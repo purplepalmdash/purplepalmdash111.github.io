@@ -1,0 +1,1141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Pi | Dash]]></title>
+  <link href="http://purplepalmdash.github.io/blog/categories/pi/atom.xml" rel="self"/>
+  <link href="http://purplepalmdash.github.io/"/>
+  <updated>2015-05-17T06:59:52+08:00</updated>
+  <id>http://purplepalmdash.github.io/</id>
+  <author>
+    <name><![CDATA[Dash]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[HMC5883L on RaspberryPI(2)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2014/01/09/hmc5883l-on-raspberrypi-2/"/>
+    <updated>2014-01-09T11:13:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2014/01/09/hmc5883l-on-raspberrypi-2</id>
+    <content type="html"><![CDATA[<p>Here are some explanation on the code in &ldquo;HMC5883L on RaspberryPI&rdquo;.   <br/>
+The i2clibraries calls the &ldquo;quick2wire&rdquo; library.</p>
+
+<pre><code>    root@rasp:~/code/i2c/pythoncode# grep "quick2wire" ./ -r
+    ./i2clibraries/i2c.py:from quick2wire.i2c import I2CMaster, writing_bytes, reading
+    Binary file ./i2clibraries/__pycache__/i2c.cpython-32.pyc matches
+    Binary file ./i2clibraries/i2c.pyc matches
+</code></pre>
+
+<p>So we have to include QUICK2WIRE_API_HOME into the PYTHONPATH:</p>
+
+<pre><code>    export QUICK2WIRE_API_HOME=~/code/i2c/quick2wire-python-api/
+    export PYTHONPATH=$PYTHONPATH:$QUICK2WIRE_API_HOME
+</code></pre>
+
+<p>So notice you have to specify the correct directory which contains the corresponding code.</p>
+
+<pre><code>    root@rasp:~/code/i2c# tree -d
+    .
+    ├── pythoncode
+    │   └── i2clibraries
+    │       └── __pycache__
+    └── quick2wire-python-api
+        ├── doc
+        ├── examples
+        ├── quick2wire
+        │   ├── helpers
+        │   ├── parts
+        │   └── __pycache__
+        └── tools
+
+    11 directories
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[HMC5883L on RaspberryPI]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/11/16/hmc5883l-on-raspberrypi/"/>
+    <updated>2013-11-16T20:15:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/11/16/hmc5883l-on-raspberrypi</id>
+    <content type="html"><![CDATA[<h3>Make sure you have installed i2c tools</h3>
+
+<p>Install i2c-tools via:</p>
+
+<pre><code>    # apt-get install i2c-tools
+    # apt-cache search i2c-tools
+    i2c-tools - heterogeneous set of I2C tools for Linux
+</code></pre>
+
+<p>Check if spi and i2c has been blacklisted in system:</p>
+
+<pre><code>    # cat  /etc/modprobe.d/raspi-blacklist.conf 
+    # blacklist spi and i2c by default (many users don't need them)
+
+    blacklist spi-bcm2708
+    blacklist i2c-bcm2708
+</code></pre>
+
+<p>Comment out them, now your i2c will not be blacklisted.  <br/>
+Add following items into /etc/modules:</p>
+
+<pre><code>    i2c-bcm2708
+    i2c-dev
+</code></pre>
+
+<p>Enable the user to access i2c equipments in user space:</p>
+
+<pre><code>    root@rasp:~# cat /etc/udev/rules.d/99-i2c.rules 
+    SUBSYSTEM==”i2c-dev”, MODE=”0666″
+</code></pre>
+
+<p>Reboot and check the result.</p>
+
+<pre><code>    root@rasp:~# ls /dev/i2c*
+    /dev/i2c-0  /dev/i2c-1
+</code></pre>
+
+<p>Now your i2c equipments become available. Detect the attached equipments:</p>
+
+<pre><code>    root@rasp:~# i2cdetect -y 0
+         0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+    00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- 1e -- 
+    20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+    70: -- -- -- -- -- -- -- -- 
+</code></pre>
+
+<h3>Install Think Bowl I2C libraries for Python</h3>
+
+<p>For setting up the python library please input following lines:</p>
+
+<pre><code>    cd code/
+    mkdir i2c
+    cd i2c/
+    git clone https://github.com/quick2wire/quick2wire-python-api.git
+    export QUICK2WIRE_API_HOME=~/code/i2c/quick2wire-python-api/
+    export PYTHONPATH=$PYTHONPATH:$QUICK2WIRE_API_HOME
+    mkdir pythoncode
+    cd pythoncode/
+    git clone https://bitbucket.org/thinkbowl/i2clibraries.git
+</code></pre>
+
+<h3>Wiring:</h3>
+
+<pre><code>| Pi pin number | Pi pin name   | HMC5883L pin name     |
+| ------    | ------    | -----:        |
+|  1        |  3V3      |   VCC         |
+|  6        |  Ground   |   GND         |
+|  3        |  SDA      |   SDA         |
+|  5        |  SCL      |   SCL         |
+</code></pre>
+
+<h3>Python code</h3>
+
+<pre><code>    vim test-sensor.py
+    python3 test-sensor.py 
+</code></pre>
+
+<p>test-sensor.py should be like following:
+<figure class='code'><figcaption><span>test-sensor.py-test-sensor.py </span></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="o">&lt;/</span><span class="n">p</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">h1</span><span class="o">&gt;</span><span class="err">!</span><span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span><span class="n">python3</span><span class="o">&lt;/</span><span class="n">h1</span><span class="o">&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&lt;</span><span class="n">p</span><span class="o">&gt;</span><span class="kn">from</span> <span class="nn">i2clibraries</span> <span class="kn">import</span> <span class="n">i2c_hmc5883l</span>
+</span><span class='line'><span class="n">hmc5883l</span> <span class="o">=</span> <span class="n">i2c_hmc5883l</span><span class="o">.</span><span class="n">i2c_hmc5883l</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="n">hmc5883l</span><span class="o">.</span><span class="n">setContinuousMode</span><span class="p">()</span>
+</span><span class='line'><span class="n">hmc5883l</span><span class="o">.</span><span class="n">setDeclination</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="mi">54</span><span class="p">)</span>
+</span><span class='line'><span class="k">print</span><span class="p">(</span><span class="n">hmc5883l</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+Result should be shown as following:</p>
+
+<pre><code>    root@rasp:~/code/i2c/pythoncode# python3 test-sensor.py 
+    Axis X: 311.88
+    Axis Y: 160.08
+    Axis Z: -300.84
+    Declination: 9° 54'
+    Heading: 37° 4'
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[有关烤派宝典]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/11/12/you-guan-kao-pai-bao-dian/"/>
+    <updated>2013-11-12T20:00:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/11/12/you-guan-kao-pai-bao-dian</id>
+    <content type="html"><![CDATA[<p>Baking Pi一共有11个章节，已经翻译了7章，剩下4章。篇幅也不是很多，但是有点儿倦怠。于是先搁置一段时间，等有空了再把剩下的几张补齐。  <br/>
+手头有了一块新的开发板，Beagle Bone之中国版，中文叫BB-Black，入手两天但是一直在忙着翻译烤派宝典，没时间把玩。所以，剩下的4个章节，将采用一个星期完成一章的进度，慢慢将其翻译完。三天时间翻译完前面那么多章节，确实有点太赶，也难以保证翻译质量。</p>
+
+<p>下一步可以在Beagle上写一个类似于Baking Pie这样的指南的。通过学习《Baking Pie》，也接触到了操作系统的初步， 一个系统写下来，很多概念不知不觉就懂了。在Beagle板子上做同样的事情有更大的挑战性。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[烤派宝典第七章之Screen02]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/11/12/kao-pai-bao-dian-di-qi-zhang-zhi-screen02/"/>
+    <updated>2013-11-12T16:51:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/11/12/kao-pai-bao-dian-di-qi-zhang-zhi-screen02</id>
+    <content type="html"><![CDATA[<h1>烤派宝典第七章之Screen02</h1>
+
+<p>Screen02这一章基于Screen01，将教会你如何在屏幕上画直线，还将教会你一个如何生成随机数的技巧。我们设想你已经拥有了<a href="http://Tomcat.no-ip.biz/blog/2013/11/11/kao-pai-bao-dian-di-liu-zhang-zhi-screen01/">烤派宝典第6章之Screen01</a>中介绍的背景知识和代码作为基础。</p>
+
+<table>
+<thead>
+<tr>
+<th>内容       </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 <a href="#Dots">点</a> </td>
+</tr>
+<tr>
+<td>2 <a href="#Lines">线</a> </td>
+</tr>
+<tr>
+<td>3 <a href="#Randomness">随机数</a> </td>
+</tr>
+<tr>
+<td>4 <a href="#Picasso">Pi-加索</a> </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>1. 点<a name="Dots"></a></h3>
+
+<p>既然我们之前已经让屏幕工作起来了，自然我们现在就可以开始创建出形形色色的图形了。如果我们能在上面真正画出点什么来自然是最好的。绘制图形中一个最基础的任务往往是绘制两个点之间的直线，有了直线，我们就可以用直线的组合来创建出更复杂的图形了。</p>
+
+<blockquote><p>在执行更复杂的渲染时候，很多系统创建的着色函数可以使用不同颜色来绘制形状。每个像素点可以通过调用着色函数来确定在其上使用怎样的颜色。</p></blockquote>
+
+<p>我们将试着在汇编语言中实现这个函数，但是最开始时我们需要另外的一些辅助函数。我们需要一个叫SetPixel的函数用于改变特定像素点的颜色，它的输入值应该是r0和r1。在将来如果我们需要往任意内存中绘图(而不是仅仅往屏幕上绘图)时这个函数将很有用。因此最开始时我们需要一个系统用于控制我们绘制的目标。我觉得最佳的解决方案是我们在内存中开辟一块区域，在里头存储我们需要绘制的目标地址。这一系统运行完毕后，我们将得到一个存储好的地址，这个地址通常指向上一次我们使用过的frame buffer。 我们将在我们的绘图函数中始终使用这一地址。这样一来，如果我们在操作系统中的其他任何地方都可以调用这个函数来绘制出不同的图像，要做的只是改变这个地址使其指向一个新的结构而已，绘制代码则可以不用做任何修改。为了简单起见，我们使用一段数据用来控制我们要画的颜色。</p>
+
+<p>将下列代码拷贝入一个新的文件中，起名为'drawing.s'.</p>
+
+<pre><code>    .section .data
+    .align 1
+    foreColour:
+    .hword 0xFFFF
+
+    .align 2
+    graphicsAddress:
+    .int 0
+
+    .section .text
+    .globl SetForeColour
+    SetForeColour:
+    cmp r0,#0x10000
+    movhs pc,lr
+    ldr r1,=foreColour
+    strh r0,[r1]
+    mov pc,lr
+
+    .globl SetGraphicsAddress
+    SetGraphicsAddress:
+    ldr r1,=graphicsAddress
+    str r0,[r1]
+    mov pc,lr
+</code></pre>
+
+<p>以上代码能实现上面我详细描述过的功能，我们在'main.s'将和它们的数据一起，在绘制任何图像前调用完，以便控制我们在哪里绘制、如何绘制的问题。</p>
+
+<blockquote><p>创建一个类似于SetPixel般的通用方法，以便我们可以在别的函数中使用是一个很好的主意。我们需要确保这个通用方法运行得足够快，因为我们将频繁调用它。</p></blockquote>
+
+<p>我们最后的任务是实现一个SetPixel方法。这个函数需要两个参数，像素点的x 和y坐标，它还需要使用我们刚才精确定义的graphicAddress和前景色取值已确定绘制的对象和位置。 如果你认为自己可以直接实现之，那就动手吧；如果觉得自己实现有难度，那么我将大体列举出如何实现的步骤，然后我将给出一个实现的例子。</p>
+
+<ol>
+<li>载入graphicsAddress。</li>
+<li>检查x和y坐标所在的位置是否小于宽度和高度。</li>
+<li>计算像素点需要写入的地址（提示： frameBufferAddress + (x + y * width)* 像素大小 ）</li>
+<li>载入前景色。</li>
+<li>存储入相应的地址。</li>
+</ol>
+
+
+<p>下面是按照上述规则的代码实现。 <br/>
+1.</p>
+
+<pre><code>    .globl DrawPixel
+    DrawPixel:
+    px .req r0
+    py .req r1
+    addr .req r2
+    ldr addr,=graphicsAddress
+    ldr addr,[addr]
+</code></pre>
+
+<p>2.</p>
+
+<pre><code>    height .req r3
+    ldr height,[addr,#4]
+    sub height,#1
+    cmp py,height
+    movhi pc,lr
+    .unreq height
+
+    width .req r3
+    ldr width,[addr,#0]
+    sub width,#1
+    cmp px,width
+    movhi pc,lr
+</code></pre>
+
+<p>回忆一下，宽度和高度存储在framebuffer开始起的0和4个byte的偏移位置。如果需要的话，你可以返回上一章参考'framebuffer.s'。   <br/>
+3.</p>
+
+<pre><code>    ldr addr,[addr,#32]
+    add width,#1
+    mla px,py,width,px
+    .unreq width
+    .unreq py
+    add addr, px,lsl #1
+    .unreq px
+</code></pre>
+
+<p>坦白来说，上面的代码是为高彩色的frame buffer而专门设计的，因此我使用了一个二进制偏移方式来计算该地址。你可以把这个函数改得更为通用一点，无需指定高颜色的frame buffer，记得在修改的同时你也需要更新SetForeColour的代码。通用设计的实现难度可能更为复杂。   <br/>
+4.</p>
+
+<pre><code>    fore .req r3
+    ldr fore,=foreColour
+    ldrh fore,[fore]
+</code></pre>
+
+<p>如上所述，专为高彩色定制的代码。  <br/>
+5.</p>
+
+<pre><code>    strh fore,[addr]
+    .unreq fore
+    .unreq addr
+    mov pc,lr
+</code></pre>
+
+<p>如上所述，专为高彩色定制的代码。</p>
+
+<h3>2. 线<a name="Lines"></a></h3>
+
+<p>我们遇到的麻烦是，画一条直线并非你想象中那么简单。但是现在你必须啃完这块硬骨头，以便实现出我们的操作系统，那么我们就只能自己动手丰衣足食了，绘制直线也不例外。我建议你花上几分钟先自行思考一下如何在两个点之间画出一条直线来。</p>
+
+<p>我考虑出的方案着眼于计算出直线的斜率，然后步进之。这听起来合理极了，但是事实上这个念头很可怕。问题出在这样一来我们将引入大量的除法运算，我们知道在汇编语言中要处理好除法是很棘手的一件事情，还有我们需要跟踪十进制数字，就进一步增加了难度。事实上，有一种现成的算法，叫Bresenham's算法，它是实现画直线的绝佳算法，因为它只引入了加、减和比特移位操作。</p>
+
+<blockquote><p>编程的正常思维是，我们想投机取巧，比如使用下除法就OK了。但是操作系统需要想象不到的高效率，所以我们要关注要解决的问题应该是让它变成卓越的，而不是解决了就可以。</p></blockquote>
+
+<p>Bresenham's算法可以通过下列伪代码来描述，伪代码是看起来像计算机指令的文字，但是它实际上是便于程序员理解算法，而不是为了机器可读而设计的。</p>
+
+<pre><code>    /* We wish to draw a line from (x0,y0) to (x1,y1), using only a function setPixel(x,y) which draws a dot in the pixel given by (x,y). */
+    if x1 &gt; x0 then
+        set deltax to x1 - x0
+        set stepx to +1
+    otherwise
+        set deltax to x0 - x1
+        set stepx to -1
+    end if
+
+    set error to deltax - deltay
+    until x0 = x1 + stepx or y0 = y1 + stepy
+        setPixel(x0, y0)
+        if error × 2 ≥ -deltay then 
+            set x0 to x0 + stepx
+            set error to error - deltay
+        end if
+        if error × 2 ≤ deltax then 
+            set y0 to y0 + stepy
+            set error to error + deltax
+        end if
+    repeat
+</code></pre>
+
+<p>这个算法的实现很常见。你可以试试看自己能否直接实现之。我在下面也给出了自己的实现代码：</p>
+
+<pre><code>    .globl DrawLine
+    DrawLine:
+    push {r4,r5,r6,r7,r8,r9,r10,r11,r12,lr}
+    x0 .req r9
+    x1 .req r10
+    y0 .req r11
+    y1 .req r12
+
+    mov x0,r0
+    mov x1,r2
+    mov y0,r1
+    mov y1,r3
+
+    dx .req r4
+    dyn .req r5 /* Note that we only ever use -deltay, so I store its negative for speed. (hence dyn) */
+    sx .req r6
+    sy .req r7
+    err .req r8
+
+    cmp x0,x1
+    subgt dx,x0,x1
+    movgt sx,#-1
+    suble dx,x1,x0
+    movle sx,#1
+
+    cmp y0,y1
+    subgt dyn,y1,y0
+    movgt sy,#-1
+    suble dyn,y0,y1
+    movle sy,#1
+
+    add err,dx,dyn
+    add x1,sx
+    add y1,sy
+
+    pixelLoop$:
+    teq x0,x1
+    teqne y0,y1
+    popeq {r4,r5,r6,r7,r8,r9,r10,r11,r12,pc}
+
+    mov r0,x0
+    mov r1,y0
+    bl DrawPixel
+
+    cmp dyn, err,lsl #1
+    addle err,dyn
+    addle x0,sx
+
+    cmp dx, err,lsl #1
+    addge err,dx
+    addge y0,sy
+
+    b pixelLoop$
+
+    .unreq x0
+    .unreq x1
+    .unreq y0
+    .unreq y1
+    .unreq dx
+    .unreq dyn
+    .unreq sx
+    .unreq sy
+    .unreq err
+</code></pre>
+
+<h3>3. 随机数<a name="Randomness"></a></h3>
+
+<p>现在我们可以来画直线了。虽然我们现在已经得偿所望，可以用它来绘制出任何我们想要的图像（随便你怎么画！）， 我觉得还是借这个机会引入一点点计算机随机数的概念。 我们要做的是，选择一堆随机的坐标，然后在它们之间用渐变的颜色绘制出直线。我之所以这么做是因为它看起来很漂亮。</p>
+
+<p>所以现在，我们来思考一下，如何得到随机数？不幸的是在Raspberry Pi上没有专门用于产生随机数的设备（这样的设备通常贵得惊人）。 所以我们只能用我们至今所学到的知识来发明出来一个‘随机数’。 我们不需要太长时间就可以实现出来。 操作通常都能拥有明确定义好的结果，执行同一个序列的指令，寄存器中得到的值也是一样的结果。我们要做到额是引入一个序列用于产生伪随机数。这意味着，数字对于外界观察者而言，看起来是完全随机的，然而事实上它们是完全定制的。站在实现的角度，我们需要一个公式，用于产生随机数，我们能想到的一个很垃圾的数学运算符，例如4x2! /4，但实际上，这样生成的随机数，其质量是很低的。在这种情况下，如果输入为0,完了，答案也是0,太愚蠢了。但是它给出了一个思路，经过良好定义的公式，确实可以产生出高品质的随机数。</p>
+
+<blockquote><p>硬件随机数产生器很少被用在安全场合，因为可预测的随机数序列可能会影响到安全或是加密。</p></blockquote>
+
+<p>我要使用的公式叫做quadratic congruence产生器。 它是个很好的选择，因为仅仅用5条指令就可以实现它，然后它能产生出0到2的32次方-1个数之间的任意随机数。</p>
+
+<blockquote><p>有关随机数产生器的讨论经常会引出一个问题，到底什么是随机数？我们通常是指统计上的随机性： 一连串数字是没办法通过显而易见的样式或是属性用于产生它们。</p></blockquote>
+
+<p>这个随机数产生器能用如此简洁的代码产生出如此大的随机数的原因已经超出了本课程的讨论范围，但是我鼓励有兴趣的各位去研究它。可以从下面的公式着手研究， xn是产生的第n个随机数。</p>
+
+<p><img src="/images/formula.jpg" alt="fumula" /></p>
+
+<p>这个公式受到以下限制：</p>
+
+<ol>
+<li>a必须是偶数。</li>
+<li>b=a+1mod 4。</li>
+<li>c是奇数。</li>
+</ol>
+
+
+<p>如果你从未见过mod操作符，这里简单说明一下，它指的是对某个数除以被除数后，剩下的数值。例如b=a+1mod4以为着将a+1的值除以4,得到的余数就是b。 如果a 是12,那么(12+1)/4，mod的结果应该是1,因为13除以4的余数是1.</p>
+
+<p>将下列代码拷贝进你的文件夹中，命名为'random.s'</p>
+
+<pre><code>    .globl Random
+    Random:
+    xnm .req r0
+    a .req r1
+
+    mov a,#0xef00
+    mul a,xnm
+    mul a,xnm
+    add a,xnm
+    .unreq xnm
+    add r0,a,#73
+
+    .unreq a
+    mov pc,lr
+</code></pre>
+
+<p>这是一个随机函数的实现，最后产生的数字被存储在r0中，这个数字将用于产生下一个随机数。在我们的例子中，我们给定的a=EF00，b=1, c=73， 这样的选择足够产生出上面我们需要的随机数。 你可以使用任何你想要的数字进行替代，只要它们符合我们预定义的规则就可以。</p>
+
+<h3>4. Pi-加索<a name="Picasso"></a></h3>
+
+<p>好，现在我们已经拥有了所有需要的函数，让我们来画图吧。修改你的main文件，在得到framebuffer的地址后，完成以下内容:</p>
+
+<ol>
+<li>调用SetGraphicsAddress， r0中传递的参数为frame buffer info的地址。</li>
+<li>设置4个寄存器的初始值为0。 一个是最后产生的随机数，一个是颜色，一个是上一个x坐标值，一个是上一个y坐标值。</li>
+<li>调用随机数产生器生成下一个x坐标值， 使用上一次产生的随机数字作为输入。</li>
+<li>再次调用随机数产生器生成下一个y坐标值，使用上一次你生成的x 坐标值作为输入。</li>
+<li>用y坐标值更新上一个随机数。</li>
+<li>使用给定的颜色值调用SetForeColour， 然后对颜色加1. 如果这个值达到十六进制的FFFF，要记得将它归零。</li>
+<li>x和y坐标的值需要在0到FFFFFFFF之间。 我们可以转化他们为数字，为0到102310之间，使用一个逻辑右移22位即可。</li>
+<li>检查y坐标是否在屏幕上，验证y坐标的值在0到76710之间，如果不是，返回第3步。</li>
+<li>从上一个x和y的坐标绘制一条直线到当前的x和y坐标。</li>
+<li>更新当前的x和y坐标。</li>
+<li>返回第3步。</li>
+</ol>
+
+
+<p>如以前所提到的，解决方案可以在下载页面找到。</p>
+
+<p>如果你完成了编码，在你的Raspberry Pi上测试之。你可以看到非常快的一系列的随机线条在屏幕上被绘制出来，颜色有着渐变色， 它永远不会被停止。 如果你的Raspberry Pi不能显示出正常结果，请参考troubleshooting页面。</p>
+
+<p>如果你成功运行了，恭喜你！ 我们已经学会了如何绘制多姿多彩的图形，还学会了如何产生随机数。 我孤立你多玩玩直线绘制，因为它可以用来渲染任何你想要的东西。 你可能还希望探索更为复杂的图形。 这些复杂的图形都可以通过直线来产生，但是有没有更好的策略用来产生呢？留给你自己思考。如果你喜欢画直线的程序，你可以试着修改下SetPixel函数。 如果在设置每一个像素值时候，你添加上一个小的数值，它会发生什么呢？如果你想创建出别的图案，你应该如何修改呢？在下一章里，<a href="http://tbd.com">烤派宝典第8章之Screen03</a>里，我们来看看一个非常非常有用的技巧&ndash;绘制文字。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[烤派宝典第六章之Screen01]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/11/11/kao-pai-bao-dian-di-liu-zhang-zhi-screen01/"/>
+    <updated>2013-11-11T19:34:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/11/11/kao-pai-bao-dian-di-liu-zhang-zhi-screen01</id>
+    <content type="html"><![CDATA[<h1>烤派宝典第六章之Screen01</h1>
+
+<p>欢迎来到Screen教程系列。在这一系列教程中，你将学会如何在汇编语言中控制Raspberry Pi的屏幕， 如何开始显示随机数据，然后我们将学会如何显示一个固定的图像，显示文字，如何将数字转换为文字。 我们假设你已经完成了之前的OK系列，OK系列里提到过的基本概念在本教程中不会再被提及。  <br/>
+Screen01这一章讲述了一些基本的图像处理理论，我们将在这一章里，在屏幕上或是电视机（TV）上显示出一个渐变颜色的格式。</p>
+
+<table>
+<thead>
+<tr>
+<th>内容       </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 <a href="#GettingStarted">开始</a> </td>
+</tr>
+<tr>
+<td>2 <a href="#ComputerGraphics">计算机图形</a> </td>
+</tr>
+<tr>
+<td>3 <a href="#ProgrammingPostman">邮递员编程</a> </td>
+</tr>
+<tr>
+<td>4 <a href="#DearGraphicProcessor">我最心爱的图像处理器</a> </td>
+</tr>
+<tr>
+<td>5 <a href="#pixelrow">在一个框架内的连续像素</a> </td>
+</tr>
+<tr>
+<td>6 <a href="#SeeLight">曙光初现</a> </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>1. 开始<a name="GettingStarted"></a></h3>
+
+<p>我们希望你已经完成了OK系列，OK系列中已经完成的'gpio.s'和'systemTimer.s'文件中所撰写的函数会在本系列中被重复调用。如果你还没有这些文件，或者说你更愿意使用标准的参考文件，你可以从下载页面中下载到OK05的解决方案模板。 &lsquo;main.s'文件同样是有用的，但是你需要把mov sp,#0x8000之后的内容删除。</p>
+
+<h3>2. 计算机图形<a name="ComputerGraphics"></a></h3>
+
+<p>正如你所希望看到的，在很原始的层面上来看，计算机其实是很愚蠢的。它们的指令集是有限的，几乎不会解数学题目。但是不知为何它们拥有近乎无所谓不为的能力。我们目前所需要了解的，计算机如何在屏幕上显示出图像？我们如何将问题翻译成二进制而后扔给计算机去解决？答案非常简单，对于每一种颜色，我们为它编上一个唯一的编号，然后我们在计算机屏幕上的每一个点都储存上这个编号中的一个值。像素就是你屏幕上的这样一个小点，如果你凑近了看，你可能会在自己的屏幕上看到这样的点，你可以看到电脑上的每一幅图像，都是由这样的点的集合所组成的。</p>
+
+<p>随着计算机时代的演进，人们需要越来越复杂的图形，所以显卡被发明出来。显卡可以看作是你的计算机的第二个处理器，它仅仅负责在屏幕上画图。它的主要职责是将像素值信息转换为被送到屏幕上的光强度信息。 在现代计算机中，显卡能干的活儿远远不止这些，比如绘制3D图像也是它的拿手好戏。然而在本教程中，我们之关注于显卡的初级使用；从内存中获取到像素信息，输出到屏幕上。</p>
+
+<blockquote><p>有很多种用数字来表达颜色的系统，这里我们使用RGB系统，但是HSL是另一种广泛被使用的系统。</p></blockquote>
+
+<p>要注意到的一点是我们系统所使用的色彩编号系统。有很多种选择，每种选择将输出不同质量的图像。为了有助于你的完整理解，我在这里列举出了一些选择。</p>
+
+<blockquote><p>尽管这里的图像有很多种颜色，它们都使用了一种被称作空间抖动的技术。这使得它们能用很少的颜色表现出绝佳的图像效果。许多早期的操作系统中都运用了这种技术。</p></blockquote>
+
+<table class="tableTopCells">
+  <caption>
+    表 2.1 一些颜色调色板
+  </caption>
+
+  <thead>
+    <tr>
+      <th>名称</th>
+
+      <th>单色</th>
+
+      <th>描述</th>
+
+      <th>例子</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr>
+      <td>单色画</td>
+
+      <td>2</td>
+
+      <td>使用一个位来存储每个像素点，1代表白色，0代表黑色
+      </td>
+
+      <td><img alt="鸟-单色" src=
+      "http://purplepalmdash.github.io/images/colour1bImage.png"></td>
+    </tr>
+
+    <tr>
+      <td>灰阶</td>
+
+      <td>256</td>
+
+      <td>使用1byte来表示每个像素点，有255中表示白色的方式，0代表黑色，0～255之间的任意数字都代表两者的线性组合
+      </td>
+      <td><img alt="鸟-灰阶" src=
+      "http://purplepalmdash.github.io/images/colour8gImage.png"></td>
+    </tr>
+
+    <tr>
+      <td>8位色</td>
+
+      <td>8</td>
+
+      <td>使用3个位来存储每个像素点，第1个位代表红色通道的值，第2个位代表绿色通道的值，第3个位代表蓝色通道的值。
+      </td>
+
+      <td><img alt="鸟-八位色" src=
+      "http://purplepalmdash.github.io/images/colour3bImage.png"></td>
+    </tr>
+
+    <tr>
+      <td>低彩色</td>
+
+      <td>256</td>
+
+      <td>使用8个位来存储每个像素点的信息，前3个位代表红色通道的强度，接下来的3个位代表绿色通道的强度，最后2个位代表蓝色通道的强度。
+      </td>
+
+      <td><img alt="鸟- 256色（低彩色)" src=
+      "http://purplepalmdash.github.io/images/colour8bImage.png"></td>
+    </tr>
+
+    <tr>
+      <td>高彩色</td>
+
+      <td>65,536</td>
+
+      <td>使用16个位来存储每个像素点的信息，前5个位用于表示红色通道的强度，接下来的6个位用于表示绿色通道的强度，最后的5个位用来表示蓝色通道的强度。
+      </td>
+
+      <td><img alt="鸟- 高彩色" src=
+      "http://purplepalmdash.github.io/images/colour16bImage.png"></td>
+    </tr>
+
+    <tr>
+      <td>真彩色</td>
+
+      <td>16,777,216</td>
+
+      <td>使用24个位来存储每个像素点的信息，前8个位用于表示红色通道的强度，接下来的8个位用于表示绿色通道强度，最后的8个位用于表示蓝色通道的强度。
+      </td>
+
+      <td><img alt="鸟 - 真彩色" src=
+      "http://purplepalmdash.github.io/images/colour24bImage.png"></td>
+    </tr>
+
+    <tr>
+      <td>RGBA32</td>
+
+      <td>16,777,216(256个透明度级别)</td>
+
+      <td colspan="2">使用32个位来存储每个像素点的信息，前8个位用于表示红色通道的强度，接下来的8个位用于表示绿色通道的强度，第3组8个位用于表示蓝色通道的强度，最后的8个位用于表示透明度通道。同名读通道通常用于在一幅图片上绘制另一幅图片，0用于代表后置图片的颜色，255代表当前图片的颜色，所有其之间的值代表两者的组合。
+      </td>
+
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+
+<p>在本指南中我们将使用高彩色。从上面的图片中我们可以看到，高彩彩色已经相当清晰，图片质量也不错，对比于真彩色，它不会占据太大的空间。也就是说，显示一张800x600像素大小的图片，它只会占据大概1M byte的空间。它还有个优势是，它是2的幂次方的大小，对比于真彩图片，很容易得到其信息。</p>
+
+<p>Raspberry Pi上的图形处理器有一点点怪异。在Raspberry Pi上，图形显示器最先运行，并负责启动主处理器（中央处理器)。对比于正常的操作系统，这有点“不太正常”。 虽然最终这种启动方式不会造成任何差别，但总给人感觉就是中央处理器被沦落为了第二处理器，图形处理器有喧宾夺主的感觉。Raspberry Pi的中央处理器和图形处理器之间的通信方式被称之为“邮箱(mailbox)”. 这两个处理器都可以给另一个处理器发送邮件，而对段处理器在收到邮件后将在可能的时间点处理之。我们可以使用邮箱机制从图形处理器取得一个地址。这个地址就是我们需要将色彩像素信息写在屏幕上的位置，被称为Frame Buffer， 显卡通常会检查这个位置，并从这里取得信息用于直接更新屏幕。</p>
+
+<blockquote><p>存储Frame buffer会给计算机带来沉重的内存负载。基于这个原因，早期的计算机经常会使用一些欺诈的伎俩，比如，储存一个满是文字的屏幕，但是每次仅仅更新单个需要更新的字符。</p>
+
+<h3>3. 邮递员编程<a name="ProgrammingPostman"></a></h3>
+
+<p>有关图形编程我们第一个要接触的就是‘邮箱’这个概念。邮箱只有两个方法需要注意，一个是MailboxRead, 用于从位于r0的邮箱通道里读出来一条消息。MailboxWrite，用于将r0中的前28个二进制位直接写入到位于r1的邮箱通道。Raspberry Pi有7个邮箱通道，可用于连接图像处理器，我们只能使用第一个通道，因为它直接和Frame Buffer交互。</p></blockquote>
+
+<p>下面的表格和图标描述了有关邮箱的操作。</p>
+
+<table>
+  <caption>
+    表 3.1 邮箱地址
+  </caption>
+
+  <thead>
+    <tr>
+      <th>地址</th>
+
+      <th>大小/ Bytes</th>
+
+      <th>名称</th>
+
+      <th>描述</th>
+
+      <th>读/ 写</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr>
+      <td>2000B880</td>
+
+      <td>4</td>
+
+      <td>Read</td>
+
+      <td>接收邮件.</td>
+
+      <td>R</td>
+    </tr>
+
+    <tr>
+      <td>2000B890</td>
+
+      <td>4</td>
+
+      <td>Poll</td>
+
+      <td>接收邮件但不取回.</td>
+
+      <td>R</td>
+    </tr>
+
+    <tr>
+      <td>2000B894</td>
+
+      <td>4</td>
+
+      <td>Sender</td>
+
+      <td>发送信息.</td>
+
+      <td>R</td>
+    </tr>
+
+    <tr>
+      <td>2000B898</td>
+
+      <td>4</td>
+
+      <td>Status</td>
+
+      <td>信息.</td>
+
+      <td>R</td>
+    </tr>
+
+    <tr>
+      <td>2000B89C</td>
+
+      <td>4</td>
+
+      <td>Configuration</td>
+
+      <td>配置.</td>
+
+      <td>RW</td>
+    </tr>
+
+    <tr>
+      <td>2000B8A0</td>
+
+      <td>4</td>
+
+      <td>Write</td>
+
+      <td>发送邮件.</td>
+
+      <td>W</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<blockquote><p> 消息传递是组件间通信的一种很常见的方式。一些操作系统使用虚拟的消息传递机制以允许应用程序之间的相互通信.</p></blockquote>
+
+<p>发送消息给特定的邮箱步骤如下：</p>
+
+<ol>
+<li>发送端必须等待状态寄存器的最高位为0.</li>
+<li>发送端写入Write寄存器， 第4个二进制位代表要写入的位置，高28个二进制位代表要写入的信息。</li>
+</ol>
+
+
+<p>从邮箱读取一条信息的步骤如下：</p>
+
+<ol>
+<li>接收端等待状态寄存器的第30个二进制位变为0.</li>
+<li>接收端从Read寄存去读取。</li>
+<li>接收端确认消息是从正确的邮箱读出的，如果不是，则重试。</li>
+</ol>
+
+
+<p>如果你足够自信的话，你现在已经拥有足够的信息可以用于写出邮箱读/写函数了，如果你觉得还不够，那么请接着往下读。</p>
+
+<p>还是那句话，我推荐你一开始就把邮箱区域的取寄存器地址函数实现掉：
+    .globl GetMailboxBase
+    GetMailboxBase:
+    ldr r0,=0x2000B880
+    mov pc,lr
+发送流程最为简单，所以我们一开始就把它实现掉。随着你的函数越来越复杂，你需要开始计划如何组织它们。一个好的方式是实现将其实现步骤列举出来，越详细越好，比如下面的：</p>
+
+<ol>
+<li>我们的输出需要写入的寄存器是(r0)， 邮箱需要写入的寄存器是(r1)。 我们需要检查邮箱地址是否有效，低4个二进制位的值是否是0,永远不要忘记校验输入值。</li>
+<li>使用GetMailboxBase函数取得mailbox的地址。</li>
+<li>读取状态寄存器的位。</li>
+<li>检查最高位是否是0,如果不为0,则返回第3步。</li>
+<li>组合值，写入邮箱通道。</li>
+<li>写入Write寄存器。</li>
+</ol>
+
+
+<p>让我们挨个来实现之： <br/>
+1.</p>
+
+<pre><code>    .globl MailboxWrite
+    MailboxWrite: 
+    tst r0,#0b1111
+    movne pc,lr
+    cmp r1,#15
+    movhi pc,lr
+</code></pre>
+
+<p>以上代码实现了关于r0和r1寄存器的校验。 tst用于比较两个数字，通过对两个数字的逻辑与（and)运算， 并将结果与0作比较。 在这个例子这哦你哦个我们检查寄存器r0的低4位是否全为0。</p>
+
+<blockquote><p>tst reg,#val计算reg和#val作与运算的值，将其结果与0做比较。</p></blockquote>
+
+<p>2.</p>
+
+<pre><code>    channel .req r1
+    value .req r2
+    mov value,r0
+    push {lr}
+    bl GetMailboxBase
+    mailbox .req r0
+</code></pre>
+
+<p>上述代码确保调用函数时我们不会覆盖已有的寄存器的值和lr寄存器的值， 之后我们开始调用GetMailboxBase。   <br/>
+3.</p>
+
+<pre><code>    wait1$:
+    status .req r3
+    ldr status,[mailbox,#0x18]
+</code></pre>
+
+<p>上述代码将加载入当前的状态。  <br/>
+4.</p>
+
+<pre><code>    tst status,#0x80000000
+    .unreq status
+    bne wait1$
+</code></pre>
+
+<p>上述代码将检查状态寄存器的最高位是否为0,如果不是，则返回步骤3.   <br/>
+5.</p>
+
+<pre><code>    add value,channel
+    .unreq channel
+</code></pre>
+
+<p>上述代码将通道值和值做组合。    <br/>
+6.</p>
+
+<pre><code>    str value,[mailbox,#0x20]
+    .unreq value
+    .unreq mailbox
+    pop {pc}
+</code></pre>
+
+<p>上述代码将结果写入到write寄存器中。</p>
+
+<p>MailboxRead的代码也是类似的。</p>
+
+<ol>
+<li>我们的输入值为需要读取的邮箱值(r0)。 我们需要实现校验之，以确定它是真实的邮箱地址。永远记得在函数调用前要校验输入值。</li>
+<li>调用GetMailboxBase函数用于取回地址。</li>
+<li>读取状态寄存器标志位。</li>
+<li>检查第30个二进制位是否是0,如果不为0,则分支跳转回3.</li>
+<li>从Read寄存器对应的地址开始读取数据。</li>
+<li>检查mailbox是否是我们需要的那个，如果不是，则返回第3步继续执行。</li>
+<li>返回结果。</li>
+</ol>
+
+
+<p>让我们按次序来实现之：  <br/>
+1.</p>
+
+<pre><code>    .globl MailboxRead
+    MailboxRead: 
+    cmp r0,#15
+    movhi pc,lr
+</code></pre>
+
+<p>上述代码用于校验r0，是否是通道0～16之间，事实上我们只能使用一个mailbox通道。 <br/>
+2.</p>
+
+<pre><code>    channel .req r1
+    mov channel,r0
+    push {lr}
+    bl GetMailboxBase
+    mailbox .req r0
+</code></pre>
+
+<p>上述代码确保我们在调用GetMailboxBase函数时不会覆盖通用寄存器和lr寄存器值。   <br/>
+3.</p>
+
+<pre><code>    rightmail$:
+    wait2$:
+    status .req r2
+    ldr status,[mailbox,#0x18]
+</code></pre>
+
+<p>上述代码将载入当前的状态寄存器值，现在你可以在r2中看到当前的状态寄存器值。  <br/>
+4.</p>
+
+<pre><code>    tst status,#0x40000000
+    .unreq status
+    bne wait2$
+</code></pre>
+
+<p>上述代码用于检查状态寄存器的第30个二进制位是否为0,如果不是，则返回到第3步继续等待。  <br/>
+5.</p>
+
+<pre><code>    mail .req r2
+    ldr mail,[mailbox,#0]
+</code></pre>
+
+<p>上述代码从邮箱中读入下一个条目。   <br/>
+6.</p>
+
+<pre><code>    inchan .req r3
+    and inchan,mail,#0b1111
+    teq inchan,channel
+    .unreq inchan
+    bne rightmail$
+    .unreq mailbox
+    .unreq channel
+</code></pre>
+
+<p>上述代码检查我们刚才读取的通道就是我们所提供的通道，如果不是，我们将返回步骤3继续执行。因为低4位包含了地址，所以将其与输入值作对比就知道我们读取的是否是正确的，一般来说，这里可以看作是校验过程。   <br/>
+7.</p>
+
+<pre><code>    and r0,mail,#0xfffffff0
+    .unreq mail
+    pop {pc}
+</code></pre>
+
+<p>上述代码将答案（mail的高28位)写入r0寄存器中。</p>
+
+<h3>4. 我最心爱的图像处理器<a name="DearGraphicProcessor"></a></h3>
+
+<p>有了上面写的两个函数充当邮递员，我们就拥有了往显卡发送消息的能力了。我们应该发送什么消息过去？这个答案很难回答，在所有线上文档中我没发现有确切的答案。 然而通过查阅Raspberry Pi的GNU/Linux文档，我们可以随心所欲的发送任何我们想要发送的东西。</p>
+
+<p>消息非常简单，我们描述好我们希望创建的framebuffer， 显卡要么同意我们的请求，要么拒绝。如果显卡同意我们开辟出如此大小的framebuffer，那它会返回0, 并填充我们所需要的内存区域；如果显卡拒绝我们的请求，将返回给我们一个非0值, 这代表可能分配了一小块或者根本就没分配。 不幸的是，我不知道这些非0值的真实含义是什么，我们只能以为如果显卡送回0时，它表示很高兴接收我们赋予它的任务。幸运的是，没有特殊情况的话，显卡总是乐呵呵的返回给我们0值，所以在返回值这个问题上，你不要有过多的担心。</p>
+
+<blockquote><p>因为Pi上的内存被中央处理起和显示处理器所共享，我们只需要发送何处可以找到我们消息的地址就可以了， 这种技术叫做DMA，许多复杂的设备使用它以加速访问时间。</p></blockquote>
+
+<p>为简单起见，我们将提前实现我们的需求，将其存储在.data段中。 在文件'framebuffer.s'中我们输入下列代码：</p>
+
+<pre><code>    section .data
+    .align 4
+    .globl FrameBufferInfo 
+    FrameBufferInfo:
+    .int 1024 /* #0 Physical Width */
+    .int 768 /* #4 Physical Height */
+    .int 1024 /* #8 Virtual Width */
+    .int 768 /* #12 Virtual Height */
+    .int 0 /* #16 GPU - Pitch */
+    .int 16 /* #20 Bit Depth */
+    .int 0 /* #24 X */
+    .int 0 /* #28 Y */
+    .int 0 /* #32 GPU - Pointer */
+    .int 0 /* #36 GPU - Size */
+</code></pre>
+
+<p>上面就是我们需要传递给显示处理器的消息格式。前两个字描述了物理屏幕的宽度和高度。第二对字则是虚拟屏幕的的宽度和高度。framebuffer的宽度和高度属于虚拟宽度和高度，GPU会自动将其适配到物理的宽度和高度上。接下来的字用于表示GPU是否可以满足我们的请求，如果能则会被设置为framebuffer每一行的字节数，在这里是2x1024=2048。 接下来的字是每一个像素需要分配多少个二进制位用于表征色彩信息。使用16代表GPU支持高彩色，如果是24则代表真彩色，32则代表RGBA32。接下来的两个字分别代表x和y坐标，代表将framebuffer拷贝到屏幕上时需要忽略掉的像素值，x和y是相对于屏幕左上方而言。最后的两个字会被显示处理器所填充，第一个代表指向framebuffer的地址，第二个值代表framebuffer的实际大小，单位是byte。</p>
+
+<p>这里我很谨慎地使用了一个.align 4。 以前我们提起过，这条指令将保证下一条指令地址的低4个二进制为全0. 这样以来，我们就可以确保FrameBufferInfo放在可以直接传递给图形处理起的地址，因为我们的mailbox只能传送低4位全为0的地址。</p>
+
+<blockquote><p>当和使用DMA的设备交互时，对齐限制变得非常重要。GPU希望消息以16个byte对齐。</p></blockquote>
+
+<p>现在我们已经构建好了我们的消息结构，接下来我们写出发送这些消息的代码。消息通信将遵循一下流程：  <br/>
+1. 将地址FrameBufferInfo + 0x40000000写入邮箱通道1。   <br/>
+2. 读取邮箱通道1的结果，如果它为非0,这代表我们没有请求到合适的frame buffer。  <br/>
+3. 拷贝图像到GPU的指针地址，它就会直接在屏幕上显示出来。</p>
+
+<p>在步骤1中，我们需要在FrameBufferInfo地址上加上偏移0x40000000后才发送之。这条指令是一条特殊信号，用于告诉GPU在何处写入结构。如果我们只传输地址，GPU将返回它的应答信息，而不会立即更新缓存。缓存是一段内存，被处理器用于记载其当前正在处理的值，以便稍后放入内存中的对应位置。如果加上0x40000000，我们将告诉GPU不用写入缓存，保证了我们可以直接看到更改。</p>
+
+<p>因为这里我们需要做很多事，最好是将其实现为一个函数，我们将写一个名为InitialiseFrameBuffer的函数，这个函数完成诊断和协调工作，并返回包含有frame buffer信息数据结构的指针。 为简单起见，我们应该把宽度，高度和frame buffer的颜色深度都作为这个函数的输入，这样在main.s中我们就很容易更改值，而不用关注到函数的实现细节。</p>
+
+<p>还是老路子，我们先把实现的步骤逐个写下来。如果你有足够的自信，你可以跳开这一步，直接进入到函数的编写阶段。</p>
+
+<ol>
+<li>检验输入值。</li>
+<li>将输入值写入到frame buffer中。</li>
+<li>将地址frame buffer + 0x40000000写入到mailbox地址。</li>
+<li>收到mailbox的应答信息。</li>
+<li>如果应答信息非0,表示方法失败。我们将返回0代表失败。</li>
+<li>如果成功，我们将返回表征frame buffer信息的指针。</li>
+</ol>
+
+
+<p>现在我们将撰写一个巨大的实现函数，下面的代码是一个实现方案。  <br/>
+1.</p>
+
+<pre><code>    .section .text
+    .globl InitialiseFrameBuffer
+    InitialiseFrameBuffer:
+    width .req r0
+    height .req r1
+    bitDepth .req r2
+    cmp width,#4096
+    cmpls height,#4096
+    cmpls bitDepth,#32
+    result .req r0
+    movhi result,#0
+    movhi pc,lr
+</code></pre>
+
+<p>上述代码检查width和height是否在4096的范围内，颜色深度是否小于32。我们在这里又用到了条件执行的计谋。 请仔细检查你的代码是否能检查到输入值正确的取值。   <br/>
+2.</p>
+
+<pre><code>    fbInfoAddr .req r4
+    push {r4,lr}
+    ldr fbInfoAddr,=FrameBufferInfo
+    str width,[r4,#0]
+    str height,[r4,#4]
+    str width,[r4,#8]
+    str height,[r4,#12]
+    str bitDepth,[r4,#20]
+    .unreq width
+    .unreq height
+    .unreq bitDepth
+</code></pre>
+
+<p>上面的代码用于直接加载预先定义过的frame buffer 结构。这里我还将r4和链接寄存器的值保存在了栈中，因为我们需要将framebuffer的值保存在r4中。 <br/>
+3.</p>
+
+<pre><code>    mov r0,fbInfoAddr
+    add r0,#0x40000000 
+        mov r1,#1
+    bl MailboxWrite
+</code></pre>
+
+<p>MailboxWrite函数的输入值分别是：r0中存储需要写入的值，r1中存储需要写入的通道值。  <br/>
+4.</p>
+
+<pre><code>    mov r0,#1
+    bl MailboxRead
+</code></pre>
+
+<p>MailboxRead的输入值是寄存器r0， 代表要读取的通道，输出值是我们读出的值。  <br/>
+5.</p>
+
+<pre><code>    teq result,#0
+    movne result,#0
+    popne {r4,pc}
+</code></pre>
+
+<p>上述代码检查MailboxRead的返回值是否为0,如果不是0,代表我们读取失败，函数将返回0（本函数返回0代表失败, MailboxRead返回0却代表成功，这两者容易混淆，需要注意）。   <br/>
+6.</p>
+
+<pre><code>    mov result,fbInfoAddr
+    pop {r4,pc}
+    .unreq result
+    .unreq fbInfoAddr
+</code></pre>
+
+<p>上述代码是函数的结束，成功返回frame buffer 的地址。</p>
+
+<h3>5. 在一个框架内的连续像素<a name="pixelrow"></a></h3>
+
+<p>现在我们来创建一个可以和显示处理器通信的函数。它将给出来一个指向frame buffer的指针(地址)，以便我们可以在该地址上绘图。现在我们可以开始画图了。</p>
+
+<p>在第一个例子中，我们将绘制一个持续颜色渐变的屏幕。它看起来不怎么美观，但是至少它代表了我们的程序是可以正常工作的。 实现的原理是我们将framebuffer中的每个像素点设置为一个持续渐变的值，并不停的更新它。</p>
+
+<p>将下列代码拷贝到'main.s'文件中的mov sp,#0x8000代码后。</p>
+
+<pre><code>    mov r0,#1024
+    mov r1,#768
+    mov r2,#16
+    bl InitialiseFrameBuffer
+</code></pre>
+
+<p>以上代码调用了InitialiseFrameBuffer函数，创建出一个宽1024,高768的frame buffer, 颜色深度为16。 你可以将这些值改成你所期待的数字， 只要你能让它运行起来就没问题。 如果图形处理器无法给出我们一个正确的frame buffer，这个函数将返回0, 我们最好检查这个函数的返回值，如果函数执行失败，我们将点亮OKLED等，以表示函数运行有误。</p>
+
+<pre><code>    teq r0,#0
+    bne noError$
+
+    mov r0,#16
+    mov r1,#1
+    bl SetGpioFunction
+    mov r0,#16
+    mov r1,#0
+    bl SetGpio
+
+    error$:
+    b error$
+
+    noError$:
+    fbInfoAddr .req r4
+    mov fbInfoAddr,r0
+</code></pre>
+
+<p>现在我们已经拥有了frame buffer info的地址，我们需要从中得到frame buffer的指针地址，即frame buffer point， 以便我们可以直接绘制图形到屏幕上。 我们使用两个循环函数来完成绘制过程，一个循环绘制成行的像素点，另一个函数绘制成列的像素点。 在Raspberry Pi上，事实上，在几乎所有的应用程序中，图像的存储方式都是从左至右，从上而下的，我们的函数就是按照这样的方式来绘制图形的。</p>
+
+<pre><code>    render$:
+    fbAddr .req r3
+    ldr fbAddr,[fbInfoAddr,#32]
+
+    colour .req r0
+    y .req r1
+    mov y,#768
+    drawRow$:
+    x .req r2
+    mov x,#1024
+    drawPixel$:
+    strh colour,[fbAddr]
+    add fbAddr,#2
+    sub x,#1
+    teq x,#0
+    bne drawPixel$
+
+    sub y,#1
+    add colour,#1
+    teq y,#0
+    bne drawRow$
+
+    b render$
+
+    .unreq fbAddr
+    .unreq fbInfoAddr
+</code></pre>
+
+<p>这里有很多代码，loop里嵌套的loop里还有loop， 为了让你更便于浏览这些代码，我在这里使用了适当的缩进，用以标明不同的loop级别。 在高级编程语言里，使用缩进很常见，汇编代码中也支持缩进，因为编译器会自动去除tab缩进符。 我们看到代码中首先先我们往frame buffer地址中加载入frame buffer消息结构，然后循环设置一行的像素点，也就是说，给这一行里的每一个像素点分别赋值。在每个像素点，我们使用一条strh(存储高位字）指令用于存储当前的颜色信息，而后对我们当前所写入的地址执行加1操作。写完一行以后，我们对绘制的颜色执行加1操作。写完整个屏幕后，我们将跳转回开始点重新执行。</p>
+
+<blockquote><p>strh reg,[dest]将寄存器reg中的低半字存入dest给定的地址中。</p></blockquote>
+
+<h3>6. 曙光初现<a name="SeeLight"></a></h3>
+
+<p>现在你可以在Raspberry Pi上测试你的代码了。你将看到一个不断变化的渐变色屏幕。注意：在发送第一个消息给mailbox前，Raspberry Pi在四个角上显示一个静止的倾斜样式。如果你碰到问题，请参阅troubleshooting页面。</p>
+
+<p>如果你成功运行了本章例程，恭喜你！现在你学会控制屏幕了！你可以修改代码以便在屏幕上画出任何你想要的样式。你可以自己定义出一些好看的显示样式，你可以直接计算每个像素的值，因为y包含了y坐标，x包含了x坐标，你定义的点可以直接显示在屏幕上。 下一课中也就是<a href="http://tbd.com">烤派宝典第7章之Screen02</a>中，我们将学习一种常见的绘制方法，画直线。</p>
+]]></content>
+  </entry>
+  
+</feed>

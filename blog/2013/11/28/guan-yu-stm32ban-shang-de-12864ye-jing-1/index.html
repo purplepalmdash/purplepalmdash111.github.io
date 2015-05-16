@@ -1,0 +1,408 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>关于STM32板上的12864液晶(2) - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="有关电路 上一章讲的是12864的基础知识。这一章里来看12864和stm32板的连接和驱动的问题。 有关12864小LCD的连接，在PDF中我们可以找到如下的表项: 功能模块 占用模块 备注 12864小LCD
+PC4,PB2,PB11,PB13,PB15
+PC4:A0,同时也是 CH375 和 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-1">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">关于STM32板上的12864液晶(2)</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-11-28T10:13:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>10:13 am</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>有关电路</h3>
+
+<p>上一章讲的是12864的基础知识。这一章里来看12864和stm32板的连接和驱动的问题。</p>
+
+<p>有关12864小LCD的连接，在PDF中我们可以找到如下的表项:</p>
+
+<table>
+<thead>
+<tr>
+<th>功能模块</th>
+<th> 占用模块</th>
+<th> 备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>12864小LCD</td>
+<td>PC4,PB2,PB11,PB13,PB15</td>
+<td>PC4:A0,同时也是 CH375 和 TFT 的 A0;<br>PB2:BOOT1,LCD 的 CS 脚;<br>PB11:28J60 和大小 LCD 的复位脚</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>再结合电路图： <br/>
+<img src="/images/stm32spi.jpg" alt="stm32spi.jpg" /></p>
+
+<p>关于GPIO口的设置，我们可以看到有这样的定义：</p>
+
+<figure class='code'><figcaption><span>stm32f10x_gpio.h</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">typedef</span> <span class="k">enum</span>
+</span><span class='line'><span class="p">{</span> <span class="n">GPIO_Mode_AIN</span> <span class="o">=</span> <span class="mh">0x0</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_IN_FLOATING</span> <span class="o">=</span> <span class="mh">0x04</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_IPD</span> <span class="o">=</span> <span class="mh">0x28</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_IPU</span> <span class="o">=</span> <span class="mh">0x48</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_Out_OD</span> <span class="o">=</span> <span class="mh">0x14</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_Out_PP</span> <span class="o">=</span> <span class="mh">0x10</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_AF_OD</span> <span class="o">=</span> <span class="mh">0x1C</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">GPIO_Mode_AF_PP</span> <span class="o">=</span> <span class="mh">0x18</span>
+</span><span class='line'><span class="p">}</span><span class="n">GPIOMode_TypeDef</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而在stm32的Datasheet中有如下的配置模式：  <br/>
+<img src="/images/stmgpiomode.jpg" alt="stmgpiomode.jpg" /></p>
+
+<p>最低的8个bit和表中是一一对应的，其中通用输出/复用功能输出的mode1/mode0的值为00.   <br/>
+因为PB15是MOSI2口， PB13是SCK2口，所以这两个管脚需要被设置为AF模式的。AF代表复用功能。PP代表push-pull.</p>
+
+<figure class='code'><figcaption><span>LCDs.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* PB15-MOSI2,PB13-SCK2*/</span>
+</span><span class='line'><span class="cm">/* Why PB14 should be enabled? */</span>
+</span><span class='line'><span class="n">GPIO_InitStructure</span><span class="p">.</span><span class="n">GPIO_Pin</span> <span class="o">=</span> <span class="n">GPIO_Pin_13</span> <span class="o">|</span><span class="n">GPIO_Pin_14</span> <span class="o">|</span> <span class="n">GPIO_Pin_15</span><span class="p">;</span>
+</span><span class='line'><span class="n">GPIO_InitStructure</span><span class="p">.</span><span class="n">GPIO_Speed</span> <span class="o">=</span> <span class="n">GPIO_Speed_50MHz</span><span class="p">;</span>
+</span><span class='line'><span class="n">GPIO_InitStructure</span><span class="p">.</span><span class="n">GPIO_Mode</span> <span class="o">=</span> <span class="n">GPIO_Mode_AF_PP</span><span class="p">;</span>
+</span><span class='line'><span class="n">GPIO_Init</span><span class="p">(</span><span class="n">GPIOB</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">GPIO_InitStructure</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>PB11和PB2属于output口，所以直接设置为out口即可。   <br/>
+有关SPI2口的配置， 在STM中的代码如下：</p>
+
+<figure class='code'><figcaption><span>LCDs.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* SPI2 configuration */</span>
+</span><span class='line'>    <span class="n">SPI_Cmd</span><span class="p">(</span><span class="n">SPI2</span><span class="p">,</span> <span class="n">DISABLE</span><span class="p">);</span>                                                 <span class="c1">//必须先禁能,才能改变MODE</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_Direction</span> <span class="o">=</span> <span class="n">SPI_Direction_2Lines_FullDuplex</span><span class="p">;</span>      <span class="c1">//两线全双工</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_Mode</span> <span class="o">=</span> <span class="n">SPI_Mode_Master</span><span class="p">;</span>                           <span class="c1">//主</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_DataSize</span> <span class="o">=</span> <span class="n">SPI_DataSize_8b</span><span class="p">;</span>                       <span class="c1">//8位</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_CPOL</span> <span class="o">=</span> <span class="n">SPI_CPOL_High</span><span class="p">;</span>                             <span class="c1">//CPOL=1 时钟悬空高</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_CPHA</span> <span class="o">=</span> <span class="n">SPI_CPHA_2Edge</span><span class="p">;</span>                            <span class="c1">//CPHA=1 数据捕获第2个</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_NSS</span> <span class="o">=</span> <span class="n">SPI_NSS_Soft</span><span class="p">;</span>                               <span class="c1">//软件NSS</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_BaudRatePrescaler</span> <span class="o">=</span> <span class="n">SPI_BaudRatePrescaler_2</span><span class="p">;</span>      <span class="c1">//2分频</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_FirstBit</span> <span class="o">=</span> <span class="n">SPI_FirstBit_MSB</span><span class="p">;</span>                      <span class="c1">//高位在前</span>
+</span><span class='line'><span class="n">SPI_InitStructure</span><span class="p">.</span><span class="n">SPI_CRCPolynomial</span> <span class="o">=</span> <span class="mi">7</span><span class="p">;</span>                               <span class="c1">//CRC7</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">SPI_Init</span><span class="p">(</span><span class="n">SPI2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">SPI_InitStructure</span><span class="p">);</span>
+</span><span class='line'><span class="n">SPI_Cmd</span><span class="p">(</span><span class="n">SPI2</span><span class="p">,</span> <span class="n">ENABLE</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>有关SPI总线</h3>
+
+<p>SPI接口是Motorola 首先提出的全双工三线同步串行外围接口，采用主从模式（Master Slave）架构；支持多slave模式应用，一般仅支持单Master。时钟由Master控制，在时钟移位脉冲下，数据按位传输，高位在前，低位在后（MSB first）；SPI接口有2根单向数据线，为全双工通信，目前应用中的数据速率可达几Mbps的水平。   <br/>
+stm32中关于SPI传送字节的函数编写</p>
+
+<figure class='code'><figcaption><span>LCDs.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="n">u8</span> <span class="nf">SPIByte</span><span class="p">(</span><span class="n">u8</span> <span class="n">byte</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="cm">/*等待发送寄存器空*/</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">SPI2</span><span class="o">-&gt;</span><span class="n">SR</span> <span class="o">&amp;</span> <span class="n">SPI_I2S_FLAG_TXE</span><span class="p">)</span><span class="o">==</span><span class="n">RESET</span><span class="p">);</span>
+</span><span class='line'>    <span class="cm">/*发送一个字节*/</span>
+</span><span class='line'>  <span class="n">SPI2</span><span class="o">-&gt;</span><span class="n">DR</span> <span class="o">=</span> <span class="n">byte</span><span class="p">;</span>
+</span><span class='line'>  <span class="cm">/* 等待接收寄存器有效*/</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">SPI2</span><span class="o">-&gt;</span><span class="n">SR</span> <span class="o">&amp;</span> <span class="n">SPI_I2S_FLAG_RXNE</span><span class="p">)</span><span class="o">==</span><span class="n">RESET</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">return</span><span class="p">(</span><span class="n">SPI2</span><span class="o">-&gt;</span><span class="n">DR</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>命令和数据是调用这个函数写入的，我们需要注意的是时序，在写入总线时需要先拉低/高A0线</p>
+
+<figure class='code'><figcaption><span>LCDs.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="c1">//写命令</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">LcdCmd</span><span class="p">(</span><span class="n">u8</span> <span class="n">cmd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">CSLCDS_L</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">A0_L</span><span class="p">;</span>
+</span><span class='line'>  <span class="c1">//__nop();</span>
+</span><span class='line'>  <span class="p">;</span>
+</span><span class='line'>  <span class="n">SPIByte</span><span class="p">(</span><span class="n">cmd</span><span class="p">);</span>
+</span><span class='line'>  <span class="c1">//__nop();</span>
+</span><span class='line'>  <span class="p">;</span>
+</span><span class='line'>  <span class="n">CSLCDS_H</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">//写数据</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">LcdDat</span><span class="p">(</span><span class="n">u8</span> <span class="n">dat</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">CSLCDS_L</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">A0_H</span><span class="p">;</span>
+</span><span class='line'>  <span class="c1">//__nop();</span>
+</span><span class='line'>  <span class="p">;</span>
+</span><span class='line'>  <span class="n">SPIByte</span><span class="p">(</span><span class="n">dat</span><span class="p">);</span>
+</span><span class='line'>  <span class="c1">//__nop();</span>
+</span><span class='line'>  <span class="p">;</span>
+</span><span class='line'>  <span class="n">CSLCDS_H</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2013-11-28T10:13:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>10:13 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/embedded/'>embedded</a>, <a class='category' href='/blog/categories/stm32/'>stm32</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/11/27/guan-yu-stm32ban-shang-de-12864ye-jing/" title="Previous Post: 关于STM32板上的12864液晶">&laquo; 关于STM32板上的12864液晶</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-3/" title="Next Post: 关于STM32板上的12864液晶(3)">关于STM32板上的12864液晶(3) &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/">Setup a More Intelligent OpenWRT Router</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-1/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-1/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

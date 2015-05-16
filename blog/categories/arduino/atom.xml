@@ -1,0 +1,781 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Arduino | Dash]]></title>
+  <link href="http://purplepalmdash.github.io/blog/categories/arduino/atom.xml" rel="self"/>
+  <link href="http://purplepalmdash.github.io/"/>
+  <updated>2015-05-17T06:59:52+08:00</updated>
+  <id>http://purplepalmdash.github.io/</id>
+  <author>
+    <name><![CDATA[Dash]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Proto Thread in Arduino]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2014/07/04/proto-thread-in-arduino/"/>
+    <updated>2014-07-04T19:09:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2014/07/04/proto-thread-in-arduino</id>
+    <content type="html"><![CDATA[<p>Recently I want to use RTOS on Arduino, but after reading the material I find it&rsquo;s not so easy to run another &ldquo;OS&rdquo; on Arduino. But I found this library which named &ldquo;Proto Thread&rdquo; which could afford me thread-like operation. Following is the steps for using this library for controlling 2 different threads.</p>
+
+<h3>Installation of Proto Thread</h3>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[I2C Between raspberryPI and Arduino]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/12/29/i2c-between-raspberrypi-and-arduino/"/>
+    <updated>2013-12-29T19:32:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/12/29/i2c-between-raspberrypi-and-arduino</id>
+    <content type="html"><![CDATA[<h3>连线</h3>
+
+<p>Arduino I2C 连线:  <br/>
+<img src="/images/arduino-i2c-pins.jpg" alt="arduino.jpg" />  <br/>
+RaspberryPI I2C 连线:  <br/>
+<img src="/images/raspberry-pi-i2c-pins.jpg" alt="rasp.jpg" />  <br/>
+连线图：</p>
+
+<pre><code>    RPI               Arduino (Uno/Duemillanove)
+    --------------------------------------------
+    GPIO 0 (SDA) &lt;--&gt; Pin 4 (SDA)
+    GPIO 1 (SCL) &lt;--&gt; Pin 5 (SCL)
+    Ground       &lt;--&gt; Ground
+</code></pre>
+
+<p><img src="/images/RaspberryPI-I2c-Arduino.png" alt="rasp-arduino.jpg" /></p>
+
+<h3>Arduino端代码</h3>
+
+<pre><code class="c i2c.ino">#include &lt;Wire.h&gt;
+
+#define SLAVE_ADDRESS 0x04
+int number = 0;
+int state = 0;
+
+void setup() {
+    pinMode(13, OUTPUT);
+    Serial.begin(9600);         // start serial for output
+    // initialize i2c as slave
+    Wire.begin(SLAVE_ADDRESS);
+
+    // define callbacks for i2c communication
+    Wire.onReceive(receiveData);
+    Wire.onRequest(sendData);
+
+    Serial.println("Ready!");
+}
+
+void loop() {
+    delay(100);
+}
+
+// callback for received data
+void receiveData(int byteCount){
+
+    while(Wire.available()) {
+        number = Wire.read();
+        Serial.print("data received: ");
+        Serial.println(number);
+
+        if (number == 1){
+
+            if (state == 0){
+                digitalWrite(13, HIGH); // set the LED on
+                state = 1;
+            }
+            else{
+                digitalWrite(13, LOW); // set the LED off
+                state = 0;
+            }
+         }
+     }
+}
+
+// callback for sending data
+void sendData(){
+    Wire.write(number);
+}
+</code></pre>
+
+<h3>RaspberryPI端准备</h3>
+
+<p>在/etc/modules中增加一行:</p>
+
+<pre><code>    i2c-dev
+</code></pre>
+
+<p>注释掉黑名单：</p>
+
+<pre><code>    $ cat /etc/modprobe.d/raspi-blacklist.conf
+    # blacklist spi and i2c by default (many users don't need them)
+    # blacklist spi-bcm2708
+    #blacklist i2c-bcm2708
+</code></pre>
+
+<p>安装i2c工具：</p>
+
+<pre><code>    apt-get install i2c-tools
+</code></pre>
+
+<p>安装python库：</p>
+
+<pre><code>    apt-get install python-smbus
+</code></pre>
+
+<p>探测i2c设备</p>
+
+<pre><code>    i2cdetect -y 0
+</code></pre>
+
+<p>如果不是root用户，例如，如果是pi用户，则需要将当前用户增加到i2c组中:</p>
+
+<pre><code>    $ sudo adduser pi i2c
+</code></pre>
+
+<h3>RaspberryPI端代码</h3>
+
+<pre><code class="py i2c.py">import smbus
+import time
+# for RPI version 1, use "bus = smbus.SMBus(0)"
+bus = smbus.SMBus(0)
+
+# This is the address we setup in the Arduino Program
+address = 0x04
+
+def writeNumber(value):
+    bus.write_byte(address, value)
+    # bus.write_byte_data(address, 0, value)
+    return -1
+
+def readNumber():
+    number = bus.read_byte(address)
+    # number = bus.read_byte_data(address, 1)
+    return number
+
+while True:
+    var = input("Enter 1 - 9: ")
+    if not var:
+        continue
+
+    writeNumber(var)
+    print "RPI: Hi Arduino, I sent you ", var
+    # sleep one second
+    time.sleep(1)
+
+    number = readNumber()
+    print "Arduino: Hey RPI, I received a digit ", number
+    print
+</code></pre>
+
+<p>运行代码时要注意，0～255的数字输入进去，会在arduino i2c slave端收到对应的数据，并原封不动的被返回。超过255的数值将溢出。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Little Tricky on SPI]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/12/29/little-tricky-on-spi/"/>
+    <updated>2013-12-29T17:13:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/12/29/little-tricky-on-spi</id>
+    <content type="html"><![CDATA[<p>接着上一个日志来，玩一个小tricky，通过SPI总线自己想输入的字符。 <br/>
+主机端，添加下列头文件
+    #include &lt;string.h>
+这使得可以使用strcpy等函数。  <br/>
+重写transfer()函数</p>
+
+<pre><code class="c spidev_test.c">static void transfer_mine(int fd, char *buf)
+{
+    int ret;
+
+    uint8_t tx[140];
+    int len = strlen(buf)+1;
+    memcpy(tx, buf, strlen(buf)+1);
+    tx[strlen(tx)] = '\n';
+
+    uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+    struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)tx,
+        .rx_buf = (unsigned long)rx,
+        //.len = ARRAY_SIZE(tx),
+        .len = len,
+        .delay_usecs = delay,
+        .speed_hz = speed,
+        .bits_per_word = bits,
+    };
+
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+    if (ret &lt; 1)
+        pabort("can't send spi message");
+}
+</code></pre>
+
+<p>在main()函数里，改写调用的方式：</p>
+
+<pre><code class="c spidev_test.c">    char myinput[140]="Trustywill, Hi, this is Trusty";
+    transfer_mine(fd, myinput);
+</code></pre>
+
+<p>这样就可以将自定义的字符传输过去了，140是随便设置的值，可以设置为别的更大或者更小的值。 <br/>
+当然你也可以从命令行输入想传输的字符, 这里就不深入了。。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[SPI连接raspberryPI和Arduino]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/12/29/spilian-jie-raspberrypihe-arduino/"/>
+    <updated>2013-12-29T15:06:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/12/29/spilian-jie-raspberrypihe-arduino</id>
+    <content type="html"><![CDATA[<p>下面是使用SPI在RaspberryPI和Arduino Nano w之间进行双机通信的一个例子。借助它可以很好的理解SPI的工作原理。</p>
+
+<h3>背景知识</h3>
+
+<p>RaspberryPI GPIO布局图：   <br/>
+<img src="/images/GPIOs.png" alt="/images/GPIOs.png" />  <br/>
+从图中我们可以看到，RaspberryPI上与SPI通信相关的主要是GPIO 10（MOSI), GPIO 9(MISO)和GPIO 11(SCLK).  <br/>
+Arduino布局图：  <br/>
+SPI: 10 (SS), 11 (MOSI), 12 (MISO), 13 (SCK). These pins support SPI communication using the SPI library. SS代表Slava Select.      <br/>
+事实上我们要使用的仅仅是11/12/13三个口而已。</p>
+
+<h3>连线图</h3>
+
+<p>如下图进行连线，简单来说，R(10 MOSI)->A(12 MISO), R(9, MISO)->A(11, MOSI), R(11, SCLK) ->A(13, SCK)：     <br/>
+<img src="/images/spiconnector.jpg" alt="/images/spiconnector.jpg" /></p>
+
+<h3>Arduino端程序</h3>
+
+<pre><code class="c spin.ino">// Written by Nick Gammon
+// February 2011
+/**
+ * Send arbitrary number of bits at whatever clock rate (tested at 500 KHZ and 500 HZ).
+ * This script will capture the SPI bytes, when a '\n' is recieved it will then output
+ * the captured byte stream via the serial.
+ */
+
+#include &lt;SPI.h&gt;
+
+char buf [100];
+volatile byte pos;
+volatile boolean process_it;
+
+void setup (void)
+{
+  Serial.begin (115200);   // debugging
+
+  // have to send on master in, *slave out*
+  pinMode(MISO, OUTPUT);
+
+  // turn on SPI in slave mode
+  SPCR |= _BV(SPE);
+  //SPCR is  Arduino SPI Control Register
+  // __BV's definition is like : #define _BV(bit) (1 &lt;&lt; (bit))
+  // SPE is the register of the SPI Enable
+
+  // get ready for an interrupt 
+  pos = 0;   // buffer empty
+  process_it = false;
+
+  // now turn on interrupts
+  SPI.attachInterrupt();
+
+}  // end of setup
+
+
+// SPI interrupt routine
+ISR (SPI_STC_vect)
+{
+byte c = SPDR;  // grab byte from SPI Data Register
+
+  // add to buffer if room
+  if (pos &lt; sizeof buf)
+    {
+    buf [pos++] = c;
+
+    // example: newline means time to process buffer
+    if (c == '\n')
+      process_it = true;
+
+    }  // end of room available
+}  // end of interrupt routine SPI_STC_vect
+
+// main loop - wait for flag set in interrupt routine
+void loop (void)
+{
+  if (process_it)
+    {
+    buf [pos] = 0;  
+    Serial.println (buf);
+    pos = 0;
+    process_it = false;
+    }  // end of flag set
+
+}  // end of loop
+</code></pre>
+
+<p>Code Walking through:  <br/>
+Arduino SPI Control Register (SPCR), set it to</p>
+
+<pre><code>    SPCR |= _BV(SPE);
+</code></pre>
+
+<p>SPI Data Register (SPDR), SPI数据寄存器。 中断程序中，每次从SPDR中取回一个byte 并存储在c中。</p>
+
+<pre><code>    if (c == '\n')
+        process_it = true;
+</code></pre>
+
+<p>这里通过设置全局变量process_it来影响loop中对接收数据的处理，在loop()中有如下代码段：</p>
+
+<pre><code>    if (process_it)
+    {
+        //.....
+    }
+</code></pre>
+
+<p>从上面看到，如果process_it为0,则loop中一直在空循环，只有当所有的数据全部接收完毕后，才会一次性打印出所有的数据。在打印完数据后，程序将自动将buf清0, 清0是通过将pos简单置0而实现的，实际的数据其实还在。</p>
+
+<h3>RaspberryPI 端程序</h3>
+
+<pre><code class="c spi_test.c">/*
+ * SPI testing utility (using spidev driver)
+ *
+ * Copyright (c) 2007  MontaVista Software, Inc.
+ * Copyright (c) 2007  Anton Vorontsov &lt;avorontsov@ru.mvista.com&gt;
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License.
+ *
+ * Cross-compile with cross-gcc -I/path/to/cross-kernel/include
+ */
+
+#include &lt;stdint.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;getopt.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include &lt;linux/types.h&gt;
+#include &lt;linux/spi/spidev.h&gt;
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
+static void pabort(const char *s)
+{
+    perror(s);
+    abort();
+}
+
+static const char *device = "/dev/spidev0.0";
+static uint8_t mode;
+static uint8_t bits = 8;
+static uint32_t speed = 500000;
+static uint16_t delay;
+
+static void transfer(int fd)
+{
+    int ret;
+    uint8_t tx[] = {
+        0x48, 0x45, 0x4C, 0x4C, 0x4F,
+        0x20, 
+        0x57, 0x4F, 0x52, 0x4C, 0x44,
+        0x0A 
+    };
+    uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+    struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)tx,
+        .rx_buf = (unsigned long)rx,
+        .len = ARRAY_SIZE(tx),
+        .delay_usecs = delay,
+        .speed_hz = speed,
+        .bits_per_word = bits,
+    };
+
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+    if (ret &lt; 1)
+        pabort("can't send spi message");
+
+    /*
+    for (ret = 0; ret &lt; ARRAY_SIZE(tx); ret++) {
+        if (!(ret % 6))
+            puts("");
+        printf("%.2X ", rx[ret]);
+    }
+    puts("");
+    */
+}
+
+static void print_usage(const char *prog)
+{
+    printf("Usage: %s [-DsbdlHOLC3]\n", prog);
+    puts("  -D --device   device to use (default /dev/spidev1.1)\n"
+         "  -s --speed    max speed (Hz)\n"
+         "  -d --delay    delay (usec)\n"
+         "  -b --bpw      bits per word \n"
+         "  -l --loop     loopback\n"
+         "  -H --cpha     clock phase\n"
+         "  -O --cpol     clock polarity\n"
+         "  -L --lsb      least significant bit first\n"
+         "  -C --cs-high  chip select active high\n"
+         "  -3 --3wire    SI/SO signals shared\n");
+    exit(1);
+}
+
+static void parse_opts(int argc, char *argv[])
+{
+    while (1) {
+        static const struct option lopts[] = {
+            { "device",  1, 0, 'D' },
+            { "speed",   1, 0, 's' },
+            { "delay",   1, 0, 'd' },
+            { "bpw",     1, 0, 'b' },
+            { "loop",    0, 0, 'l' },
+            { "cpha",    0, 0, 'H' },
+            { "cpol",    0, 0, 'O' },
+            { "lsb",     0, 0, 'L' },
+            { "cs-high", 0, 0, 'C' },
+            { "3wire",   0, 0, '3' },
+            { "no-cs",   0, 0, 'N' },
+            { "ready",   0, 0, 'R' },
+            { NULL, 0, 0, 0 },
+        };
+        int c;
+
+        c = getopt_long(argc, argv, "D:s:d:b:lHOLC3NR", lopts, NULL);
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+        case 'D':
+            device = optarg;
+            break;
+        case 's':
+            speed = atoi(optarg);
+            break;
+        case 'd':
+            delay = atoi(optarg);
+            break;
+        case 'b':
+            bits = atoi(optarg);
+            break;
+        case 'l':
+            mode |= SPI_LOOP;
+            break;
+        case 'H':
+            mode |= SPI_CPHA;
+            break;
+        case 'O':
+            mode |= SPI_CPOL;
+            break;
+        case 'L':
+            mode |= SPI_LSB_FIRST;
+            break;
+        case 'C':
+            mode |= SPI_CS_HIGH;
+            break;
+        case '3':
+            mode |= SPI_3WIRE;
+            break;
+        case 'N':
+            mode |= SPI_NO_CS;
+            break;
+        case 'R':
+            mode |= SPI_READY;
+            break;
+        default:
+            print_usage(argv[0]);
+            break;
+        }
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    int ret = 0;
+    int fd;
+
+    parse_opts(argc, argv);
+
+    fd = open(device, O_RDWR);
+    if (fd &lt; 0)
+        pabort("can't open device");
+
+    /*
+     * spi mode
+     */
+    ret = ioctl(fd, SPI_IOC_WR_MODE, &amp;mode);
+    if (ret == -1)
+        pabort("can't set spi mode");
+
+    ret = ioctl(fd, SPI_IOC_RD_MODE, &amp;mode);
+    if (ret == -1)
+        pabort("can't get spi mode");
+
+    /*
+     * bits per word
+     */
+    ret = ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &amp;bits);
+    if (ret == -1)
+        pabort("can't set bits per word");
+
+    ret = ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &amp;bits);
+    if (ret == -1)
+        pabort("can't get bits per word");
+
+    /*
+     * max speed hz
+     */
+    ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &amp;speed);
+    if (ret == -1)
+        pabort("can't set max speed hz");
+
+    ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &amp;speed);
+    if (ret == -1)
+        pabort("can't get max speed hz");
+
+    printf("spi mode: %d\n", mode);
+    printf("bits per word: %d\n", bits);
+    printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000);
+
+    transfer(fd);
+
+    close(fd);
+
+    return ret;
+}
+</code></pre>
+
+<p>解析： 在main()函数中，设置完spi总线的相关参数后，调用transfer(fd)来传递参数。  <br/>
+transfer()函数的实现如下:</p>
+
+<pre><code class="c spidev_test.c">static void transfer(int fd)
+{
+    int ret;
+    uint8_t tx[] = {
+        0x48, 0x45, 0x4C, 0x4C, 0x4F,
+        0x20, 
+        0x57, 0x4F, 0x52, 0x4C, 0x44,
+        0x0A 
+    };
+    uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+    struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)tx,
+        .rx_buf = (unsigned long)rx,
+        .len = ARRAY_SIZE(tx),
+        .delay_usecs = delay,
+        .speed_hz = speed,
+        .bits_per_word = bits,
+    };
+
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+    if (ret &lt; 1)
+        pabort("can't send spi message");
+
+    /*
+    for (ret = 0; ret &lt; ARRAY_SIZE(tx); ret++) {
+        if (!(ret % 6))
+            puts("");
+        printf("%.2X ", rx[ret]);
+    }
+    puts("");
+    */
+}
+</code></pre>
+
+<p>tx即为字符串，'H'=0x48, &lsquo;E&rsquo;=0x45, &lsquo;L&rsquo;=0x4c, &lsquo;L&rsquo;=0x4c, &lsquo;O&rsquo;=0x4f, &lsquo; &rsquo;=0x20, &lsquo;W&rsquo;=0x57, &lsquo;O&rsquo;=0x4f, &lsquo;R&rsquo;=0x52, &lsquo;L&rsquo;=0x4c, &rsquo;D'=0x44, &lsquo;\n&rsquo;=0x0a.  <br/>
+实际传送则是调用：
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+有关它的解释如下：</p>
+
+<pre><code class="c include/uapi/linux/spi/spidev.h">    SPI_IOC_MESSAGE gives userspace the equivalent of kernel spi_sync().
+      72 * Pass it an array of related transfers, they'll execute together.
+      73 * Each transfer may be half duplex (either direction) or full duplex.
+      74 *
+      75 *      struct spi_ioc_transfer mesg[4];
+      76 *      ...
+      77 *      status = ioctl(fd, SPI_IOC_MESSAGE(4), mesg);
+
+    #define SPI_IOC_MESSAGE(N) _IOW(SPI_IOC_MAGIC, 0, char[SPI_MSGSIZE(N)])
+</code></pre>
+
+<p>调用完transfer()函数后，调用close()来关闭文件描述符。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[TSC3200 on Arduino]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2013/12/28/tsc3200-on-arduino/"/>
+    <updated>2013-12-28T19:20:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2013/12/28/tsc3200-on-arduino</id>
+    <content type="html"><![CDATA[<h3>Introduction</h3>
+
+<p>The detailed information could be seen as in :  <br/>
+<a href="http://www.eefocus.com/zhang700309/blog/13-08/296390_6c438.html">http://www.eefocus.com/zhang700309/blog/13-08/296390_6c438.html</a></p>
+
+<h3>Wiring:</h3>
+
+<p>Notice we use the interrupt 1.  <br/>
+<img src="/images/tsc3200d.jpg" alt="images/tsc3200d.jpg" /></p>
+
+<h3>Code</h3>
+
+<pre><code class="c tsc3200d.ino">#include &lt;TimerOne.h&gt;
+
+#define S0     6   // Please notice the Pin's define
+#define S1     5
+#define S2     4
+#define S3     2
+#define OUT    3
+
+int   g_count = 0;    // count the frequecy
+int   g_array[3];     // store the RGB value
+int   g_flag = 0;     // filter of RGB queue
+float g_SF[3];        // save the RGB Scale factor
+
+
+// Init TSC230 and setting Frequency.
+void TSC_Init()
+{
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  pinMode(OUT, INPUT);
+
+  digitalWrite(S0, LOW);  // OUTPUT FREQUENCY SCALING 2%
+  digitalWrite(S1, HIGH); 
+}
+
+// Select the filter color 
+void TSC_FilterColor(int Level01, int Level02)
+{
+  if(Level01 != 0)
+    Level01 = HIGH;
+
+  if(Level02 != 0)
+    Level02 = HIGH;
+
+  digitalWrite(S2, Level01); 
+  digitalWrite(S3, Level02); 
+}
+
+void TSC_Count()
+{
+  g_count ++ ;
+}
+
+void TSC_Callback()
+{
+  switch(g_flag)
+  {
+    case 0: 
+         Serial.println("-&gt;WB Start");
+         TSC_WB(LOW, LOW);              //Filter without Red
+         break;
+    case 1:
+         Serial.print("-&gt;Frequency R=");
+         Serial.println(g_count);
+         g_array[0] = g_count;
+         TSC_WB(HIGH, HIGH);            //Filter without Green
+         break;
+    case 2:
+         Serial.print("-&gt;Frequency G=");
+         Serial.println(g_count);
+         g_array[1] = g_count;
+         TSC_WB(LOW, HIGH);             //Filter without Blue
+         break;
+
+    case 3:
+         Serial.print("-&gt;Frequency B=");
+         Serial.println(g_count);
+         Serial.println("-&gt;WB End");
+         g_array[2] = g_count;
+         TSC_WB(HIGH, LOW);             //Clear(no filter)   
+         break;
+   default:
+         g_count = 0;
+         break;
+  }
+}
+
+void TSC_WB(int Level0, int Level1)      //White Balance
+{
+  g_count = 0;
+  g_flag ++;
+  TSC_FilterColor(Level0, Level1);
+  Timer1.setPeriod(1000000);             // set 1s period
+}
+
+void setup()
+{
+  TSC_Init();
+  Serial.begin(9600);
+  Timer1.initialize();             // defaulte is 1s
+  Timer1.attachInterrupt(TSC_Callback);  
+  attachInterrupt(1, TSC_Count, RISING);  
+ pinMode(8, OUTPUT);
+ pinMode(9, OUTPUT);
+ pinMode(10, OUTPUT);
+ digitalWrite(8,HIGH);
+ digitalWrite(9,HIGH);
+ digitalWrite(10,HIGH);
+
+  delay(4000);
+
+  for(int i=0; i&lt;3; i++)
+    Serial.println(g_array[i]);
+
+  g_SF[0] = 255.0/ g_array[0];     //R Scale factor
+  g_SF[1] = 255.0/ g_array[1] ;    //G Scale factor
+  g_SF[2] = 255.0/ g_array[2] ;    //B Scale factor
+
+  Serial.println(g_SF[0]);
+  Serial.println(g_SF[1]);
+  Serial.println(g_SF[2]);
+
+}
+
+void loop()
+{
+   g_flag = 0;
+   for(int i=0; i&lt;3; i++)
+    Serial.println(int(g_array[i] * g_SF[i]));
+   if(((g_array[0]*g_SF[0])&gt;(g_array[1]*g_SF[1])) &amp;&amp; ((g_array[0]*g_SF[0])&gt;(g_array[2]*g_SF[2])))
+   {
+      digitalWrite(8,HIGH);
+      digitalWrite(9,LOW);
+      digitalWrite(10,LOW);
+   }
+   else if(((g_array[1]*g_SF[1])&gt;(g_array[0]*g_SF[0])) &amp;&amp; ((g_array[1]*g_SF[1])&gt;(g_array[2]*g_SF[2])))
+   {
+      digitalWrite(8,LOW);
+      digitalWrite(9,HIGH);
+      digitalWrite(10,LOW);
+   }     
+   else if(((g_array[2]*g_SF[2])&gt;(g_array[1]*g_SF[1])) &amp;&amp; ((g_array[2]*g_SF[2])&gt;(g_array[0]*g_SF[0])))
+   {
+      digitalWrite(8,LOW);
+      digitalWrite(9,LOW);
+      digitalWrite(10,HIGH);
+   }        
+   else
+   {
+      digitalWrite(8,LOW);
+      digitalWrite(9,LOW);
+      digitalWrite(10,LOW);
+   }
+   delay(4000);
+
+}
+</code></pre>
+
+<h3>Effect</h3>
+
+<p>First, the program will caculate the RBG base value out.  <br/>
+If you put the sensor on a red object, red LED will be lighten, turn the sensor facing a green object, green LED will be lighten; blue object for blue LED.</p>
+]]></content>
+  </entry>
+  
+</feed>

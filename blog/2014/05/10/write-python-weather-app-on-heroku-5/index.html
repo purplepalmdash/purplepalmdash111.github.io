@@ -1,0 +1,574 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Write Python Weather APP on Heroku(5) - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="In fact this is a migration from sqlite3 to postgresql. View the historical sqlite3 We will refer to our own design of database. First fetch the data &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2014/05/10/write-python-weather-app-on-heroku-5">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Write Python Weather APP on Heroku(5)</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-10T09:02:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:02 am</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>In fact this is a migration from sqlite3 to postgresql.</p>
+
+<h3>View the historical sqlite3</h3>
+
+<p>We will refer to our own design of database. First fetch the data file, this is a sqlite3 file, so we use sqlite3 to view its structure.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sqlite3  
+</span><span class='line'>SQLite version 3.8.4.3 2014-04-03 16:53:12
+</span><span class='line'>Enter ".help" for usage hints.
+</span><span class='line'>Connected to a transient in-memory database.
+</span><span class='line'>Use ".open FILENAME" to reopen on a persistent database.
+</span><span class='line'>sqlite&gt; .open ./weather.db
+</span><span class='line'>sqlite&gt; .tables
+</span><span class='line'>foo
+</span><span class='line'>sqlite&gt; .schema foo
+</span><span class='line'>CREATE TABLE foo (d_temper integer, d_humi integer, d_pm10 integer, d_pm25 real, d_time timestamp);
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Although sqlite3 is supported on heroku, we&rsquo;d better use heroku&rsquo;s suggestion, to use postgre for storing out database.</p>
+
+<h3>Create Database In Postgres</h3>
+
+<h4>Datatime selection:</h4>
+
+<p>Postgres provides a very fantanstic way for handling the datatime, it supports the timezone, comparing to GAE&rsquo;s database, this feature will let us get the current time based on timezone. So we did the following tests:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># CREATE TABLE my_tbl (
+</span><span class='line'>mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+</span><span class='line'>mylocaldb(# CHECK(EXTRACT(TIMEZONE FROM my_timestamp) = '0')
+</span><span class='line'>mylocaldb(# );
+</span><span class='line'>CREATE TABLE
+</span><span class='line'>mylocaldb=# \dt my_tbl
+</span><span class='line'>        List of relations
+</span><span class='line'> Schema |  Name  | Type  | Owner 
+</span><span class='line'>--------+--------+-------+-------
+</span><span class='line'> public | my_tbl | table | Trusty
+</span><span class='line'>(1 row)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When we want to insert the datatime into table &lsquo;my_tbl&rsquo;, simply do following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# SET timezone = 'UTC';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# INSERT INTO my_tbl (my_timestamp) VALUES (NOW());
+</span><span class='line'>INSERT 0 1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And for querying out the inserted records, we do following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# select * from public.my_tbl
+</span><span class='line'>;
+</span><span class='line'>         my_timestamp          
+</span><span class='line'>-------------------------------
+</span><span class='line'> 2014-05-10 01:39:52.87532+00
+</span><span class='line'> 2014-05-10 01:42:44.130269+00
+</span><span class='line'>(2 rows)
+</span><span class='line'>
+</span><span class='line'>mylocaldb=# SET timezone='Asia/Shanghai';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# select * from public.my_tbl
+</span><span class='line'>mylocaldb-# ;
+</span><span class='line'>         my_timestamp          
+</span><span class='line'>-------------------------------
+</span><span class='line'> 2014-05-10 09:39:52.87532+08
+</span><span class='line'> 2014-05-10 09:42:44.130269+08
+</span><span class='line'>(2 rows)
+</span><span class='line'>
+</span><span class='line'>mylocaldb=# SET timezone='America/Los_Angeles';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# select * from public.my_tbl;
+</span><span class='line'>         my_timestamp          
+</span><span class='line'>-------------------------------
+</span><span class='line'> 2014-05-09 18:39:52.87532-07
+</span><span class='line'> 2014-05-09 18:42:44.130269-07
+</span><span class='line'>(2 rows)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We can see the output formats depends on our &ldquo;timezone&rdquo; value.</p>
+
+<h4>Select Other Data Formats</h4>
+
+<p>We listed following table for describing the Data we inserted:  <br/>
+Timestamp       integer     integer    integer    integer  <br/>
+Insert_Time     Temperature Humidity   PMTen       PMTwoFive</p>
+
+<p>Thus the sql sentense is as following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# CREATE TABLE weather (
+</span><span class='line'>mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+</span><span class='line'>mylocaldb(# Temperature ^C
+</span><span class='line'>mylocaldb=# CREATE TABLE weather (
+</span><span class='line'>mylocaldb(# Insert_Time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+</span><span class='line'>mylocaldb(# Temperature integer,
+</span><span class='line'>mylocaldb(# Humidity integer,
+</span><span class='line'>mylocaldb(# PMTen integer,
+</span><span class='line'>mylocaldb(# PMTwoFive integer,
+</span><span class='line'>mylocaldb(#  CHECK(EXTRACT(TIMEZONE FROM Insert_Time) = '0'));
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Check the tables:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# \dt
+</span><span class='line'>        List of relations
+</span><span class='line'> Schema |  Name   | Type  | Owner 
+</span><span class='line'>--------+---------+-------+-------
+</span><span class='line'> public | my_tbl  | table | Trusty
+</span><span class='line'> public | user    | table | Trusty
+</span><span class='line'> public | weather | table | Trusty
+</span><span class='line'>(3 rows)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Insert one record:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# INSERT INTO weather (Insert_Time, Temperature, Humidity, PMTen, PMTwoFive) VALUES(NOW(), 25, 80, 150, 75);
+</span><span class='line'>INSERT 0 1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Displaying the inserted record:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# SET timezone='Asia/Shanghai';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# select * from public.weather;
+</span><span class='line'>          insert_time          | temperature | humidity | pmten | pmtwofive 
+</span><span class='line'>-------------------------------+-------------+----------+-------+-----------
+</span><span class='line'> 2014-05-10 10:38:27.276043+08 |          25 |       80 |   150 |        75
+</span><span class='line'>(1 row)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Database Operation</h4>
+
+<p>We need to create just once database, So this function should be Check_Or_Create().   <br/>
+We need to insert records, so Insert_Record() should be written.  <br/>
+Other Operation, modification or delete shouldn&rsquo;t care at the very beginning.  <br/>
+We will use a new file for recording all of the function.</p>
+
+<p>The code for Create and Insert record into weather table is listed as following:</p>
+
+<figure class='code'><figcaption><span>database.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">create_engine</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">MetaData</span><span class="p">,</span> <span class="n">Column</span><span class="p">,</span> <span class="n">Table</span><span class="p">,</span> <span class="n">ForeignKey</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">Integer</span><span class="p">,</span> <span class="n">String</span><span class="p">,</span> <span class="n">DateTime</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">datetime</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Create the engine for connecting the local database</span>
+</span><span class='line'><span class="c"># How to connect the remote engine, heroku postgres? </span>
+</span><span class='line'><span class="c"># Yes, it&#39;s possible. The DATABASE_URL environment variable provided by heroku fits perfectly as argument for create_engine. Behind the scene, it&#39;s a postgresql database, which is perfectly handled by sqlalchemy.</span>
+</span><span class='line'><span class="c"># </span>
+</span><span class='line'><span class="c"># The way to do it may vary depending on the framework you use, but there shouldn&#39;t be any difficulty.</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="s">&#39;postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb&#39;</span><span class="p">,</span><span class="n">echo</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</span><span class='line'><span class="n">metadata</span><span class="o">=</span><span class="n">MetaData</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Definition of the weather table</span>
+</span><span class='line'><span class="n">weather_table</span><span class="o">=</span><span class="n">Table</span><span class="p">(</span><span class="s">&#39;weather&#39;</span><span class="p">,</span><span class="n">metadata</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Insert_Time&#39;</span><span class="p">,</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">timezone</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span><span class="n">primary_key</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Temperature&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Humidity&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTen&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTwoFive&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Create the table in mylocaldb</span>
+</span><span class='line'><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">checkfirst</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The actual SQL Language</span>
+</span><span class='line'><span class="c">#CREATE TABLE weather (</span>
+</span><span class='line'><span class="c"># &quot;Insert_Time&quot; TIMESTAMP WITH TIME ZONE NOT NULL, </span>
+</span><span class='line'><span class="c"># &quot;Temperature&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># &quot;Humidity&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># &quot;PmTen&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># &quot;PmTwoFive&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># PRIMARY KEY (&quot;Insert_Time&quot;)</span>
+</span><span class='line'><span class="c">#)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># mylocaldb=# select * from public.weather;</span>
+</span><span class='line'><span class="c">#  Insert_Time | Temperature | Humidity | PmTen | PmTwoFive </span>
+</span><span class='line'><span class="c"># -------------+-------------+----------+-------+-----------</span>
+</span><span class='line'><span class="c"># (0 rows)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Record Insertion</span>
+</span><span class='line'><span class="c"># First generate an insertion sentense:</span>
+</span><span class='line'><span class="n">ins</span> <span class="o">=</span> <span class="n">weather_table</span><span class="o">.</span><span class="n">insert</span><span class="p">()</span>
+</span><span class='line'><span class="c">#&gt;&gt;&gt; str(ins)</span>
+</span><span class='line'><span class="c">#&#39;INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">ins</span> <span class="o">=</span> <span class="n">weather_table</span><span class="o">.</span><span class="n">insert</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">Insert_Time</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">(),</span> <span class="n">Temperature</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">Humidity</span><span class="o">=</span><span class="mi">75</span><span class="p">,</span> <span class="n">PmTen</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">PmTwoFive</span><span class="o">=</span><span class="mi">55</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">#&gt;&gt;&gt; str(ins)</span>
+</span><span class='line'><span class="c">#&#39;INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)&#39;</span>
+</span><span class='line'><span class="c">#</span>
+</span><span class='line'><span class="c">#&gt;&gt;&gt; ins.compile().params</span>
+</span><span class='line'><span class="c">#{&#39;PmTen&#39;: 100, &#39;PmTwoFive&#39;: 55, &#39;Temperature&#39;: 25, &#39;Insert_Time&#39;: datetime.datetime(2014, 5, 10, 5, 58, 21, 677234), &#39;Humidity&#39;: 75}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Connect to engine and execute. </span>
+</span><span class='line'><span class="n">conn</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+</span><span class='line'><span class="c"># &gt;&gt;&gt; conn</span>
+</span><span class='line'><span class="c"># &lt;sqlalchemy.engine.base.Connection object at 0x2715890&gt;</span>
+</span><span class='line'><span class="n">result</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ins</span><span class="p">)</span>
+</span><span class='line'><span class="c"># View result in psql</span>
+</span><span class='line'><span class="c"># mylocaldb=# select * from public.weather;</span>
+</span><span class='line'><span class="c">#           Insert_Time          | Temperature | Humidity | PmTen | PmTwoFive </span>
+</span><span class='line'><span class="c"># -------------------------------+-------------+----------+-------+-----------</span>
+</span><span class='line'><span class="c">#  2014-05-10 05:58:21.677234+08 |          25 |       75 |   100 |        55</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The critical functions has been pointed out in the above python file. Now we will consider how to run these functions at background. This will lead to next topic, &ldquo;Run multiple process in a single Heroku dyno&rdquo;.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2014-05-10T09:02:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:02 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/python/'>python</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/05/09/write-python-weather-app-on-heroku-4/" title="Previous Post: Write Python Weather APP on Heroku(4)">&laquo; Write Python Weather APP on Heroku(4)</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/05/10/write-python-weather-app-on-heroku-6/" title="Next Post: Write Python Weather APP on Heroku(6)">Write Python Weather APP on Heroku(6) &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/">Setup a More Intelligent OpenWRT Router</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2014/05/10/write-python-weather-app-on-heroku-5/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2014/05/10/write-python-weather-app-on-heroku-5/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

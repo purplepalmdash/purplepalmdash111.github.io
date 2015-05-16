@@ -1,0 +1,1232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Virtualization | Dash]]></title>
+  <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
+  <link href="http://purplepalmdash.github.io/"/>
+  <updated>2015-05-17T06:59:52+08:00</updated>
+  <id>http://purplepalmdash.github.io/</id>
+  <author>
+    <name><![CDATA[Dash]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[使用Fuel部署OpenContrail(6)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/05/06/shi-yong-fuelbu-shu-opencontrail-6/"/>
+    <updated>2015-05-06T15:27:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/05/06/shi-yong-fuelbu-shu-opencontrail-6</id>
+    <content type="html"><![CDATA[<p>前面在HA类型的Fuel OpenStack基础上集成了OpenContrail，然而在实际的开发和测试中，用HA类型比较浪费硬件资源，因此这次我把部署节点从7个压缩到3个，做多节点上非HA类型的OpenStack集成OpenContrail.</p>
+
+<h3>先决条件</h3>
+
+<p>这次只用三台机器来做部署，分别为:  <br/>
+2-Core, 3G内存, 100G硬盘, 用于安装OpenStack Controller.      <br/>
+2-Core, 2G内存, 100G硬盘, 用于安装OpenStack Compute. 注意这台机器需要Copy Host CPU configuration, 以激活KVM。      <br/>
+2-Core, 3G内存, 100G硬盘, 用于安装Contrail.  <br/>
+创建出来的两个用于部署的OpenStack环境如下:  <br/>
+<img src="/images/2015_05_06_15_36_20_383x194.jpg" alt="/images/2015_05_06_15_36_20_383x194.jpg" /> <br/>
+值得注意的是，在OpenStack的配置中，我们激活了Ceilometer，用于统计，所以需要额外增加一台2G内存大小的虚拟机。  <br/>
+<img src="/images/2015_05_06_09_40_34_608x385.jpg" alt="/images/2015_05_06_09_40_34_608x385.jpg" /></p>
+
+<h3>安装</h3>
+
+<p>安装过程和HA的过程大同小异，配置好网络以后，现在I3OpenStack中部署好OpenStack，而后用provision的方式将I3Contrail中的Contrail部署节点机器安装为Ubuntu的格式。    <br/>
+这里的具体配置过程可以参考《使用Fuel部署OpenContrail(1)》到《使用Fuel部署OpenContrail(3)》.  <br/>
+一切就绪后，我们进入到配置过程.</p>
+
+<h3>配置</h3>
+
+<p>详细配置如下:</p>
+
+<h4>(Contrail) 配置Contrail部署节点</h4>
+
+<p>删除不用的网络端口, 并配置ifccfg-eth4后重启:</p>
+
+<pre><code># cd /etc/network/interfaces.d/
+# rm -f ifcfg-eth1 
+# rm -f ifcfg-eth2 
+# rm -f ifcfg-eth3
+# vim ifcfg-eth4
+    auto eth4
+    iface eth4 inet static
+
+    address 10.77.77.100
+    netmask 255.255.255.0
+    gateway 10.77.77.1
+
+    post-up  ethtool  -K  eth4  gso off  gro off || true
+# reboot
+</code></pre>
+
+<p>确保在Contrail部署节点上，可以ping通OpenStack Controller的10.55.55.0/24网络。   <br/>
+配置本地安装源:</p>
+
+<pre><code># echo 'deb http://10.20.0.2:8080/contrail/ /' &gt; /etc/apt/sources.list.d/contrail.list
+# echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
+# &gt;/etc/apt/sources.list
+# apt-get update
+# apt-get install -y python-paramiko contrail-fabric-utils contrail-setup
+# pip install --upgrade --no-deps --index-url=”” /opt/contrail/python_packages/Fabric-1.7.0.tar.gz
+</code></pre>
+
+<p>开始配置用于部署的testbed.py文件，可以看到，比起HA部署方式来看，我们减少了一些节点定义，去掉了HA有关的配置:</p>
+
+<pre><code># vim  /opt/contrail/utils/fabfile/testbeds/testbed.py
+    from fabric.api import env
+    #Management ip addresses of hosts in the cluster
+    #os_ctrl01 = 'root@10.55.55.6'
+    #os_ctrl02 = 'root@10.55.55.7'
+    #os_ctrl03 = 'root@10.55.55.8'
+    os_ctrl01 = 'root@10.55.55.7'
+
+    c_ctrl01 = 'root@10.77.77.100'
+    #c_ctrl02 = 'root@10.77.77.11'
+    #c_ctrl03 = 'root@10.77.77.12'
+    c_db01 = 'root@10.77.77.100'
+    #c_db02 = 'root@10.77.77.11'
+    #c_db03 = 'root@10.77.77.12'
+    #External routers
+    # ext_routers = [('gateway01', '&lt;Gateway_node1_LOOPBACK_ip&gt;'), ('gateway02', '&lt;Gateway_node2_LOOPBACK_ip&gt;')]
+    #Autonomous system number
+    router_asn = 64512
+    #Host from which the fab commands are triggered to install and provision
+    deploy_node = 'root@10.77.77.100'
+    #Role definition of the hosts.
+    env.roledefs = {
+    'all': [c_ctrl01, c_db01],
+    'cfgm': [c_ctrl01],
+    'openstack': [os_ctrl01],
+    'control': [c_ctrl01],
+    'compute': [],
+    'collector': [c_ctrl01],
+    'webui': [c_ctrl01],
+    'database': [c_db01],
+    'build': [deploy_node],
+    'storage-master': [],
+    'storage-compute': [],
+    }
+    #Openstack admin password
+    env.openstack_admin_password = 'admin'
+    env.password = 'r00tme'
+    #Passwords of each host
+    env.passwords = {
+    os_ctrl01: 'r00tme',
+    # os_ctrl02: 'r00tme',
+    # os_ctrl03: 'r00tme',
+    c_ctrl01: 'r00tme',
+    #c_ctrl02: 'r00tme',
+    #c_ctrl03: 'r00tme',
+    c_db01: 'r00tme',
+    # c_db02: 'r00tme',
+    # c_db03: 'r00tme',
+    deploy_node: 'r00tme',
+    }
+    #For reimage purpose
+    env.ostypes = {
+    os_ctrl01: 'ubuntu',
+    # os_ctrl02: 'ubuntu',
+    # os_ctrl03: 'ubuntu',
+    c_ctrl01: 'ubuntu',
+    # c_ctrl02: 'ubuntu',
+    # c_ctrl03: 'ubuntu',
+    c_db01: 'ubuntu',
+    # c_db02: 'ubuntu',
+    # c_db03: 'ubuntu',
+    deploy_node: 'ubuntu',
+    }
+    env.openstack = {
+    'service_token' : 'xqnCCCs2'
+    }
+    # env.ha = {
+    # 'internal_vip': '10.55.55.4',
+    # 'external_vip': '172.16.0.4',
+    # 'contrail_internal_vip': '10.77.77.9',
+    # 'contrail_external_vip': '10.77.77.9',
+    # }
+    env.keystone = {
+    'service_tenant': 'services',
+    'admin_token': 'xqnCCCs2',
+    }
+    multi_tenancy = True
+</code></pre>
+
+<p>从Fuel节点控制机上拷贝公钥文件，用于快速部署</p>
+
+<pre><code># scp 10.20.0.2:/root/.ssh/id_rsa /root/.ssh/id_rsa
+# chmod 0600 /root/.ssh/id_rsa
+</code></pre>
+
+<p>在节点上部署仓库，安装必要包，同意SUN协议:</p>
+
+<pre><code># fab -P -R control -w -- 'ls /etc/apt/preferences || echo -e "Package: *\nPin: release \
+l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences'
+# fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+--allow-unauthenticated install python-crypto python-netaddr python-paramiko \
+contrail-fabric-utils contrail-setup'
+# fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
+/opt/contrail/python_packages/ecdsa-0.10.tar.gz'
+# fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
+/opt/contrail/python_packages/Fabric-1.7.0.tar.gz'
+# fab -P -R control -w -- 'echo "sun-java6-plugin shared/accepted-sun-dlj-v1-1 boolean \
+true" | /usr/bin/debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo "sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean \
+ true" | /usr/bin/debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 select \
+true" | sudo debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 seen \
+ true" | sudo debconf-set-selections'
+</code></pre>
+
+<p>安装特定版本的tzdata， 安装和配置数据库，并检查状态：</p>
+
+<pre><code># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+ --allow-unauthenticated install tzdata=2014e-0ubuntu0.12.04' &amp;&amp; fab install_database &amp;&amp; fab setup_database &amp;&amp; fab -R database -w -- "contrail-status"
+# nodetool status
+</code></pre>
+
+<p>安装和配置cfgm, control, collector, webui，keepalived等, 并配置tenant服务:</p>
+
+<pre><code># fab install_cfgm &amp;&amp; fab install_control &amp;&amp; fab install_collector &amp;&amp; fab install_webui &amp;&amp; fab setup_contrail_keepalived
+# fab -P -R control -w -- 'service keepalived restart'
+# fab -P -R control -w -- "sed -i '49s/service/services/g' \
+/usr/local/lib/python2.7/dist-packages/contrail_provisioning/config/quantum_in_keystone_setup.py"
+# fab setup_cfgm
+# fab setup_control &amp;&amp; fab setup_collector &amp;&amp; fab setup_webui
+</code></pre>
+
+<p>(OpenStack Controller节点)检查neutron endpoint的方法，看是否有10.77.77.100的字段出现：</p>
+
+<pre><code># keystone service-list
+# keystone endpoint-list
+</code></pre>
+
+<p>(OpenStack Controller节点)顺便，我们要拿到rabbit_hosts的密码，供下面使用:</p>
+
+<pre><code># cat /etc/rabbitmq/rabbitmq.config | grep default_pass
+    {default_pass,        &lt;&lt;"nFyBhsrP"&gt;&gt;},
+</code></pre>
+
+<p>配置rabbit:</p>
+
+<pre><code># fab -P -R control -w -- 'openstack-config --del /etc/neutron/neutron.conf DEFAULT rabbit_host'
+# fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_hosts 10.55.55.7:5672'
+# fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_userid \
+   nova'
+# fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT \
+  rabbit_password nFyBhsrP'
+# fab -P -R control -w -- 'service neutron-server restart'
+</code></pre>
+
+<p>配置contrail-api使用OpenStack Controller上的rabbit服务:</p>
+
+<pre><code># fab -P -R control -w -- 'perl -pi -e \
+ "s/rabbit_server.*$/rabbit_server=10.55.55.7/" /etc/contrail/contrail-api.conf'
+# fab -P -R control -w -- 'perl -pi -e "s/rabbit_port.*$/rabbit_port=5672/" \
+ /etc/contrail/contrail-api.conf'
+# fab -R control -w -- "perl -pi -e 'print \"rabbit_password=nFyBhsrP\n\" \
+ if \$_ =~ rabbit_port' /etc/contrail/contrail-api.conf"
+# fab -P -R control -w -- "perl -pi -e 'print \"rabbit_user=nova\n\" if \$_ =~ rabbit_port' \
+ /etc/contrail/contrail-api.conf"
+# fab -P -R control -w -- "service contrail-api restart"
+</code></pre>
+
+<p>替换neutron的插件为OpenContrail：</p>
+
+<pre><code># cp -r contrail-repo/neutron_plugin_contrail/plugins/opencontrail /usr/share/pyshared/neutron_plugin_contrail/plugins/
+# cd /opt/contrail/utils
+# fab -P -R cfgm -w -- 'service neutron-server restart'
+</code></pre>
+
+<p>重启BGP,METADATA,ENCAPSULATION:</p>
+
+<pre><code># fab prov_control_bgp &amp;&amp; fab prov_metadata_services &amp;&amp; fab prov_encap_type
+</code></pre>
+
+<p>验证:</p>
+
+<pre><code># fab verify_cfgm
+# fab verify_control
+# fab verify_collector
+# fab verify_webui
+# fab -R control -w -- "contrail-status"
+# fab -P -R control -w -- 'update-rc.d supervisor-support-service disable'
+</code></pre>
+
+<p>现在访问:     <br/>
+<a href="https://10.77.77.100:8143">https://10.77.77.100:8143</a>    <br/>
+Contrail的组件已经被配置完毕，接下来配置Compute节点，以引入Vrouter等。</p>
+
+<h4>(OpenStack Controller节点)</h4>
+
+<p>删除ifcfg-eth4的配置后重启OpenStack Controller节点, 修改nova.conf文件:</p>
+
+<pre><code># vim /etc/nova/nova.conf
+[DEFAULT]
+network_api_class = nova.network.neutronv2.api.API
+neutron_url = http://10.77.77.100:9696
+neutron_admin_tenant_name = services
+neutron_admin_username = neutron
+neutron_admin_password = xqnCCCs2
+neutron_url_timeout = 300
+neutron_admin_auth_url = http://10.55.55.7:35357/v2.0/
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+enabled_apis = ec2,osapi_compute,metadata
+security_group_api = neutron
+service_neutron_metadata_proxy = True
+</code></pre>
+
+<p>重启服务:</p>
+
+<pre><code># service nova-api restart
+# service nova-scheduler restart
+# service nova-conductor restart
+</code></pre>
+
+<p>删除已注册的nova-network组件:</p>
+
+<pre><code># source ~/openrc
+# for i in $(nova service-list|grep nova-network|awk '{print $2}'); \
+do nova service-delete $i;done
+</code></pre>
+
+<p>接下来配置Compute节点.</p>
+
+<h4>(Compute节点)</h4>
+
+<p>引入本地安装仓库:</p>
+
+<pre><code>#  echo 'deb http://10.20.0.2:8080/contrail/ /' &gt;/etc/apt/sources.list.d/contrail.list
+# echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
+# &gt;/etc/apt/sources.list
+# apt-get update
+</code></pre>
+
+<p>删除已有的vswitch模块，并验证:</p>
+
+<pre><code># apt-get purge -y openvswitch-switch nova-network nova-api
+# apt-get purge -y  nova-network nova-api
+# aptitude search -F '%p' '~i' | grep openvswitch
+</code></pre>
+
+<p>删除OVS内核模块:</p>
+
+<pre><code># lsmod | grep openvswitch &amp;&amp; rmmod openvswitch
+</code></pre>
+
+<p>删除virtual网络,即virbr0端口:</p>
+
+<pre><code># virsh net-destroy default
+# virsh net-undefine default
+</code></pre>
+
+<p>删除除ifcfg-eth4和ifcfg-eth0的其他端口，并重启，重启后用下列命令检查是否有iptables NAT规则存在，理论上应该是空的:</p>
+
+<pre><code># iptables -L -t nat
+</code></pre>
+
+<p>安装vrouter:</p>
+
+<pre><code># apt-get install -y contrail-openstack-vrouter
+</code></pre>
+
+<p>配置vhosts,vrouter需要使用这个端口,指定IP地址为10.77.77.101:</p>
+
+<pre><code># vim /etc/network/interfaces.d/ifcfg-vhost0 
+auto vhost0
+iface vhost0 inet static
+    netmask 255.255.255.0
+    network_name application
+    address 10.77.77.101
+    gateway 10.77.77.1
+    mtu 1300
+# vim /etc/network/interfaces.d/ifcfg-eth4 
+auto eth4
+iface eth4 inet manual
+
+up ip l set eth4 up
+down ip l set eth4 down
+
+post-up  ethtool  -K  eth4  gso off  gro off || true
+</code></pre>
+
+<p>创建agent-param文件:</p>
+
+<pre><code># mv /etc/contrail/agent_param.tmpl /etc/contrail/agent_param
+# vim /etc/contrail/agent_param
+dev=eth4
+</code></pre>
+
+<p>设置vroute-agent配置:</p>
+
+<pre><code># vim /etc/contrail/contrail-vrouter-agent.conf
+[DEFAULT]
+headless_mode=true
+[DISCOVERY]
+server=10.77.77.100
+max_control_nodes=1
+[HYPERVISOR]
+type=kvm
+[NETWORKS]
+control_network_ip=10.77.77.101
+[VIRTUAL-HOST-INTERFACE]
+name=vhost0
+ip=10.77.77.101/24
+gateway=10.77.77.1
+physical_interface=eth4
+</code></pre>
+
+<p>配置节点管理参数,地址指向Contrail控制器的IP:</p>
+
+<pre><code># vim /etc/contrail/vrouter_nodemgr_param
+DISCOVERY=10.77.77.100
+</code></pre>
+
+<p>配置nova-compute:</p>
+
+<pre><code> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url http://10.77.77.100:9696
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_auth_url http://10.55.55.7:35357/v2.0/
+ # openstack-config --set /etc/nova/nova.conf DEFAULT network_api_class nova_contrail_vif.contrailvif.ContrailNetworkAPI
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_tenant_name services
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_username neutron
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_password xqnCCCs2
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url_timeout 300
+ # openstack-config --set /etc/nova/nova.conf DEFAULT firewall_driver nova.virt.firewall.NoopFirewallDriver
+ # openstack-config --set /etc/nova/nova.conf DEFAULT security_group_api neutron
+ # service supervisor-vrouter restart
+</code></pre>
+
+<p>验证所有的vrouter服务都是active状态的:</p>
+
+<pre><code># contrail-status 
+== Contrail vRouter ==
+supervisor-vrouter:           active
+contrail-vrouter-agent        active              
+contrail-vrouter-nodemgr      active              
+</code></pre>
+
+<p>更改/etc/libvirt/qemu.confg中的cgroup_device_acl部分:</p>
+
+<pre><code>cgroup_device_acl = [
+"/dev/null", "/dev/full", "/dev/zero",
+"/dev/random", "/dev/urandom",
+"/dev/ptmx", "/dev/kvm", "/dev/kqemu",
+"/dev/rtc", "/dev/hpet","/dev/net/tun",
+]
+</code></pre>
+
+<p>在每个OpenStack Compute节点上，添加iptables规则如下并保存:</p>
+
+<pre><code># iptables -I INPUT 1 -s 169.254.0.0/16 -i vhost0 -j ACCEPT -m comment --comment "metadata service"
+# iptables -I INPUT 1 -p tcp -m multiport --destination-ports 2049,8085,9090,8102,33617,39704,44177,55970,60663 -j ACCEPT -m comment --comment "juniper contrail rules"
+# iptables-save &gt; /etc/iptables/rules.v4
+</code></pre>
+
+<p>重启libvirt-bin和nova-compute服务:</p>
+
+<pre><code># service libvirt-bin restart
+# service nova-compute restart
+</code></pre>
+
+<p>(Contrail Controller节点)更改vrouter的配置, ！！！注意，这是在Contrail Deploy的那个节点运行的！！！！, host_name的结果可以在compute节点上通过hostname命令来获得 ：</p>
+
+<pre><code># python /opt/contrail/utils/provision_vrouter.py --host_name node-18 --host_ip 10.77.77.101 --api_server_ip 10.77.77.100 --admin_user neutron --admin_password xqnCCCs2 --admin_tenant_name services --oper add
+</code></pre>
+
+<h4>VGW配置</h4>
+
+<p>OpenContrail支持多种配置，例如Juniper vSRX, Juniper MX, Cisco ASR等，但这些都需要专有硬件的支持（路由器），我们仅仅采用软件路由器Vrouter, 这里我们配置VGW:</p>
+
+<pre><code># export PYTHONPATH=/usr/lib/python2.7/dist-packages/contrail_vrouter_api/gen_py/instance_service
+# python /opt/contrail/utils/provision_vgw_interface.py --oper create --interface vgw --subnets 10.88.88.0/24 --routes 0.0.0.0/0 --vrf default-domain:admin:ext:ext
+</code></pre>
+
+<p>更新/etc/contrail/contrail-vrouter-agent.con中的[GATEWAY-0]部分:</p>
+
+<pre><code>[GATEWAY-0]
+routing_instance=default-domain:admin:ext:ext
+interface=vgw
+ip_blocks=10.88.88.0/24
+routes=0.0.0.0/0
+</code></pre>
+
+<p>重新启动supervisor-vrouter进程:</p>
+
+<pre><code># service supervisor-vrouter restart
+</code></pre>
+
+<p>重启其他所有的encapsulation方法，除了MPLS On UDP:  <br/>
+<img src="/images/2015_04_27_22_45_01_799x306.jpg" alt="/images/2015_04_27_22_45_01_799x306.jpg" /></p>
+
+<p>最后结果如下:   <br/>
+<img src="/images/2015_05_06_16_24_52_891x430.jpg" alt="/images/2015_05_06_16_24_52_891x430.jpg" /></p>
+
+<h3>总结</h3>
+
+<p>非HA方式部署，需要花费内存为:   <br/>
+3+3+2+2=10G, 再加上Fuel Controller本身的3G,在16G的台式机上可以做到。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Build CentOS Image for MAAS]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/04/29/build-centos-image-for-maas/"/>
+    <updated>2015-04-29T17:31:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/04/29/build-centos-image-for-maas</id>
+    <content type="html"><![CDATA[<p>MAAS could only deploy Ubuntu in its official support, this artcle will introduce how to Build CentOS based images.</p>
+
+<h3>Preparation</h3>
+
+<p>First you need a Ubuntu14.04 machine with kvm enabled.</p>
+
+<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade &amp;&amp; sudo apt-get -y dist-upgrade
+$ sudo apt-get install build-essential
+</code></pre>
+
+<h3>Get Build Scripts</h3>
+
+<p>Get the source code from the launchpad, and run following command for preparing the building environment.</p>
+
+<pre><code>$  bzr branch lp:maas-image-builder
+$ cd maas-images-builder
+$ make install-dependencies
+</code></pre>
+
+<p>For speed-up building, I use china mainland&rsquo;s repository,  <br/>
+Replace the <code>http://mirror.centos.org/centos/6/os/x86_64</code> like following:</p>
+
+<pre><code>$ vim ./src/mib/builders/centos.py
+      #"http://mirror.centos.org/centos/6/os/i386")
+      "http://mirrors.aliyun.com/centos/6/os/i386")
+      #"http://mirror.centos.org/centos/6/os/x86_64")
+      "http://mirrors.aliyun.com/centos/6/os/x86_64")
+  #"http://mirror.centos.org/centos/7/os/x86_64")
+  "http://mirrors.aliyun.com/centos/7/os/x86_64/")
+
+$ vim ./contrib/centos/centos6/centos6-amd64.ks
+repo --name="repo0" --baseurl=http://mirrors.aliyun.com/centos/6/os/x86_64/
+repo --name="repo1" --baseurl=http://mirrors.aliyun.com/centos/6/updates/x86_64/
+repo --name="repo2" --baseurl=http://mirrors.aliyun.com/epel/6/x86_64/
+</code></pre>
+
+<h3>Build Images</h3>
+
+<p>Install python-dev and begin to make:</p>
+
+<pre><code># apt-get install python-dev
+# make
+</code></pre>
+
+<p>Now begin to generate the image:</p>
+
+<pre><code>#./bin/maas-image-builder -o centos6-amd64-root-tgz centos --edition 6
+</code></pre>
+
+<p>On-Building:   <br/>
+<img src="/images/2015_04_29_18_00_43_674x328.jpg" alt="/images/2015_04_29_18_00_43_674x328.jpg" /></p>
+
+<p>After building the image is listed as:</p>
+
+<pre><code># ls -l centos6-amd64-root-tgz 
+-rw-r--r-- 1 root root 353086181 Apr 29 13:16 centos6-amd64-root-tgz
+</code></pre>
+
+<h3>Import Images</h3>
+
+<p>First login into your own profile with following command:</p>
+
+<pre><code>$ maas login my-maas http://10.17.17.202/MAAS/api/1.0 ntQBr8QTPgeTyfYuMq:xxxxxxxxxxxxxxxxxxxxxxxxx7HNspYLch4kc6RLs
+$ maas my-maas boot-sources read
+</code></pre>
+
+<p>Above command will readout the boot-sources, now we need to import our newly-built images, import it via:</p>
+
+<pre><code>$ maas my-maas boot-resources create name=centos/centos6 architecture=amd64/generic content@=/home/Trusty/centos6-amd64-root-tgz
+</code></pre>
+
+<h3>Login</h3>
+
+<p>Use following commands:</p>
+
+<pre><code>maas@MassTestOnUbuntu1404:~$ ssh cloud-user@10.17.17.172
+The authenticity of host '10.17.17.172 (10.17.17.172)' can't be established.
+ECDSA key fingerprint is a5:57:5b:d1:ac:c0:8f:67:32:43:d8:6f:17:67:65:cb.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '10.17.17.172' (ECDSA) to the list of known hosts.
+[cloud-user@CentOS ~]$ ls
+[cloud-user@CentOS ~]$ cat /etc/issue
+\S
+Kernel \r on an \m
+
+[cloud-user@CentOS ~]$ uname -a
+Linux CentOS 3.10.0-229.1.2.el7.x86_64 #1 SMP Fri Mar 27 03:04:26 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
+</code></pre>
+
+<p>From Now on,you could use CentOS 6 for deploying!!!!!!!!!!!!!!1</p>
+
+<p>ENJOY IT!!!!!!!</p>
+
+<h3>Trouble Shooting</h3>
+
+<p>The version could not be speicified via &ndash;edition, everytime we got CentOS 7 based image , so we need to manually change the file:</p>
+
+<pre><code> root@BuildMaasImage:~/Code/once# vim src/mib/builders/centos.py
+    def populate_parser(self, parser):
+        """Add parser options."""
+        parser.add_argument(
+            #'--edition', default='7',
+            #help="CentOS edition to generate. (Default: 7)")
+            '--edition', default='6',
+            help="CentOS edition to generate. (Default: 6)")
+</code></pre>
+
+<p>Now re-generate the image again, we got CentOS 6.5 based images. <br/>
+To-Be-Done:  <br/>
+How to generate the CentOS 6.5/6.4/6.3 version? we always get the newest CentOS 6 images.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Trouble Shooting on Juju's Local Deployment]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/04/28/trouble-shooting-on-jujus-local-deployment/"/>
+    <updated>2015-04-28T12:11:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/04/28/trouble-shooting-on-jujus-local-deployment</id>
+    <content type="html"><![CDATA[<p>When deploying juju, after <code>juju bootstrap</code>, use juju ssh for login, it will hint me:</p>
+
+<pre><code>$ juju ssh 1
+......
+Permission denied (publickey).
+</code></pre>
+
+<p>That could be solved by specify the id_rsa.pub key:</p>
+
+<pre><code>$ ssh-keygen -t rsa -b 2048
+$ juju bootstrap
+$ juju bootstrap
+$ juju deploy wordpress
+$ juju deploy mysql
+$ juju add-relation wordpress mysql
+$ juju status
+$ juju expose wordpress
+</code></pre>
+
+<p>By doing this you could make your juju deployment on local successfully.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[使用Fuel部署OpenContrail(5)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-5/"/>
+    <updated>2015-04-27T21:55:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-5</id>
+    <content type="html"><![CDATA[<p>本节主要用于配置OpenStack使用OpenContrail作为其网络配置器，主要涉及到OpenStack Controller和OpenStack Compute上的配置.</p>
+
+<h3>OpenStack Controller配置</h3>
+
+<p>!!! 以下的所有操作，需要在每个OpenStack Controller节点上进行！！！
+OpenStack Controller不需要使用Private 网络，所以我们可以删除ifcfg-eth0文件:</p>
+
+<pre><code># rm -f /etc/network/interface.d/ifcfg-eth4
+# service networking restart
+</code></pre>
+
+<p>为了保险，最好重启更改完网络后的节点。  <br/>
+配置/etc/nova/nova.conf文件中的以下字段:</p>
+
+<pre><code># vim /etc/nova/nova.conf
+[DEFAULT]
+network_api_class = nova.network.neutronv2.api.API
+neutron_url = http://10.77.77.9:9696
+neutron_admin_tenant_name = services
+neutron_admin_username = neutron
+neutron_admin_password = rVlaAKUs
+neutron_url_timeout = 300
+neutron_admin_auth_url = http://10.55.55.4:35357/v2.0/
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+enabled_apis = ec2,osapi_compute,metadata
+security_group_api = neutron
+service_neutron_metadata_proxy = True
+</code></pre>
+
+<p>neutron_admin_password的值还是我们以前取得的admin token. <br/>
+更改完上述配置后，重启以下服务:</p>
+
+<pre><code># service nova-api restart
+# service nova-scheduler restart
+# service nova-conductor restart
+</code></pre>
+
+<p>在任一OpenStack Controller节点上，使用以下命令，在数据库中删除nova-network服务的定义。</p>
+
+<pre><code># source ~/openrc
+# for i in $(nova service-list|grep nova-network|awk '{print $2}'); \
+do nova service-delete $i;done
+</code></pre>
+
+<h3>Compute(计算)节点配置</h3>
+
+<p>!!! 以下操作，都应该在每个计算节点上运行 !!!!
+在每个计算节点上，配置仓库:</p>
+
+<pre><code>#  echo 'deb http://10.20.0.2:8080/contrail/ /' &gt;/etc/apt/sources.list.d/contrail.list
+# echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
+# &gt;/etc/apt/sources.list
+# apt-get update
+</code></pre>
+
+<p>Contrail是不需要OpenVSwitch(OVS)的，所以我们要把它删除:</p>
+
+<pre><code># apt-get purge -y openvswitch-common openvswitch-datapath-lts-saucy-dkms \
+openvswitch-switch nova-network nova-api
+</code></pre>
+
+<p>验证openvswitch是否被彻底删除(应该输出空行才对):</p>
+
+<pre><code># aptitude search -F '%p' '~i' | grep openvswitch
+</code></pre>
+
+<p>删除OVS的内核模块:</p>
+
+<pre><code># lsmod | grep openvswitch &amp;&amp; rmmod openvswitch
+</code></pre>
+
+<p>移除virbr0端口:</p>
+
+<pre><code># virsh net-destroy default
+# virsh net-undefine default
+</code></pre>
+
+<p>确保在所有节点的/etc/network/interface.d/下，只包括了ifcfg-eth0, ifcfg-eth4, 其他都需要被删除。   <br/>
+重启所有OpenStack Compute节点，以删除所有openvswitch和nova-network相关的iptables规则、接口等。</p>
+
+<pre><code># reboot 
+</code></pre>
+
+<p>重启以后，以下面的命令确保没有NAT规则存在:</p>
+
+<pre><code># iptables -L -t nat
+</code></pre>
+
+<p>在所有的Compute节点上，安装Contrail vrouter 组件:</p>
+
+<pre><code># apt-get install -y contrail-openstack-vrouter
+</code></pre>
+
+<p>所有节点上，配置vhost0和ifcfg-eth4:</p>
+
+<pre><code>root@node-18:~# vim /etc/network/interfaces.d/ifcfg-vhost0 
+auto vhost0
+iface vhost0 inet static
+    netmask 255.255.255.0
+    network_name application
+    address 10.77.77.15
+    gateway 10.77.77.1
+    mtu 1300
+root@node-18:~# vim /etc/network/interfaces.d/ifcfg-eth4 
+auto eth4
+iface eth4 inet manual
+
+up ip l set eth4 up
+down ip l set eth4 down
+
+post-up  ethtool  -K  eth4  gso off  gro off || true
+</code></pre>
+
+<p>创建agent_param文件:</p>
+
+<pre><code># mv /etc/contrail/agent_param.tmpl /etc/contrail/agent_param
+# vim /etc/contrail/agent_param
+dev=eth4
+</code></pre>
+
+<p>设置vroute-agent配置:</p>
+
+<pre><code># vim /etc/contrail/contrail-vrouter-agent.conf
+[DEFAULT]
+headless_mode=true
+[DISCOVERY]
+server=10.77.77.9
+max_control_nodes=2
+[HYPERVISOR]
+type=kvm
+[NETWORKS]
+control_network_ip=10.77.77.15
+[VIRTUAL-HOST-INTERFACE]
+name=vhost0
+ip=10.77.77.15/24
+gateway=10.77.77.1
+physical_interface=eth4
+</code></pre>
+
+<p>在每个OpenStack Compute节点上，配置:</p>
+
+<pre><code># vim /etc/contrail/vrouter_nodemgr_param
+DISCOVERY=10.77.77.9
+</code></pre>
+
+<p>配置nova-compute:</p>
+
+<pre><code> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url http://10.77.77.9:9696
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_auth_url http://10.55.55.4:35357/v2.0/
+ # openstack-config --set /etc/nova/nova.conf DEFAULT network_api_class nova_contrail_vif.contrailvif.ContrailNetworkAPI
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_tenant_name services
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_username neutron
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_password rVlaAKUs
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url_timeout 300
+ # openstack-config --set /etc/nova/nova.conf DEFAULT firewall_driver nova.virt.firewall.NoopFirewallDriver
+ # openstack-config --set /etc/nova/nova.conf DEFAULT security_group_api neutron
+ # service supervisor-vrouter restart
+</code></pre>
+
+<p>验证所有的vrouter服务都是active状态的:</p>
+
+<pre><code>root@node-18:~# contrail-status 
+== Contrail vRouter ==
+supervisor-vrouter:           active
+contrail-vrouter-agent        active              
+contrail-vrouter-nodemgr      active              
+</code></pre>
+
+<p>更改/etc/libvirt/qemu.confg中的cgroup_device_acl部分:</p>
+
+<pre><code>cgroup_device_acl = [
+"/dev/null", "/dev/full", "/dev/zero",
+"/dev/random", "/dev/urandom",
+"/dev/ptmx", "/dev/kvm", "/dev/kqemu",
+"/dev/rtc", "/dev/hpet","/dev/net/tun",
+]
+</code></pre>
+
+<p>在每个OpenStack Compute节点上，添加iptables规则如下并保存:</p>
+
+<pre><code># iptables -I INPUT 1 -s 169.254.0.0/16 -i vhost0 -j ACCEPT -m comment --comment "metadata service"
+# iptables -I INPUT 1 -p tcp -m multiport --destination-ports 2049,8085,9090,8102,33617,39704,44177,55970,60663 -j ACCEPT -m comment --comment "juniper contrail rules"
+# iptables-save &gt; /etc/iptables/rules.v4
+</code></pre>
+
+<p>重启libvirt-bin和nova-compute服务:</p>
+
+<pre><code># service libvirt-bin restart
+# service nova-compute restart
+</code></pre>
+
+<p>更改vrouter的配置, ！！！注意，这是在Contrail Deploy的那个节点运行的！！！！ ：</p>
+
+<pre><code># python /opt/contrail/utils/provision_vrouter.py --host_name node-18 --host_ip 10.77.77.15 --api_server_ip 10.77.77.9 --admin_user neutron --admin_password rVlaAKUs --admin_tenant_name services --oper add
+</code></pre>
+
+<h3>VGW配置</h3>
+
+<p>OpenContrail支持多种配置，例如Juniper vSRX, Juniper MX, Cisco ASR等，但这些都需要专有硬件的支持（路由器），我们仅仅采用软件路由器Vrouter, 这里我们配置VGW:</p>
+
+<pre><code># export PYTHONPATH=/usr/lib/python2.7/dist-packages/contrail_vrouter_api/gen_py/instance_service
+# python /opt/contrail/utils/provision_vgw_interface.py --oper create --interface vgw --subnets 10.88.88.0/24 --routes 0.0.0.0/0 --vrf default-domain:admin:ext:ext
+</code></pre>
+
+<p>更新/etc/contrail/contrail-vrouter-agent.con中的[GATEWAY-0]部分:</p>
+
+<pre><code>[GATEWAY-0]
+routing_instance=default-domain:admin:ext:ext
+interface=vgw
+ip_blocks=10.88.88.0/24
+routes=0.0.0.0/0
+</code></pre>
+
+<p>重新启动supervisor-vrouter进程:</p>
+
+<pre><code># service supervisor-vrouter restart
+</code></pre>
+
+<p>重启其他所有的encapsulation方法，除了MPLS On UPD:  <br/>
+<img src="/images/2015_04_27_22_45_01_799x306.jpg" alt="/images/2015_04_27_22_45_01_799x306.jpg" /></p>
+
+<p>```</p>
+
+<p>好了，这时候，Contrail已经集成到OpenStack环境里，你可以在Contrail的界面里，添加上网络，而后在OpenStack里使用它。Enjoy it !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[使用Fuel部署OpenContrail(4)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4/"/>
+    <updated>2015-04-27T19:44:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4</id>
+    <content type="html"><![CDATA[<p>前面已经准备好了集成OpenContrail的所有事宜，接下来就是真正部署OpenContrail的过程了。部署OpenContrail需要修改所有的Contrail Controller节点，OpenStack Controller节点， OpenStack Compute节点，为了避免混淆，本节主要完成在Contrail Controller上的部署工作。</p>
+
+<h3>OpenStack Controller节点部署后配置</h3>
+
+<p>在所有的OpenStack Controller节点(OS1,OS2,OS3)上，打开/usr/lib/ocf/resource.d/mirantis/ns_haproxy文件，编辑以下字段: <br/>
+OCF_Parameters部分:</p>
+
+<pre><code>OCF_RESKEY_private_network_default="10.55.55.0/24"
+OCF_RESKEY_private_network_gateway_default="10.55.55.1"
+</code></pre>
+
+<p>在meta_data()函数中，添加以下内容:</p>
+
+<pre><code>&lt;parameter name="private_network"&gt;
+&lt;longdesc lang="en"&gt;
+Private L3 network that should be configured inside the namespace
+&lt;/longdesc&gt;
+&lt;shortdesc lang="en"&gt;Namespace private network&lt;/shortdesc&gt;
+&lt;content type="string" default="${OCF_RESKEY_private_network_default}" /&gt;
+&lt;/parameter&gt;
+
+&lt;parameter name="private_network_gateway"&gt;
+&lt;longdesc lang="en"&gt;
+Private L3 network gateway that should be configured inside the namespace.
+&lt;/longdesc&gt;
+&lt;shortdesc lang="en"&gt;Namespace private gateway network&lt;/shortdesc&gt;
+&lt;content type="string" default="${OCF_RESKEY_private_network_gateway_default}" /&gt;
+&lt;/parameter&gt;
+</code></pre>
+
+<p>set_ns_routing()函数中，添加一下内容:</p>
+
+<pre><code>nsip route list | grep -q "${OCF_RESKEY_private_network}"
+if [ $? -gt 0 ]; then
+ocf_log debug "Creating ${OCF_RESKEY_private_network} route inside the namespace"
+ocf_run nsip route add "${OCF_RESKEY_private_network}" via "${OCF_RESKEY_private_network_gateway}"
+fi
+</code></pre>
+
+<p>以上的修改是为了引入haproxy的namespace的。</p>
+
+<h3>配置Contrail部署节点</h3>
+
+<p>我们引入了三个Contrail Controller节点，从中挑选一个，作为部署的管理节点，OpenContrail通过fabric下发安装指令给各节点机，因此我们首先要准备的是部署节点。这里的例子中，我们选择Contrail1(10.20.0.10)作为部署节点。</p>
+
+<pre><code># echo 'deb http://10.20.0.2:8080/contrail/ /' &gt; /etc/apt/sources.list.d/contrail.list
+# echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
+# &gt;/etc/apt/sources.list
+# apt-get update
+# apt-get install -y python-paramiko contrail-fabric-utils contrail-setup
+# pip install --upgrade --no-deps --index-url=”” /opt/contrail/python_packages/Fabric-1.7.0.tar.gz
+</code></pre>
+
+<p>apt-get udpate前我们需要清空本机上的sources.list文件，因为经过前两步后，本机的sources.list中会加上10.20.0.2的默认源，这会引发update失败，因此我们清空此文件。  <br/>
+安装完一些准备包后，部署节点进入就绪状态。</p>
+
+<h3>编写testbed.py</h3>
+
+<p>testbed.py文件定义了整个OpenContrail的组建部署节点信息，在编写此文件前，我们需要得到以下信息:  <br/>
+A. OpenStack的Service_Token, 在任何一台OpenStack Controller机器上，运行以下命令以得到系统当前的service_token值:</p>
+
+<pre><code>root@node-20:~# cat /etc/keystone/keystone.conf  | grep -i "admin_token=" | more
+#admin_token=ADMIN
+admin_token=rVlaAKUs
+</code></pre>
+
+<p>记下rVlaAKUs这个值，在testbed.py文件中我们会用到。</p>
+
+<ol type="a">
+<li>OpenStack Controller的Public vip和Management vip, 如下所示，结合我们的网络规划，Public vip是172网段，而Management vip则是10.55.55网段的IP:</li>
+</ol>
+
+
+<pre><code>root@node-20:~# source /root/openrc 
+root@node-20:~# keystone endpoint-list | grep 5000
+| 0e3c0684e8ae4c9fa4e080c9e1c66513 | RegionOne |         http://172.16.0.4:5000/v2.0          |         http://10.55.55.4:5000/v2.0          |       http://10.55.55.4:35357/v2.0      | f822df80ee1042d9b10d57118bb410aa |
+</code></pre>
+
+<ol type="a">
+<li><p>Contrail Controller的内部vip和外部vip, 因为我们把Contrail Controller的Private IP分配在10.77.77.0/24网段，所以我们暂时选用10.77.77.9作为两个vip的地址。</p></li>
+<li><p>如果有外部路由器，则需要配置外部路由器的IP地址。这次的部署中我们不采用外部路由器，因而对比于官方的推荐配置文件，我们的testbed.py中删除了这一部分。</p></li>
+</ol>
+
+
+<p>综合考虑到上述因素后，我们的testbed.py文件定义如下:</p>
+
+<pre><code>root@node-24:~# vim /opt/contrail/utils/fabfile/testbeds/testbed.py|more
+from fabric.api import env
+#Management ip addresses of hosts in the cluster
+os_ctrl01 = 'root@10.55.55.6'
+os_ctrl02 = 'root@10.55.55.7'
+os_ctrl03 = 'root@10.55.55.8'
+c_ctrl01 = 'root@10.77.77.10'
+c_ctrl02 = 'root@10.77.77.11'
+c_ctrl03 = 'root@10.77.77.12'
+c_db01 = 'root@10.77.77.10'
+c_db02 = 'root@10.77.77.11'
+c_db03 = 'root@10.77.77.12'
+#External routers
+# ext_routers = [('gateway01', '&lt;Gateway_node1_LOOPBACK_ip&gt;'), ('gateway02', '&lt;Gateway_node2_LOOPBACK_ip&gt;')]
+#Autonomous system number
+router_asn = 64512
+#Host from which the fab commands are triggered to install and provision
+deploy_node = 'root@10.77.77.10'
+#Role definition of the hosts.
+env.roledefs = {
+'all': [c_ctrl01, c_ctrl02, c_ctrl03, c_db01, c_db02, c_db03],
+'cfgm': [c_ctrl01, c_ctrl02, c_ctrl03],
+'openstack': [os_ctrl01, os_ctrl02, os_ctrl03],
+'control': [c_ctrl01, c_ctrl02, c_ctrl03],
+'compute': [],
+'collector': [c_ctrl01, c_ctrl02, c_ctrl03],
+'webui': [c_ctrl01, c_ctrl02, c_ctrl03],
+'database': [c_db01, c_db02, c_db03],
+'build': [deploy_node],
+'storage-master': [],
+'storage-compute': [],
+}
+#Openstack admin password
+env.openstack_admin_password = 'admin'
+env.password = 'r00tme'
+#Passwords of each host
+env.passwords = {
+os_ctrl01: 'r00tme',
+os_ctrl02: 'r00tme',
+os_ctrl03: 'r00tme',
+c_ctrl01: 'r00tme',
+c_ctrl02: 'r00tme',
+c_ctrl03: 'r00tme',
+c_db01: 'r00tme',
+c_db02: 'r00tme',
+c_db03: 'r00tme',
+deploy_node: 'r00tme',
+}
+#For reimage purpose
+env.ostypes = {
+os_ctrl01: 'ubuntu',
+os_ctrl02: 'ubuntu',
+os_ctrl03: 'ubuntu',
+c_ctrl01: 'ubuntu',
+c_ctrl02: 'ubuntu',
+c_ctrl03: 'ubuntu',
+c_db01: 'ubuntu',
+c_db02: 'ubuntu',
+c_db03: 'ubuntu',
+deploy_node: 'ubuntu',
+}
+env.openstack = {
+'service_token' : 'rVlaAKUs'
+}
+env.ha = {
+'internal_vip': '10.55.55.4',
+'external_vip': '172.16.0.4',
+'contrail_internal_vip': '10.77.77.9',
+'contrail_external_vip': '10.77.77.9',
+}
+env.keystone = {
+'service_tenant': 'services',
+'admin_token': 'rVlaAKUs',
+}
+multi_tenancy = True
+</code></pre>
+
+<p>编写完testbed.py文件后，就可以根据文件中的定义，部署OpenContrail的组件到多台节点主机了。  <br/>
+Fuel Controller节点上的id_rsa文件可以实现对各个节点的无密码登录，拷贝它到我们的Contrail部署节点上:</p>
+
+<pre><code># scp 10.20.0.2:/root/.ssh/id_rsa /root/.ssh/id_rsa
+# chmod 0600 /root/.ssh/id_rsa
+</code></pre>
+
+<h3>部署多节点</h3>
+
+<p>首先切换到/opt/contrail/utils目录下，所有用fab执行的部署都需要在这个目录下执行。执行以下操作, 以初始化各部署子节点:</p>
+
+<pre><code># cd /opt/contrail/utils
+# fab -P -R control -w -- "ls /etc/apt/sources.list.d/contrail.list || echo 'deb \
+http://10.20.0.2:8080/contrail/ /' &gt; \
+/etc/apt/sources.list.d/contrail.list"
+# fab -P -R control -w -- 'ls /etc/apt/preferences || echo -e "Package: *\nPin: release \
+l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences'
+# fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+--allow-unauthenticated install python-crypto python-netaddr python-paramiko \
+contrail-fabric-utils contrail-setup'
+# fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
+/opt/contrail/python_packages/ecdsa-0.10.tar.gz'
+# fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
+/opt/contrail/python_packages/Fabric-1.7.0.tar.gz'
+</code></pre>
+
+<p>如果出现apt-get update的问题，可以如上面提到的，手动登录到各个节点上去清空/etc/apt/sources.list文件，当然一般情况下不会出现这个问题。  <br/>
+运行以下命令，接受sun的协议:</p>
+
+<pre><code># fab -P -R control -w -- 'echo "sun-java6-plugin shared/accepted-sun-dlj-v1-1 boolean \
+true" | /usr/bin/debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo "sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean \
+ true" | /usr/bin/debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 select \
+true" | sudo debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 seen \
+ true" | sudo debconf-set-selections'
+</code></pre>
+
+<p>OpenContrail组件依赖于特定版本的tzdata， 用以下命令安装：</p>
+
+<pre><code># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+ --allow-unauthenticated install tzdata=2014e-0ubuntu0.12.04'
+</code></pre>
+
+<p>安装和设置database, 并检查节点的状态:</p>
+
+<pre><code> # fab install_database &amp;&amp; fab setup_database
+ # fab -R database -w -- "contrail-status"
+ # nodetool status
+--  Address      Load       Tokens  Owns   Host ID                               Rack
+UN  10.77.77.12  141.84 MB  256     33.3%  4ea3abec-16ee-417a-b78c-69e8dca292be  rack1
+UN  10.77.77.11  141.33 MB  256     35.8%  d7677bf2-1447-48af-b1d4-356b4a8d6cff  rack1
+UN  10.77.77.10  134.28 MB  256     30.9%  e418e4ef-af22-4874-ad94-777d6b4c511c  rack1
+</code></pre>
+
+<p>当看到上面有三个条目时，代表安装成功，可以进行下一步。</p>
+
+<p>安装cfgm, control, collector, webui 组件以及keepalived集群。</p>
+
+<pre><code># fab install_cfgm &amp;&amp; fab install_control &amp;&amp; fab install_collector &amp;&amp; fab install_webui &amp;&amp; fab setup_contrail_keepalived &amp;&amp; fab fixup_restart_haproxy_in_collector 2&gt;&amp;1 | tee all.txt
+</code></pre>
+
+<p>删除掉/etc/keepalived/keepalived.conf里的EXTERNAL部分, 值得注意的是，在三个Contrail Controller上，都需要执行此操作:</p>
+
+<pre><code># vim /etc/keepalived/keepalived.conf
+......remove something......
+</code></pre>
+
+<p>删除以后，重新启动keepalived服务:</p>
+
+<pre><code># fab -P -R control -w -- 'service keepalived restart'
+</code></pre>
+
+<p>更新haproxy的配置文件，添加WebUI的虚拟IP地址(vip). 值得注意的是，在三个Contrail Controller上，都需要执行此操作:</p>
+
+<pre><code># vim /etc/haproxy/haproxy.cfg
+#contrail-webui-marker-start
+frontend contrail-webui-api *:443
+    mode tcp
+    default_backend contrail-webui-api
+backend contrail-webui-api
+    mode tcp
+    balance roundrobin
+    option nolinger
+    stick on src
+    stick-table type ip size 200k expire 300m
+    option tcp-check
+    tcp-check connect port 8143
+    default-server error-limit 1 on-error mark-down
+    server 10.77.77.10 10.77.77.10:8143 check inter 2000 rise 2 fall 3
+    server 10.77.77.11 10.77.77.11:8143 check inter 2000 rise 2 fall 3
+    server 10.77.77.12 10.77.77.12:8143 check inter 2000 rise 2 fall 3
+#contrail-webui-marker-end
+</code></pre>
+
+<p>更改完以后，重启haproxy服务:</p>
+
+<pre><code># fab -P -R control -w -- 'service haproxy restart'
+</code></pre>
+
+<p>更改每个节点上的tenant服务名称，从'service'改成'services':</p>
+
+<pre><code># fab -P -R control -w -- "sed -i '49s/service/services/g' \
+/usr/local/lib/python2.7/dist-packages/contrail_provisioning/config/quantum_in_keystone_setup.py"
+</code></pre>
+
+<p>配置cfgm服务:</p>
+
+<pre><code># fab setup_cfgm
+</code></pre>
+
+<p>这时我们可以验证neutron endpoint是否被正确安装，在任何一个OpenStack Controller节点上，运行以下命令:</p>
+
+<pre><code># keystone service-list
+# keystone endpoint-list
+</code></pre>
+
+<p>例如:</p>
+
+<pre><code>root@node-20:~# keystone service-list | grep neutron
+| 2f4c887f68a9428aa448cbd688d7061f | neutron  |    network     |             network              |
+root@node-20:~# keystone endpoint-list | grep 2f4c887f68a9428aa448cbd688d7061f
+| 7dd2c25e69ad4a3296f272aa253001c8 | RegionOne |            http://10.77.77.9:9696            |            http://10.77.77.9:9696            |          http://10.77.77.9:9696         | 2f4c887f68a9428aa448cbd688d7061f |
+</code></pre>
+
+<p>成功的话，接着下一步设置，删除所有的Contrail Controller节点上文件/etc/haproxy/haproxy.cfg里的rabbit字段：</p>
+
+<pre><code># vim /etc/haproxy/haproxy.cfg
+......remove something......
+</code></pre>
+
+<p>重新启动haproxy服务:</p>
+
+<pre><code># fab -P -R control -w -- 'service haproxy restart'
+</code></pre>
+
+<p>设置control,collector,webui组件服务:</p>
+
+<pre><code># fab setup_control
+# fab setup_collector &amp;&amp; fab setup_webui
+</code></pre>
+
+<p>在任一OpenStack Controller节点上，运行以下命令，得到rabbit的密码:</p>
+
+<pre><code>root@node-22:~# cat /etc/rabbitmq/rabbitmq.config | grep default_pass
+    {default_pass,        &lt;&lt;"gYFQP10P"&gt;&gt;},
+</code></pre>
+
+<p>配置neutron插件，使用运行在OpenStack Controller上的rabbit 集群, 这里的rabbit_password使用上面得到的值:</p>
+
+<pre><code>#  fab -P -R control -w -- 'openstack-config --del /etc/neutron/neutron.conf DEFAULT rabbit_host'
+#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_hosts \
+  10.55.55.6:5673,10.55.55.7:5673,10.55.55.8:5673'
+#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_userid \
+   nova'
+#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT \
+  rabbit_password gYFQP10P'
+# fab -P -R control -w -- 'service neutron-server restart'
+</code></pre>
+
+<p>配置contrail-api以使用运行在OpenStack Controller上的rabbit集群:</p>
+
+<pre><code># fab -P -R control -w -- 'perl -pi -e \
+ "s/rabbit_server.*$/rabbit_server=10.55.55.4/" /etc/contrail/contrail-api.conf'
+# fab -P -R control -w -- 'perl -pi -e "s/rabbit_port.*$/rabbit_port=5672/" \
+ /etc/contrail/contrail-api.conf'
+# fab -R control -w -- "perl -pi -e 'print \"rabbit_password=gYFQP10P\n\" \
+ if \$_ =~ rabbit_port' /etc/contrail/contrail-api.conf"
+# fab -P -R control -w -- "perl -pi -e 'print \"rabbit_user=nova\n\" if \$_ =~ rabbit_port' \
+ /etc/contrail/contrail-api.conf"
+# fab -P -R control -w -- "service contrail-api restart"
+</code></pre>
+
+<p>使用前面下载的OpenContrail 插件，作为neutron挂载的插件, 或者你可以直接从github克隆下来:</p>
+
+<pre><code># mkdir -p /tmp/contrail-repo
+# apt-get install -y git
+# git clone https://github.com/Juniper/contrail-neutron-plugin.git /tmp/contrail-repo
+# cd /tmp/contrail-repo
+# git checkout 3189155
+# cp -r /tmp/contrail-repo/neutron_plugin_contrail/plugins/opencontrail \
+/usr/share/pyshared/neutron_plugin_contrail/plugins/
+</code></pre>
+
+<p>重新启动neutron-service:</p>
+
+<pre><code># cd /opt/contrail/utils
+# fab -P -R cfgm -w -- 'service neutron-server restart'
+</code></pre>
+
+<p>设置Contrail Controller之间的BGP节点发现，metadata服务及encapsulation类型:</p>
+
+<pre><code># fab prov_control_bgp &amp;&amp; fab prov_metadata_services &amp;&amp; fab prov_encap_type
+</code></pre>
+
+<p>用以下命令验证安装是否成功:</p>
+
+<pre><code># fab verify_cfgm
+# fab verify_control
+# fab verify_collector
+# fab verify_webui
+# fab -R control -w -- "contrail-status"
+</code></pre>
+
+<p>更新rc.d，这样在启动的时候，不会启动supervisor-support进程：</p>
+
+<pre><code># fab -P -R control -w -- 'update-rc.d supervisor-support-service disable'
+</code></pre>
+
+<p>用浏览器访问以下页面，以确认Contrail已经被正确安装:    <br/>
+<a href="https://10.77.77.9">https://10.77.77.9</a>   <br/>
+此时你看到的页面应该如下：   <br/>
+<img src="/images/2015_04_27_21_49_07_1006x746.jpg" alt="/images/2015_04_27_21_49_07_1006x746.jpg" /></p>
+
+<p>本章过完以后，我们的OpenContrail部署已经完成了大半，接下来就是在Compute和OpenStack Controller节点上的配置，达到最后的集成过程。</p>
+]]></content>
+  </entry>
+  
+</feed>

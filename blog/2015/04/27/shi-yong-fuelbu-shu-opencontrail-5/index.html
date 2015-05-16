@@ -1,0 +1,572 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>使用Fuel部署OpenContrail(5) - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="本节主要用于配置OpenStack使用OpenContrail作为其网络配置器，主要涉及到OpenStack Controller和OpenStack Compute上的配置. OpenStack Controller配置 !!! 以下的所有操作，需要在每个OpenStack &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-5">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">使用Fuel部署OpenContrail(5)</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-27T21:55:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:55 pm</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>本节主要用于配置OpenStack使用OpenContrail作为其网络配置器，主要涉及到OpenStack Controller和OpenStack Compute上的配置.</p>
+
+<h3>OpenStack Controller配置</h3>
+
+<p>!!! 以下的所有操作，需要在每个OpenStack Controller节点上进行！！！
+OpenStack Controller不需要使用Private 网络，所以我们可以删除ifcfg-eth0文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># rm -f /etc/network/interface.d/ifcfg-eth4
+</span><span class='line'># service networking restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>为了保险，最好重启更改完网络后的节点。  <br/>
+配置/etc/nova/nova.conf文件中的以下字段:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/nova/nova.conf
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>network_api_class = nova.network.neutronv2.api.API
+</span><span class='line'>neutron_url = http://10.77.77.9:9696
+</span><span class='line'>neutron_admin_tenant_name = services
+</span><span class='line'>neutron_admin_username = neutron
+</span><span class='line'>neutron_admin_password = rVlaAKUs
+</span><span class='line'>neutron_url_timeout = 300
+</span><span class='line'>neutron_admin_auth_url = http://10.55.55.4:35357/v2.0/
+</span><span class='line'>firewall_driver = nova.virt.firewall.NoopFirewallDriver
+</span><span class='line'>enabled_apis = ec2,osapi_compute,metadata
+</span><span class='line'>security_group_api = neutron
+</span><span class='line'>service_neutron_metadata_proxy = True
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>neutron_admin_password的值还是我们以前取得的admin token. <br/>
+更改完上述配置后，重启以下服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service nova-api restart
+</span><span class='line'># service nova-scheduler restart
+</span><span class='line'># service nova-conductor restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+在任一OpenStack Controller节点上，使用以下命令，在数据库中删除nova-network服务的定义。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># source ~/openrc
+</span><span class='line'># for i in $(nova service-list|grep nova-network|awk '{print $2}'); \
+</span><span class='line'>do nova service-delete $i;done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Compute(计算)节点配置</h3>
+
+<p>!!! 以下操作，都应该在每个计算节点上运行 !!!!
+在每个计算节点上，配置仓库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#  echo 'deb http://10.20.0.2:8080/contrail/ /' &gt;/etc/apt/sources.list.d/contrail.list
+</span><span class='line'># echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
+</span><span class='line'># &gt;/etc/apt/sources.list
+</span><span class='line'># apt-get update
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Contrail是不需要OpenVSwitch(OVS)的，所以我们要把它删除:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get purge -y openvswitch-common openvswitch-datapath-lts-saucy-dkms \
+</span><span class='line'>openvswitch-switch nova-network nova-api
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证openvswitch是否被彻底删除(应该输出空行才对):</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># aptitude search -F '%p' '~i' | grep openvswitch
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>删除OVS的内核模块:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># lsmod | grep openvswitch && rmmod openvswitch
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>移除virbr0端口:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># virsh net-destroy default
+</span><span class='line'># virsh net-undefine default
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>确保在所有节点的/etc/network/interface.d/下，只包括了ifcfg-eth0, ifcfg-eth4, 其他都需要被删除。   <br/>
+重启所有OpenStack Compute节点，以删除所有openvswitch和nova-network相关的iptables规则、接口等。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># reboot 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启以后，以下面的命令确保没有NAT规则存在:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -L -t nat
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在所有的Compute节点上，安装Contrail vrouter 组件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install -y contrail-openstack-vrouter
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>所有节点上，配置vhost0和ifcfg-eth4:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-18:~# vim /etc/network/interfaces.d/ifcfg-vhost0 
+</span><span class='line'>auto vhost0
+</span><span class='line'>iface vhost0 inet static
+</span><span class='line'>    netmask 255.255.255.0
+</span><span class='line'>    network_name application
+</span><span class='line'>    address 10.77.77.15
+</span><span class='line'>    gateway 10.77.77.1
+</span><span class='line'>    mtu 1300
+</span><span class='line'>root@node-18:~# vim /etc/network/interfaces.d/ifcfg-eth4 
+</span><span class='line'>auto eth4
+</span><span class='line'>iface eth4 inet manual
+</span><span class='line'>
+</span><span class='line'>up ip l set eth4 up
+</span><span class='line'>down ip l set eth4 down
+</span><span class='line'>
+</span><span class='line'>post-up  ethtool  -K  eth4  gso off  gro off || true
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建agent_param文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mv /etc/contrail/agent_param.tmpl /etc/contrail/agent_param
+</span><span class='line'># vim /etc/contrail/agent_param
+</span><span class='line'>dev=eth4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>设置vroute-agent配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/contrail/contrail-vrouter-agent.conf
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>headless_mode=true
+</span><span class='line'>[DISCOVERY]
+</span><span class='line'>server=10.77.77.9
+</span><span class='line'>max_control_nodes=2
+</span><span class='line'>[HYPERVISOR]
+</span><span class='line'>type=kvm
+</span><span class='line'>[NETWORKS]
+</span><span class='line'>control_network_ip=10.77.77.15
+</span><span class='line'>[VIRTUAL-HOST-INTERFACE]
+</span><span class='line'>name=vhost0
+</span><span class='line'>ip=10.77.77.15/24
+</span><span class='line'>gateway=10.77.77.1
+</span><span class='line'>physical_interface=eth4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在每个OpenStack Compute节点上，配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/contrail/vrouter_nodemgr_param
+</span><span class='line'>DISCOVERY=10.77.77.9
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置nova-compute:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url http://10.77.77.9:9696
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_auth_url http://10.55.55.4:35357/v2.0/
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT network_api_class nova_contrail_vif.contrailvif.ContrailNetworkAPI
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_tenant_name services
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_username neutron
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_password rVlaAKUs
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url_timeout 300
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT firewall_driver nova.virt.firewall.NoopFirewallDriver
+</span><span class='line'> # openstack-config --set /etc/nova/nova.conf DEFAULT security_group_api neutron
+</span><span class='line'> # service supervisor-vrouter restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证所有的vrouter服务都是active状态的:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-18:~# contrail-status 
+</span><span class='line'>== Contrail vRouter ==
+</span><span class='line'>supervisor-vrouter:           active
+</span><span class='line'>contrail-vrouter-agent        active              
+</span><span class='line'>contrail-vrouter-nodemgr      active              
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改/etc/libvirt/qemu.confg中的cgroup_device_acl部分:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cgroup_device_acl = [
+</span><span class='line'>"/dev/null", "/dev/full", "/dev/zero",
+</span><span class='line'>"/dev/random", "/dev/urandom",
+</span><span class='line'>"/dev/ptmx", "/dev/kvm", "/dev/kqemu",
+</span><span class='line'>"/dev/rtc", "/dev/hpet","/dev/net/tun",
+</span><span class='line'>]
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在每个OpenStack Compute节点上，添加iptables规则如下并保存:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -I INPUT 1 -s 169.254.0.0/16 -i vhost0 -j ACCEPT -m comment --comment "metadata service"
+</span><span class='line'># iptables -I INPUT 1 -p tcp -m multiport --destination-ports 2049,8085,9090,8102,33617,39704,44177,55970,60663 -j ACCEPT -m comment --comment "juniper contrail rules"
+</span><span class='line'># iptables-save &gt; /etc/iptables/rules.v4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启libvirt-bin和nova-compute服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service libvirt-bin restart
+</span><span class='line'># service nova-compute restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改vrouter的配置, ！！！注意，这是在Contrail Deploy的那个节点运行的！！！！ ：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># python /opt/contrail/utils/provision_vrouter.py --host_name node-18 --host_ip 10.77.77.15 --api_server_ip 10.77.77.9 --admin_user neutron --admin_password rVlaAKUs --admin_tenant_name services --oper add
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>VGW配置</h3>
+
+<p>OpenContrail支持多种配置，例如Juniper vSRX, Juniper MX, Cisco ASR等，但这些都需要专有硬件的支持（路由器），我们仅仅采用软件路由器Vrouter, 这里我们配置VGW:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># export PYTHONPATH=/usr/lib/python2.7/dist-packages/contrail_vrouter_api/gen_py/instance_service
+</span><span class='line'># python /opt/contrail/utils/provision_vgw_interface.py --oper create --interface vgw --subnets 10.88.88.0/24 --routes 0.0.0.0/0 --vrf default-domain:admin:ext:ext
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更新/etc/contrail/contrail-vrouter-agent.con中的[GATEWAY-0]部分:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[GATEWAY-0]
+</span><span class='line'>routing_instance=default-domain:admin:ext:ext
+</span><span class='line'>interface=vgw
+</span><span class='line'>ip_blocks=10.88.88.0/24
+</span><span class='line'>routes=0.0.0.0/0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动supervisor-vrouter进程:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service supervisor-vrouter restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启其他所有的encapsulation方法，除了MPLS On UPD:  <br/>
+<img src="/images/2015_04_27_22_45_01_799x306.jpg" alt="/images/2015_04_27_22_45_01_799x306.jpg" /></p>
+
+<p>```</p>
+
+<p>好了，这时候，Contrail已经集成到OpenStack环境里，你可以在Contrail的界面里，添加上网络，而后在OpenStack里使用它。Enjoy it !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2015-04-27T21:55:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:55 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/virtualization/'>virtualization</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4/" title="Previous Post: 使用Fuel部署OpenContrail(4)">&laquo; 使用Fuel部署OpenContrail(4)</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2015/04/28/trouble-shooting-on-jujus-local-deployment/" title="Next Post: Trouble Shooting On Juju's Local Deployment">Trouble Shooting On Juju's Local Deployment &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/">Setup a More Intelligent OpenWRT Router</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-5/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-5/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,2552 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="I/O多路技术可以作为并发事件驱动(event-driver)程序的基础。事件驱动中，流作为某种事件的结果前进。逻辑流可以被转化为状态机。
+在服务器中，我们可以用I/O多路复用，借助select函数，检测输入事件的发声。当每个已连接描述符准备好可读时，服务器为相应的状态机执行状态转移。在例子中， &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/posts/28">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div class="blog-index">
+  
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/04/02/you-guan-bing-fa-2/">有关并发(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-04-02T15:52:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>2</span><span class='date-suffix'>nd</span>, <span class='date-year'>2014</span></span> <span class='time'>3:52 pm</span></time>
+        
+         | <a href="/blog/2014/04/02/you-guan-bing-fa-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>I/O多路技术可以作为并发事件驱动(event-driver)程序的基础。事件驱动中，流作为某种事件的结果前进。逻辑流可以被转化为状态机。<br />
+在服务器中，我们可以用I/O多路复用，借助select函数，检测输入事件的发声。当每个已连接描述符准备好可读时，服务器为相应的状态机执行状态转移。在例子中，就是从描述符读入和写回一个文本行。<br /></p>
+
+<h3>并发事件驱动服务器</h3>
+
+<p>首先看代码:<br /></p>
+
+<figure class='code'><figcaption><span>echoservers.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * echoservers.c - A concurrent echo server based on select</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin echoserversmain */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">typedef</span> <span class="k">struct</span> <span class="p">{</span> <span class="cm">/* represents a pool of connected descriptors */</span> <span class="c1">//line:conc:echoservers:beginpool</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">maxfd</span><span class="p">;</span>        <span class="cm">/* largest descriptor in read_set */</span>
+</span><span class='line'>    <span class="n">fd_set</span> <span class="n">read_set</span><span class="p">;</span>  <span class="cm">/* set of all active descriptors */</span>
+</span><span class='line'>    <span class="n">fd_set</span> <span class="n">ready_set</span><span class="p">;</span> <span class="cm">/* subset of descriptors ready for reading  */</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">nready</span><span class="p">;</span>       <span class="cm">/* number of ready descriptors from select */</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">maxi</span><span class="p">;</span>         <span class="cm">/* highwater index into client array */</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">clientfd</span><span class="p">[</span><span class="n">FD_SETSIZE</span><span class="p">];</span>    <span class="cm">/* set of active descriptors */</span>
+</span><span class='line'>    <span class="kt">rio_t</span> <span class="n">clientrio</span><span class="p">[</span><span class="n">FD_SETSIZE</span><span class="p">];</span> <span class="cm">/* set of active read buffers */</span>
+</span><span class='line'><span class="p">}</span> <span class="n">pool</span><span class="p">;</span> <span class="c1">//line:conc:echoservers:endpool</span>
+</span><span class='line'><span class="cm">/* $end echoserversmain */</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">init_pool</span><span class="p">(</span><span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">pool</span> <span class="o">*</span><span class="n">p</span><span class="p">);</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">add_client</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">pool</span> <span class="o">*</span><span class="n">p</span><span class="p">);</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">check_clients</span><span class="p">(</span><span class="n">pool</span> <span class="o">*</span><span class="n">p</span><span class="p">);</span>
+</span><span class='line'><span class="cm">/* $begin echoserversmain */</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="n">byte_cnt</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="cm">/* counts total bytes received by server */</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">static</span> <span class="n">pool</span> <span class="n">pool</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">init_pool</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pool</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:initpool</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="cm">/* Wait for listening/connected descriptor(s) to become ready */</span>
+</span><span class='line'>  <span class="n">pool</span><span class="p">.</span><span class="n">ready_set</span> <span class="o">=</span> <span class="n">pool</span><span class="p">.</span><span class="n">read_set</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">pool</span><span class="p">.</span><span class="n">nready</span> <span class="o">=</span> <span class="n">Select</span><span class="p">(</span><span class="n">pool</span><span class="p">.</span><span class="n">maxfd</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pool</span><span class="p">.</span><span class="n">ready_set</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/* If listening descriptor ready, add new client to pool */</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pool</span><span class="p">.</span><span class="n">ready_set</span><span class="p">))</span> <span class="p">{</span> <span class="c1">//line:conc:echoservers:listenfdready</span>
+</span><span class='line'>      <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:accept</span>
+</span><span class='line'>      <span class="n">add_client</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pool</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:addclient</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  
+</span><span class='line'>  <span class="cm">/* Echo a text line from each ready connected descriptor */</span>
+</span><span class='line'>  <span class="n">check_clients</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pool</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:checkclients</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end echoserversmain */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $begin init_pool */</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">init_pool</span><span class="p">(</span><span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">pool</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="cm">/* Initially, there are no connected descriptors */</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxi</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>                   <span class="c1">//line:conc:echoservers:beginempty</span>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span> <span class="n">FD_SETSIZE</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'>  <span class="n">p</span><span class="o">-&gt;</span><span class="n">clientfd</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>        <span class="c1">//line:conc:echoservers:endempty</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Initially, listenfd is only member of select read set */</span>
+</span><span class='line'>    <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxfd</span> <span class="o">=</span> <span class="n">listenfd</span><span class="p">;</span>            <span class="c1">//line:conc:echoservers:begininit</span>
+</span><span class='line'>    <span class="n">FD_ZERO</span><span class="p">(</span><span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">read_set</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">FD_SET</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">read_set</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:endinit</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end init_pool */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $begin add_client */</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">add_client</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">pool</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">p</span><span class="o">-&gt;</span><span class="n">nready</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">FD_SETSIZE</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>  <span class="cm">/* Find an available slot */</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">clientfd</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="cm">/* Add connected descriptor to the pool */</span>
+</span><span class='line'>      <span class="n">p</span><span class="o">-&gt;</span><span class="n">clientfd</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">connfd</span><span class="p">;</span>                 <span class="c1">//line:conc:echoservers:beginaddclient</span>
+</span><span class='line'>      <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">clientrio</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">connfd</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:endaddclient</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="cm">/* Add the descriptor to descriptor set */</span>
+</span><span class='line'>      <span class="n">FD_SET</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">read_set</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:addconnfd</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="cm">/* Update max descriptor and pool highwater mark */</span>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="n">connfd</span> <span class="o">&gt;</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxfd</span><span class="p">)</span> <span class="c1">//line:conc:echoservers:beginmaxfd</span>
+</span><span class='line'>      <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxfd</span> <span class="o">=</span> <span class="n">connfd</span><span class="p">;</span> <span class="c1">//line:conc:echoservers:endmaxfd</span>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxi</span><span class="p">)</span>       <span class="c1">//line:conc:echoservers:beginmaxi</span>
+</span><span class='line'>      <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxi</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>       <span class="c1">//line:conc:echoservers:endmaxi</span>
+</span><span class='line'>      <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="n">FD_SETSIZE</span><span class="p">)</span> <span class="cm">/* Couldn&#39;t find an empty slot */</span>
+</span><span class='line'>  <span class="n">app_error</span><span class="p">(</span><span class="s">&quot;add_client error: Too many clients&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end add_client */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $begin check_clients */</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">check_clients</span><span class="p">(</span><span class="n">pool</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>    <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">maxi</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">nready</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">);</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">connfd</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">clientfd</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+</span><span class='line'>  <span class="n">rio</span> <span class="o">=</span> <span class="n">p</span><span class="o">-&gt;</span><span class="n">clientrio</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/* If the descriptor is ready, echo a text line from it */</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">((</span><span class="n">connfd</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">ready_set</span><span class="p">)))</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">p</span><span class="o">-&gt;</span><span class="n">nready</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">if</span> <span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">byte_cnt</span> <span class="o">+=</span> <span class="n">n</span><span class="p">;</span> <span class="c1">//line:conc:echoservers:beginecho</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Server received %d (%d total) bytes on fd %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'>             <span class="n">n</span><span class="p">,</span> <span class="n">byte_cnt</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:endecho</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="cm">/* EOF detected, remove descriptor from pool */</span>
+</span><span class='line'>      <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:closeconnfd</span>
+</span><span class='line'>      <span class="n">FD_CLR</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">read_set</span><span class="p">);</span> <span class="c1">//line:conc:echoservers:beginremove</span>
+</span><span class='line'>      <span class="n">p</span><span class="o">-&gt;</span><span class="n">clientfd</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>          <span class="c1">//line:conc:echoservers:endremove</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end check_clients */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>例子解析如下，程序首先调用init_poll初始化一个用于记录活动客户端的池(poll)。初始化完池以后，服务器进入一个无限循环。每次循环中，服务器将调用select函数用于检测两个事件，一个是来自一个新客户端的链接请求到大，另一个是已经存在的客户端的已连接描述符准备好可读。如果连接请求到达，服务器将调用add_client()将此客户端的连接描述符加入到poll中。最后，服务器将调用check_client()函数，把来自每个准备好的已连接描述符的一个文本行回送回去。<br /></p>
+
+<p>add_client和check_clients是非常精妙的设计。这构成了一个有限状态模式，select函数用于检测输入事件，add_client函数创建一个新的逻辑流。check_clients函数通过回送输入行来执行状态转移，客户端完成文本行传输时，还需要删除这个状态机。<br /></p>
+
+<p>局限在于，我们在这里能监听到的最大客户端是有限的。编码是较为复杂的。而且需要的代码是基于进程的服务器的3倍，并且，随着并发性粒度的减小，其复杂性还会上升。粒度是指的每个逻辑流每个时间片执行的指令数目。在示例并发服务器中，并发粒度就是读一个完整的文本行所需要的指令数目。如果某个逻辑流忙于读一个文本行，那么其他逻辑流就只能等着。这使得"只发送部分文本行就停止"的攻击方式得以可能。<br /></p>
+
+<h3>基于线程的并发编程</h3>
+
+<p>首先写代码:<br /></p>
+
+<figure class='code'><figcaption><span>echoservert.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * echoservert.c - A concurrent echo server using threads</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin echoservertmain */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="o">*</span><span class="n">connfdp</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span><span class="o">=</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">pthread_t</span> <span class="n">tid</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">connfdp</span> <span class="o">=</span> <span class="n">Malloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span> <span class="c1">//line:conc:echoservert:beginmalloc</span>
+</span><span class='line'>  <span class="o">*</span><span class="n">connfdp</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span> <span class="c1">//line:conc:echoservert:endmalloc</span>
+</span><span class='line'>  <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="n">connfdp</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* thread routine */</span>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">connfd</span> <span class="o">=</span> <span class="o">*</span><span class="p">((</span><span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">vargp</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_detach</span><span class="p">(</span><span class="n">pthread_self</span><span class="p">());</span> <span class="c1">//line:conc:echoservert:detach</span>
+</span><span class='line'>    <span class="n">Free</span><span class="p">(</span><span class="n">vargp</span><span class="p">);</span>                    <span class="c1">//line:conc:echoservert:free</span>
+</span><span class='line'>    <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $end echoservertmain */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这个代码其实和我当初写的DNS Server的代码类似，来一个请求则启动一个线程处理，处理完线程自动退出。因而我们可以看到在thread()函数中实现了对一个连接的完整处理，而主线程只负责监听新的连接请求，来一个请求则建立一个线程，线程创建完毕以后自己detach掉。<br />
+这里有一个需要注意的，就是传递给子线程的connfd的值可能会被更改，所以我们用到了malloc()和free()用以保护。<br /></p>
+
+<h3>多线程程序中的共享变量</h3>
+
+<p>代码如下：<br /></p>
+
+<figure class='code'><figcaption><span>sharing.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* $begin sharing */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'><span class="cp">#define N 2</span>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">char</span> <span class="o">**</span><span class="n">ptr</span><span class="p">;</span>  <span class="cm">/* global variable */</span> <span class="c1">//line:conc:sharing:ptrdec</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">pthread_t</span> <span class="n">tid</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">char</span> <span class="o">*</span><span class="n">msgs</span><span class="p">[</span><span class="n">N</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="s">&quot;Hello from foo&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="s">&quot;Hello from bar&quot;</span>
+</span><span class='line'>    <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">ptr</span> <span class="o">=</span> <span class="n">msgs</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'>        <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">i</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_exit</span><span class="p">(</span><span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">myid</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">vargp</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">static</span> <span class="kt">int</span> <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">//line:conc:sharing:cntdec</span>
+</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;[%d]: %s (cnt=%d)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">myid</span><span class="p">,</span> <span class="n">ptr</span><span class="p">[</span><span class="n">myid</span><span class="p">],</span> <span class="o">++</span><span class="n">cnt</span><span class="p">);</span> <span class="c1">//line:conc:sharing:stack</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end sharing */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>运行结果如下：<br /></p>
+
+<figure class='code'><figcaption><span>sharing.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">[</span><span class="n">Trusty</span><span class="err">@</span><span class="n">XXXyyy</span> <span class="n">chapter12</span><span class="p">]</span><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">sharing</span>
+</span><span class='line'><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">:</span> <span class="n">Hello</span> <span class="n">from</span> <span class="n">foo</span> <span class="p">(</span><span class="n">cnt</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">:</span> <span class="n">Hello</span> <span class="n">from</span> <span class="n">bar</span> <span class="p">(</span><span class="n">cnt</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里需要明了的概念是：寄存器是从不共享的，但是虚拟存储器总是共享的。线程1改写了一个存储器位置，那么在线程2中是可以看到这个变化的。<br />
+本地静态变量是定义在函数内部并且具备static属性的变量。虚拟存储器的读/写区域里之包含在程序中声明的每个本地静态变量的一个实例，因而在cnt中，运行时由于只有一个cnt的实例，因而每个对等线程都将读/写到这个实例。<br /></p>
+
+<h3>用信号量同步线程</h3>
+
+<p>代码如下:<br /></p>
+
+<figure class='code'><figcaption><span>badcnt.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * badcnt.c - An improperly synchronized counter program </span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin badcnt */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">);</span>  <span class="cm">/* Thread routine prototype */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* Global shared variable */</span>
+</span><span class='line'><span class="k">volatile</span> <span class="kt">int</span> <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="cm">/* Counter */</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">niters</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">pthread_t</span> <span class="n">tid1</span><span class="p">,</span> <span class="n">tid2</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Check input argument */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;usage: %s &lt;niters&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">niters</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Create threads and wait for them to finish */</span>
+</span><span class='line'>    <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">niters</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid2</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">niters</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_join</span><span class="p">(</span><span class="n">tid1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_join</span><span class="p">(</span><span class="n">tid2</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Check result */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">cnt</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">niters</span><span class="p">))</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;BOOM! cnt=%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cnt</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">else</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;OK cnt=%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cnt</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* Thread routine */</span>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="n">niters</span> <span class="o">=</span> <span class="o">*</span><span class="p">((</span><span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">vargp</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">niters</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="c1">//line:conc:badcnt:beginloop</span>
+</span><span class='line'>  <span class="n">cnt</span><span class="o">++</span><span class="p">;</span>                   <span class="c1">//line:conc:badcnt:endloop</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end badcnt */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果我们给出一个很大的数，运行将报错，但是如果我们给出的值足够小，那么，没问题，它每次都会运行成功:<br /></p>
+
+<figure class='code'><figcaption><span>badcnt.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">[</span><span class="n">Trusty</span><span class="err">@</span><span class="n">XXXyyy</span> <span class="n">chapter12</span><span class="p">]</span><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">badcnt</span> <span class="mi">1000000</span>
+</span><span class='line'><span class="n">BOOM</span><span class="o">!</span> <span class="n">cnt</span><span class="o">=</span><span class="mi">1842364</span>
+</span><span class='line'><span class="p">[</span><span class="n">Trusty</span><span class="err">@</span><span class="n">XXXyyy</span> <span class="n">chapter12</span><span class="p">]</span><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">badcnt</span> <span class="mi">1000000</span>
+</span><span class='line'><span class="n">BOOM</span><span class="o">!</span> <span class="n">cnt</span><span class="o">=</span><span class="mi">1101701</span>
+</span><span class='line'><span class="p">[</span><span class="n">Trusty</span><span class="err">@</span><span class="n">XXXyyy</span> <span class="n">chapter12</span><span class="p">]</span><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">badcnt</span> <span class="mi">1000</span>
+</span><span class='line'><span class="n">OK</span> <span class="n">cnt</span><span class="o">=</span><span class="mi">2000</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>原因只是在于当数值够大的时候，两个线程的临界区会交替执行。因此计算的最终结果，是小于2cnt。我们可以用信号量来避免这种问题的产生。</p>
+
+<h3>利用信号量访问共享变量</h3>
+
+<p>修改过的代码如下：</p>
+
+<figure class='code'><figcaption><span>goodcnt1.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * badcnt.c - An improperly synchronized counter program </span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin badcnt */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">);</span>  <span class="cm">/* Thread routine prototype */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* Global shared variable */</span>
+</span><span class='line'><span class="k">volatile</span> <span class="kt">int</span> <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="cm">/* Counter */</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">sem_t</span> <span class="n">mutex</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">niters</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">pthread_t</span> <span class="n">tid1</span><span class="p">,</span> <span class="n">tid2</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">//sem_t mutex;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Check input argument */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;usage: %s &lt;niters&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Initialize the semaphore */</span>
+</span><span class='line'>    <span class="n">sem_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">niters</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Create threads and wait for them to finish */</span>
+</span><span class='line'>    <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">niters</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid2</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">niters</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_join</span><span class="p">(</span><span class="n">tid1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">Pthread_join</span><span class="p">(</span><span class="n">tid2</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Check result */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">cnt</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">niters</span><span class="p">))</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;BOOM! cnt=%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cnt</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">else</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;OK cnt=%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cnt</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* Thread routine */</span>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="n">niters</span> <span class="o">=</span> <span class="o">*</span><span class="p">((</span><span class="kt">int</span> <span class="o">*</span><span class="p">)</span><span class="n">vargp</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">P</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">niters</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="c1">//line:conc:badcnt:beginloop</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>  <span class="n">cnt</span><span class="o">++</span><span class="p">;</span>                   <span class="c1">//line:conc:badcnt:endloop</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">V</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end badcnt */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>代码的改动只在于加入了mutex的概念，并调用了我们经过封装的P()和V()，这两个函数分别封装了sem_wait()和sem_post(),   P/V源自于荷兰语，分别代表Proberen(测试)和Verhogen（增加)的意思。<br />
+我自己改写的第一版的goodcnt.c中，把P/V加载了for循环中，这将大量增加CPU时间。第二版中在for意外加/减锁。<br /></p>
+
+<h3>基于预线程化的并发服务器</h3>
+
+<p>代码如下：<br /></p>
+
+<figure class='code'><figcaption><span>echoservert_pre.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * echoservert_pre.c - A prethreaded concurrent echo server</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin echoservertpremain */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'><span class="cp">#include &quot;sbuf.h&quot;</span>
+</span><span class='line'><span class="cp">#define NTHREADS  4</span>
+</span><span class='line'><span class="cp">#define SBUFSIZE  16</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo_cnt</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">sbuf_t</span> <span class="n">sbuf</span><span class="p">;</span> <span class="cm">/* shared buffer of connected descriptors */</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span><span class="o">=</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">pthread_t</span> <span class="n">tid</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>    <span class="n">sbuf_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sbuf</span><span class="p">,</span> <span class="n">SBUFSIZE</span><span class="p">);</span> <span class="c1">//line:conc:pre:initsbuf</span>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">NTHREADS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>  <span class="cm">/* Create worker threads */</span> <span class="c1">//line:conc:pre:begincreate</span>
+</span><span class='line'>  <span class="n">Pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="kr">thread</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>               <span class="c1">//line:conc:pre:endcreate</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">sbuf_insert</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sbuf</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span> <span class="cm">/* Insert connfd in buffer */</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="o">*</span><span class="nf">thread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">vargp</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">Pthread_detach</span><span class="p">(</span><span class="n">pthread_self</span><span class="p">());</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">connfd</span> <span class="o">=</span> <span class="n">sbuf_remove</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sbuf</span><span class="p">);</span> <span class="cm">/* Remove connfd from buffer */</span> <span class="c1">//line:conc:pre:removeconnfd</span>
+</span><span class='line'>  <span class="n">echo_cnt</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>                <span class="cm">/* Service client */</span>
+</span><span class='line'>  <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="cm">/* $end echoservertpremain */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这个例子建立了主线程和工作线程。一个主线程用于接受连接并将得到的连接描述符放在一个共享缓冲区中。而每一个工作线程则反复的从共享缓冲区中取出描述符并为客户端服务，然后等待下一个描述符。这种情况适合于短连接。<br />
+创建的工作线程创建完毕后其实是detach运行的，然后每个线程将调用sbuf_remove()从sbuf中取出connfd(连接字)，而后调用echo_cnt用于回写行并在终端打印出收到的字节数。<br />
+运行结果:<br /></p>
+
+<figure class='code'><figcaption><span>echoservert_pre.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kr">thread</span> <span class="o">-</span><span class="mi">1909590272</span> <span class="n">received</span> <span class="mi">6</span> <span class="p">(</span><span class="mi">258</span> <span class="n">total</span><span class="p">)</span> <span class="n">bytes</span> <span class="n">on</span> <span class="n">fd</span> <span class="mi">9</span>
+</span><span class='line'><span class="kr">thread</span> <span class="o">-</span><span class="mi">1909590272</span> <span class="n">received</span> <span class="mi">5</span> <span class="p">(</span><span class="mi">263</span> <span class="n">total</span><span class="p">)</span> <span class="n">bytes</span> <span class="n">on</span> <span class="n">fd</span> <span class="mi">9</span>
+</span><span class='line'><span class="kr">thread</span> <span class="o">-</span><span class="mi">1909590272</span> <span class="n">received</span> <span class="mi">5</span> <span class="p">(</span><span class="mi">268</span> <span class="n">total</span><span class="p">)</span> <span class="n">bytes</span> <span class="n">on</span> <span class="n">fd</span> <span class="mi">9</span>
+</span><span class='line'><span class="kr">thread</span> <span class="o">-</span><span class="mi">1892804864</span> <span class="n">received</span> <span class="mi">6</span> <span class="p">(</span><span class="mi">274</span> <span class="n">total</span><span class="p">)</span> <span class="n">bytes</span> <span class="n">on</span> <span class="n">fd</span> <span class="mi">6</span>
+</span><span class='line'><span class="kr">thread</span> <span class="o">-</span><span class="mi">1917982976</span> <span class="n">received</span> <span class="mi">7</span> <span class="p">(</span><span class="mi">281</span> <span class="n">total</span><span class="p">)</span> <span class="n">bytes</span> <span class="n">on</span> <span class="n">fd</span> <span class="mi">7</span>
+</span><span class='line'><span class="kr">thread</span> <span class="o">-</span><span class="mi">1901197568</span> <span class="n">received</span> <span class="mi">5</span> <span class="p">(</span><span class="mi">286</span> <span class="n">total</span><span class="p">)</span> <span class="n">bytes</span> <span class="n">on</span> <span class="n">fd</span> <span class="mi">8</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>需要初始化byte_cnt计数器和mutex信号量。pthread_once()函数调用初始化函数在这里是需要注意的。这使得函数包的调用更加容易。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/04/01/you-guan-bing-fa/">有关并发</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-04-01T19:07:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2014</span></span> <span class='time'>7:07 pm</span></time>
+        
+         | <a href="/blog/2014/04/01/you-guan-bing-fa/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>app2e中有几个很好的关于并发实现的例子，这里加以详细解析。<br /></p>
+
+<h3>简单的echo服务器</h3>
+
+<p>所谓echo服务器就是将客户端的输入简单的通过socket回送回来。代码实现如下：<br /></p>
+
+<figure class='code'><figcaption><span>echoserver.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;csapp.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">clientlen</span><span class="p">;</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">hostent</span> <span class="o">*</span><span class="n">hp</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="o">*</span><span class="n">haddrp</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>      <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">clientlen</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">clientaddr</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="cm">/* determin the domain name and IP address of the client */</span>
+</span><span class='line'>      <span class="n">hp</span> <span class="o">=</span> <span class="n">Gethostbyaddr</span><span class="p">((</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span><span class="p">,</span>
+</span><span class='line'>              <span class="k">sizeof</span><span class="p">(</span><span class="n">clientaddr</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span><span class="p">),</span> <span class="n">AF_INET</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">haddrp</span> <span class="o">=</span> <span class="n">inet_ntoa</span><span class="p">(</span><span class="n">clientaddr</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server conected to %s (%s)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">hp</span><span class="o">-&gt;</span><span class="n">h_name</span><span class="p">,</span> <span class="n">haddrp</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>从代码来看，这是一个很典型的socket通信的例子。连接一旦建立成功，server段会打印出client端的IP地址，并一直在echo程序中晃荡。因为echo()中有while()函数会一直等着从connfd文件描述符读入输入行。当得到来自socket fd的输入时，会打印出接收到的字符个数，并将其写入到socket文件描述符中，由此client段会得到回显字符。<br /></p>
+
+<h3>利用进程实现并发</h3>
+
+<p>上面的简单echo服务器是没法接受一个以上的连接的。因此我们写出echo服务器的第二版，利用子进程实现echo服务器。<br /></p>
+
+<figure class='code'><figcaption><span>echoserverp.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * echoserverp.c - A concurrent echo server based on processes</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin echoserverpmain */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">sigchld_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span> <span class="c1">//line:conc:echoserverp:handlerstart</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="n">waitpid</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">WNOHANG</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">;</span>
+</span><span class='line'>    <span class="k">return</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span> <span class="c1">//line:conc:echoserverp:handlerend</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span><span class="o">=</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">Signal</span><span class="p">(</span><span class="n">SIGCHLD</span><span class="p">,</span> <span class="n">sigchld_handler</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">Fork</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">listenfd</span><span class="p">);</span> <span class="cm">/* Child closes its listening socket */</span>
+</span><span class='line'>      <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>    <span class="cm">/* Child services client */</span> <span class="c1">//line:conc:echoserverp:echofun</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>   <span class="cm">/* Child closes connection with client */</span> <span class="c1">//line:conc:echoserverp:childclose</span>
+</span><span class='line'>      <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>         <span class="cm">/* Child exits */</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span> <span class="cm">/* Parent closes connected socket (important!) */</span> <span class="c1">//line:conc:echoserverp:parentclose</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $end echoserverpmain */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>编译和运行命令如下：<br /></p>
+
+<figure class='code'><figcaption><span>echoserverp.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">echoserverp</span> <span class="n">echoserverp</span><span class="p">.</span><span class="n">c</span> <span class="o">-</span><span class="n">lcsapp</span> <span class="o">-</span><span class="n">lpthread</span>
+</span><span class='line'><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span><span class='line'><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">echoclient</span> <span class="n">localhost</span> <span class="mi">3344</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在多个终端上执行完./echoclient localhost 3344后，我们可以用ps -ef | grep echoserverp来检查当前系统中的进程个数:<br /></p>
+
+<figure class='code'><figcaption><span>echoserverp.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">ps</span> <span class="o">-</span><span class="n">ef</span> <span class="o">|</span> <span class="n">grep</span> <span class="n">echoserverp</span>
+</span><span class='line'><span class="n">Trusty</span>     <span class="mi">30404</span>  <span class="mi">8497</span>  <span class="mi">0</span> <span class="mi">17</span><span class="o">:</span><span class="mi">19</span> <span class="n">pts</span><span class="o">/</span><span class="mi">9</span>    <span class="mo">00</span><span class="o">:</span><span class="mo">00</span><span class="o">:</span><span class="mo">00</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span><span class='line'><span class="n">Trusty</span>     <span class="mi">30651</span> <span class="mi">30404</span>  <span class="mi">0</span> <span class="mi">17</span><span class="o">:</span><span class="mi">19</span> <span class="n">pts</span><span class="o">/</span><span class="mi">9</span>    <span class="mo">00</span><span class="o">:</span><span class="mo">00</span><span class="o">:</span><span class="mo">00</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span><span class='line'><span class="n">Trusty</span>     <span class="mi">31174</span> <span class="mi">30404</span>  <span class="mi">0</span> <span class="mi">17</span><span class="o">:</span><span class="mi">20</span> <span class="n">pts</span><span class="o">/</span><span class="mi">9</span>    <span class="mo">00</span><span class="o">:</span><span class="mo">00</span><span class="o">:</span><span class="mo">00</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里看到，在有3个client端连接时，存在3个echoserverp运行实例。<br /></p>
+
+<p>实现的关键在于：<br />
+1. 使用信号, SIGCHLD用于回收僵死进程。
+2. Fork()函数创建子进程。
+3. 创建完子进程后，父进程需要关闭已经建立的socket连接。而子进程则需要关闭它的监听描述符。</p>
+
+<p>优缺点比较：<br />
+父子进程共享文件表，但是不共享用户地址空间。使得一个进程不可能不小心覆盖到另一个进程的虚拟存储器。但是独立的地址空间使得进程共享状态信息变得困难，它们需要用IPC来显示通信。而且进程通常比较慢，因为进程控制和IPC的开销很高。IPC,进程间通信。<br /></p>
+
+<h3>基于I/O多路复用的并发编程</h3>
+
+<figure class='code'><figcaption><span>selectecho.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* $begin select */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">command</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">fd_set</span> <span class="n">read_set</span><span class="p">,</span> <span class="n">ready_set</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>  <span class="c1">//line:conc:select:openlistenfd</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">FD_ZERO</span><span class="p">(</span><span class="o">&amp;</span><span class="n">read_set</span><span class="p">);</span>              <span class="cm">/* Clear read set */</span> <span class="c1">//line:conc:select:clearreadset</span>
+</span><span class='line'>    <span class="n">FD_SET</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">read_set</span><span class="p">);</span> <span class="cm">/* Add stdin to read set */</span> <span class="c1">//line:conc:select:addstdin</span>
+</span><span class='line'>    <span class="n">FD_SET</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">read_set</span><span class="p">);</span>     <span class="cm">/* Add listenfd to read set */</span> <span class="c1">//line:conc:select:addlistenfd</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">ready_set</span> <span class="o">=</span> <span class="n">read_set</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">Select</span><span class="p">(</span><span class="n">listenfd</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ready_set</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span> <span class="c1">//line:conc:select:select</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ready_set</span><span class="p">))</span> <span class="c1">//line:conc:select:stdinready</span>
+</span><span class='line'>      <span class="n">command</span><span class="p">();</span> <span class="cm">/* Read command line from stdin */</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ready_set</span><span class="p">))</span> <span class="p">{</span> <span class="c1">//line:conc:select:listenfdready</span>
+</span><span class='line'>      <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span> <span class="cm">/* Echo client input until EOF */</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">command</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">Fgets</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">,</span> <span class="n">stdin</span><span class="p">))</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span> <span class="cm">/* EOF */</span>
+</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%s&quot;</span><span class="p">,</span> <span class="n">buf</span><span class="p">);</span> <span class="cm">/* Process the input command */</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $end select */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这个例子测试时需要注意的是，当客户端有连接时，终端输入将失效。一个更好的解决方案是使用更细粒度的多路复用，服务器每次循环回送一个文本行。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/04/01/reading-digests-for-app2e/">Reading Digests for APP2E</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-04-01T10:50:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2014</span></span> <span class='time'>10:50 am</span></time>
+        
+         | <a href="/blog/2014/04/01/reading-digests-for-app2e/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Preparation</h3>
+
+<p>Download the files from the student&rsquo;s website of app2e via:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wget http://csapp.cs.cmu.edu/public/ics2/code.tar
+</span><span class='line'>tar xvf code.tar
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Start building the static libs and copy it to system library:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@XXXyyy lib]$ pwd
+</span><span class='line'>/home/Trusty/code/app2e/practise/lib
+</span><span class='line'>[Trusty@XXXyyy lib]$ cp /home/Trusty/code/app2e/code/src/csapp.c  .
+</span><span class='line'>[Trusty@XXXyyy lib]$ cp /home/Trusty/code/app2e/code/include/csapp.h  .
+</span><span class='line'>[Trusty@XXXyyy lib]$ gcc -c -o csapp.o csapp.c 
+</span><span class='line'>[Trusty@XXXyyy lib]$ ar rcs libcsapp.a csapp.o
+</span><span class='line'>[Trusty@XXXyyy lib]$ sudo cp libcsapp.a  /usr/lib/
+</span><span class='line'>[Trusty@XXXyyy lib]$ sudo cp csapp.h  /usr/include/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you can directly use libcssapp.a in your own files:<br /></p>
+
+<figure class='code'><figcaption><span>test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;csapp.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Compile the file via:<br /></p>
+
+<figure class='code'><figcaption><span>test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">test</span> <span class="n">test</span><span class="p">.</span><span class="n">c</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Rio</h3>
+
+<figure class='code'><figcaption><span>cpfile.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;csapp.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">STDIN_FILENO</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Compile the file via:<br /></p>
+
+<figure class='code'><figcaption><span>cpfile.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">cpfile</span> <span class="n">cpfile</span><span class="p">.</span><span class="n">c</span>  <span class="o">-</span><span class="n">lcsapp</span> <span class="o">-</span><span class="n">lpthread</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run the app via:<br /></p>
+
+<figure class='code'><figcaption><span>cpfile.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">.</span><span class="o">/</span><span class="n">cpfile</span><span class="o">&lt;</span><span class="n">cpfile</span><span class="p">.</span><span class="n">c</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will print the cpfile.c content on the stdout screen.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/30/remote-ssh-and-vnc-forwarding/">Remote SSH and VNC Forwarding</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-30T15:05:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>3:05 pm</span></time>
+        
+         | <a href="/blog/2014/03/30/remote-ssh-and-vnc-forwarding/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>因为有中转服务器的存在，我们需要建立ssh端口转发，以便一步到位通过中转服务器登录到远程主机。<br /></p>
+
+<h3>ssh转发</h3>
+
+<p>建立ssh转发：<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ssh -L 2121:192.168.1xx.xxx.xxx 1xx.xxx.xxx.xxx -l Tomcat
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>建立以后则可以：<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ssh root@localhost -p 2121
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Autossh without entering password:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cat id_rsa.pub | ssh Tomcat@1xx.xxx.xx.xxx 'cat &gt;&gt;.ssh/authorized_keys'
+</span><span class='line'># After login on to 170, run:
+</span><span class='line'>chmod 600 ~/.ssh/authorized_keys
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>VNC设置</h3>
+
+<p>配置VNC自动启动:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vim /etc/init.d/vncserver
+</span><span class='line'># 添加：
+</span><span class='line'>VNCSERVERS="1:rohc"
+</span><span class='line'>VNCSERVERARGS[1]="-geometry 1280x1024"
+</span><span class='line'>$ chkconfig vncserver on
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>设置VNC转发：<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ssh -L 2333:192.168.1xx.xxx:5901 1xx.xxx.xxx.xxx -l Tomcat
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>之后就可以通过:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vncviewer localhost:5901来访问VNC了。   
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/28/configure-davmail-and-thunderbird/">Configure Davmail and Thunderbird</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-28T16:19:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:19 pm</span></time>
+        
+         | <a href="/blog/2014/03/28/configure-davmail-and-thunderbird/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Install davmail via:<br />
+    $ pacman -S davmail
+    $ davmail &amp;
+Configure it as:<br /></p>
+
+<p><img src="/images/davmail.jpg" alt="/images/davmail.jpg" /></p>
+
+<p>Now configure the thunderbird:<br /></p>
+
+<p>imap, to the localhost/port/  non-encrypt, Normal passwords<br />
+smtp, to the localhost/port/  non-encrypt, Normal passwords<br />
+And the usename should be the domain/username.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/27/basic-archlinux-setting-i386/">Basic ArchLinux Setting(i386)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-27T19:10:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>7:10 pm</span></time>
+        
+         | <a href="/blog/2014/03/27/basic-archlinux-setting-i386/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>ArchLinux Installation</h3>
+
+<p>First we download the iso from the archlinux.org, then using iso to boot. Partition it into many disks as you like.<br /></p>
+
+<p>Now begin to install:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mount /dev/sda2 /mnt
+</span><span class='line'>$ swapon /dev/sda1
+</span><span class='line'>$ pacstrap /mnt base
+</span><span class='line'>$ genfstab -p /mnt &gt;&gt; /mnt/etc/fstab
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Chroot into the newly installed system:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ arch-chroot /mnt
+</span><span class='line'>$ ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+</span><span class='line'>$ vi /etc/locale.gen
+</span><span class='line'># enable en_US related
+</span><span class='line'>$ locale-gen
+</span><span class='line'>$ vi /etc/mkinitcpio.conf
+</span><span class='line'># we can remain the default, notice if you use usb, enable usb related. 
+</span><span class='line'>$ mkinitcpio -p linux
+</span><span class='line'>$ passwd root
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Grub install and configure:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S grub
+</span><span class='line'>$ grub-install --target=i386-pc --recheck --debug /dev/sda
+</span><span class='line'>$ grub-install --target=i386-pc --recheck --debug /dev/sda
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install vim:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install dhcpcd:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S dhcpcd
+</span><span class='line'>$ systemctl enable dhcpcd@enp0s3
+</span><span class='line'>$ pacman -S net-tools # for using ifconfig
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install openssh:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S openssh
+</span><span class='line'>$ systemctl start sshd
+</span><span class='line'>$ systemcrl enable sshd.service
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Build rsim3 on ArchLinux</h3>
+
+<p>First download the package from rsim3.<br />
+Install the base-devel:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>pacman -S base-devel
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install boost, boost-libs, libpcap, cppunit:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>pacman -S boost boost-libs libpcap cppunit
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then you can enjoy the compiling and get the result.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/21/use-redis-for-inter-communication/">Use Redis for Inter-Communication</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-21T15:55:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>21</span><span class='date-suffix'>st</span>, <span class='date-year'>2014</span></span> <span class='time'>3:55 pm</span></time>
+        
+         | <a href="/blog/2014/03/21/use-redis-for-inter-communication/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Play With Redis</h3>
+
+<p>On ArchLinux, we install redis via:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S redis</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Enalbe and start the redis.service:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl enable redis.service
+</span><span class='line'>$ sudo systemctl start redis.service
+</span><span class='line'>$ ps -ef | grep redis
+</span><span class='line'>redis     7609     1  0 16:03 ?        00:00:00 /usr/bin/redis-server 127.0.0.1:6379</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Play with redis:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@DashArch queue]$ redis-cli 
+</span><span class='line'>127.0.0.1:6379&gt; set name leezk
+</span><span class='line'>OK
+</span><span class='line'>127.0.0.1:6379&gt; get name
+</span><span class='line'>"leezk"
+</span><span class='line'>127.0.0.1:6379&gt; del name
+</span><span class='line'>(integer) 1
+</span><span class='line'>127.0.0.1:6379&gt; exists name
+</span><span class='line'>(integer) 0
+</span><span class='line'>127.0.0.1:6379&gt; exit</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>RQ: Simple Job Queue For Python</h3>
+
+<p>Install redis and rq:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pip2 install redis
+</span><span class='line'>$ sudo pip2 install rq</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install requests for debugging(Not related with RQ and Redis):<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pip2 install requests</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use following file for RedisQueue:<br /></p>
+
+<figure class='code'><figcaption><span>RedisQueue.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="kn">import</span> <span class="nn">redis</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">RedisQueue</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+</span><span class='line'>    <span class="sd">&quot;&quot;&quot;Simple Queue with Redis Backend&quot;&quot;&quot;</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="s">&#39;queue&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">redis_kwargs</span><span class="p">):</span>
+</span><span class='line'>        <span class="sd">&quot;&quot;&quot;The default connection parameters are: host=&#39;localhost&#39;, port=6379, db=0&quot;&quot;&quot;</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__db</span><span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="o">**</span><span class="n">redis_kwargs</span><span class="p">)</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span><span class="p">(</span><span class="n">namespace</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">qsize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="sd">&quot;&quot;&quot;Return the approximate size of the queue.&quot;&quot;&quot;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__db</span><span class="o">.</span><span class="n">llen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="sd">&quot;&quot;&quot;Return True if the queue is empty, False otherwise.&quot;&quot;&quot;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">qsize</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+</span><span class='line'>        <span class="sd">&quot;&quot;&quot;Put item into the queue.&quot;&quot;&quot;</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">__db</span><span class="o">.</span><span class="n">rpush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+</span><span class='line'>        <span class="sd">&quot;&quot;&quot;Remove and return an item from the queue. </span>
+</span><span class='line'>
+</span><span class='line'><span class="sd">        If optional args block is true and timeout is None (the default), block</span>
+</span><span class='line'><span class="sd">        if necessary until an item is available.&quot;&quot;&quot;</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">block</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__db</span><span class="o">.</span><span class="n">blpop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__db</span><span class="o">.</span><span class="n">lpop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">if</span> <span class="n">item</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">item</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">get_nowait</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="sd">&quot;&quot;&quot;Equivalent to get(False).&quot;&quot;&quot;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Testing the RedisQueue with following:<br />
+Put something into the RedisQueue:<br /></p>
+
+<figure class='code'><figcaption><span>RedisQueue.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">RedisQueue</span> <span class="kn">import</span> <span class="n">RedisQueue</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">q</span> <span class="o">=</span> <span class="n">RedisQueue</span><span class="p">(</span><span class="s">&#39;test&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s">&#39;hello World!&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Fetch something from the RedisQueue:<br /></p>
+
+<figure class='code'><figcaption><span>RedisQueue.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">RedisQueue</span> <span class="kn">import</span> <span class="n">RedisQueue</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">q</span> <span class="o">=</span> <span class="n">RedisQueue</span><span class="p">(</span><span class="s">&#39;test&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;&gt;&gt;</span> <span class="n">q</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+</span><span class='line'><span class="s">&#39;hello World!&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Rewrite Dictionary Program</h3>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/20/re-compile-kernel-for-supporting-512m-memory-for-raspberrypi-in-qemu/">Re-compile Kernel for Supporting 512M Memory for RaspberryPI in Qemu</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-20T09:43:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:43 am</span></time>
+        
+         | <a href="/blog/2014/03/20/re-compile-kernel-for-supporting-512m-memory-for-raspberrypi-in-qemu/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Cross Compiler Prepration</h3>
+
+<p>Get the cross-compiler from github:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@XXXyyy tools]$ pwd
+</span><span class='line'>/media/y/raspberryPI/tools
+</span><span class='line'>[Trusty@XXXyyy tools]$ git clone git://github.com/raspberrypi/tools.git
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the cross-compiler to system path:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>export PATH="/media/y/raspberryPI/tools/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin:$PATH"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now input &ldquo;arm-linux-g&rdquo; + tab you will see the cross-compiler is ready.<br /></p>
+
+<h3>Prepare the kernel</h3>
+
+<p>Get the kernel source from github:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone git://github.com/raspberrypi/linux.git
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we need to get the patches for supporting the raspberryPI, Torlus has done the patches which could also be downloaded from github:<br /></p>
+
+<p>Now we need to configure the kernel:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cd linux
+</span><span class='line'>make ARCH=arm versatile_defconfig
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>NO, I MADE A MISTAKE, IT SHOULDN&rsquo;T COMPILE KERNEL, SHOULD COMPILE QEMU!!!</p>
+
+<h3>Compile qemu</h3>
+
+<p>Get the modified qemu branch from github:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone git://github.com/Torlus/qemu.git
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Switch to &lsquo;rpi&rsquo; branch:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git fetch origin
+</span><span class='line'>git branch -v -a # List the available branches.
+</span><span class='line'>git checkout -b raspberry origin/rpi  # Checkout the origin/rpi to local raspberry
+</span><span class='line'>git fetch
+</span><span class='line'>git checkout raspberry
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Begin to configure qemu, notice we have to use python2 for configuring the qemu:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>workon venv2
+</span><span class='line'>./configure --help
+</span><span class='line'>./configure --target-list="arm-softmmu arm-linux-user" --enable-sdl 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now begin to make the qemu, use -j8 for speeding up, adjust the number according to your own machine:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>make -j8
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now under the following directory you will get the qemu-system-arm:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pwd
+</span><span class='line'>/media/y/raspberryPI/qemu/arm-softmmu
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Get the kernel.img from the SD image. <br /></p>
+
+<h3>Use the compiled qemu for running</h3>
+
+<p>We have to change the scripts for running the qemu:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>/media/y/raspberryPI/qemu/arm-softmmu/qemu-system-arm -net nic,macaddr=$macaddr -net user -kernel kernel.img -cpu arm1176 -m 512 -M raspi -no-reboot -serial stdio -append "rw earlyprintk loglevel=8 panic=120 keep_bootcon rootwait dma.dmachans=0x7f35 bcm2708_fb.fbwidth=1024 bcm2708_fb.fbheight=768 bcm2708.boardrev=0xf bcm2708.serial=0xcad0eedf smsc95xx.macaddr=B8:27:EB:D0:EE:DF sdhci-bcm2708.emmc_clock_freq=100000000 vc_mem.mem_base=0x1c000000 vc_mem.mem_size=0x20000000  dwc_otg.lpm_enable=0 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait" -sd 2014-01-07-wheezy-raspbian.img  -device usb-kbd -device usb-mouse -usbdevice net 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can run the raspberryPI in QEMU with 512MB memory, but, the network is still unavailable.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/18/building-qemu-based-raspberrypi-development-environment/">Building Qemu Based RaspberryPI Development Environment</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-18T16:00:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:00 pm</span></time>
+        
+         | <a href="/blog/2014/03/18/building-qemu-based-raspberrypi-development-environment/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>First download the latest image from <a href="http://www.raspberrypi.org/downloads">http://www.raspberrypi.org/downloads</a>, mine is Wheezy. <br />
+And we also have to download the qemu-compatible kernel from following address:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://xecdesign.com/downloads/linux-qemu/kernel-qemu
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the img file according to <a href="http://localhost/blog/2013/09/04/qemu-for-raspberrypi/">http://localhost/blog/2013/09/04/qemu-for-raspberrypi/</a>, follow this tutorial, you have to change the img file size and its content, but we have to do some modifications. <br />
+The run-qemu file is changed to following: <br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#!/bin/bash
+</span><span class='line'>USERID=$(whoami)
+</span><span class='line'>
+</span><span class='line'># Get name of newly created TAP device; see https://bbs.archlinux.org/viewtopic.php?pid=1285079#p1285079
+</span><span class='line'>precreationg=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+</span><span class='line'>sudo /usr/bin/ip tuntap add user $USERID mode tap
+</span><span class='line'>postcreation=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+</span><span class='line'>IFACE=$(comm -13 &lt;(echo "$precreationg") &lt;(echo "$postcreation"))
+</span><span class='line'>
+</span><span class='line'># This line creates a random mac address. The downside is the dhcp server will assign a different ip each time
+</span><span class='line'>printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff )) $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff ))
+</span><span class='line'># Instead, uncomment and edit this line to set an static mac address. The benefit is that the dhcp server will assign the same ip.
+</span><span class='line'># macaddr='52:54:be:36:42:a9'
+</span><span class='line'>    macaddr = '52:54:79:3c:80:c0'
+</span><span class='line'> 
+</span><span class='line'>qemu-system-arm -net nic,macaddr=$macaddr -net tap,ifname="$IFACE" -append "root=/dev/sda2 panic=1 rootfstype=ext4 rw" $*
+</span><span class='line'>  
+</span><span class='line'>sudo ip link set dev $IFACE down &&gt; /dev/null
+</span><span class='line'>sudo ip tuntap del $IFACE mode tap &&gt; /dev/null
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In router, we add the static address for mac corresponding to 10.0.0.168, you can alter it according to your habit. <br /></p>
+
+<p>Now we want to disable the X at every startup and use vnc instead. <br />
+And we can overlocking the raspberryPI to 1000MHZ, this will greatly improve the performance.<br /></p>
+
+<p>Enable the vncserver:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ apt-get install tightvncserver vim 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now startup the vncserver and use vncviewer to view the desktop:<br /></p>
+
+<p><img src="/images/Screenshot-QEMU.png" alt="/images/Screenshot-QEMU.png" /></p>
+
+<p>No, the correct method is listed as: <br /></p>
+
+<figure class='code'><figcaption><span>startvnc</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>cat /eroot@raspberrypi:~# cat /etc/init.d/startvnc
+</span><span class='line'><span class="c">#!/bin/sh -e</span>
+</span><span class='line'><span class="c">### BEGIN INIT INFO</span>
+</span><span class='line'><span class="c"># Provides:          vncserver</span>
+</span><span class='line'><span class="c"># Required-Start:    networking</span>
+</span><span class='line'><span class="c"># Default-Start:     3 4 5</span>
+</span><span class='line'><span class="c"># Default-Stop:      0 6</span>
+</span><span class='line'><span class="c">### END INIT INFO</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;$PATH:/usr/X11R6/bin/&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The Username:Group that will run VNC</span>
+</span><span class='line'><span class="nb">export </span><span class="nv">USER</span><span class="o">=</span><span class="s2">&quot;pi&quot;</span>
+</span><span class='line'><span class="c">#${RUNAS}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The display that VNC will use</span>
+</span><span class='line'><span class="nv">DISPLAY</span><span class="o">=</span><span class="s2">&quot;1&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Color depth (between 8 and 32)</span>
+</span><span class='line'><span class="nv">DEPTH</span><span class="o">=</span><span class="s2">&quot;16&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The Desktop geometry to use.</span>
+</span><span class='line'><span class="c">#GEOMETRY=&quot;&lt;WIDTH&gt;x&lt;HEIGHT&gt;&quot;</span>
+</span><span class='line'><span class="c">#GEOMETRY=&quot;800x600&quot;</span>
+</span><span class='line'><span class="c">#GEOMETRY=&quot;1024x768&quot;</span>
+</span><span class='line'><span class="nv">GEOMETRY</span><span class="o">=</span><span class="s2">&quot;1280x1024&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The name that the VNC Desktop will have.</span>
+</span><span class='line'><span class="nv">NAME</span><span class="o">=</span><span class="s2">&quot;my-vnc-server&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">OPTIONS</span><span class="o">=</span><span class="s2">&quot;-name ${NAME} -depth ${DEPTH} -geometry ${GEOMETRY} :${DISPLAY}&quot;</span>
+</span><span class='line'>
+</span><span class='line'>. /lib/lsb/init-functions
+</span><span class='line'>
+</span><span class='line'><span class="k">case</span> <span class="s2">&quot;$1&quot;</span> in
+</span><span class='line'>start<span class="o">)</span>
+</span><span class='line'>log_action_begin_msg <span class="s2">&quot;Starting vncserver for user &#39;${USER}&#39; on   localhost:${DISPLAY}&quot;</span>
+</span><span class='line'>su <span class="k">${</span><span class="nv">USER</span><span class="k">}</span> -c <span class="s2">&quot;/usr/bin/vncserver ${OPTIONS}&quot;</span>
+</span><span class='line'><span class="p">;;</span>
+</span><span class='line'>
+</span><span class='line'>stop<span class="o">)</span>
+</span><span class='line'>log_action_begin_msg <span class="s2">&quot;Stoping vncserver for user &#39;${USER}&#39; on localhost:${DISPLAY}&quot;</span>
+</span><span class='line'>su <span class="k">${</span><span class="nv">USER</span><span class="k">}</span> -c <span class="s2">&quot;/usr/bin/vncserver -kill :${DISPLAY}&quot;</span>
+</span><span class='line'><span class="p">;;</span>
+</span><span class='line'>
+</span><span class='line'>restart<span class="o">)</span>
+</span><span class='line'><span class="nv">$0</span> stop
+</span><span class='line'><span class="nv">$0</span> start
+</span><span class='line'><span class="p">;;</span>
+</span><span class='line'><span class="k">esac</span>
+</span><span class='line'>
+</span><span class='line'><span class="nb">exit </span>0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And now we can add this script into /etc/rc.local as:<br /></p>
+
+<figure class='code'><figcaption><span>startvnc</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c"># Start the vncserver here:</span>
+</span><span class='line'>/etc/init.d/startvnc start
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So everytime we startup the qemu based raspberryPI, we can easily attached to its geometry, and we can easily adapt the resolution.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/03/18/moving-weather-app-to-bbb/">Moving Weather App to BBB</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-03-18T13:56:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:56 pm</span></time>
+        
+         | <a href="/blog/2014/03/18/moving-weather-app-to-bbb/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Following is the steps for moving the weather app to BBB(BeagleBone Black)<br /></p>
+
+<h3>Apache Configuration</h3>
+
+<p>Create the site definition file under /etc/apache2/sites-available: <br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cp default nanjing
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the nanjing file with the following content:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat nanjing
+</span><span class='line'>&lt;VirtualHost *:7778&gt;
+</span><span class='line'>  ServerAdmin webmaster@localhost
+</span><span class='line'>        ServerName nanjing
+</span><span class='line'>        ServerAlias nanjing.weather
+</span><span class='line'>
+</span><span class='line'>  DocumentRoot /srv/www1
+</span><span class='line'>  &lt;Directory /&gt;
+</span><span class='line'>      Options FollowSymLinks
+</span><span class='line'>      AllowOverride None
+</span><span class='line'>  &lt;/Directory&gt;
+</span><span class='line'>  &lt;Directory /srv/www1/&gt;
+</span><span class='line'>      Options Indexes FollowSymLinks MultiViews
+</span><span class='line'>      AllowOverride None
+</span><span class='line'>      Order allow,deny
+</span><span class='line'>      Allow from all
+</span><span class='line'>  &lt;/Directory&gt;
+</span><span class='line'>
+</span><span class='line'>  ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+</span><span class='line'>  &lt;Directory "/usr/lib/cgi-bin"&gt;
+</span><span class='line'>      AllowOverride None
+</span><span class='line'>      Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+</span><span class='line'>      Order allow,deny
+</span><span class='line'>      Allow from all
+</span><span class='line'>  &lt;/Directory&gt;
+</span><span class='line'>
+</span><span class='line'>  ErrorLog ${APACHE_LOG_DIR}/error.log
+</span><span class='line'>
+</span><span class='line'>  # Possible values include: debug, info, notice, warn, error, crit,
+</span><span class='line'>  # alert, emerg.
+</span><span class='line'>  LogLevel warn
+</span><span class='line'>
+</span><span class='line'>  CustomLog ${APACHE_LOG_DIR}/access.log combined
+</span><span class='line'>&lt;/VirtualHost&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then we have to edit the /etc/apache2/ports.conf file, to add the newly-added site definition file. <br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat ports.conf
+</span><span class='line'>NameVirtualHost *:7777
+</span><span class='line'>Listen 7777
+</span><span class='line'>NameVirtualHost *:7778
+</span><span class='line'>Listen 7778
+</span><span class='line'>NameVirtualHost *:7779
+</span><span class='line'>Listen 7779
+</span><span class='line'>NameVirtualHost *:7780
+</span><span class='line'>Listen 7780
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you already could visit the site of <a href="http://Your_Ip_Address:7777">http://Your_Ip_Address:7777</a> for the nanjing weather infos. <br /></p>
+
+<h3>Script Moving</h3>
+
+<p>Be sure following modules has been installed:&lt; br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install django pywapi pinyin
+</span><span class='line'>$ pip install BeautifulSoup
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the crontab tasks:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>0 */1 * * * python /root/code/genhtml.py
+</span><span class='line'>15 */1 * * * python /root/code/genhtml_bj.py
+</span><span class='line'>30 */1 * * * python /root/code/genhtml_changsha.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the script will be run every hour at 0/15/30 minutes, enjoy it. <br />
+Notice the timezone should be correctly configured:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$  dpkg-reconfigure tzdata
+</span><span class='line'># Choose Asia/Shanghai
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  <div class="pagination">
+    
+      <a class="prev" href="/posts/29">&larr; Older</a>
+    
+    <a href="/blog/archives">Blog Archives</a>
+    
+    <a class="next" href="/posts/27">Newer &rarr;</a>
+    
+  </div>
+</div>
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/">Setup a More Intelligent OpenWRT Router</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        var disqus_script = 'count.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

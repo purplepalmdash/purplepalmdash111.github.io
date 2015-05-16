@@ -1,0 +1,300 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>使用Fuel部署OpenContrail(1) - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">使用Fuel部署OpenContrail(1)</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-22T20:01:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2015</span></span> <span class='time'>8:01 pm</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署。</p>
+
+<h3>先决条件</h3>
+
+<p>先决条件主要是用于准备用于部署的硬件环境和软件包。 <br/>
+硬件环境:   <br/>
+i5-4460(3.2GHz/4核/6M三级缓存), 32G 内存。  <br/>
+系统:  <br/>
+Ubuntu 14.04 LTS  <br/>
+软件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libvirtd virt-manager
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+从Miranti网站下载： MirantisOpenStack-6.0.iso  <br/>
+从Contrail网站下载: contrail-install-packages_2.0-22~icehouse_all.deb  <br/>
+contrail-neutron-plugin仓库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/Juniper/contrail-neutron-plugin.git
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>CPU/内存/磁盘规划</h3>
+
+<p>需要构建一共8台虚拟机用于在部署好的Mirantis OpenStack上集成OpenContrail. CPU/内存/磁盘规划如下:  <br/>
+1台Mirantis Fuel控制节点机,2核,划分3G内存, 100G磁盘。
+3个OpenStack Controller节点, 2核,各划分3G内存, 100G磁盘。   <br/>
+1个OpenStack Compute节点，2核(嵌套虚拟化),划分3G内存, 100G磁盘。   <br/>
+3个OpenContrail节点，2核,各划分4G内存, 100G磁盘。  <br/>
+一共需要27G内存。磁盘格式为qcow2，实际占用远小于这个数，各个节点最大也就是在5G左右大小。 <br/>
+其中，关于嵌套虚拟化的CPU设置，如下图, 记得选择Copy host CPU Configuration:   <br/>
+<img src="/images/2015_04_27_12_20_40_598x372.jpg" alt="/images/2015_04_27_12_20_40_598x372.jpg" />   <br/>
+启用嵌套虚拟化需要在BIOS设置，并添加相应的内核模块。</p>
+
+<h3>网络规划</h3>
+
+<p>Fuel OpenStack规划了5个网络，分别是:   <br/>
+Admin(PXE)  <br/>
+Public   <br/>
+Management   <br/>
+Storage   <br/>
+Private</p>
+
+<p>我们在Virt-Manager里也同样创建出这样的五个子网:  <br/>
+Admin(PXE) &ndash; FuelNAT  &ndash; 10.20.0.0/24   <br/>
+Public &ndash; FuelPublic  &ndash; 172.16.0.0/24  <br/>
+Management &ndash; FuelMgmt &ndash; 10.55.55.0/24  <br/>
+Storage  &ndash; FuelStorage &ndash; 10.66.66.0/24  <br/>
+Private  &ndash; FuelPrivate &ndash; 10.77.77.0/24</p>
+
+<p>创建网络的步骤如下，双击Virtual Machine Manager里的localhost(QEMU), 弹出下面的窗口:  <br/>
+<img src="/images/2015_04_27_14_57_37_499x379.jpg" alt="/images/2015_04_27_14_57_37_499x379.jpg" />  <br/>
+点击网络列表最下面的+号,弹出创建网络的窗口:  <br/>
+<img src="/images/2015_04_27_14_58_52_543x374.jpg" alt="/images/2015_04_27_14_58_52_543x374.jpg" />  <br/>
+命名该网络，点击下一步:  <br/>
+<img src="/images/2015_04_27_15_00_34_549x371.jpg" alt="/images/2015_04_27_15_00_34_549x371.jpg" />  <br/>
+禁用DHCP:  <br/>
+<img src="/images/2015_04_27_16_37_32_544x374.jpg" alt="/images/2015_04_27_16_37_32_544x374.jpg" />  <br/>
+选择isolated网络模式:  <br/>
+<img src="/images/2015_04_27_16_38_34_551x375.jpg" alt="/images/2015_04_27_16_38_34_551x375.jpg" />  <br/>
+接着点击下一步直到完成，这样我们的网络就创建好了。  <br/>
+用上面的方法创建出以上5个子网。</p>
+
+<h3>各个节点网络配置</h3>
+
+<p>Miranti Fuel Node: 仅FuelNAT, 安装完毕后，自动指定地址为10.20.0.2.    <br/>
+其他所有节点机，在创建时，把五个网络都添加上，添加方法如下:  <br/>
+Details -> Add Hardware -> Network, 而后选择:      <br/>
+<img src="/images/2015_04_27_16_45_34_765x444.jpg" alt="/images/2015_04_27_16_45_34_765x444.jpg" /></p>
+
+<h3>Miranti Fuel Node安装</h3>
+
+<p>安装很简单，直接用下载的MirantisOpenStack-6.0.iso作为安装光盘，在创建出来的虚拟机里安装系统。安装完毕后，在Host机器的浏览器里访问   <br/>
+<a href="http://10.20.0.2:8000">http://10.20.0.2:8000</a>    <br/>
+输入用户名密码都为admin后，登录，可以看到以下界面:    <br/>
+<img src="/images/2015_04_27_16_55_29_717x477.jpg" alt="/images/2015_04_27_16_55_29_717x477.jpg" />  <br/>
+在这个界面里我们可以进行OpenStack环境的准备、部署、配置、销毁等操作。</p>
+
+<p>到这一步，我们已经完成了Miranti Fuel Node的安装，基本的部署准备工作已经完成，接下来我们将使用Fuel来部署一个可用的OpenStack环境, 以及三台用于部署Contrail的节点机.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2015-04-22T20:01:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2015</span></span> <span class='time'>8:01 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/virtualization/'>virtualization</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2015/04/17/glusterfs-howto/" title="Previous Post: Glusterfs Howto">&laquo; Glusterfs Howto</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/" title="Next Post: 使用Fuel部署OpenContrail(2)">使用Fuel部署OpenContrail(2) &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/">Setup a More Intelligent OpenWRT Router</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

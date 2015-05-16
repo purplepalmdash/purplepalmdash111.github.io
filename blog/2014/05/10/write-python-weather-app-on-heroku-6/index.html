@@ -1,0 +1,292 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Write Python Weather APP on Heroku(6) - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="Risk On Google App Engine it&rsquo;s very convinient to setup a crontab task, while in heroku setting up a crontab task will occupy the material, &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2014/05/10/write-python-weather-app-on-heroku-6">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Write Python Weather APP on Heroku(6)</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-10T16:46:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:46 pm</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>Risk</h3>
+
+<p>On Google App Engine it&rsquo;s very convinient to setup a crontab task, while in heroku setting up a crontab task will occupy the material, thus will use another dyno, each dyno will cost $30/month. For avoiding this, we will re-design our Weather App.   <br/>
+Following is the detailed explanation on heroku&rsquo;s dyno:  <br/>
+Heroku allows you to run one free dyno (or actually they give you 720 free dyno hours per month, which corresponds to one dyno constantly running). This means that if you choose to run one web dyno and one worker dyno (celery in this case), you&rsquo;ll be charged for 720 dyno hours. However, if you have a very small project, or your&rsquo;re working on a project that hasn&rsquo;t been released yet, you can avoid this cost.  <br/>
+A heroku dyno is like a process, and in this process you can actually spawn new processes, as long as you stay within the limit of 512 mb ram (the process also only has one CPU core). Heroku suggests that you use foreman when you run your application on your local machine, but you can actually use foreman on heroku, in order to run multiple processes in a single dyno.  <br/>
+On Heroku, we don’t have physical machines; in fact there isn’t the concept of “machine” at all. Instead, Heroku has Dynos, which are described as “lightweight containers” for UNIX processes. From their documentation:</p>
+
+<p>[A Dyno] can run any command available in its default environment combined with your app’s slug</p>
+
+<h3>Solution</h3>
+
+<p>Celery<a href="www.celeryproject.org">www.celeryproject.org</a>  <br/>
+or  <br/>
+Honcho<a href="https://github.com/nickstenning/honcho">https://github.com/nickstenning/honcho</a>  <br/>
+We will try Honcho first, because it&rsquo;s based on python, so won&rsquo;t affect our code format.</p>
+
+<h4>Celery Way</h4>
+
+<p>Install redis and celery:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>pip install redis celery
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Remember to use <code>pip freeze</code> to update the requirement.txt file.   <br/>
+We should also enable the RedisToGo plugin, install it via CLI:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku addons:add rediscloud
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If you don&rsquo;t have a credit card, then your installation of plugin will be fail. We will register an account on <a href="www.redislabs.com/">www.redislabs.com</a>, then we will continue our setting.  ]</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>heroku config:set REDISCLOUD_URL="http://Resouce_Name:Redis_Passwod@pub-redis-xxxx.xxx.xxx..garantiadata.com:1xxx3"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Your heroku app will restart, then we can test this redis database via following commands:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku run python
+</span><span class='line'>Running `python` attached to terminal... up, run.8246
+</span><span class='line'>Python 2.7.6 (default, Jan 16 2014, 02:39:37) 
+</span><span class='line'>[GCC 4.4.3] on linux2
+</span><span class='line'>Type "help", "copyright", "credits" or "license" for more information.
+</span><span class='line'>&gt;&gt;&gt; import os
+</span><span class='line'>&gt;&gt;&gt; import urlparse
+</span><span class='line'>&gt;&gt;&gt; import redis
+</span><span class='line'>&gt;&gt;&gt; url = urlparse.urlparse(os.environ.get('REDISCLOUD_URL'))
+</span><span class='line'>&gt;&gt;&gt; r = redis.Redis(host=url.hostname, port=url.port, password=url.password)
+</span><span class='line'>&gt;&gt;&gt; r.set('foo','bar')
+</span><span class='line'>True
+</span><span class='line'>&gt;&gt;&gt; r.get('foo')
+</span><span class='line'>'bar'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>An Article of using celery is right after this article, so we end this article and in next one we will re-design the web app to fit the celery way.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2014-05-10T16:46:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:46 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/python/'>python</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/05/10/write-python-weather-app-on-heroku-5/" title="Previous Post: Write Python Weather APP on Heroku(5)">&laquo; Write Python Weather APP on Heroku(5)</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/05/10/celery-and-rabbitmq-on-archlinux/" title="Next Post: Celery and RabbitMQ on ArchLinux">Celery and RabbitMQ on ArchLinux &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/">Setup a More Intelligent OpenWRT Router</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2014/05/10/write-python-weather-app-on-heroku-6/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2014/05/10/write-python-weather-app-on-heroku-6/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
