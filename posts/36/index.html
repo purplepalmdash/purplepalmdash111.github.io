@@ -9,31 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Cortx-M3特有的SysTick可以很方便的实现定时。系统始终的频率和开启系统时钟中断主要在RCC.c里进行设置： RCC.c1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-//SYSTICK分频-- &hellip;">
+  <meta name="description" content="RTC(Real Time Clock) 在STM32中可以理解为内置的一个部件，和传说中的DS1302是有差别的。尽管官方发布的程序可以将RTC搞成一个万年历。 配置RTC RTC需要顺带使用后备寄存器， 因为RTC是一个简单的秒中断定时器，关于年日月分秒的信息需要在掉电保存时依然放在某个地方， &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -89,6 +65,210 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/11/30/rtc-on-stm32/">RTC on STM32</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-11-30T14:43:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>2:43 pm</span></time>
+        
+         | <a href="/blog/2013/11/30/rtc-on-stm32/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>RTC(Real Time Clock) 在STM32中可以理解为内置的一个部件，和传说中的DS1302是有差别的。尽管官方发布的程序可以将RTC搞成一个万年历。</p>
+
+<h3>配置RTC</h3>
+
+<p>RTC需要顺带使用后备寄存器， 因为RTC是一个简单的秒中断定时器，关于年日月分秒的信息需要在掉电保存时依然放在某个地方，这个地方就是STM32的后备寄存器。配置好以后，尽管系统关电，依靠板子上的后备电池，依然可以保存32768的晶振和后备寄存器的数据。  <br/>
+配置RTC的方法：</p>
+
+<figure class='code'><figcaption><span>RTC.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &quot;stm32f10x_bkp.h&quot;</span>
+</span><span class='line'><span class="cp">#include &quot;stm32f10x_pwr.h&quot;</span>
+</span><span class='line'><span class="cp">#include &quot;stm32f10x_rtc.h&quot;</span>
+</span><span class='line'><span class="c1">//使能一些外设</span>
+</span><span class='line'>  <span class="n">RCC_APB1PeriphClockCmd</span><span class="p">(</span><span class="n">RCC_APB1Periph_PWR</span> <span class="o">|</span> <span class="n">RCC_APB1Periph_BKP</span><span class="p">,</span> <span class="n">ENABLE</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">PWR_BackupAccessCmd</span><span class="p">(</span><span class="n">ENABLE</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>判断RTC是否被配置过</h3>
+
+<p>下面的函数被用于判断RTC是否被配置过：</p>
+
+<figure class='code'><figcaption><span>RTC.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/**************************************************************</span>
+</span><span class='line'><span class="cm">** 函数名:TestRtc</span>
+</span><span class='line'><span class="cm">** 功能:测试RTC用</span>
+</span><span class='line'><span class="cm">** 注意事项:用于显示RTC是否已经设置过.</span>
+</span><span class='line'><span class="cm">***************************************************************/</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">TestRtc</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">RTC_Blank</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">USART1_Puts</span><span class="p">(</span><span class="s">&quot;The Time is not set</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="k">else</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">USART1_Puts</span><span class="p">(</span><span class="s">&quot;Time Setted.</span><span class="se">\r\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这个函数判断RTC_Blank全局变量的值，而全局变量的值则在配置RTC的时候被设定。</p>
+
+<figure class='code'><figcaption><span>RTC.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">void</span> <span class="nf">RTC_Configuration</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="c1">//......</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">BKP_ReadBackupRegister</span><span class="p">(</span><span class="n">BKP_DR1</span><span class="p">)</span> <span class="o">!=</span> <span class="mh">0xA5A5</span><span class="p">)</span>
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>  <span class="c1">//......</span>
+</span><span class='line'>          <span class="n">RTC_Blank</span><span class="o">=</span><span class="mi">1</span><span class="p">;</span>   <span class="c1">//这个标志代表RTC是没有预设的(或者说是没有上纽扣电池)</span>
+</span><span class='line'>  
+</span><span class='line'>      <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果RTC后备寄存器的值为设定为0xA5A5，则代表RTC已经被设置过。否则，我们认为它处于未被设置过的状态。</p>
+
+<h3>使用RTC的秒中断</h3>
+
+<p>在NVIC中，需要有下列的定义，以标识RTC的秒中断。</p>
+
+<figure class='code'><figcaption><span>NVIC.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* RTC */</span>
+</span><span class='line'><span class="n">NVIC_InitStructure</span><span class="p">.</span><span class="n">NVIC_IRQChannel</span> <span class="o">=</span> <span class="n">RTC_IRQn</span><span class="p">;</span>
+</span><span class='line'><span class="n">NVIC_InitStructure</span><span class="p">.</span><span class="n">NVIC_IRQChannelPreemptionPriority</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="n">NVIC_InitStructure</span><span class="p">.</span><span class="n">NVIC_IRQChannelSubPriority</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="n">NVIC_InitStructure</span><span class="p">.</span><span class="n">NVIC_IRQChannelCmd</span> <span class="o">=</span> <span class="n">ENABLE</span><span class="p">;</span>
+</span><span class='line'><span class="n">NVIC_Init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">NVIC_InitStructure</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>对应的中断响应例程则定义在stm32f10x_it.c中：</p>
+
+<figure class='code'><figcaption><span>stm32f10x_it.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/*******************************************************************************</span>
+</span><span class='line'><span class="cm">* Function Name  : RTC_IRQHandler    RTC中断</span>
+</span><span class='line'><span class="cm">* Description    : </span>
+</span><span class='line'><span class="cm">* Input          : None</span>
+</span><span class='line'><span class="cm">* Output         : None</span>
+</span><span class='line'><span class="cm">* Return         : None</span>
+</span><span class='line'><span class="cm">*******************************************************************************/</span>
+</span><span class='line'><span class="k">extern</span> <span class="k">volatile</span> <span class="kt">bool</span> <span class="n">Sec</span><span class="p">;</span> <span class="c1">//1S标志</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">RTC_IRQHandler</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">RTC_GetITStatus</span><span class="p">(</span><span class="n">RTC_IT_SEC</span><span class="p">)</span> <span class="o">!=</span> <span class="n">RESET</span><span class="p">)</span> <span class="c1">//RTC发生了秒中断（也有可能是溢出或者闹钟中断)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">RTC_ClearITPendingBit</span><span class="p">(</span><span class="n">RTC_IT_SEC</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Sec</span><span class="o">=</span><span class="n">TRUE</span><span class="p">;</span>
+</span><span class='line'>      
+</span><span class='line'>      <span class="c1">//以免RTC计数溢出,这里限制了RTC计数值的大小.0x0001517f实际就是一天的秒数</span>
+</span><span class='line'>      <span class="k">if</span><span class="p">(</span><span class="n">RTC_GetCounter</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mh">0x0001517f</span><span class="p">)</span> 
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>          <span class="n">RTC_SetCounter</span><span class="p">(</span><span class="mh">0x0</span><span class="p">);</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而在main.c中，则根据Sec的值来闪烁LED1灯。</p>
+
+<figure class='code'><figcaption><span>main.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">for</span><span class="p">(;;)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">Sec</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">Sec</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>      <span class="n">GPIOA</span><span class="o">-&gt;</span><span class="n">ODR</span><span class="o">^=</span><span class="n">GPIO_Pin_8</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1762,452 +1942,6 @@ Unzip the download image:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/11/22/openocd-configuration/">openOCD Configuration</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-11-22T20:37:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2013</span></span> <span class='time'>8:37 pm</span></time>
-        
-         | <a href="/blog/2013/11/22/openocd-configuration/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>OpenOCD Device Scan</h3>
-
-<p>Install and view the OpenOCD:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S openocd
-</span><span class='line'>[Trusty@XXXyyy debian_octopress]$ openocd -v
-</span><span class='line'>Open On-Chip Debugger 0.7.0 (2013-11-02-01:53)
-</span><span class='line'>Licensed under GNU GPL v2
-</span><span class='line'>For bug reports, read
-</span><span class='line'>  http://openocd.sourceforge.net/doc/doxygen/bugs.html
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Insert your openJTAG debug board, and view its connection:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@XXXyyy debian_octopress]$ lsusb
-</span><span class='line'>Bus 001 Device 016: ID 1457:5118 First International Computer, Inc. OpenMoko Neo1973 Debug board (V2+)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>From the dmesg information:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[15767.673553] usb 1-1: new full-speed USB device number 11 using xhci_hcd
-</span><span class='line'>[15767.695990] usb 1-1: Device not responding to set address.
-</span><span class='line'>[15767.938262] usb 1-1: Device not responding to set address.
-</span><span class='line'>[15768.140725] usb 1-1: device not accepting address 11, error -71
-</span><span class='line'>[15768.421057] usb 1-1: new full-speed USB device number 13 using xhci_hcd
-</span><span class='line'>[15769.015800] usbcore: registered new interface driver usbserial
-</span><span class='line'>[15769.016012] usbcore: registered new interface driver usbserial_generic
-</span><span class='line'>[15769.016075] usbserial: USB Serial support registered for generic
-</span><span class='line'>[15769.020028] usbcore: registered new interface driver ftdi_sio
-</span><span class='line'>[15769.020050] usbserial: USB Serial support registered for FTDI USB Serial Device
-</span><span class='line'>[15769.020458] usb 1-1: Ignoring serial port reserved for JTAG
-</span><span class='line'>[15769.020499] ftdi_sio 1-1:1.1: FTDI USB Serial Device converter detected
-</span><span class='line'>[15769.020544] usb 1-1: Detected FT2232C
-</span><span class='line'>[15769.020548] usb 1-1: Number of endpoints 2
-</span><span class='line'>[15769.020550] usb 1-1: Endpoint 1 MaxPacketSize 64
-</span><span class='line'>[15769.020553] usb 1-1: Endpoint 2 MaxPacketSize 64
-</span><span class='line'>[15769.020555] usb 1-1: Setting MaxPacketSize 64
-</span><span class='line'>[15769.026647] usb 1-1: FTDI USB Serial Device converter now attached to ttyUSB0
-</span><span class='line'>[15975.012193] usb 1-1: USB disconnect, device number 13
-</span><span class='line'>[15975.012449] ftdi_sio ttyUSB0: FTDI USB Serial Device converter now disconnected from ttyUSB0
-</span><span class='line'>[15975.012465] ftdi_sio 1-1:1.1: device disconnected
-</span><span class='line'>[15975.270658] usb 1-1: new full-speed USB device number 14 using xhci_hcd
-</span><span class='line'>[15975.355869] usb 1-1: Ignoring serial port reserved for JTAG
-</span><span class='line'>[15975.366867] ftdi_sio 1-1:1.1: FTDI USB Serial Device converter detected
-</span><span class='line'>[15975.366902] usb 1-1: Detected FT2232C
-</span><span class='line'>[15975.366904] usb 1-1: Number of endpoints 2
-</span><span class='line'>[15975.366906] usb 1-1: Endpoint 1 MaxPacketSize 64
-</span><span class='line'>[15975.366908] usb 1-1: Endpoint 2 MaxPacketSize 64
-</span><span class='line'>[15975.366909] usb 1-1: Setting MaxPacketSize 64
-</span><span class='line'>[15975.371933] usb 1-1: FTDI USB Serial Device converter now attached to ttyUSB0
-</span><span class='line'>[16608.914153] usb 1-1: USB disconnect, device number 14
-</span><span class='line'>[16608.914371] ftdi_sio ttyUSB0: FTDI USB Serial Device converter now disconnected from ttyUSB0
-</span><span class='line'>[16608.914402] ftdi_sio 1-1:1.1: device disconnected
-</span><span class='line'>[16609.394763] usb 1-1: new full-speed USB device number 15 using xhci_hcd
-</span><span class='line'>[16609.395097] usb 1-1: Device not responding to set address.
-</span><span class='line'>[16609.598734] usb 1-1: Device not responding to set address.
-</span><span class='line'>[16609.801899] usb 1-1: device not accepting address 15, error -71
-</span><span class='line'>[16609.962045] usb 1-1: new full-speed USB device number 16 using xhci_hcd
-</span><span class='line'>[16609.962371] usb 1-1: Device not responding to set address.
-</span><span class='line'>[16610.250376] usb 1-1: Ignoring serial port reserved for JTAG
-</span><span class='line'>[16610.261380] ftdi_sio 1-1:1.1: FTDI USB Serial Device converter detected
-</span><span class='line'>[16610.261428] usb 1-1: Detected FT2232C
-</span><span class='line'>[16610.261431] usb 1-1: Number of endpoints 2
-</span><span class='line'>[16610.261433] usb 1-1: Endpoint 1 MaxPacketSize 64
-</span><span class='line'>[16610.261435] usb 1-1: Endpoint 2 MaxPacketSize 64
-</span><span class='line'>[16610.261437] usb 1-1: Setting MaxPacketSize 64
-</span><span class='line'>[16610.266397] usb 1-1: FTDI USB Serial Device converter now attached to ttyUSB0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>From the above information we could know, Now we have a new Serial port named ttyUSB0, and also a FT2232C debug port. Currently we don&rsquo;t use Serial Port, FT2232 is all we want to configure.</p>
-
-<h3>OpenOCD Configuration</h3>
-
-<p>We have to make a cfg file for OpenOCD to use. There are some pre-defined configuration files for us to refer under the directory of &ldquo;/usr/share/openocd/scripts/&rdquo;, since we know the debug board information and we know exactly the development board info, we can easily write our own OpenOCD startup scripts. <br/>
-Get the interface definition via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@XXXyyy interface]$ pwd
-</span><span class='line'>/usr/share/openocd/scripts/interface
-</span><span class='line'>[Trusty@XXXyyy interface]$ grep "1457" ./ -r
-</span><span class='line'>./neodb.cfg:ft2232_vid_pid 0x1457 0x5118
-</span><span class='line'>./ftdi/neodb.cfg:ftdi_vid_pid 0x1457 0x5118
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So we directly copy the neodb.cfg to our openocd.cfg under our home directory. But the usb name of our OpenOCD is changed,</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ft2232_device_desc "USB&lt;=&gt;JTAG&RS232
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The definition is taken from the output of &ldquo;lsusb -v -d 1457:5118&rdquo;</p>
-
-<p>We also want to define the port for telnet and gdb connection</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#########daemon configuration####
-</span><span class='line'>telnet_port 4444
-</span><span class='line'>gdb_port 3333
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The Target configuration is taken from the /usr/share/openocd/scripts/target/stm32f1x.cfg, which is the definition of the stm32f1x. Copy them directly to your own config file.</p>
-
-<p>Finally your configuration file should be listed as:</p>
-
-<figure class='code'><figcaption><span>openocd.cfg</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-<span class='line-number'>85</span>
-<span class='line-number'>86</span>
-<span class='line-number'>87</span>
-<span class='line-number'>88</span>
-<span class='line-number'>89</span>
-<span class='line-number'>90</span>
-<span class='line-number'>91</span>
-<span class='line-number'>92</span>
-<span class='line-number'>93</span>
-<span class='line-number'>94</span>
-<span class='line-number'>95</span>
-<span class='line-number'>96</span>
-<span class='line-number'>97</span>
-<span class='line-number'>98</span>
-<span class='line-number'>99</span>
-<span class='line-number'>100</span>
-<span class='line-number'>101</span>
-<span class='line-number'>102</span>
-<span class='line-number'>103</span>
-<span class='line-number'>104</span>
-<span class='line-number'>105</span>
-<span class='line-number'>106</span>
-<span class='line-number'>107</span>
-<span class='line-number'>108</span>
-<span class='line-number'>109</span>
-<span class='line-number'>110</span>
-<span class='line-number'>111</span>
-<span class='line-number'>112</span>
-<span class='line-number'>113</span>
-<span class='line-number'>114</span>
-<span class='line-number'>115</span>
-<span class='line-number'>116</span>
-<span class='line-number'>117</span>
-</pre></td><td class='code'><pre><code class='linux-config'><span class='line'><span class="c1">#########daemon configuration####</span>
-</span><span class='line'>telnet_port <span class="mi">4444</span>
-</span><span class='line'>gdb_port <span class="mi">3333</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">########Interface Info###########</span>
-</span><span class='line'><span class="c1">################################################</span>
-</span><span class='line'><span class="c1"># Since our board takes the same vid_pid</span>
-</span><span class='line'><span class="c1"># We directly use openmoko&#39;s definition.</span>
-</span><span class='line'><span class="c1">################################################</span>
-</span><span class='line'><span class="c1">#</span>
-</span><span class='line'><span class="c1"># Openmoko USB JTAG/RS232 adapter</span>
-</span><span class='line'><span class="c1">#</span>
-</span><span class='line'><span class="c1"># http://wiki.openmoko.org/wiki/Debug_Board_v3</span>
-</span><span class='line'><span class="c1">#</span>
-</span><span class='line'>interface ft2232
-</span><span class='line'>ft2232_device_desc <span class="s2">&quot;USB&lt;=&gt;JTAG&amp;RS232&quot;</span>
-</span><span class='line'>ft2232_layout jtagkey
-</span><span class='line'>ft2232_vid_pid <span class="mi">0</span>x1457 <span class="mi">0</span>x5118
-</span><span class='line'>
-</span><span class='line'><span class="c1">########Board Info###########</span>
-</span><span class='line'><span class="c1"># Adjust Work-area size (RAM size) according to MCU in use:</span>
-</span><span class='line'><span class="c1">#STM32F103VC --&gt; 48KB</span>
-</span><span class='line'><span class="c1">#STM32F103RB --&gt; 20KB</span>
-</span><span class='line'><span class="c1">#set WORKAREASIZE 0x5000</span>
-</span><span class='line'><span class="c1"># STM32F103RE --&gt; 64KB</span>
-</span><span class='line'><span class="c1"># set WORKAREASIZE 0x10000</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1"># reset_config parameter (see OpenOCD manual):</span>
-</span><span class='line'><span class="c1"># none --&gt; srst and trst of MCU not connected to JTAG device</span>
-</span><span class='line'><span class="c1"># srst_only --&gt; only srst of MCU connected to JTAG device</span>
-</span><span class='line'><span class="c1"># trst_only --&gt; only trst of MCU connected to JTAG device</span>
-</span><span class='line'><span class="c1"># srst_and_trst --&gt; srst and trst of MCU connected to JTAG device</span>
-</span><span class='line'><span class="c1"># default setting: &quot;reset_config none&quot; will produce a single reset via SYSRESETREQ (JTAG commands) at reset pin of MCU</span>
-</span><span class='line'><span class="c1">#reset_config none</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="c1">#script for stm32f1x family</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">if</span> { [info exists CHIPNAME] } {
-</span><span class='line'>   set _CHIPNAME $CHIPNAME
-</span><span class='line'>} else {
-</span><span class='line'>   set _CHIPNAME stm32f1x
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'><span class="k">if</span> { [info exists ENDIAN] } {
-</span><span class='line'>   set _ENDIAN $ENDIAN
-</span><span class='line'>} else {
-</span><span class='line'>   set _ENDIAN little
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'><span class="c1"># Work-area is a space in RAM used for flash programming</span>
-</span><span class='line'><span class="c1"># By default use 16kB</span>
-</span><span class='line'><span class="k">if</span> { [info exists WORKAREASIZE] } {
-</span><span class='line'>   set _WORKAREASIZE $WORKAREASIZE
-</span><span class='line'>} else {
-</span><span class='line'>   set _WORKAREASIZE <span class="mi">0</span>x4000
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'><span class="c1"># JTAG speed should be &lt;= F_CPU/6. F_CPU after reset is 8MHz, so use F_JTAG = 1MHz</span>
-</span><span class='line'>adapter_khz <span class="mi">1000</span>
-</span><span class='line'>
-</span><span class='line'>adapter_nsrst_delay <span class="mi">100</span>
-</span><span class='line'>jtag_ntrst_delay <span class="mi">100</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">#jtag scan chain</span>
-</span><span class='line'><span class="k">if</span> { [info exists CPUTAPID] } {
-</span><span class='line'>   set _CPUTAPID $CPUTAPID
-</span><span class='line'>} else {
-</span><span class='line'>  <span class="c1"># See STM Document RM0008</span>
-</span><span class='line'>  <span class="c1"># Section 26.6.3</span>
-</span><span class='line'>   set _CPUTAPID <span class="mi">0</span>x3ba00477
-</span><span class='line'>}
-</span><span class='line'>jtag newtap $_CHIPNAME cpu -irlen <span class="mi">4</span> -ircapture <span class="mi">0</span>x1 -irmask <span class="mi">0</span>xf -expected-id $_CPUTAPID
-</span><span class='line'>
-</span><span class='line'><span class="k">if</span> { [info exists BSTAPID] } {
-</span><span class='line'>   <span class="c1"># FIXME this never gets used to override defaults...</span>
-</span><span class='line'>   set _BSTAPID $BSTAPID
-</span><span class='line'>} else {
-</span><span class='line'>  <span class="c1"># See STM Document RM0008</span>
-</span><span class='line'>  <span class="c1"># Section 29.6.2</span>
-</span><span class='line'>  <span class="c1"># Low density devices, Rev A</span>
-</span><span class='line'>  set _BSTAPID1 <span class="mi">0</span>x06412041
-</span><span class='line'>  <span class="c1"># Medium density devices, Rev A</span>
-</span><span class='line'>  set _BSTAPID2 <span class="mi">0</span>x06410041
-</span><span class='line'>  <span class="c1"># Medium density devices, Rev B and Rev Z</span>
-</span><span class='line'>  set _BSTAPID3 <span class="mi">0</span>x16410041
-</span><span class='line'>  set _BSTAPID4 <span class="mi">0</span>x06420041
-</span><span class='line'>  <span class="c1"># High density devices, Rev A</span>
-</span><span class='line'>  set _BSTAPID5 <span class="mi">0</span>x06414041
-</span><span class='line'>  <span class="c1"># Connectivity line devices, Rev A and Rev Z</span>
-</span><span class='line'>  set _BSTAPID6 <span class="mi">0</span>x06418041
-</span><span class='line'>  <span class="c1"># XL line devices, Rev A</span>
-</span><span class='line'>  set _BSTAPID7 <span class="mi">0</span>x06430041
-</span><span class='line'>  <span class="c1"># VL line devices, Rev A and Z In medium-density and high-density value line devices</span>
-</span><span class='line'>  set _BSTAPID8 <span class="mi">0</span>x06420041
-</span><span class='line'>  <span class="c1"># VL line devices, Rev A</span>
-</span><span class='line'>  set _BSTAPID9 <span class="mi">0</span>x06428041
-</span><span class='line'>
-</span><span class='line'>}
-</span><span class='line'>jtag newtap $_CHIPNAME bs -irlen <span class="mi">5</span> -expected-id $_BSTAPID1 \
-</span><span class='line'>  -expected-id $_BSTAPID2 -expected-id $_BSTAPID3 \
-</span><span class='line'>  -expected-id $_BSTAPID4 -expected-id $_BSTAPID5 \
-</span><span class='line'>  -expected-id $_BSTAPID6 -expected-id $_BSTAPID7 \
-</span><span class='line'>  -expected-id $_BSTAPID8 -expected-id $_BSTAPID9
-</span><span class='line'>
-</span><span class='line'>set _TARGETNAME $_CHIPNAME.cpu
-</span><span class='line'>target create $_TARGETNAME cortex_m -endian $_ENDIAN -chain-position $_TARGETNAME
-</span><span class='line'>
-</span><span class='line'>$_TARGETNAME configure -work-area-phys <span class="mi">0</span>x20000000 -work-area-size $_WORKAREASIZE -work-area-backup <span class="mi">0</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1"># flash size will be probed</span>
-</span><span class='line'>set _FLASHNAME $_CHIPNAME.flash
-</span><span class='line'>flash bank $_FLASHNAME stm32f1x <span class="mi">0</span>x08000000 <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> $_TARGETNAME
-</span><span class='line'>
-</span><span class='line'><span class="c1"># if srst is not fitted use SYSRESETREQ to</span>
-</span><span class='line'><span class="c1"># perform a soft reset</span>
-</span><span class='line'>cortex_m reset_config sysresetreq
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><figcaption><span>openocd.cfg</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='linux-config'><span class='line'>[root@XXXyyy target]# openocd -f /media/y/embedded/stm32/dev/openocd.cfg -f ./stm32f1x.cfg
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/37">&larr; Older</a>
@@ -2225,6 +1959,10 @@ Get the interface definition via:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/05/23/use-apt-cacher-for-speeding-up-deployment/">Use Apt-cacher for Speeding Up Deployment</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/05/22/change-cobbler-profile-for-using-local-repository/">Change Cobbler Profile for Using Local Repository</a>
       </li>
     
@@ -2238,10 +1976,6 @@ Get the interface definition via:</p>
     
       <li class="post">
         <a href="/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">My Configuration on Cobbler for Deploying Ubuntu12.04</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
       </li>
     
   </ul>
