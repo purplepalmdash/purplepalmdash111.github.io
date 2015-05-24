@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-05-23T21:16:09+08:00</updated>
+  <updated>2015-05-24T16:13:51+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,299 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[三节点搭建OpenStack Juno(1)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno/"/>
+    <updated>2015-05-24T14:36:34+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno</id>
+    <content type="html"><![CDATA[<h3>目的</h3>
+
+<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
+
+<h3>硬件及网络准备</h3>
+
+<h4>物理服务器</h4>
+
+<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。  <br/>
+物理服务器操作系统: Ubuntu14.04</p>
+
+<h4>虚拟机：</h4>
+
+<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.  <br/>
+虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.  <br/>
+虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
+
+<h4>网络规划</h4>
+
+<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。      <br/>
+Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。  <br/>
+External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。 <br/>
+当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
+
+<h4>节点网络名规划</h4>
+
+<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.  <br/>
+Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
+Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
+
+<p>一个参考的例图如下:  <br/>
+<img src="http://purplepalmdash.github.io/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
+
+<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
+
+<h3>虚拟机初始化配置</h3>
+
+<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pwd
+</span><span class='line'>/media/repo/Image/3NodeOpenStack
+</span><span class='line'>$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
+</span><span class='line'>Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+</span><span class='line'>$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
+</span><span class='line'>Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+</span><span class='line'>$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
+</span><span class='line'>Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:  <br/>
+<img src="http://purplepalmdash.github.io/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
+
+<p>各个节点的network定义文件如下:</p>
+
+<p>控制节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.55.55.2
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.55.55.1
+</span><span class='line'>dns-nameservers 114.114.114.114</span></code></pre></td></tr></table></div></figure>
+
+
+<p>网络节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.55.55.3
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.55.55.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>auto eth1
+</span><span class='line'>iface eth1 inet static
+</span><span class='line'>address 10.66.66.3
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>
+</span><span class='line'>auto eth2
+</span><span class='line'>iface eth2 inet static
+</span><span class='line'>address 192.168.1.3
+</span><span class='line'>netmask 255.255.255.0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>计算节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.55.55.4
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.55.55.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span><span class='line'>
+</span><span class='line'>auto eth1
+</span><span class='line'>iface eth1 inet static
+</span><span class='line'>address 10.66.66.4
+</span><span class='line'>netmask 255.255.255.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/hosts
+</span><span class='line'>127.0.0.1       localhost
+</span><span class='line'>127.0.1.1       Controller
+</span><span class='line'>10.55.55.2      Controller
+</span><span class='line'>10.55.55.3      Network
+</span><span class='line'>10.55.55.4      Compute
+</span><span class='line'>......
+</span><span class='line'>
+</span><span class='line'>$ cat /etc/hostname
+</span><span class='line'>Controller
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>网络配置完毕后，保证可以通过<code>ping Controller</code>等命令达到互通。</p>
+
+<p>在进入到后续步骤前，更新所有节点到最新状态:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get update && sudo apt-get upgrade && sudo apt-get dist-upgrade && sudo reboot</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>NTP 服务器/客户端配置</h3>
+
+<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
+
+<h4>NTP服务器</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get -y install ntp
+</span><span class='line'># vim /etc/ntp.conf
+</span><span class='line'>    # 修改成大陆时间
+</span><span class='line'>    server 2.cn.pool.ntp.org
+</span><span class='line'>    server 1.asia.pool.ntp.org
+</span><span class='line'>    server 2.asia.pool.ntp.org
+</span><span class='line'>    # 修改 restrict 設定
+</span><span class='line'>    restrict -4 default kod notrap nomodify
+</span><span class='line'>    restrict -6 default kod notrap nomodify
+</span><span class='line'># service ntp restart</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>NTP客户端</h4>
+
+<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get -y install ntp
+</span><span class='line'># vim /etc/ntp.conf
+</span><span class='line'>    # 設定 controller 為參照的 time server
+</span><span class='line'>    # 並將其他 server 開頭的設定進行註解
+</span><span class='line'>    server 10.55.55.2 iburst
+</span><span class='line'># service ntp restart</span></code></pre></td></tr></table></div></figure>
+
+
+<p>检查结果是否正确:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# ntpq -c peers
+</span><span class='line'>     remote           refid      st t when poll reach   delay   offset  jitter
+</span><span class='line'>==============================================================================
+</span><span class='line'> Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049</span></code></pre></td></tr></table></div></figure>
+
+
+<p>接下来真正进入OpenStack的安装和配置过程。</p>
+
+<h3>源设定</h3>
+
+<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:   <br/>
+所有节点上(Controller,Network,Compute):</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install ubuntu-cloud-keyring
+</span><span class='line'>$ sudo bash
+</span><span class='line'># echo "deb http://ubuntu-cloud.archive.canonical.com/ubuntu" "trusty-updates/juno main" &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
+</span><span class='line'># apt-get update && apt-get -y dist-upgrade</span></code></pre></td></tr></table></div></figure>
+
+
+<p>第一部分就先到这里。</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Use Apt-cacher for Speeding Up Deployment]]></title>
@@ -598,7 +891,7 @@ The steps are followed by following URL:  <br/>
 
 <h3>Github Account</h3>
 
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#105;&#108;&#x74;&#111;&#58;&#x67;&#105;&#116;&#64;&#x67;&#x69;&#116;&#x68;&#117;&#x62;&#46;&#x63;&#x6f;&#x6d;">&#x67;&#105;&#116;&#64;&#x67;&#x69;&#116;&#x68;&#x75;&#98;&#x2e;&#99;&#111;&#x6d;</a></p>
+<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#x69;&#x6c;&#116;&#x6f;&#58;&#x67;&#105;&#x74;&#64;&#x67;&#105;&#x74;&#104;&#x75;&#x62;&#x2e;&#x63;&#111;&#x6d;">&#103;&#x69;&#116;&#x40;&#x67;&#105;&#x74;&#x68;&#x75;&#x62;&#x2e;&#99;&#x6f;&#109;</a></p>
 
 <h3>Repository</h3>
 
@@ -4132,127 +4425,6 @@ Fuel Controller节点上的id_rsa文件可以实现对各个节点的无密码�
 <img src="http://purplepalmdash.github.io/images/2015_04_27_21_49_07_1006x746.jpg" alt="/images/2015_04_27_21_49_07_1006x746.jpg" /></p>
 
 <p>本章过完以后，我们的OpenContrail部署已经完成了大半，接下来就是在Compute和OpenStack Controller节点上的配置，达到最后的集成过程。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[使用Fuel部署OpenContrail(3)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-3/"/>
-    <updated>2015-04-27T18:56:00+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-3</id>
-    <content type="html"><![CDATA[<p>在OpenStack HA部署好的基础上集成OpenContrail是一个比较繁琐的过程，所以这一节里我们主要做集成前的准备工作，准备网络拓扑和创建好OpenContrail本地部署仓库。</p>
-
-<h3>网络规划</h3>
-
-<p>在Miranti提供的集成参考里，有如下的图，定义了整个环境的网络拓扑。  <br/>
-<img src="http://purplepalmdash.github.io/images/2015_04_27_19_06_11_1147x804.jpg" alt="images/2015_04_27_19_06_11_1147x804.jpg" /> <br/>
-从图中可以看到各个节点所接入到的物理网络。我们根据这些节点接入网络的不同，来定义对应系统上的网络配置。  <br/>
-在安装完毕后的虚拟机里，可以看到该节点的DNS名称，例如node-19, node-20之类，在Fuel Controller上可以通过<code>ssh root@node-19</code>来登入相应角色的机器上。  <br/>
-以下是三个OpenStack节点的网络部署, N/A代表不需要配置，可以直接把对应的接口文件删除:  <br/>
-对应的接口分别是从eth0 ~ eth4.</p>
-
-<p>OS1: node-19, PXE:10.20.0.14, Public: 172.16.0.6, Management: 10.55.55.6, Storage: 10.66.66.5, Private: N/A.   <br/>
-OS2: node-20, PXE:10.20.0.15, Public: 172.16.0.7, Management: 10.55.55.7, Storage: 10.66.66.6, Private: N/A.   <br/>
-OS3: node-22, PXE:10.20.0.16, Public: 172.16.0.8, Management: 10.55.55.8, Storage: 10.66.66.7, Private: N/A.</p>
-
-<p>Compute: node-18, PXE: 10.20.0.13, Public: 172.16.0.5, Management: 10.55.55.5, Storage: 10.66.66.4, Private: N/A.</p>
-
-<p>Contrail1: node-24, PXE: 10.20.0.10, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.10
-Contrail2: node-21, PXE: 10.20.0.11, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.11
-Contrail3: node-23, PXE: 10.20.0.12, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.12</p>
-
-<p>OpenStack和Compute各个节点的配置是自动配置好的，Contrail节点上的Private节点则需要手动配置，具体步骤如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-24:~# vim /etc/network/interfaces.d/ifcfg-eth4 
-</span><span class='line'>auto eth4
-</span><span class='line'>iface eth4 inet static
-</span><span class='line'>
-</span><span class='line'>address 10.77.77.10
-</span><span class='line'>netmask 255.255.255.0
-</span><span class='line'>gateway 10.77.77.1
-</span><span class='line'>
-</span><span class='line'>post-up  ethtool  -K  eth4  gso off  gro off || true
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除三个Contrail Controller节点上的未用端口, 并重启后得到我们要的配置:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth3 
-</span><span class='line'>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth2
-</span><span class='line'>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth1 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>到这里，我们节点机的网络单机就配置完毕了。</p>
-
-<h3>网间互通</h3>
-
-<p>我们需要让Management网络和Private网络可以通过某种途径互相连通，这里为了部署的方便，直接在主机(Host机器)上用iptables加上以下规则：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -D FORWARD -i virbr5 -j REJECT --reject-with icmp-port-unreachable
-</span><span class='line'># iptables -D FORWARD -o virbr5 -j REJECT --reject-with icmp-port-unreachable
-</span><span class='line'># iptables -D FORWARD -o virbr3 -j REJECT --reject-with icmp-port-unreachable
-</span><span class='line'># iptables -D FORWARD -i virbr3 -j REJECT --reject-with icmp-port-unreachable
-</span><span class='line'># iptables -t nat -A POSTROUTING -s 10.55.55.0/24 -d 10.77.77.0/24 -j MASQUERADE
-</span><span class='line'># iptables -t nat -A POSTROUTING -s 10.77.77.0/24 -d 10.55.55.0/24 -j MASQUERADE
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>值得注意的是，virbr5和virbr3就是10.55.55.0/24和10.77.77.0/24所附属的网口，具体可以在Virt-Manager的配置菜单里看到。   <br/>
-添加完毕后，在OpenStack的节点(OS1,OS2,OS3)ping Private网络里的地址，如<code>ping 10.77.77.10</code>, 确保可以ping通；在Contrail Controller的节点(Contrail1, Contrail2, Contrail3)上ping Management网络里的地址，如10.55.55.6，确保可以ping通。 <br/>
-集成OpenContrail的一个先决条件是Private网络和Management网络可以互通。</p>
-
-<h3>OpenContrail安装仓库准备</h3>
-
-<p>我们在Fuel Controller上建立OpenContrail的安装仓库，这样有利于快速部署， 具体的操作是从Juniper官方提供的deb包里释出OpenContrail安装所需要的包，形成一个本地仓库。具体步骤如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum -y install dpkg-devel
-</span><span class='line'># cd ~/Deb
-</span><span class='line'># mkdir -p /var/www/nailgun/contrail
-</span><span class='line'># mv /root/contrail-install-packages_2.0-22~icehouse_all.deb  ./
-</span><span class='line'># ar vx contrail-install-packages_2.0-22~icehouse_all.deb
-</span><span class='line'># rm -f contrail-install-packages_2.0-22~icehouse_all.deb 
-</span><span class='line'># tar xf data.tar.gz
-</span><span class='line'># tar xf opt/contrail/contrail_packages/contrail_debs.tgz -C /var/www/nailgun/contrail
-</span><span class='line'># cd /var/www/nailgun/contrail
-</span><span class='line'># dpkg-scanpackages . /dev/null | gzip -9c &gt; Packages.gz
-</span><span class='line'># rm -rf ~/Deb
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-这时候如果在本机上访问  <br/>
-<a href="http://10.20.0.2:8080/contrail/">http://10.20.0.2:8080/contrail/</a>  <br/>
-就可以看到整个仓库的包列表及详情。这个仓库将在后面部署Contrail时被用到。</p>
 ]]></content>
   </entry>
   
