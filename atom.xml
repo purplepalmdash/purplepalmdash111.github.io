@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-05-24T16:13:51+08:00</updated>
+  <updated>2015-05-25T00:26:51+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,829 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[三节点搭建OpenStack Juno(2)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/"/>
+    <updated>2015-05-24T22:37:28+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno-2</id>
+    <content type="html"><![CDATA[<h3>MySQL数据库</h3>
+
+<p>绝大多数的OpenStack服务使用SQL数据库来存储信息，一般情况下数据库运行在控制节点上，这里我们使用MariaDB或者MySQL来作为SQL数据库。</p>
+
+<p>安装, 注意安装过程中需要输入密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install mariadb-server python-mysqldb</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置, 主要是更改了bind的地址，添加了一些有用选项，并支持UTF-8编码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/mysql/my.cnf
+</span><span class='line'>[mysqld]
+</span><span class='line'>...
+</span><span class='line'>bind-address = 10.55.55.2
+</span><span class='line'>...
+</span><span class='line'>default-storage-engine = innodb
+</span><span class='line'>innodb_file_per_table
+</span><span class='line'>collation-server = utf8_general_ci
+</span><span class='line'>init-connect = 'SET NAMES utf8'
+</span><span class='line'>character-set-server = utf8</span></code></pre></td></tr></table></div></figure>
+
+
+<p>完成安装，包括重启服务及加密数据库服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service mysql restart
+</span><span class='line'># mysql_secure_installation </span></code></pre></td></tr></table></div></figure>
+
+
+<h3>消息服务器</h3>
+
+<p>OpenStack使用message broker用来在各种服务器之间调度操作和协调状态信息，通常情况下消息服务器也运行在控制节点上，OpenStack支持RabbitMQ, Qpid和ZeroMQ, 这里使用RabbitMQ.</p>
+
+<p>安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install rabbitmq-server</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置，首先我们需要设定rabbitMQ使用的密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># rabbitmqctl change_password guest RABBIT_PASS
+</span><span class='line'>Changing password for user "guest" ...
+</span><span class='line'>...done.</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果是RabbitMQ 3.3.0或者更新的版本，则需要激活guest用户的远程访问权限。</p>
+
+<p>检查RabbitMQ版本:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># rabbitmqctl status | grep rabbit
+</span><span class='line'>Status of node rabbit@Controller ...
+</span><span class='line'> {running_applications,[{rabbit,"RabbitMQ","3.2.4"},</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里我们的版本是3.2.4所以不需要做任何修改，直接重启RabbitMQ服务即可。若是3.3.0以后的版本，则需要参考官方文档作更为详细的配置。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service rabbitmq-server restart</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>鉴权(Identity)服务</h3>
+
+<p>鉴权服务的作用主要有:   <br/>
+1. 跟踪用户及其权限。   <br/>
+2. 提供可用服务的服务类别及API endpoint.</p>
+
+<p>详细的关于Identity的介绍可以参见OpenStack官方文档。只有理解了其理念后才能明了OpenStack架构中各种服务的角色和地位.</p>
+
+<p>首先创建keystone所需要的数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 36
+</span><span class='line'>Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE keystone;
+</span><span class='line'>Query OK, 1 row affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' \
+</span><span class='line'>    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
+</span><span class='line'>Query OK, 0 rows affected (0.01 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' \
+</span><span class='line'>    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建一个随机值，用于管理token在初始化配置时使用:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># openssl rand -hex 10
+</span><span class='line'>760bc221f4dc966693e5</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装和配置组件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install keystone python-keystoneclient</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置, 更改<code>admin_token</code>为刚才生成的随机数:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/keystone/keystone.conf
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>admin_token = 760bc221f4dc966693e5
+</span><span class='line'>...
+</span><span class='line'>[database]
+</span><span class='line'>...
+</span><span class='line'>connection = mysql://keystone:KEYSTONE_DBPASS@Controller/keystone
+</span><span class='line'>...
+</span><span class='line'>[token]
+</span><span class='line'>...
+</span><span class='line'>provider = keystone.token.providers.uuid.Provider
+</span><span class='line'>driver = keystone.token.persistence.backends.sql.Token
+</span><span class='line'>...
+</span><span class='line'>[revoke]
+</span><span class='line'>...
+</span><span class='line'>driver = keystone.contrib.revoke.backends.sql.Revoke
+</span><span class='line'>...
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>verbose = True</span></code></pre></td></tr></table></div></figure>
+
+
+<p>修改完毕后，使用以下命令来同步Identity服务数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># su -s /bin/sh -c "keystone-manage db_sync" keystone</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启鉴权服务，删除Ubuntu使用的默认sqlite数据库, 并完成安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service keystone restart
+</span><span class='line'># rm -f /var/lib/keystone/keystone.db </span></code></pre></td></tr></table></div></figure>
+
+
+<p>使用下列命令来激活cron任务，以便每小时判断tokens的存活时间:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># (crontab -l -u keystone 2&gt;&1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush &gt;/var/log/keystone/keystone-tokenflush.log 2&gt;&1' &gt;&gt; /var/spool/cron/crontabs/keystone</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>创建tenants, users, roles</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># export OS_SERVICE_TOKEN=760bc221f4dc966693e5
+</span><span class='line'># export OS_SERVICE_ENDPOINT=http://Controller:35357/v2.0
+</span><span class='line'># keystone tenant-create --name admin --description "Admin Tenant"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |           Admin Tenant           |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 6f5f440aa9de4b2fa205f43df073ddfa |
+</span><span class='line'>|     name    |              admin               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone user-create --name admin --pass XXXXXXXXX --email xxxxxxxx@gmail.com
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |        XXXXXXXX@gmail.com        |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | 7bc9be5493e345518a384383872ab274 |
+</span><span class='line'>|   name   |              admin               |
+</span><span class='line'>| username |              admin               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'># keystone role-create --name admin
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|    id    | 65b6ccaa3b434c848ccb757be43d6b41 |
+</span><span class='line'>|   name   |              admin               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'># keystone user-role-add --user admin --tenant admin --role admin
+</span><span class='line'># keystone tenant-create --name demo --description "Demo Tenant"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |           Demo Tenant            |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 459c25933274483fb01ce66d9514add6 |
+</span><span class='line'>|     name    |               demo               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone user-create --name demo --tenant demo --pass xxxxx --email xxxxxxx@gmail.com
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |        xxxxxxx@gmail.com        |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | b2f3d8a239b34edfb50fa67c5aca8f83 |
+</span><span class='line'>|   name   |               demo               |
+</span><span class='line'>| tenantId | 459c25933274483fb01ce66d9514add6 |
+</span><span class='line'>| username |               demo               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'># keystone tenant-create --name service --description "Service Tenant"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |          Service Tenant          |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 08a675be93a04cca8a74159a3eefa288 |
+</span><span class='line'>|     name    |             service              |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone service-create --name keystone --type identity --description "OpenStack Identity"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |        OpenStack Identity        |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | bf7613d9563c47a9af80ecdb4f26f3f5 |
+</span><span class='line'>|     name    |             keystone             |
+</span><span class='line'>|     type    |             identity             |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone endpoint-create --service-id $(keystone service-list | awk '/ identity / {print $2}') --publicurl http://Controller:5000/v2.0 --internalurl http://Controller:5000/v2.0 --adminurl http://Controller:35357/v2.0 --region regionOne
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   adminurl  |   http://Controller:35357/v2.0   |
+</span><span class='line'>|      id     | c2c7a6c24b1d411b996f2e30fefc70b6 |
+</span><span class='line'>| internalurl |   http://Controller:5000/v2.0    |
+</span><span class='line'>|  publicurl  |   http://Controller:5000/v2.0    |
+</span><span class='line'>|    region   |            regionOne             |
+</span><span class='line'>|  service_id | bf7613d9563c47a9af80ecdb4f26f3f5 |
+</span><span class='line'>+-------------+----------------------------------+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证, 详细的说明参见OpenStack官方文档:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># unset OS_SERVICE_TOKEN OS_SERVICE_ENDPOINT
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 token-get
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  Property |              Value               |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  expires  |       2015-05-24T16:43:08Z       |
+</span><span class='line'>|     id    | 612b529c9c754b87a153abd39284aff6 |
+</span><span class='line'>| tenant_id | 6f5f440aa9de4b2fa205f43df073ddfa |
+</span><span class='line'>|  user_id  | 7bc9be5493e345518a384383872ab274 |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 tenant-list
+</span><span class='line'>+----------------------------------+---------+---------+
+</span><span class='line'>|                id                |   name  | enabled |
+</span><span class='line'>+----------------------------------+---------+---------+
+</span><span class='line'>| 6f5f440aa9de4b2fa205f43df073ddfa |  admin  |   True  |
+</span><span class='line'>| 459c25933274483fb01ce66d9514add6 |   demo  |   True  |
+</span><span class='line'>| 08a675be93a04cca8a74159a3eefa288 | service |   True  |
+</span><span class='line'>+----------------------------------+---------+---------+
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 user-list
+</span><span class='line'>+----------------------------------+-------+---------+--------------------+
+</span><span class='line'>|                id                |  name | enabled |       email        |
+</span><span class='line'>+----------------------------------+-------+---------+--------------------+
+</span><span class='line'>| 7bc9be5493e345518a384383872ab274 | admin |   True  | xxxxxxx@gmail.com |
+</span><span class='line'>| b2f3d8a239b34edfb50fa67c5aca8f83 |  demo |   True  | xxxxxxx@gmail.com |
+</span><span class='line'>+----------------------------------+-------+---------+--------------------+
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 role-list
+</span><span class='line'>+----------------------------------+----------+
+</span><span class='line'>|                id                |   name   |
+</span><span class='line'>+----------------------------------+----------+
+</span><span class='line'>| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
+</span><span class='line'>| 65b6ccaa3b434c848ccb757be43d6b41 |  admin   |
+</span><span class='line'>+----------------------------------+----------+
+</span><span class='line'># keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 token-get
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  Property |              Value               |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  expires  |       2015-05-24T16:46:34Z       |
+</span><span class='line'>|     id    | 0d8a9472b0f547dfabc62594b4fb146f |
+</span><span class='line'>| tenant_id | 459c25933274483fb01ce66d9514add6 |
+</span><span class='line'>|  user_id  | b2f3d8a239b34edfb50fa67c5aca8f83 |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'># keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 user-list
+</span><span class='line'>You are not authorized to perform the requested action: admin_required (HTTP 403)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>创建脚本</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat admin-openrc.sh 
+</span><span class='line'>export OS_TENANT_NAME=admin
+</span><span class='line'>export OS_USERNAME=admin
+</span><span class='line'>export OS_PASSWORD=xxxxx
+</span><span class='line'>export OS_AUTH_URL=http://Controller:35357/v2.0
+</span><span class='line'># cat demo-openrc.sh
+</span><span class='line'>export OS_TENANT_NAME=demo
+</span><span class='line'>export OS_USERNAME=demo
+</span><span class='line'>export OS_PASSWORD=xxxxx
+</span><span class='line'>export OS_AUTH_URL=http://Controller:5000/v2.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>下次使用时直接用<code>source admin-openrc.sh</code>或者<code>source demo-openrc.sh</code>即可。</p>
+
+<h3>镜像服务</h3>
+
+<p>添加镜像服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 40
+</span><span class='line'>Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE glance;
+</span><span class='line'>Query OK, 1 row affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建glance用户:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># source  /home/dash/admin-openrc.sh
+</span><span class='line'># keystone user-create --name glance --pass xxxxx
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |                                  |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | a3108e4267154acd809f3978d360e6cd |
+</span><span class='line'>|   name   |              glance              |
+</span><span class='line'>| username |              glance              |
+</span><span class='line'>+----------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>赋予glance用户admin权限:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># keystone user-role-add --user glance --tenant service --role admin</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建service entity和service end-point:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> keystone service-create --name glance --type image --description "OpenStack Image Service"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |     OpenStack Image Service      |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 8736ca50fdf741afb5fcc2d078b1cd9b |
+</span><span class='line'>|     name    |              glance              |
+</span><span class='line'>|     type    |              image               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://Controller:9292 --internalurl http://Controller:9292 --adminurl http://Controller:9292 --region regionOne
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   adminurl  |      http://Controller:9292      |
+</span><span class='line'>|      id     | 340f40f0558c4a5b8fa88089aee69767 |
+</span><span class='line'>| internalurl |      http://Controller:9292      |
+</span><span class='line'>|  publicurl  |      http://Controller:9292      |
+</span><span class='line'>|    region   |            regionOne             |
+</span><span class='line'>|  service_id | 8736ca50fdf741afb5fcc2d078b1cd9b |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装服务组件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install glance python-glanceclient</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/glance/glance-api.conf
+</span><span class='line'>[database]
+</span><span class='line'>...
+</span><span class='line'>connection = mysql://glance:GLANCE_DBPASS@controller/glance
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>...
+</span><span class='line'>auth_uri = http://controller:5000/v2.0
+</span><span class='line'>identity_uri = http://controller:35357
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = GLANCE_PASS
+</span><span class='line'>[paste_deploy]
+</span><span class='line'>...
+</span><span class='line'>flavor = keystone
+</span><span class='line'>[glance_store]
+</span><span class='line'>...
+</span><span class='line'>default_store = file
+</span><span class='line'>filesystem_store_datadir = /var/lib/glance/images/
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>notification_driver = noop
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>verbose = True</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置<code>/etc/glance/glance-registry.conf</code>文件，完成以下配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[database]
+</span><span class='line'>...
+</span><span class='line'>connection = mysql://glance:GLANCE_DBPASS@controller/glance
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>...
+</span><span class='line'>auth_uri = http://controller:5000/v2.0
+</span><span class='line'>identity_uri = http://controller:35357
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = GLANCE_PASS
+</span><span class='line'>[paste_deploy]
+</span><span class='line'>...
+</span><span class='line'>flavor = keystone
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>notification_driver = noop
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>notification_driver = noop</span></code></pre></td></tr></table></div></figure>
+
+
+<p>同步数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># su -s /bin/sh -c "glance-manage db_sync" glance</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启服务，删除默认的sqlite数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service glance-registry restart
+</span><span class='line'># service glance-api restart
+</span><span class='line'># rm -f /var/lib/glance/glance.sqlite
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+</span><span class='line'># source ~/admin-openrc.sh
+</span><span class='line'># glance image-create --name "cirros-0.3.3-x86_64" --file ~/cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
+</span><span class='line'>[=============================&gt;] 100%
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| Property         | Value                                |
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
+</span><span class='line'>| container_format | bare                                 |
+</span><span class='line'>| created_at       | 2015-05-24T16:25:32                  |
+</span><span class='line'>| deleted          | False                                |
+</span><span class='line'>| deleted_at       | None                                 |
+</span><span class='line'>| disk_format      | qcow2                                |
+</span><span class='line'>| id               | 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 |
+</span><span class='line'>| is_public        | True                                 |
+</span><span class='line'>| min_disk         | 0                                    |
+</span><span class='line'>| min_ram          | 0                                    |
+</span><span class='line'>| name             | cirros-0.3.3-x86_64                  |
+</span><span class='line'>| owner            | 6f5f440aa9de4b2fa205f43df073ddfa     |
+</span><span class='line'>| protected        | False                                |
+</span><span class='line'>| size             | 13200896                             |
+</span><span class='line'>| status           | active                               |
+</span><span class='line'>| updated_at       | 2015-05-24T16:25:32                  |
+</span><span class='line'>| virtual_size     | None                                 |
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'># glance image-list
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>控制节点基本上配置成功，明天继续。</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[三节点搭建OpenStack Juno(1)]]></title>
@@ -891,7 +1714,7 @@ The steps are followed by following URL:  <br/>
 
 <h3>Github Account</h3>
 
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#x69;&#x6c;&#116;&#x6f;&#58;&#x67;&#105;&#x74;&#64;&#x67;&#105;&#x74;&#104;&#x75;&#x62;&#x2e;&#x63;&#111;&#x6d;">&#103;&#x69;&#116;&#x40;&#x67;&#105;&#x74;&#x68;&#x75;&#x62;&#x2e;&#99;&#x6f;&#109;</a></p>
+<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#x3a;&#x67;&#x69;&#116;&#x40;&#x67;&#105;&#x74;&#104;&#117;&#x62;&#x2e;&#x63;&#x6f;&#x6d;">&#103;&#x69;&#116;&#64;&#x67;&#x69;&#116;&#104;&#117;&#98;&#46;&#99;&#111;&#x6d;</a></p>
 
 <h3>Repository</h3>
 
@@ -3796,635 +4619,6 @@ OpenStack Controller不需要使用Private 网络，所以我们可以删除ifcf
 <p>```</p>
 
 <p>好了，这时候，Contrail已经集成到OpenStack环境里，你可以在Contrail的界面里，添加上网络，而后在OpenStack里使用它。Enjoy it !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[使用Fuel部署OpenContrail(4)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4/"/>
-    <updated>2015-04-27T19:44:00+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4</id>
-    <content type="html"><![CDATA[<p>前面已经准备好了集成OpenContrail的所有事宜，接下来就是真正部署OpenContrail的过程了。部署OpenContrail需要修改所有的Contrail Controller节点，OpenStack Controller节点， OpenStack Compute节点，为了避免混淆，本节主要完成在Contrail Controller上的部署工作。</p>
-
-<h3>OpenStack Controller节点部署后配置</h3>
-
-<p>在所有的OpenStack Controller节点(OS1,OS2,OS3)上，打开/usr/lib/ocf/resource.d/mirantis/ns_haproxy文件，编辑以下字段: <br/>
-OCF_Parameters部分:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>OCF_RESKEY_private_network_default="10.55.55.0/24"
-</span><span class='line'>OCF_RESKEY_private_network_gateway_default="10.55.55.1"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p> <br/>
-在meta_data()函数中，添加以下内容:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>&lt;parameter name="private_network"&gt;
-</span><span class='line'>&lt;longdesc lang="en"&gt;
-</span><span class='line'>Private L3 network that should be configured inside the namespace
-</span><span class='line'>&lt;/longdesc&gt;
-</span><span class='line'>&lt;shortdesc lang="en"&gt;Namespace private network&lt;/shortdesc&gt;
-</span><span class='line'>&lt;content type="string" default="${OCF_RESKEY_private_network_default}" /&gt;
-</span><span class='line'>&lt;/parameter&gt;
-</span><span class='line'>
-</span><span class='line'>&lt;parameter name="private_network_gateway"&gt;
-</span><span class='line'>&lt;longdesc lang="en"&gt;
-</span><span class='line'>Private L3 network gateway that should be configured inside the namespace.
-</span><span class='line'>&lt;/longdesc&gt;
-</span><span class='line'>&lt;shortdesc lang="en"&gt;Namespace private gateway network&lt;/shortdesc&gt;
-</span><span class='line'>&lt;content type="string" default="${OCF_RESKEY_private_network_gateway_default}" /&gt;
-</span><span class='line'>&lt;/parameter&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>set_ns_routing()函数中，添加一下内容:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>nsip route list | grep -q "${OCF_RESKEY_private_network}"
-</span><span class='line'>if [ $? -gt 0 ]; then
-</span><span class='line'>ocf_log debug "Creating ${OCF_RESKEY_private_network} route inside the namespace"
-</span><span class='line'>ocf_run nsip route add "${OCF_RESKEY_private_network}" via "${OCF_RESKEY_private_network_gateway}"
-</span><span class='line'>fi
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>以上的修改是为了引入haproxy的namespace的。</p>
-
-<h3>配置Contrail部署节点</h3>
-
-<p>我们引入了三个Contrail Controller节点，从中挑选一个，作为部署的管理节点，OpenContrail通过fabric下发安装指令给各节点机，因此我们首先要准备的是部署节点。这里的例子中，我们选择Contrail1(10.20.0.10)作为部署节点。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># echo 'deb http://10.20.0.2:8080/contrail/ /' &gt; /etc/apt/sources.list.d/contrail.list
-</span><span class='line'># echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
-</span><span class='line'># &gt;/etc/apt/sources.list
-</span><span class='line'># apt-get update
-</span><span class='line'># apt-get install -y python-paramiko contrail-fabric-utils contrail-setup
-</span><span class='line'># pip install --upgrade --no-deps --index-url=”” /opt/contrail/python_packages/Fabric-1.7.0.tar.gz
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>apt-get udpate前我们需要清空本机上的sources.list文件，因为经过前两步后，本机的sources.list中会加上10.20.0.2的默认源，这会引发update失败，因此我们清空此文件。  <br/>
-安装完一些准备包后，部署节点进入就绪状态。</p>
-
-<h3>编写testbed.py</h3>
-
-<p>testbed.py文件定义了整个OpenContrail的组建部署节点信息，在编写此文件前，我们需要得到以下信息:  <br/>
-A. OpenStack的Service_Token, 在任何一台OpenStack Controller机器上，运行以下命令以得到系统当前的service_token值:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-20:~# cat /etc/keystone/keystone.conf  | grep -i "admin_token=" | more
-</span><span class='line'>#admin_token=ADMIN
-</span><span class='line'>admin_token=rVlaAKUs
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>记下rVlaAKUs这个值，在testbed.py文件中我们会用到。</p>
-
-<ol type="a">
-<li>OpenStack Controller的Public vip和Management vip, 如下所示，结合我们的网络规划，Public vip是172网段，而Management vip则是10.55.55网段的IP:</li>
-</ol>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-20:~# source /root/openrc 
-</span><span class='line'>root@node-20:~# keystone endpoint-list | grep 5000
-</span><span class='line'>| 0e3c0684e8ae4c9fa4e080c9e1c66513 | RegionOne |         http://172.16.0.4:5000/v2.0          |         http://10.55.55.4:5000/v2.0          |       http://10.55.55.4:35357/v2.0      | f822df80ee1042d9b10d57118bb410aa |
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ol type="a">
-<li><p>Contrail Controller的内部vip和外部vip, 因为我们把Contrail Controller的Private IP分配在10.77.77.0/24网段，所以我们暂时选用10.77.77.9作为两个vip的地址。</p></li>
-<li><p>如果有外部路由器，则需要配置外部路由器的IP地址。这次的部署中我们不采用外部路由器，因而对比于官方的推荐配置文件，我们的testbed.py中删除了这一部分。</p></li>
-</ol>
-
-
-<p>综合考虑到上述因素后，我们的testbed.py文件定义如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-24:~# vim /opt/contrail/utils/fabfile/testbeds/testbed.py|more
-</span><span class='line'>from fabric.api import env
-</span><span class='line'>#Management ip addresses of hosts in the cluster
-</span><span class='line'>os_ctrl01 = 'root@10.55.55.6'
-</span><span class='line'>os_ctrl02 = 'root@10.55.55.7'
-</span><span class='line'>os_ctrl03 = 'root@10.55.55.8'
-</span><span class='line'>c_ctrl01 = 'root@10.77.77.10'
-</span><span class='line'>c_ctrl02 = 'root@10.77.77.11'
-</span><span class='line'>c_ctrl03 = 'root@10.77.77.12'
-</span><span class='line'>c_db01 = 'root@10.77.77.10'
-</span><span class='line'>c_db02 = 'root@10.77.77.11'
-</span><span class='line'>c_db03 = 'root@10.77.77.12'
-</span><span class='line'>#External routers
-</span><span class='line'># ext_routers = [('gateway01', '&lt;Gateway_node1_LOOPBACK_ip&gt;'), ('gateway02', '&lt;Gateway_node2_LOOPBACK_ip&gt;')]
-</span><span class='line'>#Autonomous system number
-</span><span class='line'>router_asn = 64512
-</span><span class='line'>#Host from which the fab commands are triggered to install and provision
-</span><span class='line'>deploy_node = 'root@10.77.77.10'
-</span><span class='line'>#Role definition of the hosts.
-</span><span class='line'>env.roledefs = {
-</span><span class='line'>'all': [c_ctrl01, c_ctrl02, c_ctrl03, c_db01, c_db02, c_db03],
-</span><span class='line'>'cfgm': [c_ctrl01, c_ctrl02, c_ctrl03],
-</span><span class='line'>'openstack': [os_ctrl01, os_ctrl02, os_ctrl03],
-</span><span class='line'>'control': [c_ctrl01, c_ctrl02, c_ctrl03],
-</span><span class='line'>'compute': [],
-</span><span class='line'>'collector': [c_ctrl01, c_ctrl02, c_ctrl03],
-</span><span class='line'>'webui': [c_ctrl01, c_ctrl02, c_ctrl03],
-</span><span class='line'>'database': [c_db01, c_db02, c_db03],
-</span><span class='line'>'build': [deploy_node],
-</span><span class='line'>'storage-master': [],
-</span><span class='line'>'storage-compute': [],
-</span><span class='line'>}
-</span><span class='line'>#Openstack admin password
-</span><span class='line'>env.openstack_admin_password = 'admin'
-</span><span class='line'>env.password = 'r00tme'
-</span><span class='line'>#Passwords of each host
-</span><span class='line'>env.passwords = {
-</span><span class='line'>os_ctrl01: 'r00tme',
-</span><span class='line'>os_ctrl02: 'r00tme',
-</span><span class='line'>os_ctrl03: 'r00tme',
-</span><span class='line'>c_ctrl01: 'r00tme',
-</span><span class='line'>c_ctrl02: 'r00tme',
-</span><span class='line'>c_ctrl03: 'r00tme',
-</span><span class='line'>c_db01: 'r00tme',
-</span><span class='line'>c_db02: 'r00tme',
-</span><span class='line'>c_db03: 'r00tme',
-</span><span class='line'>deploy_node: 'r00tme',
-</span><span class='line'>}
-</span><span class='line'>#For reimage purpose
-</span><span class='line'>env.ostypes = {
-</span><span class='line'>os_ctrl01: 'ubuntu',
-</span><span class='line'>os_ctrl02: 'ubuntu',
-</span><span class='line'>os_ctrl03: 'ubuntu',
-</span><span class='line'>c_ctrl01: 'ubuntu',
-</span><span class='line'>c_ctrl02: 'ubuntu',
-</span><span class='line'>c_ctrl03: 'ubuntu',
-</span><span class='line'>c_db01: 'ubuntu',
-</span><span class='line'>c_db02: 'ubuntu',
-</span><span class='line'>c_db03: 'ubuntu',
-</span><span class='line'>deploy_node: 'ubuntu',
-</span><span class='line'>}
-</span><span class='line'>env.openstack = {
-</span><span class='line'>'service_token' : 'rVlaAKUs'
-</span><span class='line'>}
-</span><span class='line'>env.ha = {
-</span><span class='line'>'internal_vip': '10.55.55.4',
-</span><span class='line'>'external_vip': '172.16.0.4',
-</span><span class='line'>'contrail_internal_vip': '10.77.77.9',
-</span><span class='line'>'contrail_external_vip': '10.77.77.9',
-</span><span class='line'>}
-</span><span class='line'>env.keystone = {
-</span><span class='line'>'service_tenant': 'services',
-</span><span class='line'>'admin_token': 'rVlaAKUs',
-</span><span class='line'>}
-</span><span class='line'>multi_tenancy = True
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>编写完testbed.py文件后，就可以根据文件中的定义，部署OpenContrail的组件到多台节点主机了。  <br/>
-Fuel Controller节点上的id_rsa文件可以实现对各个节点的无密码登录，拷贝它到我们的Contrail部署节点上:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># scp 10.20.0.2:/root/.ssh/id_rsa /root/.ssh/id_rsa
-</span><span class='line'># chmod 0600 /root/.ssh/id_rsa
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>部署多节点</h3>
-
-<p>首先切换到/opt/contrail/utils目录下，所有用fab执行的部署都需要在这个目录下执行。执行以下操作, 以初始化各部署子节点:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd /opt/contrail/utils
-</span><span class='line'># fab -P -R control -w -- "ls /etc/apt/sources.list.d/contrail.list || echo 'deb \
-</span><span class='line'>http://10.20.0.2:8080/contrail/ /' &gt; \
-</span><span class='line'>/etc/apt/sources.list.d/contrail.list"
-</span><span class='line'># fab -P -R control -w -- 'ls /etc/apt/preferences || echo -e "Package: *\nPin: release \
-</span><span class='line'>l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences'
-</span><span class='line'># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
-</span><span class='line'>--allow-unauthenticated install python-crypto python-netaddr python-paramiko \
-</span><span class='line'>contrail-fabric-utils contrail-setup'
-</span><span class='line'># fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
-</span><span class='line'>/opt/contrail/python_packages/ecdsa-0.10.tar.gz'
-</span><span class='line'># fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
-</span><span class='line'>/opt/contrail/python_packages/Fabric-1.7.0.tar.gz'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>如果出现apt-get update的问题，可以如上面提到的，手动登录到各个节点上去清空/etc/apt/sources.list文件，当然一般情况下不会出现这个问题。  <br/>
-运行以下命令，接受sun的协议:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'echo "sun-java6-plugin shared/accepted-sun-dlj-v1-1 boolean \
-</span><span class='line'>true" | /usr/bin/debconf-set-selections' && fab -P -R control -w -- 'echo "sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean \
-</span><span class='line'> true" | /usr/bin/debconf-set-selections' && fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 select \
-</span><span class='line'>true" | sudo debconf-set-selections' && fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 seen \
-</span><span class='line'> true" | sudo debconf-set-selections'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>OpenContrail组件依赖于特定版本的tzdata， 用以下命令安装：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
-</span><span class='line'> --allow-unauthenticated install tzdata=2014e-0ubuntu0.12.04'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>安装和设置database, 并检查节点的状态:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> # fab install_database && fab setup_database
-</span><span class='line'> # fab -R database -w -- "contrail-status"
-</span><span class='line'> # nodetool status
-</span><span class='line'>--  Address      Load       Tokens  Owns   Host ID                               Rack
-</span><span class='line'>UN  10.77.77.12  141.84 MB  256     33.3%  4ea3abec-16ee-417a-b78c-69e8dca292be  rack1
-</span><span class='line'>UN  10.77.77.11  141.33 MB  256     35.8%  d7677bf2-1447-48af-b1d4-356b4a8d6cff  rack1
-</span><span class='line'>UN  10.77.77.10  134.28 MB  256     30.9%  e418e4ef-af22-4874-ad94-777d6b4c511c  rack1
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>当看到上面有三个条目时，代表安装成功，可以进行下一步。</p>
-
-<p>安装cfgm, control, collector, webui 组件以及keepalived集群。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab install_cfgm && fab install_control && fab install_collector && fab install_webui && fab setup_contrail_keepalived && fab fixup_restart_haproxy_in_collector 2&gt;&1 | tee all.txt
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除掉/etc/keepalived/keepalived.conf里的EXTERNAL部分, 值得注意的是，在三个Contrail Controller上，都需要执行此操作:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/keepalived/keepalived.conf
-</span><span class='line'>......remove something......
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除以后，重新启动keepalived服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'service keepalived restart'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>更新haproxy的配置文件，添加WebUI的虚拟IP地址(vip). 值得注意的是，在三个Contrail Controller上，都需要执行此操作:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/haproxy/haproxy.cfg
-</span><span class='line'>#contrail-webui-marker-start
-</span><span class='line'>frontend contrail-webui-api *:443
-</span><span class='line'>    mode tcp
-</span><span class='line'>    default_backend contrail-webui-api
-</span><span class='line'>backend contrail-webui-api
-</span><span class='line'>    mode tcp
-</span><span class='line'>    balance roundrobin
-</span><span class='line'>    option nolinger
-</span><span class='line'>    stick on src
-</span><span class='line'>    stick-table type ip size 200k expire 300m
-</span><span class='line'>    option tcp-check
-</span><span class='line'>    tcp-check connect port 8143
-</span><span class='line'>    default-server error-limit 1 on-error mark-down
-</span><span class='line'>    server 10.77.77.10 10.77.77.10:8143 check inter 2000 rise 2 fall 3
-</span><span class='line'>    server 10.77.77.11 10.77.77.11:8143 check inter 2000 rise 2 fall 3
-</span><span class='line'>    server 10.77.77.12 10.77.77.12:8143 check inter 2000 rise 2 fall 3
-</span><span class='line'>#contrail-webui-marker-end
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>更改完以后，重启haproxy服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'service haproxy restart'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>更改每个节点上的tenant服务名称，从'service'改成'services':</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- "sed -i '49s/service/services/g' \
-</span><span class='line'>/usr/local/lib/python2.7/dist-packages/contrail_provisioning/config/quantum_in_keystone_setup.py"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置cfgm服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab setup_cfgm
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>这时我们可以验证neutron endpoint是否被正确安装，在任何一个OpenStack Controller节点上，运行以下命令:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># keystone service-list
-</span><span class='line'># keystone endpoint-list
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>例如:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-20:~# keystone service-list | grep neutron
-</span><span class='line'>| 2f4c887f68a9428aa448cbd688d7061f | neutron  |    network     |             network              |
-</span><span class='line'>root@node-20:~# keystone endpoint-list | grep 2f4c887f68a9428aa448cbd688d7061f
-</span><span class='line'>| 7dd2c25e69ad4a3296f272aa253001c8 | RegionOne |            http://10.77.77.9:9696            |            http://10.77.77.9:9696            |          http://10.77.77.9:9696         | 2f4c887f68a9428aa448cbd688d7061f |
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>成功的话，接着下一步设置，删除所有的Contrail Controller节点上文件/etc/haproxy/haproxy.cfg里的rabbit字段：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/haproxy/haproxy.cfg
-</span><span class='line'>......remove something......
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重新启动haproxy服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'service haproxy restart'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>设置control,collector,webui组件服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab setup_control
-</span><span class='line'># fab setup_collector && fab setup_webui
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在任一OpenStack Controller节点上，运行以下命令，得到rabbit的密码:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-22:~# cat /etc/rabbitmq/rabbitmq.config | grep default_pass
-</span><span class='line'>    {default_pass,        &lt;&lt;"gYFQP10P"&gt;&gt;},
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置neutron插件，使用运行在OpenStack Controller上的rabbit 集群, 这里的rabbit_password使用上面得到的值:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  fab -P -R control -w -- 'openstack-config --del /etc/neutron/neutron.conf DEFAULT rabbit_host'
-</span><span class='line'>#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_hosts \
-</span><span class='line'>  10.55.55.6:5673,10.55.55.7:5673,10.55.55.8:5673'
-</span><span class='line'>#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_userid \
-</span><span class='line'>   nova'
-</span><span class='line'>#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT \
-</span><span class='line'>  rabbit_password gYFQP10P'
-</span><span class='line'># fab -P -R control -w -- 'service neutron-server restart'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置contrail-api以使用运行在OpenStack Controller上的rabbit集群:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'perl -pi -e \
-</span><span class='line'> "s/rabbit_server.*$/rabbit_server=10.55.55.4/" /etc/contrail/contrail-api.conf'
-</span><span class='line'># fab -P -R control -w -- 'perl -pi -e "s/rabbit_port.*$/rabbit_port=5672/" \
-</span><span class='line'> /etc/contrail/contrail-api.conf'
-</span><span class='line'># fab -R control -w -- "perl -pi -e 'print \"rabbit_password=gYFQP10P\n\" \
-</span><span class='line'> if \$_ =~ rabbit_port' /etc/contrail/contrail-api.conf"
-</span><span class='line'># fab -P -R control -w -- "perl -pi -e 'print \"rabbit_user=nova\n\" if \$_ =~ rabbit_port' \
-</span><span class='line'> /etc/contrail/contrail-api.conf"
-</span><span class='line'># fab -P -R control -w -- "service contrail-api restart"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>使用前面下载的OpenContrail 插件，作为neutron挂载的插件, 或者你可以直接从github克隆下来:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /tmp/contrail-repo
-</span><span class='line'># apt-get install -y git
-</span><span class='line'># git clone https://github.com/Juniper/contrail-neutron-plugin.git /tmp/contrail-repo
-</span><span class='line'># cd /tmp/contrail-repo
-</span><span class='line'># git checkout 3189155
-</span><span class='line'># cp -r /tmp/contrail-repo/neutron_plugin_contrail/plugins/opencontrail \
-</span><span class='line'>/usr/share/pyshared/neutron_plugin_contrail/plugins/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重新启动neutron-service:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd /opt/contrail/utils
-</span><span class='line'># fab -P -R cfgm -w -- 'service neutron-server restart'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>设置Contrail Controller之间的BGP节点发现，metadata服务及encapsulation类型:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab prov_control_bgp && fab prov_metadata_services && fab prov_encap_type
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>用以下命令验证安装是否成功:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab verify_cfgm
-</span><span class='line'># fab verify_control
-</span><span class='line'># fab verify_collector
-</span><span class='line'># fab verify_webui
-</span><span class='line'># fab -R control -w -- "contrail-status"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>更新rc.d，这样在启动的时候，不会启动supervisor-support进程：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'update-rc.d supervisor-support-service disable'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>用浏览器访问以下页面，以确认Contrail已经被正确安装:    <br/>
-<a href="https://10.77.77.9">https://10.77.77.9</a>   <br/>
-此时你看到的页面应该如下：   <br/>
-<img src="http://purplepalmdash.github.io/images/2015_04_27_21_49_07_1006x746.jpg" alt="/images/2015_04_27_21_49_07_1006x746.jpg" /></p>
-
-<p>本章过完以后，我们的OpenContrail部署已经完成了大半，接下来就是在Compute和OpenStack Controller节点上的配置，达到最后的集成过程。</p>
 ]]></content>
   </entry>
   
