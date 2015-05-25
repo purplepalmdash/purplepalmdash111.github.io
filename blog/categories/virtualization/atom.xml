@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-05-25T15:22:20+08:00</updated>
+  <updated>2015-05-25T20:08:33+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -14,11 +14,269 @@
 
   
   <entry>
+    <title type="html"><![CDATA[三节点搭建OpenStack Juno(3)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/05/25/san-jie-dian-da-jian-openstack-juno-3/"/>
+    <updated>2015-05-25T16:51:01+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/05/25/san-jie-dian-da-jian-openstack-juno-3</id>
+    <content type="html"><![CDATA[<h3>Nova</h3>
+
+<h4>Nova数据库</h4>
+
+<p>创建nova数据库:</p>
+
+<pre><code># mysql -u root -p
+    CREATE DATABASE nova;
+    GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' \
+    IDENTIFIED BY 'NOVA_DBPASS';
+    GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' \
+    IDENTIFIED BY 'NOVA_DBPASS';
+    quit;
+</code></pre>
+
+<p>创建nova用户:</p>
+
+<pre><code># source /home/dash/admin-openrc.sh
+root@Controller:~# keystone user-create --name nova --pass xxxxxx
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |                                  |
+| enabled  |               True               |
+|    id    | 4a3768e3f4754cd0b9d47c6fadb22c7e |
+|   name   |               nova               |
+| username |               nova               |
++----------+----------------------------------+
+</code></pre>
+
+<p>为admin角色添加nova用户:</p>
+
+<pre><code># keystone user-role-add --user nova --tenant service --role admin
+</code></pre>
+
+<p>添加nova服务条目:</p>
+
+<pre><code># keystone service-create --name nova --type compute --description "OpenStack Compute"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |        OpenStack Compute         |
+|   enabled   |               True               |
+|      id     | 1587a46ee1e94402821398444175981f |
+|     name    |               nova               |
+|     type    |             compute              |
+</code></pre>
+
+<p>创建Compute服务的API endpoints:</p>
+
+<pre><code># keystone endpoint-create --service-id $(keystone service-list | awk '/ compute / {print $2}') --publicurl http://Controller:8774/v2/%\(tenant_id\)s --internalurl http://Controller:8774/v2/%\(tenant_id\)s --adminurl http://Controller:8774/v2/%\(tenant_id\)s --region regionOne
++-------------+-----------------------------------------+
+|   Property  |                  Value                  |
++-------------+-----------------------------------------+
+|   adminurl  | http://Controller:8774/v2/%(tenant_id)s |
+|      id     |     bd439dc236c04956a11b353a7b74331c    |
+| internalurl | http://Controller:8774/v2/%(tenant_id)s |
+|  publicurl  | http://Controller:8774/v2/%(tenant_id)s |
+|    region   |                regionOne                |
+|  service_id |     1587a46ee1e94402821398444175981f    |
++-------------+-----------------------------------------+
+</code></pre>
+
+<h4>Nova安装及配置</h4>
+
+<p>安装以下包:</p>
+
+<pre><code># apt-get install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
+</code></pre>
+
+<p>更改数据库链接:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[database]
+...
+connection = mysql://nova:NOVA_DBPASS@controller/nova
+</code></pre>
+
+<p>配置RabbitMQ访问:</p>
+
+<pre><code>[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>配置鉴权服务:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+[keystone_authtoken]
+...
+auth_uri = http://controller:5000/v2.0
+identity_uri = http://controller:35357
+admin_tenant_name = service
+admin_user = nova
+admin_password = NOVA_PASS
+</code></pre>
+
+<p>更改<code>my_ip</code>:</p>
+
+<pre><code>[DEFAULT]
+...
+my_ip = 10.55.55.2
+</code></pre>
+
+<p>更改VNC侦听：</p>
+
+<pre><code>[DEFAULT]
+...
+vncserver_listen = 10.55.55.2
+vncserver_proxyclient_address = 10.55.55.2
+</code></pre>
+
+<p>配置glance服务所在:</p>
+
+<pre><code>[glance]
+...
+host = controller
+</code></pre>
+
+<p>现在开始配置数据库:</p>
+
+<pre><code># su -s /bin/sh -c "nova-manage db sync" nova
+</code></pre>
+
+<p>重启服务以完成安装:</p>
+
+<pre><code># service nova-api restart
+# service nova-cert restart
+# service nova-consoleauth restart
+# service nova-scheduler restart 
+# service nova-conductor start
+# service nova-conductor restart
+# service nova-novncproxy
+# service nova-novncproxy restart
+</code></pre>
+
+<p>扫尾，删除不用的sqlite数据库:</p>
+
+<pre><code># rm -f /var/lib/nova/nova.sqlite
+</code></pre>
+
+<h3>安装和配置计算节点</h3>
+
+<p>在计算节点上，安装以下包:</p>
+
+<pre><code># apt-get install nova-compute sysfsutils
+</code></pre>
+
+<p>配置具体过程如下:  <br/>
+配置RabbitMQ:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>配置鉴权服务:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+[keystone_authtoken]
+...
+auth_uri = http://Controller:5000/v2.0
+identity_uri = http://Controller:35357
+admin_tenant_name = service
+admin_user = nova
+admin_password = NOVA_PASS
+</code></pre>
+
+<p>配置<code>my_ip</code>:</p>
+
+<pre><code>[DEFAULT]
+...
+my_ip = 10.55.55.4
+</code></pre>
+
+<p>配置允许远程终端访问:</p>
+
+<pre><code>[DEFAULT]
+...
+vnc_enabled = True
+vncserver_listen = 0.0.0.0
+vncserver_proxyclient_address = 10.55.55.4
+novncproxy_base_url = http://Controller:6080/vnc_auto.html
+</code></pre>
+
+<p>配置glance服务:</p>
+
+<pre><code>[glance]
+...
+host = Controller
+</code></pre>
+
+<p>完成安装， 首先判断你的CPU是否支持硬件加速:</p>
+
+<pre><code>$ egrep -c '(vmx|svm)' /proc/cpuinfo
+</code></pre>
+
+<p>如果返回的值小于1, 则更改<code>/etc/nova/nova-compute.conf</code>配置中的[libvirt]选项，选用qemu而不是kvm:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova-compute.conf
+[libvirt]
+...
+virt_type = qemu
+</code></pre>
+
+<p>重启nova-compute服务:</p>
+
+<pre><code># service nova-compute restart
+</code></pre>
+
+<p>扫尾，删除不用的nova.sqlite文件:</p>
+
+<pre><code># rm -f /var/lib/nova/nova.sqlite
+</code></pre>
+
+<h3>验证</h3>
+
+<p>具体步骤如下:</p>
+
+<pre><code>root@Controller:~# source ~/admin-openrc.sh
+root@Controller:~# nova service-list
++----+------------------+------------+----------+---------+-------+----------------------------+-----------------+
+| Id | Binary           | Host       | Zone     | Status  | State | Updated_at                 | Disabled Reason |
++----+------------------+------------+----------+---------+-------+----------------------------+-----------------+
+| 1  | nova-cert        | Controller | internal | enabled | up    | 2015-05-25T12:00:20.000000 | -               |
+| 2  | nova-consoleauth | Controller | internal | enabled | up    | 2015-05-25T12:00:28.000000 | -               |
+| 3  | nova-scheduler   | Controller | internal | enabled | up    | 2015-05-25T12:00:23.000000 | -               |
+| 4  | nova-conductor   | Controller | internal | enabled | up    | 2015-05-25T12:00:25.000000 | -               |
+| 5  | nova-compute     | Compute    | nova     | enabled | up    | 2015-05-25T12:00:20.000000 | -               |
++----+------------------+------------+----------+---------+-------+----------------------------+-----------------+
+root@Controller:~# nova image-list
++--------------------------------------+---------------------+--------+--------+
+| ID                                   | Name                | Status | Server |
++--------------------------------------+---------------------+--------+--------+
+| 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 | cirros-0.3.3-x86_64 | ACTIVE |        |
++--------------------------------------+---------------------+--------+--------+
+</code></pre>
+
+<p>注意我们看到了compute节点已经被加入进来。这样我们完成了添加计算服务，接下来我们将开始添加网络组件，这可能是最难的一部分。</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[LXCize the KVM Machine]]></title>
     <link href="http://purplepalmdash.github.io/blog/2015/05/25/lxcize-the-kvm-machine/"/>
     <updated>2015-05-25T11:46:28+08:00</updated>
     <id>http://purplepalmdash.github.io/blog/2015/05/25/lxcize-the-kvm-machine</id>
-    <content type="html"><![CDATA[<p>In order to make exsiting kvm based machine to be lxc container, following is the steps.</p>
+    <content type="html"><![CDATA[<p>In order to make exsiting kvm based machine to be lxc container, following is the steps.    <br/>
+Refers to:  <br/>
+<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
 
 <h3>Convert Disk Formats</h3>
 
@@ -99,6 +357,12 @@ $ sudo lxc-start -n myvminlxc -f ./myvm.conf
 <pre><code>$ sudo vim /etc/selinux/config
 #SELINUX=permissive
 SELINUX=disabled
+</code></pre>
+
+<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
+
+<pre><code>kpartx -a /home/xxxxx/iso/Contrail.raw
+lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
 </code></pre>
 ]]></content>
   </entry>
@@ -852,79 +1116,6 @@ boot  dists  doc  EFI  install  isolinux  md5sum.txt  pics  pool  preseed  READM
 </code></pre>
 
 <p>After modification, next time if you re-install the compute, it will directly get the packages from the local repository.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[My Configuration on Cobbler for Deploying Ubuntu12.04]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/"/>
-    <updated>2015-05-18T18:15:47+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04</id>
-    <content type="html"><![CDATA[<p>Configuration file for preseed, put it under: /var/lib/cobbler/kickstarts/autoinstall.seed:</p>
-
-<pre><code># BASIC
-d-i  debian-installer/locale    string en_US.UTF-8
-d-i  debian-installer/splash    boolean false
-d-i  console-setup/ask_detect   boolean false
-d-i  console-setup/layoutcode   string us
-d-i  console-setup/variantcode  string
-d-i  clock-setup/utc            boolean true
-d-i  clock-setup/ntp            boolean true
-
-# DISKPART
-d-i  partman-auto/method                string regular
-d-i  partman-lvm/device_remove_lvm      boolean true
-d-i  partman-lvm/confirm                boolean true
-d-i  partman/confirm_write_new_label    boolean true
-d-i  partman/choose_partition           select Finish partitioning and write changes to disk
-d-i  partman/confirm                    boolean true
-d-i  partman/confirm_nooverwrite        boolean true
-d-i  partman/default_filesystem         string ext3
-
-# SOFTWARE
-# /var/www/cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu/
-d-i  mirror/country             string manual
-d-i  mirror/http/hostname       string $http_server
-d-i  mirror/http/directory      string /cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu
-d-i  mirror/http/proxy          string
-d-i  apt-setup/security_host    string $http_server
-d-i  apt-setup/security_path    string /cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu
-d-i  apt-setup/services-select  multiselect none
-d-i  pkgsel/upgrade             select none
-d-i  pkgsel/language-packs      multiselect
-d-i  pkgsel/update-policy       select none
-d-i  pkgsel/updatedb            boolean true
-d-i  pkgsel/include             string openssh-server
-
-# USER
-d-i  passwd/root-login                  boolean true
-d-i  passwd/make-user                   boolean false
-d-i  passwd/root-password               password root
-d-i  passwd/root-password-again         password root
-d-i  user-setup/allow-password-weak     boolean true
-
-# FINISH
-d-i  grub-installer/skip                boolean false
-d-i  lilo-installer/skip                boolean false
-d-i  grub-installer/only_debian         boolean true
-d-i  grub-installer/with_other_os       boolean true
-d-i  finish-install/keep-consoles       boolean false
-d-i  finish-install/reboot_in_progress  note
-d-i  cdrom-detect/eject                 boolean true
-d-i  debian-installer/exit/halt         boolean false
-d-i  debian-installer/exit/poweroff     boolean false
-
-# EXTRA
-d-i  preseed/late_command       string echo "UseDNS no" &gt;&gt; /target/etc/ssh/sshd_config
-</code></pre>
-
-<p>Edit the profile via:</p>
-
-<pre><code>$ cobbler profile list
-$ cobbler profile edit --name=Ubuntu12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/autoinstall.seed 
-</code></pre>
-
-<p>Now select the installation, your installation will use local repository.</p>
 ]]></content>
   </entry>
   
