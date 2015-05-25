@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-05-25T20:08:33+08:00</updated>
+  <updated>2015-05-25T22:54:45+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,613 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Deleteing Neutron Subnet and Router]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/05/25/tips-on-deleteing-neutron-subnet-and-router/"/>
+    <updated>2015-05-25T21:44:54+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/05/25/tips-on-deleteing-neutron-subnet-and-router</id>
+    <content type="html"><![CDATA[<p>Get the existing subnet:</p>
+
+<pre><code>root@Controller:~# neutron subnet-list 
++--------------------------------------+-------------+----------------+--------------------------------------------------+
+| id                                   | name        | cidr           | allocation_pools                                 |
++--------------------------------------+-------------+----------------+--------------------------------------------------+
+| 98725e3a-7ee2-4e3f-83e3-eaca0236918f | demo-subnet | 192.168.1.0/24 | {"start": "192.168.1.2", "end": "192.168.1.254"} |
++--------------------------------------+-------------+----------------+--------------------------------------------------+
+</code></pre>
+
+<p>Delete it via:</p>
+
+<pre><code>root@Controller:~# neutron subnet-delete --name demo-subnet
+Unable to complete operation on subnet 98725e3a-7ee2-4e3f-83e3-eaca0236918f. One or more ports have an IP allocation from this subnet. (HTTP 409) (Request-ID: req-7d729bcc-ec50-4de6-83d9-5d2b98332127)
+</code></pre>
+
+<p>Because we have the router, so we list the router via:</p>
+
+<pre><code>root@Controller:~# neutron router-list
++--------------------------------------+-------------+-----------------------+
+| id                                   | name        | external_gateway_info |
++--------------------------------------+-------------+-----------------------+
+| a745487e-8e7c-4cc2-aff7-a8423d0a6614 | demo-router | null                  |
++--------------------------------------+-------------+-----------------------+
+</code></pre>
+
+<p>Get the ports of this router:</p>
+
+<pre><code>root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
++--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+| id                                   | name | mac_address       | fixed_ips                                                                          |
++--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+| e56fe57e-e939-493b-8984-b5adfa64e2cc |      | fa:16:3e:b3:7b:e6 | {"subnet_id": "98725e3a-7ee2-4e3f-83e3-eaca0236918f", "ip_address": "192.168.1.1"} |
++--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+</code></pre>
+
+<p>So we remove the interface from this router via:</p>
+
+<pre><code>root@Controller:~# neutron router-interface-delete demo-router 98725e3a-7ee2-4e3f-83e3-eaca0236918f
+Removed interface from router demo-router.
+root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
+</code></pre>
+
+<p>Now we could remove the router and the subnet:</p>
+
+<pre><code>root@Controller:~# neutron router-delete demo-router
+Deleted router: demo-router
+root@Controller:~# neutron subnet-delete demo-subnet
+Deleted subnet: demo-subnet
+</code></pre>
+
+<p>From now on ,you could create another subnet and router.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[三节点搭建OpenStack Juno(4)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/05/25/san-jie-dian-da-jian-openstack-juno-4/"/>
+    <updated>2015-05-25T20:11:17+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/05/25/san-jie-dian-da-jian-openstack-juno-4</id>
+    <content type="html"><![CDATA[<p>Neutron和nova-network的区别在于，nova-network可以让你在每个instance上部署一种网络类型，适合基本的网络功能。而Neutron则使得你可以在一个instance上部署多种网络类型，并且以插件的方式支持多种虚拟化网络。</p>
+
+<p>详细的介绍，以后慢慢加，理解吃透了再加上来，这里单单提操作步骤。</p>
+
+<h3>准备</h3>
+
+<p>数据库准备如下:</p>
+
+<pre><code>root@Controller:~# mysql -u root -p
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 39
+Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+
+Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]&gt; CREATE DATABASE neutron;
+Query OK, 1 row affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY 'xxxxx';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY 'xxxxx';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; quit;
+Bye
+</code></pre>
+
+<h3>配置服务</h3>
+
+<pre><code>root@Controller:~# source admin-openrc.sh
+root@Controller:~# keystone user-create --name neutron --pass xxxxx
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |                                  |
+| enabled  |               True               |
+|    id    | a6d790e8e86749bba1d27972de8eaae2 |
+|   name   |             neutron              |
+| username |             neutron              |
++----------+----------------------------------+
+root@Controller:~# keystone user-role-add --user neutron --tenant service --role admin
+root@Controller:~# keystone service-create --name neutron --type network --description "OpenStack Networking"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |       OpenStack Networking       |
+|   enabled   |               True               |
+|      id     | 2f6de710ec414797a4a639c2310c8249 |
+|     name    |             neutron              |
+|     type    |             network              |
++-------------+----------------------------------+
+root@Controller:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ network / {print $2}') --publicurl http://Controller:9696 --adminurl http://Controller:9696 --internalurl http://Controller:9696 --region regionOne
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |      http://Controller:9696      |
+|      id     | a23132fd0a824aa09f3b1ea72cbb97d2 |
+| internalurl |      http://Controller:9696      |
+|  publicurl  |      http://Controller:9696      |
+|    region   |            regionOne             |
+|  service_id | 2f6de710ec414797a4a639c2310c8249 |
++-------------+----------------------------------+
+</code></pre>
+
+<h3>安装和配置网络组件</h3>
+
+<p>安装下列包:</p>
+
+<pre><code># apt-get install neutron-server neutron-plugin-ml2 python-neutronclient
+</code></pre>
+
+<p>在Controller节点上开始配置:</p>
+
+<pre><code>$ sudo vim /etc/neutron/neutron.conf
+[database]
+...
+connection = mysql://neutron:NEUTRON_DBPASS@Controller/neutron
+</code></pre>
+
+<p>配置rabbitMQ认证方式:</p>
+
+<pre><code>
+[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = Controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>配置keystone认证:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+
+#### 删除已有的keystone authtoken配置方式
+[keystone_authtoken]
+...
+auth_uri = http://Controller:5000/v2.0
+identity_uri = http://Controller:35357
+admin_tenant_name = service
+admin_user = neutron
+admin_password = NEUTRON_PASS
+</code></pre>
+
+<p>激活ML2插件(Modular Layer 2), router服务, 和overlapping IP地址:</p>
+
+<pre><code>[DEFAULT]
+...
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
+</code></pre>
+
+<p>配置网络，以便在网络拓扑发生变化时告知Compute节点:</p>
+
+<pre><code>[DEFAULT]
+...
+notify_nova_on_port_status_changes = True
+notify_nova_on_port_data_changes = True
+nova_url = http://Controller:8774/v2
+nova_admin_auth_url = http://Controller:35357/v2.0
+nova_region_name = regionOne
+nova_admin_username = nova
+nova_admin_tenant_id = SERVICE_TENANT_ID
+nova_admin_password = NOVA_PASS
+</code></pre>
+
+<p><code>SERVICE_TENANT_ID</code> 通过以下命令来获得:</p>
+
+<pre><code>$ source admin-openrc.sh
+$ keystone tenant-get service
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |          Service Tenant          |
+|   enabled   |               True               |
+|      id     | 08a675be93a04cca8a74159a3eefa288 |
+|     name    |             service              |
++-------------+----------------------------------+
+</code></pre>
+
+<p>可以自定义打开verbose选项:</p>
+
+<pre><code>[DEFAULT]
+...
+verbose = True
+</code></pre>
+
+<p>配置Modular Layer2(ML2)插件:</p>
+
+<p>在[ml2]部分，激活flat and generic routing encapsulation(GRE) network类型驱动, GRE Tenant网络和OVS机制驱动:</p>
+
+<pre><code>$ sudo vim /etc/neutron/plugins/ml2/ml2_conf.ini
+[ml2]
+...
+type_drivers = flat,gre
+tenant_network_types = gre
+mechanism_drivers = openvswitch
+</code></pre>
+
+<p><code>[ml2_type_gre]</code> 部分，配置tunnel identifier(id)范围:</p>
+
+<pre><code>[ml2_type_gre]
+...
+tunnel_id_ranges = 1:1000
+</code></pre>
+
+<p>配置securitygroup部分,</p>
+
+<pre><code>[securitygroup]
+...
+enable_security_group = True
+enable_ipset = True
+firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
+</code></pre>
+
+<p>配置计算服务使用网络:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[DEFAULT]
+...
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+</code></pre>
+
+<p>在<code>[neutron]</code>部分，配置访问参数:</p>
+
+<pre><code>[neutron]
+...
+url = http://Controller:9696
+auth_strategy = keystone
+admin_auth_url = http://Controller:35357/v2.0
+admin_tenant_name = service
+admin_username = neutron
+admin_password = NEUTRON_PASS
+</code></pre>
+
+<p>完成安装：</p>
+
+<pre><code># su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade juno" neutron
+# service nova-api restart
+# service nova-scheduler restart
+# service nova-conductor restart
+# service neutron-server restart
+</code></pre>
+
+<p>验证:</p>
+
+<pre><code>root@Controller:~# source admin-openrc.sh
+root@Controller:~# neutron ext-list
++-----------------------+-----------------------------------------------+
+| alias                 | name                                          |
++-----------------------+-----------------------------------------------+
+| security-group        | security-group                                |
+| l3_agent_scheduler    | L3 Agent Scheduler                            |
+| ext-gw-mode           | Neutron L3 Configurable external gateway mode |
+| binding               | Port Binding                                  |
+| provider              | Provider Network                              |
+| agent                 | agent                                         |
+| quotas                | Quota management support                      |
+| dhcp_agent_scheduler  | DHCP Agent Scheduler                          |
+| l3-ha                 | HA Router extension                           |
+| multi-provider        | Multi Provider Network                        |
+| external-net          | Neutron external network                      |
+| router                | Neutron L3 Router                             |
+| allowed-address-pairs | Allowed Address Pairs                         |
+| extraroute            | Neutron Extra Route                           |
+| extra_dhcp_opt        | Neutron Extra DHCP opts                       |
+| dvr                   | Distributed Virtual Router                    |
++-----------------------+-----------------------------------------------+
+</code></pre>
+
+<h3>配置网络节点</h3>
+
+<p>安装以下包:</p>
+
+<pre><code># apt-get install neutron-plugin-ml2 neutron-plugin-openvswitch-agent neutron-l3-agent neutron-dhcp-agent
+</code></pre>
+
+<p>配置， 首先，删除<code>/etc/neutron/neutron.conf</code>里所有的database连接，因为网络节点不需要任何数据库连接。</p>
+
+<pre><code>$ sudo vim /etc/neutron/neutron.conf
+[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>更改keystone认证方式:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+[keystone_authtoken]
+...
+auth_uri = http://controller:5000/v2.0
+identity_uri = http://controller:35357
+admin_tenant_name = service
+admin_user = neutron
+admin_password = NEUTRON_PASS
+</code></pre>
+
+<p>有关<code>[ml2]</code>的配置:</p>
+
+<pre><code>[DEFAULT]
+...
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
+</code></pre>
+
+<pre><code>$ sudo vim /etc/neutron/plugins/ml2/ml2_conf
+[ml2]
+...
+type_drivers = flat,gre
+tenant_network_types = gre
+mechanism_drivers = openvswitch
+[ml2_type_flat]
+...
+flat_networks = external
+[ml2_type_gre]
+...
+tunnel_id_ranges = 1:1000
+[securitygroup]
+...
+enable_security_group = True
+enable_ipset = True
+firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
+[ovs]
+...
+local_ip = INSTANCE_TUNNELS_INTERFACE_IP_ADDRESS
+enable_tunneling = True
+bridge_mappings = external:br-ex
+[agent]
+...
+tunnel_types = gre
+</code></pre>
+
+<p>配置Layer-3客户端:</p>
+
+<pre><code>$ sudo vim /etc/neutron/l3_agent.ini
+[DEFAULT]
+...
+interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
+use_namespaces = True
+external_network_bridge = br-ex
+router_delete_namespaces = True
+</code></pre>
+
+<p>配置DHCP客户端：</p>
+
+<pre><code>$ sudo vim /etc/neutron/dhcp_agent.init
+[DEFAULT]
+...
+interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
+dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
+use_namespaces = True
+dhcp_delete_namespaces = True
+
+[DEFAULT]
+...
+dnsmasq_config_file = /etc/neutron/dnsmasq-neutron.conf
+</code></pre>
+
+<p>配置dnsmasq配置文件:</p>
+
+<pre><code>$ sudo vim /etc/neutron/dnsmasq_neutron.conf
+dhcp-option-force=26,1454
+$ sudo pkill dnsmasq
+</code></pre>
+
+<p>配置metadata客户端:</p>
+
+<pre><code>$ sudo vim /etc/neutron/metadata_agent.ini
+[DEFAULT]
+...
+auth_url = http://controller:5000/v2.0
+auth_region = regionOne
+admin_tenant_name = service
+admin_user = neutron
+admin_password = NEUTRON_PASS
+
+[DEFAULT]
+...
+nova_metadata_ip = controller
+
+[DEFAULT]
+...
+metadata_proxy_shared_secret = METADATA_SECRET
+</code></pre>
+
+<p>对应的，在控制节点上，配置:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[neutron]
+...
+service_metadata_proxy = True
+metadata_proxy_shared_secret = METADATA_SECRET
+# service nova-api restart
+</code></pre>
+
+<p>配置Open vSwitch(OVS)服务:</p>
+
+<pre><code># service openvswitch-switch restart
+# ovs-vsctl add-br br-ex
+# ovs-vsctl add-port br-ex INTERFACE_NAME
+# service neutron-plugin-openvswitch-agent restart
+# service neutron-l3-agent restart
+# service neutron-dhcp-agent restart
+# service neutron-metadata-agent restart
+</code></pre>
+
+<p>验证:</p>
+
+<pre><code>$ source admin-openrc.sh
+$ neutron agent-list
+</code></pre>
+
+<h3>计算节点配置</h3>
+
+<pre><code>$ sudo vim /etc/sysctl.conf
+net.ipv4.conf.all.rp_filter=0
+net.ipv4.conf.default.rp_filter=0
+# sysctl -p
+</code></pre>
+
+<p>安装网络组件：</p>
+
+<pre><code># apt-get install neutron-plugin-ml2 neutron-plugin-openvswitch-agent
+</code></pre>
+
+<p>配置网络组件：</p>
+
+<pre><code>$ sudo vim /etc/neutron/neutron.conf
+[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>keystone组件:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+[keystone_authtoken]
+...
+auth_uri = http://controller:5000/v2.0
+identity_uri = http://controller:35357
+admin_tenant_name = service
+admin_user = neutron
+admin_password = NEUTRON_PASS
+</code></pre>
+
+<p><code>[ml2]</code>插件:</p>
+
+<pre><code>$ sudo vim /etc/neutron/neutron.conf
+[DEFAULT]
+...
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
+</code></pre>
+
+<p>继续配置ml2插件:  <br/>
+```
+$ sudo vim /etc/neutron/plugins/ml2/ml2_conf.ini
+[ml2]
+&hellip;
+type_drivers = flat,gre
+tenant_network_types = gre
+mechanism_drivers = openvswitch</p>
+
+<p>[ml2_type_gre]
+&hellip;
+tunnel_id_ranges = 1:1000</p>
+
+<p>[securitygroup]
+&hellip;
+enable_security_group = True
+enable_ipset = True
+firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver</p>
+
+<p>[ovs]
+&hellip;
+local_ip = INSTANCE_TUNNELS_INTERFACE_IP_ADDRESS
+enable_tunneling = True</p>
+
+<p>[agent]
+&hellip;
+tunnel_types = gre
+```</p>
+
+<p>配置OVS服务：</p>
+
+<pre><code># service openvswitch-switch restart
+</code></pre>
+
+<p>配置计算节点使用网络:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[DEFAULT]
+...
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+
+[neutron]
+...
+url = http://controller:9696
+auth_strategy = keystone
+admin_auth_url = http://controller:35357/v2.0
+admin_tenant_name = service
+admin_username = neutron
+admin_password = NEUTRON_PASS
+</code></pre>
+
+<p>完成安装:</p>
+
+<pre><code># service nova-compute restart
+# service neutron-plugin-openvswitch-agent restart
+</code></pre>
+
+<p>验证， 在Controller节点上:</p>
+
+<pre><code>$ source admin-openrc.sh
+$ neutron agent-list
+</code></pre>
+
+<h3>创建初始化网络</h3>
+
+<p>步骤如下:</p>
+
+<p>创建外网:  <br/>
+```</p>
+
+<h1>source admin-openrc.sh</h1>
+
+<h1>neutron net-create ext-net &ndash;router:external True \</h1>
+
+<p>&ndash;provider:physical_network external &ndash;provider:network_type flat</p>
+
+<h1>neutron subnet-create ext-net &ndash;name ext-subnet \</h1>
+
+<p>&ndash;allocation-pool start=10.77.77.200,end=10.77.77.220 \
+&ndash;disable-dhcp &ndash;gateway 10.77.77.1 10.77.77.0/24
+```</p>
+
+<p>租户网络:</p>
+
+<pre><code>$ source demo-openrc.sh
+$ neutron net-create demo-net
+$ neutron subnet-create demo-net --name demo-subnet \
+--gateway 10.10.10.1 10.10.10.0/24
+$ neutron router-create demo-router
+$ neutron router-interface-add demo-router demo-subnet
+$ neutron router-gateway-set demo-router ext-net
+</code></pre>
+
+<p>验证, 因为我们用了10.77.77.200~220作为外网的floating IP, 所以路由器外网的IP应该落在10.77.77.200上，在计算节点上直接ping, 看结果:</p>
+
+<pre><code>dash@PowerfulDash:~$ ping 10.77.77.200
+PING 10.77.77.200 (10.77.77.200) 56(84) bytes of data.
+64 bytes from 10.77.77.200: icmp_seq=1 ttl=64 time=0.323 ms
+64 bytes from 10.77.77.200: icmp_seq=2 ttl=64 time=0.177 ms
+64 bytes from 10.77.77.200: icmp_seq=3 ttl=64 time=0.141 ms
+</code></pre>
+
+<p>其实上面的结果是在Host机器上Ping的，因host机器已经有了10.77.77.1地址，理论上，如果能Ping通10.77.77.200，证明Router工作正常。</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[三节点搭建OpenStack Juno(3)]]></title>
@@ -841,281 +1448,6 @@ notification_driver = noop
 </code></pre>
 
 <p>控制节点基本上配置成功，明天继续。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[三节点搭建OpenStack Juno(1)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno/"/>
-    <updated>2015-05-24T14:36:34+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno</id>
-    <content type="html"><![CDATA[<h3>目的</h3>
-
-<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
-
-<h3>硬件及网络准备</h3>
-
-<h4>物理服务器</h4>
-
-<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。  <br/>
-物理服务器操作系统: Ubuntu14.04</p>
-
-<h4>虚拟机：</h4>
-
-<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.  <br/>
-虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.  <br/>
-虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
-
-<h4>网络规划</h4>
-
-<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。      <br/>
-Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。  <br/>
-External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。 <br/>
-当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
-
-<h4>节点网络名规划</h4>
-
-<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.  <br/>
-Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
-Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
-
-<p>一个参考的例图如下:  <br/>
-<img src="/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
-
-<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
-
-<h3>虚拟机初始化配置</h3>
-
-<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
-
-<pre><code>$ pwd
-/media/repo/Image/3NodeOpenStack
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
-Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
-Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
-Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-</code></pre>
-
-<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:  <br/>
-<img src="/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
-
-<p>各个节点的network定义文件如下:</p>
-
-<p>控制节点:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.2
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
-</code></pre>
-
-<p>网络节点:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.3
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
-
-
-auto eth1
-iface eth1 inet static
-address 10.66.66.3
-netmask 255.255.255.0
-
-auto eth2
-iface eth2 inet static
-address 192.168.1.3
-netmask 255.255.255.0
-</code></pre>
-
-<p>计算节点:</p>
-
-<pre><code>auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.4
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
-
-auto eth1
-iface eth1 inet static
-address 10.66.66.4
-netmask 255.255.255.0
-</code></pre>
-
-<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:   <br/>
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/hosts
-</span><span class='line'>127.0.0.1       localhost
-</span><span class='line'>127.0.1.1       Controller
-</span><span class='line'>10.55.55.2      Controller
-</span><span class='line'>10.55.55.3      Network
-</span><span class='line'>10.55.55.4      Compute
-</span><span class='line'>&hellip;&hellip;&lt;/p&gt;
-</span><span class='line'>
-</span><span class='line'>&lt;p&gt;$ cat /etc/hostname
-</span><span class='line'>Controller&lt;/p&gt;
-</span><span class='line'>
-</span><span class='line'>&lt;pre&gt;&lt;code&gt;网络配置完毕后，保证可以通过`ping Controller`等命令达到互通。    
-</span><span class='line'>
-</span><span class='line'>在进入到后续步骤前，更新所有节点到最新状态:     
-</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
-</span><span class='line'>
-</span><span class='line'>&lt;p&gt;$ sudo apt-get update &amp;&amp; sudo apt-get upgrade &amp;&amp; sudo apt-get dist-upgrade &amp;&amp; sudo reboot</span></code></pre></td></tr></table></div></figure></p>
-
-<h3>NTP 服务器/客户端配置</h3>
-
-<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
-
-<h4>NTP服务器</h4>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 修改成大陆时间
-    server 2.cn.pool.ntp.org
-    server 1.asia.pool.ntp.org
-    server 2.asia.pool.ntp.org
-    # 修改 restrict 設定
-    restrict -4 default kod notrap nomodify
-    restrict -6 default kod notrap nomodify
-# service ntp restart
-</code></pre>
-
-<h4>NTP客户端</h4>
-
-<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 設定 controller 為參照的 time server
-    # 並將其他 server 開頭的設定進行註解
-    server 10.55.55.2 iburst
-# service ntp restart
-</code></pre>
-
-<p>检查结果是否正确:</p>
-
-<pre><code>root@JunoNetwork:~# ntpq -c peers
-     remote           refid      st t when poll reach   delay   offset  jitter
-==============================================================================
- Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
-</code></pre>
-
-<p>接下来真正进入OpenStack的安装和配置过程。</p>
-
-<h3>源设定</h3>
-
-<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:   <br/>
-所有节点上(Controller,Network,Compute):</p>
-
-<pre><code>$ sudo apt-get install ubuntu-cloud-keyring
-$ sudo bash
-# echo "deb http://ubuntu-cloud.archive.canonical.com/ubuntu" "trusty-updates/juno main" &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
-# apt-get update &amp;&amp; apt-get -y dist-upgrade
-</code></pre>
-
-<p>第一部分就先到这里。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Change Cobbler Profile for Using Local Repository]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/22/change-cobbler-profile-for-using-local-repository/"/>
-    <updated>2015-05-22T14:12:58+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/22/change-cobbler-profile-for-using-local-repository</id>
-    <content type="html"><![CDATA[<h3>Cobbler Profiles</h3>
-
-<p>For getting the profiles and get the detailed information of the profile.</p>
-
-<pre><code># cobbler profile list
-   ubuntu1404-x86_64
-# cobbler profile help
-usage
-=====
-cobbler profile add
-cobbler profile copy
-cobbler profile dumpvars
-cobbler profile edit
-cobbler profile find
-cobbler profile getks
-cobbler profile list
-cobbler profile remove
-cobbler profile rename
-cobbler profile report
-# cobbler profile report ubuntu1404-x86_64
-......
-Kickstart                      : /var/lib/cobbler/kickstarts/sample.seed
-......
-</code></pre>
-
-<h3>Use Local Repository</h3>
-
-<p>For adding the repository via following command, you could use your local repository:</p>
-
-<pre><code>$ sudo cobbler repo add --name=local-trusty --breed=apt --arch=x86_64 --mirror=http://xxxxxxxxxxxxxx/ubuntu --apt-components=main,restricted,universe,multiverse --apt-dists=trusty,trusty-updates,trusty-security
-$ sudo cobbler repo sync
-</code></pre>
-
-<p>After syncing, the folder will contains all of the packages:</p>
-
-<pre><code># pwd
-/var/www/cobbler/ks_mirror/ubuntu1404-x86_64
-# ls
-boot  dists  doc  EFI  install  isolinux  md5sum.txt  pics  pool  preseed  README.diskdefines  ubuntu
-</code></pre>
-
-<p>Edit the sample seed via:</p>
-
-<pre><code># cp /var/lib/cobbler/kickstarts/sample.seed /var/lib/cobbler/kickstarts/local.seed
-# vim /var/lib/cobbler/kickstarts/local.seed
-
-    d-i mirror/http/hostname string $http_server
-    # d-i mirror/http/directory string $install_source_directory
-    d-i mirror/http/directory string /cobbler/ks_mirror/ubuntu1404-x86_64/ubuntu/
-</code></pre>
-
-<p>Then Modify the profile&rsquo;s kickstart via:</p>
-
-<pre><code>#  cobbler profile edit --name=ubuntu1404-x86_64 --kickstart=/var/lib/cobbler/kickstarts/local.seed
-</code></pre>
-
-<p>After modification, next time if you re-install the compute, it will directly get the packages from the local repository.</p>
 ]]></content>
   </entry>
   
