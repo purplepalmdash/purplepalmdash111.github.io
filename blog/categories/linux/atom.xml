@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Linux | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/linux/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-06-01T14:33:21+08:00</updated>
+  <updated>2015-06-01T14:41:50+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,103 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Chef for Deploying OpenStack]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/01/chef-for-deploying-openstack/"/>
+    <updated>2015-06-01T11:19:34+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/01/chef-for-deploying-openstack</id>
+    <content type="html"><![CDATA[<p>Following article records all of the steps for using chef for deploying OpenStack.</p>
+
+<h3>Change vbox files</h3>
+
+<p>Edit the Vagrantfile for bring up the vbox, then startup the machine, modify its content , save it.</p>
+
+<pre><code>$ vim Vagrantfile
+    # -*- mode: ruby -*-
+    # vi: set ft=ruby :
+    Vagrant::Config.run do |config|
+    config.vm.box = "Trusy64"
+    config.vm.box_url = "http://xxx.xxx.xxx.xxx/opscode_ubuntu-14.04_chef-provisionerless.box"
+    config.vm.customize ["modifyvm", :id, "--memory", 1024]
+    end
+</code></pre>
+
+<p>Login to the running machine and modify its default repository from official to local repository.</p>
+
+<pre><code>$ vagrant up
+$ vagrant ssh
+(YourVagrantMachine) $ sudo vim /etc/apt/sources.list
+(YourVagrantMachine) $ sudo vim /etc/apt/apt.conf
+(YourVagrantMachine) $ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade
+</code></pre>
+
+<p>Now save your modification to the vbox file:</p>
+
+<pre><code>$ vagrant package --base vagrant_default_1433130468275_38998
+$ ls
+package.box Vagrantfile
+</code></pre>
+
+<h3>Setup Chef Code</h3>
+
+<p>First install the vagrant plugins via:</p>
+
+<pre><code>$ vagrant plugin install vagrant-berkshelf
+$ vagrant plugin install vagrant-chef-zero
+$ vagrant plugin install vagrant-omnibus
+$ vagrant plugin list
+</code></pre>
+
+<p>Get the repository from github, modify the file <code>vagrant_linux.rb</code>:</p>
+
+<pre><code>[xxxx@~/Code/Chef/MasterVersion]$ git clone https://github.com/stackforge/openstack-chef-repo.git
+$ cd openstack-chef-repo
+$ vim vagrant_linux.rb
+  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_centos-7.1_chef-provisionerless.box'
+  url 'http://xxx.xxx.xxx.xxx/opscode_centos-7.1_chef-provisionerless.box'
+
+  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_ubuntu-14.04_chef-provisionerless.box'
+  url 'http://xxx.xxx.xxx.xxx/package.box'
+
+  'vm.box' =&gt; 'ubuntu14'
+</code></pre>
+
+<p>Download all of the cookbooks, and modify the rubygems.org to Chinese mirror, Thanks for the fucking GreatFW!:</p>
+
+<pre><code>$ chef exec rake berks_vendor
+$ cp -r cookbooks cookbooks.back
+$ cd cookbooks
+$ find . -type f -exec sed -i -e 's/https:\/\/rubygems.org/http:\/\/mirrors.aliyun.com\/rubygems/g' {} \; 
+</code></pre>
+
+<p>Edit the ruby definition file for avoiding <code>Chef encountered an error attempting to load the node data for "controller"</code>:</p>
+
+<pre><code>$ vim ./aio-neutron.rb
+machine 'controller' do
+  add_machine_options vagrant_config: controller_config
++  chef_server( :chef_server_url =&gt; 'http://localhost:8889')
+  role 'allinone-compute'
+  role 'os-image-upload'
+</code></pre>
+
+<p>One Cookbook needs to modify, because it will automatically use source from <code>rubygems.org</code>, Thanks again for the fucking GreatFW!:</p>
+
+<pre><code>$ cd cookbooks
+$ vim ./mysql2_chef_gem/libraries/provider_mysql2_chef_gem_mysql.rb
+             options("--clear-sources --source http://mirrors.aliyun.com/rubygems/gems/mysql2-0.3.18.gem") 
+</code></pre>
+
+<p>Now begin to provision via:</p>
+
+<pre><code>$ chef exec rake aio_neutron 2&gt;&amp;1 | tee aio_neutron.txt
+</code></pre>
+
+<p>After installation and configuration, you could visit following URL for your OpenStack:</p>
+
+<p><a href="https://127.0.0.1:9443">https://127.0.0.1:9443</a></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Use Apt-cacher for Speeding Up Deployment]]></title>
@@ -511,85 +608,6 @@ running: /usr/sbin/fence_virsh
 received on stdout: 
 received on stderr: Unable to connect/login to fencing device
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips for Setting Up CentOS Local Repository]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/11/tips-for-setting-up-centos-local-repository/"/>
-    <updated>2015-05-11T20:48:00+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/11/tips-for-setting-up-centos-local-repository</id>
-    <content type="html"><![CDATA[<p>The material is learned from:   <br/>
-<a href="http://paulcodr.co/blog/2015/yumrepo-server-local/">http://paulcodr.co/blog/2015/yumrepo-server-local/</a></p>
-
-<h3>Steps</h3>
-
-<p>Local ISO Preparation:</p>
-
-<pre><code>[root@localhost ~]# mkdir isos bin
-[root@localhost ~]# ls isos
-CentOS-6.6-x86_64-bin-DVD1.iso  CentOS-6.6-x86_64-bin-DVD2.iso
-</code></pre>
-
-<p>Download the scripts:</p>
-
-<pre><code># cd bin
-# wget http://paulcodr.co/download/yum-scripts.zip
-# unzip yum-scripts.zip 
-Archive:  yum-scripts.zip
-   creating: yum-scripts/
-  inflating: yum-scripts/yum-create-server-centos6.6.sh  
-  inflating: yum-scripts/yum-rsync-minimal-centos6.6.sh  
-</code></pre>
-
-<p>Change the priviledges:</p>
-
-<pre><code>[root@localhost bin]# chown -R root:root /root/isos
-[root@localhost bin]# chmod 750 -R /root/bin
-</code></pre>
-
-<p>Execute the script:</p>
-
-<pre><code>[root@localhost bin]# mv yum-scripts/* ./
-[root@localhost bin]# ls
-yum-create-server-centos6.6.sh  yum-rsync-minimal-centos6.6.sh  yum-scripts  yum-scripts.zip
-[root@localhost bin]# ./yum-create-server-centos6.6.sh 2&gt;&amp;1 | tee createserver.log
-</code></pre>
-
-<p>Verify it via:</p>
-
-<pre><code>[root@localhost bin]#  du -hs /data/www/yumrpms/centos6.6/6.6/os/x86_64
-5.6G    /data/www/yumrpms/centos6.6/6.6/os/x86_64
-[root@localhost bin]#  ls -lh /data/www/yumrpms/centos6.6/
-total 4.0K
-lrwxrwxrwx 1 apache apache    3 May 11 12:49 6 -&gt; 6.6
-drwxr-xr-x 3 apache apache 4.0K May 11 12:47 6.6
-</code></pre>
-
-<p>Verify it on another PC:</p>
-
-<p>```
-[root:/home/juju/iso]# curl <a href="http://10.7.7.124/yumrpms/centos6.6/6/os/x86_64/">http://10.7.7.124/yumrpms/centos6.6/6/os/x86_64/</a>
-&hellip;..
-</table></p>
-
-<address>Apache/2.2.15 (CentOS) Server at 10.7.7.124 Port 80</address>
-
-
-<p></body></html></p>
-
-<pre><code>Change the rsync repository in yum-rsync-minimal-cent6.6.sh:    
-</code></pre>
-
-<p>rsync://mirrors.yun-idc.com/centos/</p>
-
-<pre><code>Then:    
-</code></pre>
-
-<p>[root@localhost bin]# ./yum-rsync-minimal-centos6.6.sh 2>&amp;1 | tee syncserver.log</p>
-
-<p>```
-Wait for rsync&hellip;&hellip;</p>
 ]]></content>
   </entry>
   
