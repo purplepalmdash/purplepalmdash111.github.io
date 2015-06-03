@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="I want to expand my storage size on DigitalOcean, the droplet I have on DO one have 11G, and the other have 15G size, so if I could combine them &hellip;">
+  <meta name="description" content="最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,119 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1/">使用Fuel部署OpenContrail(1)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-22T20:01:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2015</span></span> <span class='time'>8:01 pm</span></time>
+        
+         | <a href="/blog/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署。</p>
+
+<h3>先决条件</h3>
+
+<p>先决条件主要是用于准备用于部署的硬件环境和软件包。 <br/>
+硬件环境:   <br/>
+i5-4460(3.2GHz/4核/6M三级缓存), 32G 内存。  <br/>
+系统:  <br/>
+Ubuntu 14.04 LTS  <br/>
+软件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libvirtd virt-manager
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+从Miranti网站下载： MirantisOpenStack-6.0.iso  <br/>
+从Contrail网站下载: contrail-install-packages_2.0-22~icehouse_all.deb  <br/>
+contrail-neutron-plugin仓库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/Juniper/contrail-neutron-plugin.git
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>CPU/内存/磁盘规划</h3>
+
+<p>需要构建一共8台虚拟机用于在部署好的Mirantis OpenStack上集成OpenContrail. CPU/内存/磁盘规划如下:  <br/>
+1台Mirantis Fuel控制节点机,2核,划分3G内存, 100G磁盘。
+3个OpenStack Controller节点, 2核,各划分3G内存, 100G磁盘。   <br/>
+1个OpenStack Compute节点，2核(嵌套虚拟化),划分3G内存, 100G磁盘。   <br/>
+3个OpenContrail节点，2核,各划分4G内存, 100G磁盘。  <br/>
+一共需要27G内存。磁盘格式为qcow2，实际占用远小于这个数，各个节点最大也就是在5G左右大小。 <br/>
+其中，关于嵌套虚拟化的CPU设置，如下图, 记得选择Copy host CPU Configuration:   <br/>
+<img src="/images/2015_04_27_12_20_40_598x372.jpg" alt="/images/2015_04_27_12_20_40_598x372.jpg" />   <br/>
+启用嵌套虚拟化需要在BIOS设置，并添加相应的内核模块。</p>
+
+<h3>网络规划</h3>
+
+<p>Fuel OpenStack规划了5个网络，分别是:   <br/>
+Admin(PXE)  <br/>
+Public   <br/>
+Management   <br/>
+Storage   <br/>
+Private</p>
+
+<p>我们在Virt-Manager里也同样创建出这样的五个子网:  <br/>
+Admin(PXE) &ndash; FuelNAT  &ndash; 10.20.0.0/24   <br/>
+Public &ndash; FuelPublic  &ndash; 172.16.0.0/24  <br/>
+Management &ndash; FuelMgmt &ndash; 10.55.55.0/24  <br/>
+Storage  &ndash; FuelStorage &ndash; 10.66.66.0/24  <br/>
+Private  &ndash; FuelPrivate &ndash; 10.77.77.0/24</p>
+
+<p>创建网络的步骤如下，双击Virtual Machine Manager里的localhost(QEMU), 弹出下面的窗口:  <br/>
+<img src="/images/2015_04_27_14_57_37_499x379.jpg" alt="/images/2015_04_27_14_57_37_499x379.jpg" />  <br/>
+点击网络列表最下面的+号,弹出创建网络的窗口:  <br/>
+<img src="/images/2015_04_27_14_58_52_543x374.jpg" alt="/images/2015_04_27_14_58_52_543x374.jpg" />  <br/>
+命名该网络，点击下一步:  <br/>
+<img src="/images/2015_04_27_15_00_34_549x371.jpg" alt="/images/2015_04_27_15_00_34_549x371.jpg" />  <br/>
+禁用DHCP:  <br/>
+<img src="/images/2015_04_27_16_37_32_544x374.jpg" alt="/images/2015_04_27_16_37_32_544x374.jpg" />  <br/>
+选择isolated网络模式:  <br/>
+<img src="/images/2015_04_27_16_38_34_551x375.jpg" alt="/images/2015_04_27_16_38_34_551x375.jpg" />  <br/>
+接着点击下一步直到完成，这样我们的网络就创建好了。  <br/>
+用上面的方法创建出以上5个子网。</p>
+
+<h3>各个节点网络配置</h3>
+
+<p>Miranti Fuel Node: 仅FuelNAT, 安装完毕后，自动指定地址为10.20.0.2.    <br/>
+其他所有节点机，在创建时，把五个网络都添加上，添加方法如下:  <br/>
+Details -> Add Hardware -> Network, 而后选择:      <br/>
+<img src="/images/2015_04_27_16_45_34_765x444.jpg" alt="/images/2015_04_27_16_45_34_765x444.jpg" /></p>
+
+<h3>Miranti Fuel Node安装</h3>
+
+<p>安装很简单，直接用下载的MirantisOpenStack-6.0.iso作为安装光盘，在创建出来的虚拟机里安装系统。安装完毕后，在Host机器的浏览器里访问   <br/>
+<a href="http://10.20.0.2:8000">http://10.20.0.2:8000</a>    <br/>
+输入用户名密码都为admin后，登录，可以看到以下界面:    <br/>
+<img src="/images/2015_04_27_16_55_29_717x477.jpg" alt="/images/2015_04_27_16_55_29_717x477.jpg" />  <br/>
+在这个界面里我们可以进行OpenStack环境的准备、部署、配置、销毁等操作。</p>
+
+<p>到这一步，我们已经完成了Miranti Fuel Node的安装，基本的部署准备工作已经完成，接下来我们将使用Fuel来部署一个可用的OpenStack环境, 以及三台用于部署Contrail的节点机.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3049,415 +3162,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/">安装Icehouse@Ubuntu14.04(3)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-04-13T16:54:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:54 pm</span></time>
-        
-         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Image Service 用于提供给用户用于快速启动虚拟机的镜像文件，这样的服务称为glance服务。</p>
-
-<h3>Glance服务数据库设定</h3>
-
-<p>在mysql中创建glance数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 33
-</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE glance;
-</span><span class='line'>Query OK, 1 row affected (0.01 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxx'
-</span><span class='line'>    -&gt; ;
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; quit;
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>创建Glance的user/role/tenant权限</h3>
-
-<p>用admin的权限，创建以下权限：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  source ~/openstack/admin-openrc.sh
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建glance用户:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-create --name glance --pass engine
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |                                  |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | c706febbcc8843fb97383c9fdfba6214 |
-</span><span class='line'>|   name   |              glance              |
-</span><span class='line'>| username |              glance              |
-</span><span class='line'>+----------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>用户glance属于admin角色，使用service tanant:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>keystone user-role-add --user glance --tenant service --role admin
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在keystone注册glance服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name glance --type image --description "OpenStack Image Service"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |     OpenStack Image Service      |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 3d52d2992b9f423eb9868304e4405fab |
-</span><span class='line'>|     name    |              glance              |
-</span><span class='line'>|     type    |              image               |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在keystone创建服务的end-point:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://10.17.17.211:9292 --internalurl http://10.17.17.211:9292 --adminurl http://10.17.17.211:9292 --region regionOne
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   adminurl  |     http://10.17.17.211:9292     |
-</span><span class='line'>|      id     | f44400bebc07408d8e0f4e70a0d18475 |
-</span><span class='line'>| internalurl |     http://10.17.17.211:9292     |
-</span><span class='line'>|  publicurl  |     http://10.17.17.211:9292     |
-</span><span class='line'>|    region   |            regionOne             |
-</span><span class='line'>|  service_id | 3d52d2992b9f423eb9868304e4405fab |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>安装Glance服务</h3>
-
-<p>安装:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get -y install glance python-glanceclient
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/glance/glance-api.conf
-</span><span class='line'>[database]
-</span><span class='line'># sqlite_db = /var/lib/glance/glance.sqlite
-</span><span class='line'>backend = sqlalchemy
-</span><span class='line'>connection = mysql://glance:engine@10.17.17.211/glance
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = glance
-</span><span class='line'>admin_password = engine
-</span><span class='line'>#  vim /etc/glance/glance-registry.conf
-</span><span class='line'>[database]
-</span><span class='line'># The file name to use with SQLite (string value)
-</span><span class='line'>#sqlite_db = /var/lib/glance/glance.sqlite
-</span><span class='line'>backend = sqlalchemy
-</span><span class='line'>connection = mysql://glance:engine@10.17.17.211/glance
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = glance
-</span><span class='line'>admin_password = engine
-</span><span class='line'># rm -f /var/lib/glance/glance.sqlite
-</span><span class='line'># su -s /bin/sh -c "glance-manage db_sync" glance
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>这里会碰到一个问题，解决方案如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# su -s /bin/sh -c "glance-manage db_sync" glance
-</span><span class='line'>2015-04-13 17:20:22.637 9455 CRITICAL glance [-] ValueError: Tables "migrate_version" have non utf8 collation, please make sure all tables are CHARSET=utf8
-</span><span class='line'>
-</span><span class='line'>root@JunoController:~# mysql -u root -p glance
-</span><span class='line'>Enter password: 
-</span><span class='line'>Reading table information for completion of table and column names
-</span><span class='line'>You can turn off this feature to get a quicker startup with -A
-</span><span class='line'>
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 29
-</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [glance]&gt; alter table migrate_version convert to character set utf8 collate utf8_unicode_ci;
-</span><span class='line'>Query OK, 1 row affected (0.09 sec)                
-</span><span class='line'>Records: 1  Duplicates: 0  Warnings: 0
-</span><span class='line'>
-</span><span class='line'>MariaDB [glance]&gt; flush privileges;
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [glance]&gt; quit;
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启服务，</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service glance-registry restart
-</span><span class='line'>root@JunoController:~# service glance-api restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>验证Glance服务</h3>
-
-<p>首先下载镜像:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://cdn.download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建Glance可见镜像:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># glance image-create --name "cirros-0.3.3-x86_64" --file cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
-</span><span class='line'>[=============================&gt;] 100%
-</span><span class='line'>+------------------+--------------------------------------+
-</span><span class='line'>| Property         | Value                                |
-</span><span class='line'>+------------------+--------------------------------------+
-</span><span class='line'>| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
-</span><span class='line'>| container_format | bare                                 |
-</span><span class='line'>| created_at       | 2015-04-13T09:27:54                  |
-</span><span class='line'>| deleted          | False                                |
-</span><span class='line'>| deleted_at       | None                                 |
-</span><span class='line'>| disk_format      | qcow2                                |
-</span><span class='line'>| id               | 68f14900-8b25-4329-ad56-8fbd497c6812 |
-</span><span class='line'>| is_public        | True                                 |
-</span><span class='line'>| min_disk         | 0                                    |
-</span><span class='line'>| min_ram          | 0                                    |
-</span><span class='line'>| name             | cirros-0.3.3-x86_64                  |
-</span><span class='line'>| owner            | ea1f0a6b15dc4796958f087c38756ed1     |
-</span><span class='line'>| protected        | False                                |
-</span><span class='line'>| size             | 13200896                             |
-</span><span class='line'>| status           | active                               |
-</span><span class='line'>| updated_at       | 2015-04-13T09:27:54                  |
-</span><span class='line'>| virtual_size     | None                                 |
-</span><span class='line'>+------------------+--------------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>检查镜像:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# ls /var/lib/glance/images/
-</span><span class='line'>68f14900-8b25-4329-ad56-8fbd497c6812
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>列出可用镜像:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# glance image-list
-</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-</span><span class='line'>| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
-</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-</span><span class='line'>| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
-</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>好了，现在glance服务可以使用了，接下来将创建compute节点和网络节点。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/5">&larr; Older</a>
@@ -3475,6 +3179,10 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/06/03/tips-on-using-vagrant-and-chefdk/">Tips on Using Vagrant and Chefdk</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/06/01/chef-for-deploying-openstack/">Chef for Deploying OpenStack</a>
       </li>
     
@@ -3488,10 +3196,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
     
       <li class="post">
         <a href="/blog/2015/05/25/san-jie-dian-da-jian-openstack-juno-4/">三节点搭建OpenStack Juno(4)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/05/25/san-jie-dian-da-jian-openstack-juno-3/">三节点搭建OpenStack Juno(3)</a>
       </li>
     
   </ul>
