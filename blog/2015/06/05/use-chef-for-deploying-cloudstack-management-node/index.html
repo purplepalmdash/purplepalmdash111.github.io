@@ -1,0 +1,291 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Use Chef for Deploying CloudStack Management Node - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="Following record all of the necessary steps for deploying cloudstack management node on kvm based environment. Get The CookBook You need following &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2015/06/05/use-chef-for-deploying-cloudstack-management-node">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//libs.useso.com/js/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Use Chef for Deploying CloudStack Management Node</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-06-05T17:07:22+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:07 pm</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Following record all of the necessary steps for deploying cloudstack management node on kvm based environment.</p>
+
+<h3>Get The CookBook</h3>
+
+<p>You need following cookbooks:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[kkkk@~/chef-repo/cookbooks]$ ls
+</span><span class='line'>apt         cloudstack_wrapper      cookbook_cloudstack_wrapper  line   nfs    rbac       selinux  sudo  yum-mysql-community
+</span><span class='line'>cloudstack  cloudstack_wrapper_kvm  learn_chef_apache2           mysql  nginx  README.md  smf      yum
+</span><span class='line'>[kkkk@~/chef-repo/cookbooks]$ pwd
+</span><span class='line'>/home/kkkk/chef-repo/cookbooks</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Most of the books could be downloaded from the chef supermarket, while the <code>cookbook_cloudstack_wrapper</code> is downloaded from the github, and <code>cloudstack_wrapper_kvm</code> is modified from it.</p>
+
+<p>Note: You have to replace all of the <code>cloudstack_wrapper::</code> to <code>cloudstack_wrapper_kvm::</code> under the copied folder.</p>
+
+<p>You have to modify the definition of the</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[dash@~/chef-repo/cookbooks]$ cat cloudstack_wrapper_kvm/recipes/management_server.rb
+</span><span class='line'>
+</span><span class='line'>......
+</span><span class='line'>
+</span><span class='line'># download initial systemvm template
+</span><span class='line'>cloudstack_system_template 'kvm' do
+</span><span class='line'>  nfs_path    node['cloudstack']['secondary']['path']
+</span><span class='line'>  nfs_server  node['cloudstack']['secondary']['host']
+</span><span class='line'>  url         node['cloudstack']['systemvm']['kvm']
+</span><span class='line'>  db_user     node['cloudstack']['db']['username']
+</span><span class='line'>  db_password node['cloudstack']['db']['password']
+</span><span class='line'>  db_host     node['cloudstack']['db']['host']
+</span><span class='line'>  action :create
+</span><span class='line'>end
+</span><span class='line'>......
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Add Node</h3>
+
+<p>Add a new node into the system , then you should do following steps for letting the deployment continue:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ proxychains4  /opt/chef/embedded/bin/gem install cloudstack_ruby_client
+</span><span class='line'>$ sudo apt-get update
+</span><span class='line'>$  sudo apt-get install nfs-common</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now continue until you could see the final result.</p>
+
+<h3>Verification</h3>
+
+<p>After deployment, visit:</p>
+
+<p><a href="http://YourIP:8080/client">http://YourIP:8080/client</a>   admin/password</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2015-06-05T17:07:22+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:07 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/virtualization/'>virtualization</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2015/06/03/tips-on-using-vagrant-and-chefdk/" title="Previous Post: Tips on using vagrant and chefdk">&laquo; Tips on using vagrant and chefdk</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2015/06/05/use-chef-for-deploying-cloudstack-management-node/">Use Chef for Deploying CloudStack Management Node</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/06/03/tips-on-using-vagrant-and-chefdk/">Tips on Using Vagrant and Chefdk</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/06/02/chef-trouble-shooting/">Chef Trouble-Shooting</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/06/01/chef-for-deploying-openstack/">Chef for Deploying OpenStack</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/05/26/chef-setup/">Chef Setup</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2015/06/05/use-chef-for-deploying-cloudstack-management-node/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2015/06/05/use-chef-for-deploying-cloudstack-management-node/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
