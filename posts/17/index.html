@@ -9,7 +9,8 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Cheetsheet For Using NFS Following configuration use the 192.168.1.221&rsquo;s tftp server and 192.168.1.11&rsquo;s nfs server, why I use different &hellip;">
+  <meta name="description" content="Problem The mysql server always keep crash, with following log under /var/log/mysql/error.log: 1
+141104 23:06:46 InnoDB: Fatal error: cannot allocate &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +66,261 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/05/mysql-creashes-on-digitalocean/">MySQL Creashes on DigitalOcean</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-05T13:51:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:51 pm</span></time>
+        
+         | <a href="/blog/2014/11/05/mysql-creashes-on-digitalocean/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Problem</h3>
+
+<p>The mysql server always keep crash, with following log under /var/log/mysql/error.log:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>141104 23:06:46 InnoDB: Fatal error: cannot allocate memory for the buffer pool
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So this is the memory problem, we should allocate more memory for our VPS.</p>
+
+<h3>Solution</h3>
+
+<p>Add swap partition:   <br/>
+First check the swap partition:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# free -m
+</span><span class='line'>             total       used       free     shared    buffers     cached
+</span><span class='line'>Mem:           490        464         25         28         61        172
+</span><span class='line'>-/+ buffers/cache:        230        259
+</span><span class='line'>Swap:            0          0          0
+</span><span class='line'>root@xxx:/var/log# swapon -s
+</span><span class='line'>Filename                                Type            Size    Used    Priority
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now create a swapfile:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># dd if=/dev/zero of=/swapfile bs=1M count=1024
+</span><span class='line'>1024+0 records in
+</span><span class='line'>1024+0 records out
+</span><span class='line'>1073741824 bytes (1.1 GB) copied, 2.16285 s, 496 MB/s
+</span><span class='line'># ls /swapfile -l -h
+</span><span class='line'>-rw-r--r-- 1 root root 1.0G Nov  5 00:58 /swapfile
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Setting the swapfile:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# chmod 600 /swapfile 
+</span><span class='line'>root@xxx:/var/log# swapon /swapfile
+</span><span class='line'>swapon: /swapfile: read swap header failed: Invalid argument
+</span><span class='line'>root@xxx:/var/log# mkswap /swapfile
+</span><span class='line'>Setting up swapspace version 1, size = 1048572 KiB
+</span><span class='line'>no label, UUID=64b727dd-0d7e-45ff-9235-cd9ba84b062f
+</span><span class='line'>root@xxx:/var/log# swapon /swapfile 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now use free command you could check swap file enabled:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# free -m
+</span><span class='line'>             total       used       free     shared    buffers     cached
+</span><span class='line'>Mem:           490        458         31         28         25        229
+</span><span class='line'>-/+ buffers/cache:        204        285
+</span><span class='line'>Swap:         1023          0       1023
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add it permanately into the /etc/fstab:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>/swapfile   none    swap    sw    0   0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Configure the parameters:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/swappiness
+</span><span class='line'>60
+</span><span class='line'>root@xxx:/var/log# sysctl vm.swappiness=10
+</span><span class='line'>vm.swappiness = 10                                                                                      
+</span><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/swappiness                                                  
+</span><span class='line'>10                                                
+</span><span class='line'>root@xxx:/var/log# vim /etc/sysctl.conf
+</span><span class='line'>vm.swappiness=10
+</span><span class='line'>vm.vfs_cache_pressure = 50
+</span><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
+</span><span class='line'>100                                         
+</span><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
+</span><span class='line'>50                                                                                                     
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the mysql server should be good.</p>
+
+<h3>Disable wp-admin login password</h3>
+
+<p>Disable the login password.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/apache2/apache2.conf
+</span><span class='line'>#&lt;DirectoryMatch ^.*/wp-admin/&gt;
+</span><span class='line'>#    AuthType Basic
+</span><span class='line'>#    AuthName "Please login to your droplet via SSH for login details."
+</span><span class='line'>#    AuthUserFile /etc/apache2/.htpasswd
+</span><span class='line'>#    Require valid-user
+</span><span class='line'>#&lt;DirectoryMatch&gt;
+</span><span class='line'>root@xxx:~# service apache2 restart
+</span><span class='line'> * Restarting web server apache2      
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the password for login details</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ htpasswd .htpasswd user2
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/05/build-openwrt-for-x86/">Build OpenWRT for X86</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-05T12:43:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>12:43 pm</span></time>
+        
+         | <a href="/blog/2014/11/05/build-openwrt-for-x86/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Prepare</h3>
+
+<p>Install following packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install build-essential subversion git-core libncurses5-dev zlib1g-dev gawk flex quilt libssl-dev xsltproc libxml-parser-perl
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Code</h3>
+
+<p>Get the source code from OpenWRT.org:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone git://git.openwrt.org/openwrt.git
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then Prepare for menuconfig:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd openwrt
+</span><span class='line'>$ ./scripts/feeds update -a
+</span><span class='line'>$ ./scripts/feeds install -a
+</span><span class='line'>$ make menuconfig
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Select x86 for Target System.  <br/>
+[] ext4&ndash;> Target Images &ndash;> ext4   <br/>
+[] Build VMware image files (VMDK)</p>
+
+<p>You could also select for VDI or other formats.</p>
+
+<p>Luci- > collection - > select luci.</p>
+
+<p>Then we could type <code>make</code> for making out the images.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3133,356 +3389,6 @@ Restart samba service:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/27/system-trouble-shooting/">System Trouble Shooting</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-27T11:05:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:05 am</span></time>
-        
-         | <a href="/blog/2014/10/27/system-trouble-shooting/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>SSHD Timeout</h3>
-
-<h4>Trouble</h4>
-
-<p>When you login to some remote ssh machine, after 1 or 2 minutes, the server will hint you:   <br/>
-Connection closed by foreign host.</p>
-
-<h4>Solution</h4>
-
-<p>This trouble happens on Ubuntu14.04, because we don&rsquo;t set the timeout intervals. So we could add following 2 lines into the <code>/etc/ssh/sshd_config</code></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ClientAliveInterval 60
-</span><span class='line'>ClientAliveCountMax 3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>AliveInterval means we could keep the client alive for 60 minutes. AliveCountMax means when server send 3 times request to ssh client, if client didn&rsquo;t send back reply message, then the ssh connection will be lost.  <br/>
-Restart the ssh via <code>service ssh restart</code> and now you won&rsquo;t got this annoying trouble.</p>
-
-<h3>DNS</h3>
-
-<p>Since I use dnsencrypt at home, so once it enabled, all of the query goes to the 127.0.0.1, I have to turn it back at company.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$ cat /etc/resolv.conf
-</span><span class='line'># Generated by resolvconf
-</span><span class='line'>nameserver 10.0.0.1
-</span><span class='line'>search lan
-</span><span class='line'>alias disdns='sudo systemctl stop dnscrypt-proxy.service'
-</span><span class='line'>$ disdns
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>By doing this you could reach the internet.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/27/linux2-dot-6-32-for-utu2440-6/">Linux2.6.32 for Utu2440(6)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-27T09:46:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:46 am</span></time>
-        
-         | <a href="/blog/2014/10/27/linux2-dot-6-32-for-utu2440-6/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Flash Disk</h3>
-
-<p>Enable the scsi device support in kernel configuration:              <br/>
-<img src="/images/scsidriver.jpg" alt="/images/scsidriver.jpg" />  <br/>
-Then enable the usb support:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>* Support for Host-side USB
-</span><span class='line'>* USB device filesystem(DEPRECATED)
-</span><span class='line'>* OHCI HCD support
-</span><span class='line'>* USB Mass Storage support
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Also enable the filesystem support for FAT/FAT16/FAT32/EXT4:</p>
-
-<p>change the default u-boot parameters:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>utu-bootloader=&gt;&gt;&gt;printenv bootcmd
-</span><span class='line'>bootcmd=nand read.i 0x32000000 0x60000 0x200000; bootm
-</span><span class='line'>utu-bootloader=&gt;&gt;&gt;setenv bootcmd 'tftp 30000000 uImage; bootm'
-</span><span class='line'>utu-bootloader=&gt;&gt;&gt;printenv bootcmd
-</span><span class='line'>bootcmd=tftp 30000000 uImage; bootm
-</span><span class='line'>utu-bootloader=&gt;&gt;&gt;saveenv
-</span><span class='line'>Saving Environment to NAND...
-</span><span class='line'>Erasing Nand...Writing to Nand... done
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Next time the reboot will directly download the kernel file from tftp server and bootm it from memory.</p>
-
-<p>Also please enable the filesystem support on FAT/FAT32/ext4, etc, then next time you insert the USB Disk, it will automatically scanned and recognize your partitions.</p>
-
-<h3>MMC/SD</h3>
-
-<p>From the schematic image we could see:  <br/>
-<img src="/images/sdio.jpg" alt="/images/sdio.jpg" /></p>
-
-<p>Add the following definition in <code>arch/arm/mach-s3c2440/mach-smdk2440.c</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>// Added for mmc
-</span><span class='line'>#include &lt;linux/mmc/host.h&gt;
-</span><span class='line'>#include &lt;plat/mci.h&gt;
-</span><span class='line'>
-</span><span class='line'>/* MMC/SD */
-</span><span class='line'>static struct s3c24xx_mci_pdata smdk2440_mmc_cfg = {
-</span><span class='line'>    .gpio_detect = S3C2410_GPG(8),
-</span><span class='line'>    .gpio_wprotect = S3C2410_GPH(8),
-</span><span class='line'>    .set_power = NULL,
-</span><span class='line'>    .ocr_avail = MMC_VDD_32_33|MMC_VDD_33_34,
-</span><span class='line'>};
-</span><span class='line'>
-</span><span class='line'>static struct platform_device *smdk2440_devices[] __initdata = {
-</span><span class='line'>  //........
-</span><span class='line'>  &s3c_device_sdi,  // Added SD card into the platform equipments 
-</span><span class='line'>};
-</span><span class='line'>
-</span><span class='line'>static void __init smdk2440_machine_init(void)
-</span><span class='line'>{
-</span><span class='line'>
-</span><span class='line'>+     /* Add support for mmc in smdk2440 */
-</span><span class='line'>+ s3c_device_sdi.dev.platform_data = &smdk2440_mmc_cfg;
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Kernel configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Device Drivers ---&gt;
-</span><span class='line'>&lt;*&gt; MMC/SD/SDIO card support ---&gt;
-</span><span class='line'>&lt;*&gt; MMC block device driver
-</span><span class='line'>&lt;*&gt; Secure Digital Host Controller Interface support
-</span><span class='line'>&lt;*&gt; Samsung S3C SD/MMC Card Interface support
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then re-compile the kernel and verify.  <br/>
-Only 1G&rsquo;s mmc card could be supported currently. I didn&rsquo;t test other volumns.</p>
-
-<h3>Sound Card</h3>
-
-<p>The sound card&rsquo;s schematic is listed as:  <br/>
-<img src="/images/soundcard.jpg" alt="/images/soundcard.jpg" />   <br/>
-Then made code changes in:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>// Sound Card
-</span><span class='line'>#include &lt;sound/s3c24xx_uda134x.h&gt;
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>/*Sound card*/
-</span><span class='line'>static struct s3c24xx_uda134x_platform_data s3c24xx_uda134x_data = {
-</span><span class='line'>    .l3_clk = S3C2410_GPB(4),
-</span><span class='line'>    .l3_data = S3C2410_GPB(3),
-</span><span class='line'>    .l3_mode = S3C2410_GPB(2),
-</span><span class='line'>    .model = UDA134X_UDA1341,
-</span><span class='line'>};
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>static struct platform_device s3c24xx_uda134x = {
-</span><span class='line'>    .name = "s3c24xx_uda134x",
-</span><span class='line'>         .dev = {
-</span><span class='line'>         .platform_data = &s3c24xx_uda134x_data,
-</span><span class='line'>    }
-</span><span class='line'>};
-</span><span class='line'>
-</span><span class='line'>static struct platform_device *smdk2440_devices[] __initdata = {
-</span><span class='line'>  //.........
-</span><span class='line'>        &s3c24xx_uda134x, // Register the UDA1341 platform device to kernel
-</span><span class='line'>};
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Kernel Configuration:  <br/>
-<img src="/images/soundcard2.jpg" alt="/images/soundcard2.jpg" /></p>
-
-<p><img src="/images/soundcard1.jpg" alt="/images/soundcard1.jpg" />   <br/>
-Then re-compile the kernel and verify it on utu2440.</p>
-
-<p>Test steps:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /root/test.wav&gt;/dev/dsp
-</span><span class='line'>$ cat /proc/devices
-</span><span class='line'>10 misc
-</span><span class='line'> 13 input
-</span><span class='line'> 14 sound
-</span><span class='line'> 21 sg
-</span><span class='line'> 29 fb
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now cross-compile mad-player for playing mp3.</p>
-
-<p>Download the madplayer and cross-compiler.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./configure CC=arm-linux-gcc --host=arm --prefix=/srv/nfs4/rootfs/usr/
-</span><span class='line'>$ make clean && make
-</span><span class='line'>$ sudo make install
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Trouble shooting:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>/bin # /bin/sh madplay 
-</span><span class='line'>madplay: line 1: syntax error: unexpected word (expecting ")")
-</span><span class='line'>
-</span><span class='line'>[Trusty@/media/y/embedded/utu2440/App/madplay-0.15.2b]$ arm-linux-readelf -a madplay | grep interpreter
-</span><span class='line'>      [Requesting program interpreter: /lib/ld-linux.so.3]
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-Solution: copy all of the dynamic library from the cross-compiler to the root file system:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo cp -f /opt/cross/arm-linux-gcc_4.3.2/arm-none-linux-gnueabi/libc/armv4t/lib/*so* /srv/nfs4/rootfs/lib -a
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Download the libmad from:  <br/>
-<a href="http://sourceforge.net/projects/mad/files/libmad/0.15.1b/libmad-0.15.1b.tar.gz/download">http://sourceforge.net/projects/mad/files/libmad/0.15.1b/libmad-0.15.1b.tar.gz/download</a></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./configure --prefix=/srv/nfs4/rootfs/usr/ --host=arm-linux CC=arm-linux-gcc
-</span><span class='line'>$ make && make install
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When run madplay, it will complains the Bus Error, need further debugging.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/18">&larr; Older</a>
@@ -3500,6 +3406,14 @@ Solution: copy all of the dynamic library from the cross-compiler to the root fi
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/06/08/chef-troubleshooting-2/">Chef TroubleShooting 2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/06/07/quickly-change-centos-networking/">Quickly Change CentOS Networking</a>
       </li>
     
@@ -3509,14 +3423,6 @@ Solution: copy all of the dynamic library from the cross-compiler to the root fi
     
       <li class="post">
         <a href="/blog/2015/06/03/tips-on-using-vagrant-and-chefdk/">Tips on Using Vagrant and Chefdk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/02/chef-trouble-shooting/">Chef Trouble-Shooting</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/01/chef-for-deploying-openstack/">Chef for Deploying OpenStack</a>
       </li>
     
   </ul>

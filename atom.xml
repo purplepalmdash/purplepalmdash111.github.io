@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-06-08T09:16:45+08:00</updated>
+  <updated>2015-06-08T19:48:26+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,315 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Chef TroubleShooting 2]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/08/chef-troubleshooting-2/"/>
+    <updated>2015-06-08T19:43:13+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/08/chef-troubleshooting-2</id>
+    <content type="html"><![CDATA[<p>The ssl checking for adding new nodes is still a horrible procedure, following shows the correct steps for adding new node:</p>
+
+<p>On Chef Workstation, add node via its ip address rather than via its hostname:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ knife bootstrap 172.16.0.12 -x username_on_12 -P password_on_12 --sudo</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The example knife.rb file should be written like following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>current_dir = File.dirname(__FILE__)
+</span><span class='line'>log_level                :info
+</span><span class='line'>log_location             STDOUT
+</span><span class='line'>node_name                "nodename"
+</span><span class='line'>client_key               "#{current_dir}/node.pem"
+</span><span class='line'>validation_client_name   "nodename"
+</span><span class='line'>validation_key           "#{current_dir}/node_org.pem"
+</span><span class='line'>chef_server_url          "https://tmpChefServer/organizations/nodename"
+</span><span class='line'>syntax_check_cache_path  "#{ENV['HOME']}/.chef/syntaxcache"
+</span><span class='line'>cookbook_path            ["#{current_dir}/../cookbooks"]</span></code></pre></td></tr></table></div></figure>
+
+
+<p>On Chef Client, first fetching the ssl, then manually passed the verification.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ knife ssl fetch --config /etc/chef/client.rb
+</span><span class='line'>$ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxxxx.pem</span></code></pre></td></tr></table></div></figure>
+
+
+<p>On Chef Server, bootstrap again via the same command, now you could work.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[OpenVSwitch and VXLAN How-to]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/08/openvswitch-and-vxlan-how-to/"/>
+    <updated>2015-06-08T09:48:20+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/08/openvswitch-and-vxlan-how-to</id>
+    <content type="html"><![CDATA[<p>Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it.</p>
+
+<h3>Preparation</h3>
+
+<p>I use two VMs for this experiment, created a new virtual network, it&rsquo;s 10.94.94.0/24, every vm machines adds into this network. <br/>
+VM1, VM2, both have 1G Memory. 1 Core. <br/>
+VM1: 10.94.94.11, VM2: 10.94.94.12.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get update && sudo apt-get -y upgrade
+</span><span class='line'>$ sudo apt-get install build-essential$
+</span><span class='line'>$ sudo reboot
+</span><span class='line'>$ uname -a
+</span><span class='line'>$ uname -a
+</span><span class='line'>Linux OpenVSwitchVM1 3.13.0-24-generic #47-Ubuntu SMP Fri May 2 23:30:00 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>Generate DEB</h3>
+
+<p>Following steps includes install dependencies, fetching source code, build, generate package, notice we use 2.3.0 version of the openvswitch.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y build-essential fakeroot debhelper \
+</span><span class='line'>                    autoconf automake bzip2 libssl-dev \
+</span><span class='line'>                    openssl graphviz python-all procps \
+</span><span class='line'>                    python-qt4 python-zopeinterface \
+</span><span class='line'>                    python-twisted-conch libtool
+</span><span class='line'>$ wget http://openvswitch.org/releases/openvswitch-2.3.0.tar.gz
+</span><span class='line'>$ tar xzvf openvswitch-2.3.0.tar.gz
+</span><span class='line'>$ cd openvsiwtch-2.3.0
+</span><span class='line'>$ DEB_BUILD_OPTIONS='parallel=8 nocheck' fakeroot debian/rules binary
+</span><span class='line'>$ cd ..
+</span><span class='line'>$ ls -al *.deb
+</span><span class='line'>openvswitch-common_2.3.0-1_amd64.deb         openvswitch-ipsec_2.3.0-1_amd64.deb   openvswitch-vtep_2.3.0-1_amd64.deb
+</span><span class='line'>openvswitch-datapath-dkms_2.3.0-1_all.deb    openvswitch-pki_2.3.0-1_all.deb       python-openvswitch_2.3.0-1_all.deb
+</span><span class='line'>openvswitch-datapath-source_2.3.0-1_all.deb  openvswitch-switch_2.3.0-1_amd64.deb
+</span><span class='line'>openvswitch-dbg_2.3.0-1_amd64.deb            openvswitch-test_2.3.0-1_all.deb
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also copy all of the deb files into another PC.</p>
+
+<h3>Installation</h3>
+
+<p>In two machines, do following steps for installing.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y bridge-utils
+</span><span class='line'>$ sudo dpkg -i openvswitch-common_2.3.1-1_amd64.deb \
+</span><span class='line'>         openvswitch-switch_2.3.1-1_amd64.deb</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>VM Netorking Configuration</h3>
+
+<p>For VM1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-br br0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-br br1
+</span><span class='line'># ovs-vsctl add-port br0 eth0
+</span><span class='line'># ifconfig eth0 0 up
+</span><span class='line'># ifconfig br0 10.94.94.11
+</span><span class='line'># route add default gw 10.94.94.1 br0
+</span><span class='line'># ifconfig br1 172.10.0.1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For VM2:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># ovs-vsctl add-br br0
+</span><span class='line'># ovs-vsctl add-br br1
+</span><span class='line'># ovs-vsctl add-port br0 eth0
+</span><span class='line'># ifconfig eth0 0 up && ifconfig br0 10.94.94.12
+</span><span class='line'># route add default gw 10.94.94.1
+</span><span class='line'># ifconfig br1 172.10.1.1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Ping each other, we could see br1 is not OK.</p>
+
+<h3>VXLAN Setup</h3>
+
+<p>On VM1, do following operation, to set the vx1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.12
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl show
+</span><span class='line'>a1e9afb6-345a-4f79-8e0b-131cd43cfb67
+</span><span class='line'>    Bridge "br0"
+</span><span class='line'>        Port "eth0"
+</span><span class='line'>            Interface "eth0"
+</span><span class='line'>        Port "br0"
+</span><span class='line'>            Interface "br0"
+</span><span class='line'>                type: internal
+</span><span class='line'>    Bridge "br1"
+</span><span class='line'>        Port "br1"
+</span><span class='line'>            Interface "br1"
+</span><span class='line'>                type: internal
+</span><span class='line'>        Port "vx1"
+</span><span class='line'>            Interface "vx1"
+</span><span class='line'>                type: vxlan
+</span><span class='line'>                options: {remote_ip="10.94.94.12"}
+</span><span class='line'>    ovs_version: "2.3.0"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>On VM2, do following operation, to set vx1</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM2:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.11
+</span><span class='line'>root@OpenVSwitchVM2:~# ovs-vsctl show
+</span><span class='line'>bce3f2b5-9b77-41dc-8130-b8922dd7ac9e
+</span><span class='line'>    Bridge "br1"
+</span><span class='line'>        Port "vx1"
+</span><span class='line'>            Interface "vx1"
+</span><span class='line'>                type: vxlan
+</span><span class='line'>                options: {remote_ip="10.94.94.11"}
+</span><span class='line'>        Port "br1"
+</span><span class='line'>            Interface "br1"
+</span><span class='line'>                type: internal
+</span><span class='line'>    Bridge "br0"
+</span><span class='line'>        Port "br0"
+</span><span class='line'>            Interface "br0"
+</span><span class='line'>                type: internal
+</span><span class='line'>        Port "eth0"
+</span><span class='line'>            Interface "eth0"
+</span><span class='line'>    ovs_version: "2.3.0"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So now you could ping each other via the br1 address.</p>
+
+<h3>Mirror Port</h3>
+
+<p>Do the following things for setting up the mirror port.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#  modprobe dummy
+</span><span class='line'>#  ip link set up dummy0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 dummy0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl --id=@m create mirror name=mirror0 -- add bridge br1 mirrors @m
+</span><span class='line'>33931f5a-008f-44cf-abc6-38afb3062b5e
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl list port dummy0
+</span><span class='line'>_uuid               : 5f5fe675-b1ee-4acd-a0ab-f14e952d1603
+</span><span class='line'>bond_downdelay      : 0
+</span><span class='line'>bond_fake_iface     : false
+</span><span class='line'>bond_mode           : []
+</span><span class='line'>bond_updelay        : 0
+</span><span class='line'>external_ids        : {}
+</span><span class='line'>fake_bridge         : false
+</span><span class='line'>interfaces          : [a6fbabe9-790d-4be8-a362-b7cbdd46db89]
+</span><span class='line'>lacp                : []
+</span><span class='line'>mac                 : []
+</span><span class='line'>name                : "dummy0"
+</span><span class='line'>other_config        : {}
+</span><span class='line'>qos                 : []
+</span><span class='line'>statistics          : {}
+</span><span class='line'>status              : {}
+</span><span class='line'>tag                 : []
+</span><span class='line'>trunks              : []
+</span><span class='line'>vlan_mode           : []
+</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Quickly Change CentOS Networking]]></title>
@@ -4121,7 +4430,7 @@ The steps are followed by following URL:  <br/>
 
 <h3>Github Account</h3>
 
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#x6d;&#97;&#x69;&#108;&#116;&#x6f;&#58;&#x67;&#105;&#116;&#64;&#x67;&#105;&#116;&#104;&#117;&#98;&#46;&#99;&#x6f;&#109;">&#x67;&#105;&#x74;&#64;&#x67;&#105;&#116;&#x68;&#x75;&#x62;&#46;&#x63;&#111;&#109;</a></p>
+<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#x69;&#108;&#x74;&#111;&#x3a;&#x67;&#105;&#x74;&#x40;&#103;&#x69;&#x74;&#x68;&#x75;&#x62;&#x2e;&#x63;&#111;&#x6d;">&#103;&#x69;&#116;&#x40;&#103;&#105;&#116;&#x68;&#117;&#98;&#x2e;&#x63;&#x6f;&#109;</a></p>
 
 <h3>Repository</h3>
 
@@ -4173,524 +4482,6 @@ The steps are followed by following URL:  <br/>
 
 
 <h3>Encryption</h3>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Setup a More Intelligent OpenWRT Router]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/14/setup-a-more-intelligent-openwrt-router/"/>
-    <updated>2015-05-14T21:01:00+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/14/setup-a-more-intelligent-openwrt-router</id>
-    <content type="html"><![CDATA[<h3>Openssh-Server</h3>
-
-<p>The default sshd is provided by dropbear, the functionality is not good, so I have to replace it with openssh-server.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenWrt:~# uci set dropbear.@dropbear[0].Port=2222
-</span><span class='line'>root@OpenWrt:~# uci commit dropbear
-</span><span class='line'>root@OpenWrt:~# /etc/init.d/dropbear restart
-</span><span class='line'>root@OpenWrt:~# opkg install openssh-server
-</span><span class='line'>root@OpenWrt:~# opkg install openssh-client
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the OpenSSH:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># /etc/init.d/sshd enable
-</span><span class='line'># /etc/init.d/sshd start
-</span><span class='line'># /etc/init.d/dropbear disable
-</span><span class='line'># /etc/init.d/dropbear stop
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The next time you login will ask you for changing your password, do it and continue for using ssh.</p>
-
-<h3>ShadowSocks and DNS</h3>
-
-<p>For ShadowSocks you could refer to my previous blogs. <br/>
-DNS Server is for automatically analyze the dns in server, install it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install dnsmasq
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure it to another port rather than the default 53.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>redsocks 翻墙
-</span></code></pre></td></tr></table></div></figure>
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Setup the Cobbler Server]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/14/setup-the-cobbler-server/"/>
-    <updated>2015-05-14T09:38:00+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/14/setup-the-cobbler-server</id>
-    <content type="html"><![CDATA[<p>The reference material is mainly from:  <br/>
-<a href="http://www.cobblerd.org/manuals/quickstart/">http://www.cobblerd.org/manuals/quickstart/</a></p>
-
-<h3>Prepartion</h3>
-
-<p>First install the CentOS6.6, choose the basic server. <br/>
-After installation, update to the latest system via <code>yum -y update</code>. <br/>
-Disable the SELinux via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/selinux/config
-</span><span class='line'>#SELINUX=enforcing                                                                                                                       │
-</span><span class='line'>SELINUX=disabled 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then restart the compute.  <br/>
-Add epel repository:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
-</span><span class='line'># yum update
-</span><span class='line'># yum install -y cobbler cobbler-web
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configuration</h3>
-
-<p>Change the default password:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># openssl passwd -1                                                                                                     │
-</span><span class='line'>Password:                                                                                                                                 │
-</span><span class='line'>Verifying - Password:                                                                                                                     │
-</span><span class='line'>igaowugoauwgoueougo
-</span><span class='line'>[root@CobblerServer ~]# vim /etc/cobbler/settings          
-</span><span class='line'>default_password_crypted: "agowuoguwoawoguwoe"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Set the Server and Next_Server to the specified IP Address, DO NOT use 0.0.0.0:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># default, localhost
-</span><span class='line'>server: 10.3.3.3.
-</span><span class='line'>
-</span><span class='line'># default, localhost
-</span><span class='line'>next_server: 10.3.3.3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the dhcp managed:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>manage_dhcp: 0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the dhcp template via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>vi /etc/cobbler/dhcp.template
-</span><span class='line'>subnet 10.3.3.0 netmask 255.255.255.0 {
-</span><span class='line'>     option routers             10.3.3.1;                                                                                                  
-</span><span class='line'>     range dynamic-bootp        10.3.3.4 10.3.3.254;
-</span><span class='line'>     option domain-name-servers 114.114.114.114, 8.8.8.8;     
-</span><span class='line'>     option subnet-mask         255.255.255.0;         
-</span><span class='line'>     filename                   "/pxelinux.0";       
-</span><span class='line'>     default-lease-time         21600;           
-</span><span class='line'>     max-lease-time             43200;      
-</span><span class='line'>     next-server                $next_server; 
-</span><span class='line'>}          
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start and check the service status:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# service cobblerd start                                                                                           
-</span><span class='line'>Starting cobbler daemon:                                   [  OK  ]
-</span><span class='line'>[root@CobblerServer ~]# chkconfig cobblerd on                     
-</span><span class='line'>[root@CobblerServer ~]# chkconfig httpd on                     
-</span><span class='line'>[root@CobblerServer ~]# service cobblerd status                  
-</span><span class='line'>cobblerd (pid 1564) is running...     
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Better you restart the machine and verify your installation via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler check
-</span><span class='line'>The following are potential configuration items that you may want to fix:
-</span><span class='line'>
-</span><span class='line'>1 : dhcpd is not installed
-</span><span class='line'>2 : some network boot-loaders are missing from /var/lib/cobbler/loaders, you may run 'cobbler get-loaders' to download them, or, if you only want to handle x86/x86_64 netbooting, you may ensure that you have installed a *recent* version of the syslinux package installed and can ignore this message entirely.  Files in this directory, should you want to support all architectures, should include pxelinux.0, menu.c32, elilo.efi, and yaboot. The 'cobbler get-loaders' command is the easiest way to resolve these requirements.
-</span><span class='line'>3 : change 'disable' to 'no' in /etc/xinetd.d/rsync
-</span><span class='line'>4 : since iptables may be running, ensure 69, 80/443, and 25151 are unblocked
-</span><span class='line'>5 : debmirror package is not installed, it will be required to manage debian deployments and repositories
-</span><span class='line'>6 : ksvalidator was not found, install pykickstart
-</span><span class='line'>7 : fencing tools were not found, and are required to use the (optional) power management features. install cman or fence-agents to use them
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>OOOOPs, so many errors, so first install dhcpd:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y dhcpd
-</span><span class='line'># chkconfig dhcpd on
-</span><span class='line'># chkconfig xinetd on
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Manullly edit the dhcpd configuration file as in following files:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cat /etc/dhcp/dhcpd.conf 
-</span><span class='line'>#
-</span><span class='line'># DHCP Server Configuration file.
-</span><span class='line'>#   see /usr/share/doc/dhcp*/dhcpd.conf.sample
-</span><span class='line'>#   see 'man 5 dhcpd.conf'
-</span><span class='line'>#
-</span><span class='line'># create new
-</span><span class='line'># specify domain name
-</span><span class='line'>option domain-name "server.world";
-</span><span class='line'># specify name server's hostname or IP address
-</span><span class='line'>option domain-name-servers 114.114.114.114;
-</span><span class='line'># default lease time
-</span><span class='line'>default-lease-time 600;
-</span><span class='line'># max lease time
-</span><span class='line'>max-lease-time 7200;
-</span><span class='line'># this DHCP server to be declared valid
-</span><span class='line'>authoritative;
-</span><span class='line'># specify network address and subnet mask
-</span><span class='line'>subnet 10.3.3.0 netmask 255.255.255.0 {
-</span><span class='line'>    # specify the range of lease IP address
-</span><span class='line'>    range dynamic-bootp 10.3.3.4 10.3.3.254;
-</span><span class='line'>    # specify broadcast address
-</span><span class='line'>    option broadcast-address 10.3.3.255;
-</span><span class='line'>    # specify default gateway
-</span><span class='line'>    option routers 10.3.3.1;
-</span><span class='line'>}
-</span><span class='line'># service dhcpd restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>One trouble after another, solve them:  <br/>
-Get Loaders:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler get-loaders
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the rsync configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>  # vim /etc/xinetd.d/rsync 
-</span><span class='line'>        disable = no
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the following lines into the /etc/sysconfig/iptables:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>:OUTPUT ACCEPT [0:0]
-</span><span class='line'>-A INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT 
-</span><span class='line'>-A INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT 
-</span><span class='line'>-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Or:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -I INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT
-</span><span class='line'># iptables -I INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The difference is the latter won&rsquo;t last for long once the machine got restarted.</p>
-
-<p>Install following packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# yum install -y debmirror pykickstart cman
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now check again:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cobbler check
-</span><span class='line'>$ cobbler sync
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Import ISO</h3>
-
-<p>I use the CentOS7 iso(CentOS-7-x86_64-Everything-1503-01.iso).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# mount -o loop -t iso9660 ./CentOS-7-x86_64-Everything-1503-01.iso  /mnt
-</span><span class='line'>[root@CobblerServer ~]# cobbler import --name=CentOS-7 --arch=x86_64 --path=/mnt
-</span><span class='line'>path=/mnt
-</span><span class='line'>task started: 2015-05-14_035209_import
-</span><span class='line'>task started (id=Media import, time=Thu May 14 03:52:09 2015)
-</span><span class='line'>Found a candidate signature: breed=redhat, version=rhel6
-</span><span class='line'>Found a candidate signature: breed=redhat, version=rhel7
-</span><span class='line'>Found a matching signature: breed=redhat, version=rhel7
-</span><span class='line'>Adding distros from path /var/www/cobbler/ks_mirror/CentOS-7-x86_64:
-</span><span class='line'>creating new distro: CentOS-7-x86_64
-</span><span class='line'>trying symlink: /var/www/cobbler/ks_mirror/CentOS-7-x86_64 -&gt; /var/www/cobbler/links/CentOS-7-x86_64
-</span><span class='line'>creating new profile: CentOS-7-x86_64
-</span><span class='line'>associating repos
-</span><span class='line'>checking for rsync repo(s)
-</span><span class='line'>checking for rhn repo(s)
-</span><span class='line'>checking for yum repo(s)
-</span><span class='line'>starting descent into /var/www/cobbler/ks_mirror/CentOS-7-x86_64 for CentOS-7-x86_64
-</span><span class='line'>processing repo at : /var/www/cobbler/ks_mirror/CentOS-7-x86_64
-</span><span class='line'>need to process repo/comps: /var/www/cobbler/ks_mirror/CentOS-7-x86_64
-</span><span class='line'>looking for /var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata/*comps*.xml
-</span><span class='line'>Keeping repodata as-is :/var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata
-</span><span class='line'>*** TASK COMPLETE ***
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler distro list
-</span><span class='line'>   CentOS-7-x86_64
-</span><span class='line'>[root@CobblerServer ~]# cobbler profile list
-</span><span class='line'>   CentOS-7-x86_64
-</span><span class='line'>[root@CobblerServer ~]# cobbler distro report --name=CentOS-7-x86_64
-</span><span class='line'>Name                           : CentOS-7-x86_64
-</span><span class='line'>Architecture                   : x86_64
-</span><span class='line'>TFTP Boot Files                : {}
-</span><span class='line'>Breed                          : redhat
-</span><span class='line'>Comment                        : 
-</span><span class='line'>Fetchable Files                : {}
-</span><span class='line'>Initrd                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/initrd.img
-</span><span class='line'>Kernel                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/vmlinuz
-</span><span class='line'>Kernel Options                 : {}
-</span><span class='line'>Kernel Options (Post Install)  : {}
-</span><span class='line'>Kickstart Metadata             : {'tree': 'http://@@http_server@@/cblr/links/CentOS-7-x86_64'}
-</span><span class='line'>Management Classes             : []
-</span><span class='line'>OS Version                     : rhel7
-</span><span class='line'>Owners                         : ['admin']
-</span><span class='line'>Red Hat Management Key         : &lt;&lt;inherit&gt;&gt;
-</span><span class='line'>Red Hat Management Server      : &lt;&lt;inherit&gt;&gt;
-</span><span class='line'>Template Files                 : {}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Installation</h3>
-
-<p>Install the system, via setup a machine which boot from PXE in the same subnet, then this machine will hint you with installing the corresponding system. <br/>
-The new system&rsquo;s username/password is the same as we set in the cobbler configuration file.</p>
-
-<h3>Enable Web Interface</h3>
-
-<p>Change the default password via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cp /etc/cobbler/users.digest /etc/cobbler/users.digest.back
-</span><span class='line'>$ htdigest /etc/cobbler/users.digest "Cobbler" cobbler
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now restart the cobblerd, you could visit following URL for visiting the Web Inteface:  <br/>
-<a href="http://10.3.3.3/cobbler_web">http://10.3.3.3/cobbler_web</a></p>
-
-<h3>Import Multiple ISOs</h3>
-
-<p>Import the first iso as usual.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mount -o loop -t iso9660 ./CentOS-6.6-x86_64-bin-DVD1.iso  /mnt
-</span><span class='line'># cobbler import --name=CentOS-6.6 --arch=x86_64 --path=/mnt
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The Second iso first mount to /mnt1/ directory, then import with following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  rsync -a '/mnt1/' /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/ --exclude-from=/etc/cobbler/rsync.exclude --progress
-</span><span class='line'>#  COMPSXML=$(ls /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/repodata/*comps*.xml)
-</span><span class='line'>#  createrepo -c cache -s sha --update --groupfile ${COMPSXML} /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cobbler distro list
-</span><span class='line'># cobbler profile list
-</span><span class='line'># cobbler distro report --name=CentOS-6.6-x86_64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via installing a new machine running CentOS6.6.</p>
-
-<h3>Trouble-Shooting on fence</h3>
-
-<p>Lacking of fence equipment.</p>
-
-<p>Trouble shooting for controlling the Systems(which is the node information which added into cobbler system).   <br/>
-For Power Management:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler system poweroff --name Node1
-</span><span class='line'>task started: 2015-05-14_064600_power
-</span><span class='line'>task started (id=Power management (off), time=Thu May 14 06:46:00 2015)
-</span><span class='line'>cobbler power configuration is:
-</span><span class='line'>      type   : virsh
-</span><span class='line'>      address: qemu+ssh://root@10.3.3.1/system
-</span><span class='line'>      user   : root
-</span><span class='line'>      id     : CobblerTest
-</span><span class='line'>running: /usr/sbin/fence_virsh
-</span><span class='line'>received on stdout: 
-</span><span class='line'>received on stderr: Unable to connect/login to fencing device
-</span></code></pre></td></tr></table></div></figure>
-
 ]]></content>
   </entry>
   
