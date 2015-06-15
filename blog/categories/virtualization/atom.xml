@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-06-11T18:49:30+08:00</updated>
+  <updated>2015-06-15T18:50:43+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,135 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Ansible for Deploying CloudStack]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/15/tips-on-ansible-for-deploying-cloudstack/"/>
+    <updated>2015-06-15T11:38:51+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/15/tips-on-ansible-for-deploying-cloudstack</id>
+    <content type="html"><![CDATA[<h3>Background</h3>
+
+<p>Use two nodes, both running CentOS6.6, the Ansible Node have 1-G memory, while the csmanger(CloudStack Manager) Node have 4-G memory.</p>
+
+<p>Install the epel on Cloudstack manager for installing ansible.</p>
+
+<pre><code>$ wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
+$ yum install -y ansible sshpass
+</code></pre>
+
+<h3>Get Nodes</h3>
+
+<p>Create the definition of the ansible characters:</p>
+
+<pre><code>[root@CentOS66Base ~]# mkdir -p ~/Code/Ansible
+[root@CentOS66Base ~]# cd Code/Ansible/
+[root@CentOS66Base Ansible]# vim ansible.cfg
+[defaults]
+hostfile=/root/Code/Ansible/hosts
+[root@CentOS66Base Ansible]# vim hosts
+[acs-manager]
+10.55.55.72
+[root@CentOS66Base Ansible]# cat /etc/hosts
+.......
+10.55.55.72 acs-manager
+[root@CentOS66Base Ansible]# ping acs-manager
+PING acs-manager (10.55.55.72) 56(84) bytes of data.
+64 bytes from acs-manager (10.55.55.72): icmp_seq=1 ttl=64 time=1.16 ms
+</code></pre>
+
+<p>Add the ssh certification:</p>
+
+<pre><code>[root@CentOS66Base Ansible]# ssh-keyscan acs-manager&gt;&gt;/root/.ssh/known_hosts 
+# acs-manager SSH-2.0-OpenSSH_5.3
+</code></pre>
+
+<p>Generate the <code>id_rsa.pub</code> locally:</p>
+
+<pre><code>[root@CentOS66Base Ansible]# ssh-keygen -t rsa -b 2048
+......
+[root@CentOS66Base Ansible]# ls -l -h /root/.ssh/id_rsa.pub 
+-rw-r--r--. 1 root root 399 Jun 14 23:59 /root/.ssh/id_rsa.pub
+</code></pre>
+
+<p>Write key installation yml file:</p>
+
+<pre><code>[root@CentOS66Base Ansible]# vim ssh-addkey.ymll 
+---
+- hosts: all
+  sudo: yes
+  gather_facts: no
+  remote_user: root
+
+  tasks:
+
+  - name: install ssh key
+    authorized_key: user=root
+                    key="" 
+                    state=present
+</code></pre>
+
+<p>!!! Be sure to disable the selinux on the acs-manager machine, then install the sshkey via:</p>
+
+<pre><code>root@CentOS66Base Ansible]# ansible-playbook ssh-addkey.yml --ask-pass
+SSH password: 
+
+PLAY [all] ******************************************************************** 
+
+TASK: [install ssh key] ******************************************************* 
+changed: [10.55.55.72]
+
+PLAY RECAP ******************************************************************** 
+10.55.55.72                : ok=1    changed=1    unreachable=0    failed=0   
+</code></pre>
+
+<h3>Prepare the secondary storage</h3>
+
+<pre><code>$ sudo apt-get install nfs-kernel-server
+$ cd /srv 
+$ mkdir nfs4
+$ ls
+nfs4
+$ sudo chown nobody:nogroup /srv/nfs4 
+$ sudo vim /etc/exports
+# Share access to all networks
+/srv/nfs4       *(rw,sync,no_subtree_check)
+$ sudo /etc/init.d/nfs-kernel-server start
+</code></pre>
+
+<h3>Start deploying</h3>
+
+<p>Deployment sequences:</p>
+
+<pre><code>$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=base
+$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=mysql
+$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=mysql3306
+$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=csmanagement
+</code></pre>
+
+<h3>Trouble Shooting</h3>
+
+<p>Too slow connection:</p>
+
+<pre><code>Use Redsocks. 
+By pass 
+iptables -t nat -I OUTPUT -d 192.168.0.0/16 -j RETURN
+</code></pre>
+
+<p>CloudMonkey setup:</p>
+
+<pre><code>The host name of this computer does not resolve to an IP address.
+
+[root@acs-manager ~]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+10.55.55.72     acs-manager
+</code></pre>
+
+<p>After deployment, visit:</p>
+
+<p><a href="http://xxx.xx.x.xxx:8080/client">http://xxx.xx.x.xxx:8080/client</a></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[OpenVSwitch and VXLAN How-to]]></title>
@@ -288,66 +417,6 @@ $ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxx
 </code></pre>
 
 <p>Now bootstrap again, and you will see the node could be added into the Chef-Server&rsquo;s system.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on Deleteing Neutron Subnet and Router]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/25/tips-on-deleteing-neutron-subnet-and-router/"/>
-    <updated>2015-05-25T21:44:54+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/25/tips-on-deleteing-neutron-subnet-and-router</id>
-    <content type="html"><![CDATA[<p>Get the existing subnet:</p>
-
-<pre><code>root@Controller:~# neutron subnet-list 
-+--------------------------------------+-------------+----------------+--------------------------------------------------+
-| id                                   | name        | cidr           | allocation_pools                                 |
-+--------------------------------------+-------------+----------------+--------------------------------------------------+
-| 98725e3a-7ee2-4e3f-83e3-eaca0236918f | demo-subnet | 192.168.1.0/24 | {"start": "192.168.1.2", "end": "192.168.1.254"} |
-+--------------------------------------+-------------+----------------+--------------------------------------------------+
-</code></pre>
-
-<p>Delete it via:</p>
-
-<pre><code>root@Controller:~# neutron subnet-delete --name demo-subnet
-Unable to complete operation on subnet 98725e3a-7ee2-4e3f-83e3-eaca0236918f. One or more ports have an IP allocation from this subnet. (HTTP 409) (Request-ID: req-7d729bcc-ec50-4de6-83d9-5d2b98332127)
-</code></pre>
-
-<p>Because we have the router, so we list the router via:</p>
-
-<pre><code>root@Controller:~# neutron router-list
-+--------------------------------------+-------------+-----------------------+
-| id                                   | name        | external_gateway_info |
-+--------------------------------------+-------------+-----------------------+
-| a745487e-8e7c-4cc2-aff7-a8423d0a6614 | demo-router | null                  |
-+--------------------------------------+-------------+-----------------------+
-</code></pre>
-
-<p>Get the ports of this router:</p>
-
-<pre><code>root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
-+--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
-| id                                   | name | mac_address       | fixed_ips                                                                          |
-+--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
-| e56fe57e-e939-493b-8984-b5adfa64e2cc |      | fa:16:3e:b3:7b:e6 | {"subnet_id": "98725e3a-7ee2-4e3f-83e3-eaca0236918f", "ip_address": "192.168.1.1"} |
-+--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
-</code></pre>
-
-<p>So we remove the interface from this router via:</p>
-
-<pre><code>root@Controller:~# neutron router-interface-delete demo-router 98725e3a-7ee2-4e3f-83e3-eaca0236918f
-Removed interface from router demo-router.
-root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
-</code></pre>
-
-<p>Now we could remove the router and the subnet:</p>
-
-<pre><code>root@Controller:~# neutron router-delete demo-router
-Deleted router: demo-router
-root@Controller:~# neutron subnet-delete demo-subnet
-Deleted subnet: demo-subnet
-</code></pre>
-
-<p>From now on ,you could create another subnet and router.</p>
 ]]></content>
   </entry>
   

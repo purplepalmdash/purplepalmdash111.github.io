@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-06-11T18:49:30+08:00</updated>
+  <updated>2015-06-15T18:50:43+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,204 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Ansible for Deploying CloudStack]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/15/tips-on-ansible-for-deploying-cloudstack/"/>
+    <updated>2015-06-15T11:38:51+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/15/tips-on-ansible-for-deploying-cloudstack</id>
+    <content type="html"><![CDATA[<h3>Background</h3>
+
+<p>Use two nodes, both running CentOS6.6, the Ansible Node have 1-G memory, while the csmanger(CloudStack Manager) Node have 4-G memory.</p>
+
+<p>Install the epel on Cloudstack manager for installing ansible.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
+</span><span class='line'>$ yum install -y ansible sshpass</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Get Nodes</h3>
+
+<p>Create the definition of the ansible characters:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CentOS66Base ~]# mkdir -p ~/Code/Ansible
+</span><span class='line'>[root@CentOS66Base ~]# cd Code/Ansible/
+</span><span class='line'>[root@CentOS66Base Ansible]# vim ansible.cfg
+</span><span class='line'>[defaults]
+</span><span class='line'>hostfile=/root/Code/Ansible/hosts
+</span><span class='line'>[root@CentOS66Base Ansible]# vim hosts
+</span><span class='line'>[acs-manager]
+</span><span class='line'>10.55.55.72
+</span><span class='line'>[root@CentOS66Base Ansible]# cat /etc/hosts
+</span><span class='line'>.......
+</span><span class='line'>10.55.55.72 acs-manager
+</span><span class='line'>[root@CentOS66Base Ansible]# ping acs-manager
+</span><span class='line'>PING acs-manager (10.55.55.72) 56(84) bytes of data.
+</span><span class='line'>64 bytes from acs-manager (10.55.55.72): icmp_seq=1 ttl=64 time=1.16 ms</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the ssh certification:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CentOS66Base Ansible]# ssh-keyscan acs-manager&gt;&gt;/root/.ssh/known_hosts 
+</span><span class='line'># acs-manager SSH-2.0-OpenSSH_5.3</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Generate the <code>id_rsa.pub</code> locally:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CentOS66Base Ansible]# ssh-keygen -t rsa -b 2048
+</span><span class='line'>......
+</span><span class='line'>[root@CentOS66Base Ansible]# ls -l -h /root/.ssh/id_rsa.pub 
+</span><span class='line'>-rw-r--r--. 1 root root 399 Jun 14 23:59 /root/.ssh/id_rsa.pub</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Write key installation yml file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CentOS66Base Ansible]# vim ssh-addkey.ymll 
+</span><span class='line'>---
+</span><span class='line'>- hosts: all
+</span><span class='line'>  sudo: yes
+</span><span class='line'>  gather_facts: no
+</span><span class='line'>  remote_user: root
+</span><span class='line'>
+</span><span class='line'>  tasks:
+</span><span class='line'>
+</span><span class='line'>  - name: install ssh key
+</span><span class='line'>    authorized_key: user=root
+</span><span class='line'>                    key="" 
+</span><span class='line'>                    state=present</span></code></pre></td></tr></table></div></figure>
+
+
+<p>!!! Be sure to disable the selinux on the acs-manager machine, then install the sshkey via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@CentOS66Base Ansible]# ansible-playbook ssh-addkey.yml --ask-pass
+</span><span class='line'>SSH password: 
+</span><span class='line'>
+</span><span class='line'>PLAY [all] ******************************************************************** 
+</span><span class='line'>
+</span><span class='line'>TASK: [install ssh key] ******************************************************* 
+</span><span class='line'>changed: [10.55.55.72]
+</span><span class='line'>
+</span><span class='line'>PLAY RECAP ******************************************************************** 
+</span><span class='line'>10.55.55.72                : ok=1    changed=1    unreachable=0    failed=0   </span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Prepare the secondary storage</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install nfs-kernel-server
+</span><span class='line'>$ cd /srv 
+</span><span class='line'>$ mkdir nfs4
+</span><span class='line'>$ ls
+</span><span class='line'>nfs4
+</span><span class='line'>$ sudo chown nobody:nogroup /srv/nfs4 
+</span><span class='line'>$ sudo vim /etc/exports
+</span><span class='line'># Share access to all networks
+</span><span class='line'>/srv/nfs4       *(rw,sync,no_subtree_check)
+</span><span class='line'>$ sudo /etc/init.d/nfs-kernel-server start</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Start deploying</h3>
+
+<p>Deployment sequences:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=base
+</span><span class='line'>$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=mysql
+</span><span class='line'>$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=mysql3306
+</span><span class='line'>$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=csmanagement</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Trouble Shooting</h3>
+
+<p>Too slow connection:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Use Redsocks. 
+</span><span class='line'>By pass 
+</span><span class='line'>iptables -t nat -I OUTPUT -d 192.168.0.0/16 -j RETURN</span></code></pre></td></tr></table></div></figure>
+
+
+<p>CloudMonkey setup:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>The host name of this computer does not resolve to an IP address.
+</span><span class='line'>
+</span><span class='line'>[root@acs-manager ~]# cat /etc/hosts
+</span><span class='line'>127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+</span><span class='line'>::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+</span><span class='line'>10.55.55.72     acs-manager
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After deployment, visit:</p>
+
+<p><a href="http://xxx.xx.x.xxx:8080/client">http://xxx.xx.x.xxx:8080/client</a></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Use 8188eu and Hostapd for Setting Soft-AP Router]]></title>
@@ -4706,97 +4904,6 @@ The steps are followed by following URL:  <br/>
 
 
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Setup Local Repository]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/05/19/setup-local-repository/"/>
-    <updated>2015-05-19T11:57:19+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/05/19/setup-local-repository</id>
-    <content type="html"><![CDATA[<h3>Ubuntu</h3>
-
-<p>After using apt-mirror syncing all of the packages from the repository website, setup a ftp site:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install -y proftpd
-</span><span class='line'># cat conf.d/anonymous.conf 
-</span><span class='line'>&lt;Anonymous ~ftp&gt;
-</span><span class='line'>   User                    ftp
-</span><span class='line'>   Group                nogroup
-</span><span class='line'>   UserAlias         anonymous ftp
-</span><span class='line'>   RequireValidShell        off
-</span><span class='line'>#   MaxClients                   10
-</span><span class='line'>   &lt;Directory *&gt;
-</span><span class='line'>     &lt;Limit WRITE&gt;
-</span><span class='line'>       DenyAll
-</span><span class='line'>     &lt;/Limit&gt;
-</span><span class='line'>   &lt;/Directory&gt;
-</span><span class='line'> &lt;/Anonymous&gt;
-</span><span class='line'>#  mount --bind /mnt/myrepo/mirror/mirrors.aliyun.com/ /srv/ftp/
-</span><span class='line'># service proftpd restart</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now Open your browser to <code>ftp://Your_URL/</code>, you will find the repository available.</p>
-
-<h3>CentOS Proftpd</h3>
-
-<p>Just remember the default directory is located at <code>/var/ftp</code>,</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y proftpd
-</span><span class='line'># mount --bind /mirror/mirrors.aliyun.com/ /var/ftp/
-</span><span class='line'># service proftpd restart</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Client Configuration</h3>
-
-<p>Replace the URL into your ftp url:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/apt/sources.list
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-security main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-updates main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-security main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-updates main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'># apt-get update && apt-get upgrade </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using local repository will greately improve your development speed.</p>
 ]]></content>
   </entry>
   
