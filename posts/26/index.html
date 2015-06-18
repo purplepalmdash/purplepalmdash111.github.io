@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Use Template In Flask To use template in flask, we should put the static file under the templates folder under the root directory. Our index page &hellip;">
+  <meta name="description" content="Draw Flot Picture Since the article is mainly on writing apps, I don&rsquo;t want to spend much time on how to use javascript or flot for drawing &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,357 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/13/write-python-weather-app-on-heroku-11/">Write Python Weather APP on Heroku(11)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-13T21:00:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:00 pm</span></time>
+        
+         | <a href="/blog/2014/05/13/write-python-weather-app-on-heroku-11/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Draw Flot Picture</h3>
+
+<p>Since the article is mainly on writing apps, I don&rsquo;t want to spend much time on how to use javascript or flot for drawing picture.  <br/>
+Simply checkout the code on github, you will see the code which is used for retrieving the data and start drawing plot pictures.</p>
+
+<h3>Fetching 24-hours Data</h3>
+
+<p>Fetching 24 latest records from the postgres database, and then add them into the chart, chart then has been sent to simplejson which used for updating the flot picture locally .</p>
+
+<figure class='code'><figcaption><span>genhtm.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/ajax/24hours/&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="c"># ajax updateing for 24-hour data</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">TwentyFourHours</span><span class="p">():</span>
+</span><span class='line'>    <span class="c"># Here we will visit postgres for retrieving back the last 24 hours&#39; data</span>
+</span><span class='line'>    <span class="c"># Local version</span>
+</span><span class='line'>    <span class="c"># engine = create_engine(&#39;postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb&#39;, echo=True)</span>
+</span><span class='line'>    <span class="c"># Heroku Version</span>
+</span><span class='line'>    <span class="n">db_conn</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s">&#39;DATABASE_URL&#39;</span><span class="p">]</span>
+</span><span class='line'>    <span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="n">db_conn</span><span class="p">)</span>
+</span><span class='line'>    <span class="c"># Engine selection</span>
+</span><span class='line'>    <span class="n">metadata</span><span class="o">=</span><span class="n">MetaData</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">weather_table</span><span class="o">=</span><span class="n">Table</span><span class="p">(</span><span class="s">&#39;weather&#39;</span><span class="p">,</span><span class="n">metadata</span><span class="p">,</span>
+</span><span class='line'>        <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Insert_Time&#39;</span><span class="p">,</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">timezone</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span><span class="n">primary_key</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+</span><span class='line'>        <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Temperature&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>        <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Humidity&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>        <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTen&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>        <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTwoFive&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>    <span class="p">)</span>
+</span><span class='line'>    <span class="n">s</span> <span class="o">=</span> <span class="n">select</span><span class="p">([</span><span class="n">weather_table</span><span class="p">])</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">weather_table</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">Insert_Time</span><span class="o">.</span><span class="n">desc</span><span class="p">())</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">conn</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+</span><span class='line'>    <span class="n">result</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">chart</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+</span><span class='line'>        <span class="c"># row[0], datetime; </span>
+</span><span class='line'>        <span class="c"># row[1], Temperature;</span>
+</span><span class='line'>        <span class="c"># row[2], Humidity;</span>
+</span><span class='line'>        <span class="c"># row[3], PM10;</span>
+</span><span class='line'>        <span class="c"># row[4], PM2.5; </span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c">###  append row[x] into the char ###</span>
+</span><span class='line'>        <span class="c"># chart.append({</span>
+</span><span class='line'>        <span class="n">chart</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">{</span>
+</span><span class='line'>            <span class="s">&quot;label&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">hours</span> <span class="o">=</span> <span class="mi">8</span><span class="p">))</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s">&quot;%H:%M&quot;</span><span class="p">),</span>
+</span><span class='line'>            <span class="s">&quot;value&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+</span><span class='line'>            <span class="s">&quot;humi_value&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+</span><span class='line'>            <span class="s">&quot;pm25_value&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+</span><span class='line'>            <span class="s">&quot;pm10_value&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+</span><span class='line'>            <span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">jsonStr</span> <span class="o">=</span> <span class="n">simplejson</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span>
+</span><span class='line'>        <span class="c"># This is char, will be used in script.js</span>
+</span><span class='line'>        <span class="s">&quot;chart&quot;</span> <span class="p">:{</span>
+</span><span class='line'>            <span class="c"># tooltip is used by the jQuery chart:</span>
+</span><span class='line'>            <span class="s">&quot;tooltip&quot;</span>   <span class="p">:</span> <span class="s">&quot;Temperature at %1: %2 degree&quot;</span><span class="p">,</span>
+</span><span class='line'>            <span class="c"># humi_tooltip is used for jQuery chart for humidity:</span>
+</span><span class='line'>            <span class="s">&quot;humi_tooltip&quot;</span> <span class="p">:</span> <span class="s">&quot;Humidity at %1: %2 \%&quot;</span><span class="p">,</span>
+</span><span class='line'>            <span class="s">&quot;pm25_tooltip&quot;</span> <span class="p">:</span> <span class="s">&quot;PM2.5 at %1: %2 ug/m(3)&quot;</span><span class="p">,</span>
+</span><span class='line'>            <span class="s">&quot;pm10_tooltip&quot;</span> <span class="p">:</span> <span class="s">&quot;PM10 at %1: %2 ug/m(3)&quot;</span><span class="p">,</span>
+</span><span class='line'>            <span class="s">&quot;data&quot;</span>      <span class="p">:</span> <span class="n">chart</span>
+</span><span class='line'>            <span class="p">},</span>
+</span><span class='line'>        <span class="c"># This is &quot;downtime&quot; will be used in script.js</span>
+</span><span class='line'>             <span class="s">&quot;downtime&quot;</span>  <span class="p">:</span> <span class="n">getDowntime</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>        <span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="n">jsonStr</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The periodic task which runs in <code>tasks.py</code> will fetching the data from the python api and the webpage, then insert them into the postgres database, so here in 24-hours' function we just get them out and fill in the flot picture.</p>
+
+<h3>Daily Data</h3>
+
+<p>Daily data shall be generated via calculating them at the mid-night, that is, at the beginning of a brand new day, we will calculate out the last day&rsquo;s average data.  <br/>
+The code is implemented in <code>tasks.py</code> as a crontab task, the code is listed as following:</p>
+
+<figure class='code'><figcaption><span>tasks.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="c"># Every Day we will run a periodly work which will calculate </span>
+</span><span class='line'><span class="c"># the average temperature/humidity/pm2.5/pm10 task, and store</span>
+</span><span class='line'><span class="c"># it into the daily database, thus we have to define new Database</span>
+</span><span class='line'><span class="c"># here and insert data into.</span>
+</span><span class='line'><span class="c"># Beijing is locate at east 8 zone, thus 16:12 + 8 hour = 24:12</span>
+</span><span class='line'><span class="c"># At every mid-night(24:12) it will caculate the average value for</span>
+</span><span class='line'><span class="c"># the past 24 hours. </span>
+</span><span class='line'><span class="nd">@periodic_task</span><span class="p">(</span><span class="n">run_every</span><span class="o">=</span><span class="n">crontab</span><span class="p">(</span><span class="n">hour</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">minute</span><span class="o">=</span><span class="mi">12</span><span class="p">))</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">OneDayHandler</span><span class="p">():</span>
+</span><span class='line'>    <span class="c"># First Get the last 24 hours&#39; data set</span>
+</span><span class='line'>    <span class="c"># Local Engine</span>
+</span><span class='line'>    <span class="c"># engine = create_engine(&#39;postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb&#39;,echo=True)</span>
+</span><span class='line'>    <span class="c"># Heroku Engine</span>
+</span><span class='line'>    <span class="n">db_conn</span> <span class="o">=</span> <span class="n">environ</span><span class="p">[</span><span class="s">&#39;DATABASE_URL&#39;</span><span class="p">]</span>
+</span><span class='line'>    <span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="n">db_conn</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">metadata</span><span class="o">=</span><span class="n">MetaData</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+</span><span class='line'>    <span class="c"># Definition of the weather table</span>
+</span><span class='line'>    <span class="n">weather_table</span><span class="o">=</span><span class="n">Table</span><span class="p">(</span><span class="s">&#39;weather&#39;</span><span class="p">,</span><span class="n">metadata</span><span class="p">,</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Insert_Time&#39;</span><span class="p">,</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">timezone</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span><span class="n">primary_key</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Temperature&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Humidity&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTen&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTwoFive&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>    <span class="p">)</span>
+</span><span class='line'>    <span class="c"># Get last 24 records, If we suppose there are truely 24 records in last 24 hours, we can enable this sentense. But sometimes, this will be wrong. </span>
+</span><span class='line'>    <span class="n">s</span> <span class="o">=</span> <span class="n">select</span><span class="p">([</span><span class="n">weather_table</span><span class="p">])</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">weather_table</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">Insert_Time</span><span class="o">.</span><span class="n">asc</span><span class="p">())</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">conn</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+</span><span class='line'>    <span class="n">results</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># Temperature</span>
+</span><span class='line'>    <span class="n">totTemperature</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="n">avgTemperature</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="c"># Humidity</span>
+</span><span class='line'>    <span class="n">totHumidity</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="n">avgHumidity</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="c"># PM2.5</span>
+</span><span class='line'>    <span class="n">totPm25</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="n">avgPm25</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="c"># PM10</span>
+</span><span class='line'>    <span class="n">totPm10</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="n">avgPm10</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">records_number</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">totTemperature</span> <span class="o">+=</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+</span><span class='line'>        <span class="n">totHumidity</span> <span class="o">+=</span> <span class="n">item</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+</span><span class='line'>        <span class="n">totPm25</span> <span class="o">+=</span> <span class="n">item</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+</span><span class='line'>        <span class="n">totPm10</span> <span class="o">+=</span> <span class="n">item</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+</span><span class='line'>        <span class="n">records_number</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="n">records_number</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">avgTemperature</span> <span class="o">=</span> <span class="n">totTemperature</span><span class="o">/</span><span class="n">records_number</span>
+</span><span class='line'>        <span class="n">avgHumidity</span> <span class="o">=</span> <span class="n">totHumidity</span><span class="o">/</span><span class="n">records_number</span>
+</span><span class='line'>        <span class="n">avgPm25</span> <span class="o">=</span> <span class="n">totPm25</span><span class="o">/</span><span class="n">records_number</span>
+</span><span class='line'>        <span class="n">avgPm10</span> <span class="o">=</span> <span class="n">totPm10</span><span class="o">/</span><span class="n">records_number</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># Definition of the avg_eather table</span>
+</span><span class='line'>    <span class="n">avg_metadata</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">avg_weather_table</span><span class="o">=</span><span class="n">Table</span><span class="p">(</span><span class="s">&#39;avg_weather&#39;</span><span class="p">,</span><span class="n">avg_metadata</span><span class="p">,</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;avg_Insert_Time&#39;</span><span class="p">,</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">timezone</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span><span class="n">primary_key</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;avg_Temperature&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;avg_Humidity&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;avg_PmTen&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>      <span class="n">Column</span><span class="p">(</span><span class="s">&#39;avg_PmTwoFive&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>    <span class="p">)</span>
+</span><span class='line'>    <span class="c"># Create table in db</span>
+</span><span class='line'>    <span class="n">avg_metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">checkfirst</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</span><span class='line'>    <span class="c"># Create insert sentense</span>
+</span><span class='line'>    <span class="n">avg_ins</span> <span class="o">=</span> <span class="n">avg_weather_table</span><span class="o">.</span><span class="n">insert</span><span class="p">()</span>
+</span><span class='line'>    <span class="c"># Really insert</span>
+</span><span class='line'>    <span class="n">avg_ins</span> <span class="o">=</span> <span class="n">avg_weather_table</span><span class="o">.</span><span class="n">insert</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">avg_Insert_Time</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">(),</span> <span class="n">avg_Temperature</span> <span class="o">=</span> <span class="n">avgTemperature</span><span class="p">,</span> <span class="n">avg_Humidity</span> <span class="o">=</span> <span class="n">avgHumidity</span><span class="p">,</span> <span class="n">avg_PmTen</span> <span class="o">=</span> <span class="n">avgPm10</span><span class="p">,</span> <span class="n">avg_PmTwoFive</span> <span class="o">=</span> <span class="n">av</span>
+</span><span class='line'><span class="n">gPm25</span><span class="p">)</span>
+</span><span class='line'>    <span class="c"># Connect to engine and execute</span>
+</span><span class='line'>    <span class="n">avg_conn</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+</span><span class='line'>    <span class="n">avg_conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">avg_ins</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="mi">1</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We defined a new table named avg_weather, and at the mid-night we will retrieve the latest 24 records, calculating their average value, then insert them into the aver_weather table.</p>
+
+<h3>Displaying Daily Data</h3>
+
+<p>The main procedure is mainly like in 24-hours datas, but notice we are select from avg_weather, and we only select 7 items.   <br/>
+30-days data is very simple, change the day from 7 to 30, then you can see the monthly data.</p>
+
+<h3>Write Testing Interface</h3>
+
+<p>We hope we can manually test the functions via web. So we added following testing APIs in genhtml.py:</p>
+
+<figure class='code'><figcaption><span>genhtml.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/test/fetch/&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">fetch</span><span class="p">():</span>
+</span><span class='line'>    <span class="n">fetch_and_store_data</span><span class="p">()</span>
+</span><span class='line'>    <span class="k">return</span> <span class="s">&quot;Fetching Test Done!!!&quot;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/test/gen/&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">generateOneDay</span><span class="p">():</span>
+</span><span class='line'>    <span class="n">OneDayHandler</span><span class="p">()</span>
+</span><span class='line'>    <span class="k">return</span> <span class="s">&quot;Generate Test Done!!!&quot;</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If we visit <a href="http://Your_app_address/test/fetch,">http://Your_app_address/test/fetch,</a> the program will fetch back the data.  And for <a href="http://Your_app_address/test/gen,">http://Your_app_address/test/gen,</a> the daily average data will be generated.</p>
+
+<p>Next Chapter is the last one. We simply paste the screenshots of the APP.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2410,165 +2761,6 @@ Create a python interactive command window via:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/05/09/write-python-weather-app-on-heroku-2/">Write Python Weather APP on Heroku(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-05-09T15:19:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>3:19 pm</span></time>
-        
-         | <a href="/blog/2014/05/09/write-python-weather-app-on-heroku-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Get Current Weather Data</h3>
-
-<p>Now we begin to change our APP to a real funny staff. First we change the hello.py and begin to write our own &ldquo;genhtml.py&rdquo;</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mv hello.py genhtml.py
-</span><span class='line'>$ cat Procfile
-</span><span class='line'>web: gunicorn genhtml:app
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We know there is an python library which we could install from pip named &ldquo;pywapi&rdquo;, simply install it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>(venv2) $ pip install pywapi
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If your pip&rsquo;s version is 1.5.1, then notice you have to use following command for installing the pywapi:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>(venv2) $ pip install pywapi --allow-external pywapi --allow-unverified pywapi
-</span><span class='line'>Downloading/unpacking pywapi
-</span><span class='line'>  pywapi is potentially insecure and unverifiable.
-</span><span class='line'>  Downloading pywapi-0.3.8.tar.gz
-</span><span class='line'>  Running setup.py (path:/home/Trusty/code/herokuWeatherApp/venv/build/pywapi/setup.py) egg_info for package pywapi
-</span><span class='line'>    
-</span><span class='line'>Installing collected packages: pywapi
-</span><span class='line'>  Running setup.py install for pywapi
-</span><span class='line'>    
-</span><span class='line'>Successfully installed pywapi
-</span><span class='line'>Cleaning up...
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now change the genhtml.py to following content:</p>
-
-<figure class='code'><figcaption><span>genhtml.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="kn">import</span> <span class="nn">os</span>
-</span><span class='line'><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="nn">pywapi</span>
-</span><span class='line'><span class="kn">import</span> <span class="nn">string</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="c"># Generate the Nanjing Weather Data</span>
-</span><span class='line'><span class="k">def</span> <span class="nf">genhtml</span><span class="p">():</span>
-</span><span class='line'>    <span class="n">Yahoo_Result</span> <span class="o">=</span> <span class="n">pywapi</span><span class="o">.</span><span class="n">get_weather_from_yahoo</span><span class="p">(</span><span class="s">&#39;CHXX0099&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="n">Current_Temp</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">lower</span><span class="p">(</span><span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;condition&#39;</span><span class="p">][</span><span class="s">&#39;temp&#39;</span><span class="p">])</span>
-</span><span class='line'>    <span class="n">Current_Humi</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">lower</span><span class="p">(</span><span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;atmosphere&#39;</span><span class="p">][</span><span class="s">&#39;humidity&#39;</span><span class="p">])</span>
-</span><span class='line'>    <span class="n">Tomorrow_Forecast</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-</span><span class='line'>    <span class="n">Twenty_Four_Hours</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>    <span class="n">Fourty_Eight_Hours</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span>
-</span><span class='line'>    <span class="n">Seventy_Two_Hours</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">3</span><span class="p">]</span>
-</span><span class='line'>    <span class="k">return</span> <span class="n">Current_Temp</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After modification, we use &ldquo;foreman start&rdquo; for previewing the result, we can see the webpage returns the current temperature of Nanjing, its value is 25, as in following picture:  <br/>
-<img src="/images/current_temp.jpg" alt="/images/current_temp.jpg" /></p>
-
-<p>This shows the pywapi could be work together with other components, we will continue for next step.</p>
-
-<h3>Deployment On Heroku</h3>
-
-<p>You need to change the requirement.txt file like following:</p>
-
-<figure class='code'><figcaption><span>genhtml.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="err">$</span> <span class="n">cat</span> <span class="n">requirements</span><span class="o">.</span><span class="n">txt</span>
-</span><span class='line'><span class="o">--</span><span class="n">allow</span><span class="o">-</span><span class="nb">all</span><span class="o">-</span><span class="n">external</span>
-</span><span class='line'><span class="o">--</span><span class="n">allow</span><span class="o">-</span><span class="n">unverified</span> <span class="n">pywapi</span>
-</span><span class='line'><span class="n">Flask</span><span class="o">==</span><span class="mf">0.10</span><span class="o">.</span><span class="mi">1</span>
-</span><span class='line'><span class="n">Jinja2</span><span class="o">==</span><span class="mf">2.7</span><span class="o">.</span><span class="mi">2</span>
-</span><span class='line'><span class="n">MarkupSafe</span><span class="o">==</span><span class="mf">0.23</span>
-</span><span class='line'><span class="n">Werkzeug</span><span class="o">==</span><span class="mf">0.9</span><span class="o">.</span><span class="mi">4</span>
-</span><span class='line'><span class="n">gunicorn</span><span class="o">==</span><span class="mf">18.0</span>
-</span><span class='line'><span class="n">itsdangerous</span><span class="o">==</span><span class="mf">0.24</span>
-</span><span class='line'><span class="n">pywapi</span><span class="o">==</span><span class="mf">0.3</span><span class="o">.</span><span class="mi">8</span>
-</span><span class='line'><span class="n">wsgiref</span><span class="o">==</span><span class="mf">0.1</span><span class="o">.</span><span class="mi">2</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then run &ldquo;git push heroku master&rdquo;, open your browser and visit <a href="http://python-weather-app.herokuapp.com/">http://python-weather-app.herokuapp.com/</a>, the output the same as in local.</p>
-
-<p>By now, we have created a very simple app on getting the current temperature of nanjing, next chapter we will use database for timely record the data.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/27">&larr; Older</a>
@@ -2586,6 +2778,10 @@ Create a python interactive command window via:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/06/18/use-virtualenv-for-downloading-pip-packages/">Use VirtualEnv for Downloading PIP Packages</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/06/18/wh-worktips-3/">WH Worktips(3)</a>
       </li>
     
@@ -2599,10 +2795,6 @@ Create a python interactive command window via:</p>
     
       <li class="post">
         <a href="/blog/2015/06/16/xenserver-tips/">XenServer Tips</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/15/tips-on-ansible-for-deploying-cloudstack/">Tips on Ansible for Deploying CloudStack</a>
       </li>
     
   </ul>
