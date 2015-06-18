@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Since the network environment is not good(In fact, very bad), because of the GFW, so I have to build the opencontrail packages in digitalOcean. &hellip;">
+  <meta name="description" content="Since the coreOS met some critical errors, I have to re-construct the DO System using CentOS. So I destroyed the old CoreOS machine, runs CentOS. &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,151 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/01/26/using-new-do-system/">Using New DO System</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-01-26T23:05:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:05 pm</span></time>
+        
+         | <a href="/blog/2015/01/26/using-new-do-system/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Since the coreOS met some critical errors, I have to re-construct the DO System using CentOS. So I destroyed the old CoreOS machine, runs CentOS.</p>
+
+<h3>Configure</h3>
+
+<h3>Install packages</h3>
+
+<p>Update and install vim</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum update
+</span><span class='line'>$ yum install vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Add Swap</h4>
+
+<p>512M is not enough for playing, enlarge the swapfile.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># dd if=/dev/zero of=/swapfile bs=1M count=1024
+</span><span class='line'># chmod 600 /swapfile
+</span><span class='line'># mkswap /swapfile
+</span><span class='line'>$ sudo vim /etc/systemd/system/swap.service
+</span><span class='line'> [Unit]  
+</span><span class='line'> Description=Turn on swap  
+</span><span class='line'> [Service]  
+</span><span class='line'> Type=oneshot  
+</span><span class='line'> Environment="SWAPFILE=/swapfile"
+</span><span class='line'> RemainAfterExit=true  
+</span><span class='line'> ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
+</span><span class='line'> ExecStart=/usr/bin/sh -c "/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> ExecStop=/usr/bin/sh -c "/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> ExecStopPost=/usr/bin/sh -c "/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> [Install]  
+</span><span class='line'> WantedBy=multi-user.target 
+</span><span class='line'>$ sudo  systemctl enable /etc/systemd/system/swap.service  
+</span><span class='line'>$ sudo systemctl start swap  
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the swapfile is 1000MB, enough for doing various operations.</p>
+
+<h4>Add new user</h4>
+
+<p>Add new user and changes its password:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># useradd -m -g root -G root -s /bin/bash Trusty
+</span><span class='line'># passwd Trusty
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the sshd configuration, disable root login, and change the listening port.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vim /etc/ssh/sshd_config
+</span><span class='line'>port changes, 
+</span><span class='line'>PermitRootLogin no
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now reboot the system, you will got a safe DigitalOcean machine.</p>
+
+<h3>Build OpenContrail</h3>
+
+<p>The repo is the same as the above article, then we install other packages which needed for CengOS.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y libtool kernel-devel 
+</span><span class='line'>$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install epel via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+</span><span class='line'>$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install following packages from epel:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y --disablerepo="*" --enablerepo="epel" scons protobuf protobuf-devel protobuf-compiler 
+</span><span class='line'>$  sudo yum install -y python-lxml patch unzip flex bison gcc-c++ openssl-devel make wget python-setuptools
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So now you could run the whole compilation via <code>scons</code> under the ~/Code folder.   <br/>
+tips: tmux&rsquo;s q will quit ctrl+b mode.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1030,47 +1175,6 @@ Faint, it failed, so need more investigation.     Later!!!!!!!</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/20/things-to-be-done-from-jan21-to-jan25/">Things to Be Done From Jan21 to Jan25</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-20T20:26:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:26 pm</span></time>
-        
-         | <a href="/blog/2015/01/20/things-to-be-done-from-jan21-to-jan25/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Things to be done in this week:  <br/>
-1. Installation documentation for OpenStack, but don&rsquo;t try it myself.   <br/>
-2. Documentation on Contrail.  <br/>
-3. Conceptions on SDN(Software Defined Networking).  <br/>
-4. Books on SDN/PLATFORMs.  <br/>
-5. Enable the CoreOS Access via SurfacePro.  <br/>
-6. Guangzhou Weather/PM2.5/PM10. <br/>
-7. To enable the key-map on MAC?  <br/>
-8. Build awesome on CentOS, and let it to be my default WM.</p>
-
-<p>If there are more things to be added, type it following.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/12">&larr; Older</a>
@@ -1088,6 +1192,10 @@ Faint, it failed, so need more investigation.     Later!!!!!!!</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/06/18/wh-worktips-3/">WH Worktips(3)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/06/18/wh-worktips-2/">WH Worktips(2)</a>
       </li>
     
@@ -1101,10 +1209,6 @@ Faint, it failed, so need more investigation.     Later!!!!!!!</p>
     
       <li class="post">
         <a href="/blog/2015/06/15/tips-on-ansible-for-deploying-cloudstack/">Tips on Ansible for Deploying CloudStack</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/">Use 8188eu and Hostapd for Setting Soft-AP Router</a>
       </li>
     
   </ul>
