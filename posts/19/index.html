@@ -9,7 +9,12 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="In this chapter we will continue to migrate driver on LCD, first we want to get the LCD information. LCD Info From the LCD we could see &ldquo; &hellip;">
+  <meta name="description" content="Flash Disk Enable the scsi device support in kernel configuration: Then enable the usb support: 1
+2
+3
+4
+* Support for Host-side USB
+* USB device &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +70,285 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/10/27/linux2-dot-6-32-for-utu2440-6/">Linux2.6.32 for Utu2440(6)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-10-27T09:46:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:46 am</span></time>
+        
+         | <a href="/blog/2014/10/27/linux2-dot-6-32-for-utu2440-6/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Flash Disk</h3>
+
+<p>Enable the scsi device support in kernel configuration:              <br/>
+<img src="/images/scsidriver.jpg" alt="/images/scsidriver.jpg" />  <br/>
+Then enable the usb support:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>* Support for Host-side USB
+</span><span class='line'>* USB device filesystem(DEPRECATED)
+</span><span class='line'>* OHCI HCD support
+</span><span class='line'>* USB Mass Storage support
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also enable the filesystem support for FAT/FAT16/FAT32/EXT4:</p>
+
+<p>change the default u-boot parameters:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>utu-bootloader=&gt;&gt;&gt;printenv bootcmd
+</span><span class='line'>bootcmd=nand read.i 0x32000000 0x60000 0x200000; bootm
+</span><span class='line'>utu-bootloader=&gt;&gt;&gt;setenv bootcmd 'tftp 30000000 uImage; bootm'
+</span><span class='line'>utu-bootloader=&gt;&gt;&gt;printenv bootcmd
+</span><span class='line'>bootcmd=tftp 30000000 uImage; bootm
+</span><span class='line'>utu-bootloader=&gt;&gt;&gt;saveenv
+</span><span class='line'>Saving Environment to NAND...
+</span><span class='line'>Erasing Nand...Writing to Nand... done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Next time the reboot will directly download the kernel file from tftp server and bootm it from memory.</p>
+
+<p>Also please enable the filesystem support on FAT/FAT32/ext4, etc, then next time you insert the USB Disk, it will automatically scanned and recognize your partitions.</p>
+
+<h3>MMC/SD</h3>
+
+<p>From the schematic image we could see:  <br/>
+<img src="/images/sdio.jpg" alt="/images/sdio.jpg" /></p>
+
+<p>Add the following definition in <code>arch/arm/mach-s3c2440/mach-smdk2440.c</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>// Added for mmc
+</span><span class='line'>#include &lt;linux/mmc/host.h&gt;
+</span><span class='line'>#include &lt;plat/mci.h&gt;
+</span><span class='line'>
+</span><span class='line'>/* MMC/SD */
+</span><span class='line'>static struct s3c24xx_mci_pdata smdk2440_mmc_cfg = {
+</span><span class='line'>    .gpio_detect = S3C2410_GPG(8),
+</span><span class='line'>    .gpio_wprotect = S3C2410_GPH(8),
+</span><span class='line'>    .set_power = NULL,
+</span><span class='line'>    .ocr_avail = MMC_VDD_32_33|MMC_VDD_33_34,
+</span><span class='line'>};
+</span><span class='line'>
+</span><span class='line'>static struct platform_device *smdk2440_devices[] __initdata = {
+</span><span class='line'>  //........
+</span><span class='line'>  &s3c_device_sdi,  // Added SD card into the platform equipments 
+</span><span class='line'>};
+</span><span class='line'>
+</span><span class='line'>static void __init smdk2440_machine_init(void)
+</span><span class='line'>{
+</span><span class='line'>
+</span><span class='line'>+     /* Add support for mmc in smdk2440 */
+</span><span class='line'>+ s3c_device_sdi.dev.platform_data = &smdk2440_mmc_cfg;
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Kernel configuration:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Device Drivers ---&gt;
+</span><span class='line'>&lt;*&gt; MMC/SD/SDIO card support ---&gt;
+</span><span class='line'>&lt;*&gt; MMC block device driver
+</span><span class='line'>&lt;*&gt; Secure Digital Host Controller Interface support
+</span><span class='line'>&lt;*&gt; Samsung S3C SD/MMC Card Interface support
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then re-compile the kernel and verify.  <br/>
+Only 1G&rsquo;s mmc card could be supported currently. I didn&rsquo;t test other volumns.</p>
+
+<h3>Sound Card</h3>
+
+<p>The sound card&rsquo;s schematic is listed as:  <br/>
+<img src="/images/soundcard.jpg" alt="/images/soundcard.jpg" />   <br/>
+Then made code changes in:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>// Sound Card
+</span><span class='line'>#include &lt;sound/s3c24xx_uda134x.h&gt;
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>/*Sound card*/
+</span><span class='line'>static struct s3c24xx_uda134x_platform_data s3c24xx_uda134x_data = {
+</span><span class='line'>    .l3_clk = S3C2410_GPB(4),
+</span><span class='line'>    .l3_data = S3C2410_GPB(3),
+</span><span class='line'>    .l3_mode = S3C2410_GPB(2),
+</span><span class='line'>    .model = UDA134X_UDA1341,
+</span><span class='line'>};
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>static struct platform_device s3c24xx_uda134x = {
+</span><span class='line'>    .name = "s3c24xx_uda134x",
+</span><span class='line'>         .dev = {
+</span><span class='line'>         .platform_data = &s3c24xx_uda134x_data,
+</span><span class='line'>    }
+</span><span class='line'>};
+</span><span class='line'>
+</span><span class='line'>static struct platform_device *smdk2440_devices[] __initdata = {
+</span><span class='line'>  //.........
+</span><span class='line'>        &s3c24xx_uda134x, // Register the UDA1341 platform device to kernel
+</span><span class='line'>};
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Kernel Configuration:  <br/>
+<img src="/images/soundcard2.jpg" alt="/images/soundcard2.jpg" /></p>
+
+<p><img src="/images/soundcard1.jpg" alt="/images/soundcard1.jpg" />   <br/>
+Then re-compile the kernel and verify it on utu2440.</p>
+
+<p>Test steps:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /root/test.wav&gt;/dev/dsp
+</span><span class='line'>$ cat /proc/devices
+</span><span class='line'>10 misc
+</span><span class='line'> 13 input
+</span><span class='line'> 14 sound
+</span><span class='line'> 21 sg
+</span><span class='line'> 29 fb
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now cross-compile mad-player for playing mp3.</p>
+
+<p>Download the madplayer and cross-compiler.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./configure CC=arm-linux-gcc --host=arm --prefix=/srv/nfs4/rootfs/usr/
+</span><span class='line'>$ make clean && make
+</span><span class='line'>$ sudo make install
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Trouble shooting:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>/bin # /bin/sh madplay 
+</span><span class='line'>madplay: line 1: syntax error: unexpected word (expecting ")")
+</span><span class='line'>
+</span><span class='line'>[Trusty@/media/y/embedded/utu2440/App/madplay-0.15.2b]$ arm-linux-readelf -a madplay | grep interpreter
+</span><span class='line'>      [Requesting program interpreter: /lib/ld-linux.so.3]
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+Solution: copy all of the dynamic library from the cross-compiler to the root file system:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo cp -f /opt/cross/arm-linux-gcc_4.3.2/arm-none-linux-gnueabi/libc/armv4t/lib/*so* /srv/nfs4/rootfs/lib -a
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Download the libmad from:  <br/>
+<a href="http://sourceforge.net/projects/mad/files/libmad/0.15.1b/libmad-0.15.1b.tar.gz/download">http://sourceforge.net/projects/mad/files/libmad/0.15.1b/libmad-0.15.1b.tar.gz/download</a></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./configure --prefix=/srv/nfs4/rootfs/usr/ --host=arm-linux CC=arm-linux-gcc
+</span><span class='line'>$ make && make install
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When run madplay, it will complains the Bus Error, need further debugging.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2476,465 +2760,6 @@ Open the gtk-recordMyDesktop then select the window, start and it will automatic
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/20/quick-start-for-setting-up-wp-and-vpn-server-on-digitalocean/">Quick-start for Setting Up WP and VPN Server on DigitalOcean</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-20T20:32:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>8:32 pm</span></time>
-        
-         | <a href="/blog/2014/10/20/quick-start-for-setting-up-wp-and-vpn-server-on-digitalocean/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Prerequisite</h3>
-
-<p>First you should check your Linux Version, for this tutorial is only works for ubuntu, that means, if you run archlinux/centos/debian on DigitalOcean, this tutorial won&rsquo;t be fit for your need.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@justfordemo:~# cat /etc/issue
-</span><span class='line'>Ubuntu 14.04.1 LTS \n \l
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Upgrade to the newest system via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@justfordemo:~# apt-get update && apt-get upgrade
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enter Y if system asks you to confirm.</p>
-
-<h3>NGINX and PHP</h3>
-
-<p>Following commands refers to:  <br/>
-<a href="https://www.digitalocean.com/community/tutorials/how-to-install-linux-nginx-mysql-php-lemp-stack-on-ubuntu-14-04">https://www.digitalocean.com/community/tutorials/how-to-install-linux-nginx-mysql-php-lemp-stack-on-ubuntu-14-04</a>  and <a href="https://www.digitalocean.com/community/tutorials/how-to-install-wordpress-with-nginx-on-ubuntu-14-04">https://www.digitalocean.com/community/tutorials/how-to-install-wordpress-with-nginx-on-ubuntu-14-04</a>.</p>
-
-<h4>Install nginx</h4>
-
-<p>Install the nginx server via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install nginx
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Get the ip address via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ip addr show eth0 | grep inet | awk '{ print $2; }' | sed 's/\/.*$//'
-</span><span class='line'>10.0.0.6
-</span><span class='line'>fe80::a00:27ff:fe38:b7c5
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use you browser to visit <a href="http://10.0.0.6,">http://10.0.0.6,</a> you will see following page which indiciates the nginx works for you.    <br/>
-<img src="/images/nginxworks.jpg" alt="/images/nginxworks.jpg" /></p>
-
-<h4>Install mysql server</h4>
-
-<p>Install it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get install mysql-server
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When you see following window, choose your password(You should remember this password, for it&rsquo;s for administration!!!)  <br/>
-<img src="/images/mysqlpasswd.jpg" alt="/images/mysqlpasswd.jpg" /></p>
-
-<p>Then you should run following commands for install the database and enable secure installation. The suggested answer is listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@justfordemo:~# mysql_install_db
-</span><span class='line'>root@justfordemo:~# mysql_secure_installation 
-</span><span class='line'>Change the root password? [Y/n] n
-</span><span class='line'>Remove anonymous users? [Y/n] Y
-</span><span class='line'>Disallow root login remotely? [Y/n] Y
-</span><span class='line'>Remove test database and access to it? [Y/n] Y
-</span><span class='line'>Reload privilege tables now? [Y/n] Y
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Install PHP</h4>
-
-<p>Install php for processing:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install php5-fpm php5-mysql
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Open the main php5-fpm configuration file with root privileges:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># nano /etc/php5/fpm/php.ini
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>;cgi.fix_pathinfo=1
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>to</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>cgi.fix_pathinfo=0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Save and restart the php5-fpm service:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service php5-fpm restart
-</span><span class='line'>php5-fpm stop/waiting
-</span><span class='line'>php5-fpm start/running, process 15959
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Enable php prcessor in NGINX</h4>
-
-<p>Change the configuration file /etc/nginx/sites-available/default:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>server {
-</span><span class='line'>    listen 80 default_server;
-</span><span class='line'>    listen [::]:80 default_server ipv6only=on;
-</span><span class='line'>
-</span><span class='line'>    root /usr/share/nginx/html;
-</span><span class='line'>    index index.html index.htm;
-</span><span class='line'>
-</span><span class='line'>    server_name localhost;
-</span><span class='line'>
-</span><span class='line'>    location / {
-</span><span class='line'>        try_files $uri $uri/ =404;
-</span><span class='line'>    }
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>to</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>server {
-</span><span class='line'>    listen 80 default_server;
-</span><span class='line'>    listen [::]:80 default_server ipv6only=on;
-</span><span class='line'>
-</span><span class='line'>    root /usr/share/nginx/html;
-</span><span class='line'>    index index.php index.html index.htm;
-</span><span class='line'>
-</span><span class='line'>    server_name server_domain_name_or_IP;
-</span><span class='line'>
-</span><span class='line'>    location / {
-</span><span class='line'>        try_files $uri $uri/ =404;
-</span><span class='line'>    }
-</span><span class='line'>
-</span><span class='line'>    error_page 404 /404.html;
-</span><span class='line'>    error_page 500 502 503 504 /50x.html;
-</span><span class='line'>    location = /50x.html {
-</span><span class='line'>        root /usr/share/nginx/html;
-</span><span class='line'>    }
-</span><span class='line'>
-</span><span class='line'>    location ~ \.php$ {
-</span><span class='line'>        try_files $uri =404;
-</span><span class='line'>        fastcgi_split_path_info ^(.+\.php)(/.+)$;
-</span><span class='line'>        fastcgi_pass unix:/var/run/php5-fpm.sock;
-</span><span class='line'>        fastcgi_index index.php;
-</span><span class='line'>        include fastcgi_params;
-</span><span class='line'>    }
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Visit <a href="http://10.0.0.6/info.php">http://10.0.0.6/info.php</a>(assume our ipaddress is 10.0.0.6), then the picture may seems like following:   <br/>
-<img src="/images/phprun.jpg" alt="/images/phprun.jpg" /></p>
-
-<p>Now your webserver with php support is ready for use.</p>
-
-<h3>Wordpress</h3>
-
-<h4>Create MYSQL database and users</h4>
-
-<p>The steps is quite simple, listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@justfordemo:~# mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MySQL monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MySQL connection id is 48
-</span><span class='line'>Server version: 5.5.40-0ubuntu0.14.04.1 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
-</span><span class='line'>
-</span><span class='line'>Oracle is a registered trademark of Oracle Corporation and/or its
-</span><span class='line'>affiliates. Other names may be trademarks of their respective
-</span><span class='line'>owners.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>mysql&gt; CREATE DATABASE wordpress;
-</span><span class='line'>Query OK, 1 row affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>mysql&gt; CREATE USER wordpressuser@localhost IDENTIFIED BY 'password';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>mysql&gt; GRANT ALL PRIVILEGES ON wordpress.* TO wordpressuser@localhost;
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>mysql&gt; FLUSH PRIVILEGES;
-</span><span class='line'>Query OK, 0 rows affected (0.01 sec)
-</span><span class='line'>
-</span><span class='line'>mysql&gt; exit
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Wordpress</h4>
-
-<p>Download the latest wordpress installation file in home directory:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd ~
-</span><span class='line'># wget http://wordpress.org/latest.tar.gz
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Unzip the tar.gz file and install, but we have to install php-gd and libssh2-php first:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install php5-gd libssh2-php
-</span><span class='line'># tar xzvf latest.tar.gz
-</span><span class='line'># cd wordpress
-</span><span class='line'># cp wp-config-sample.php wp-config.php
-</span><span class='line'># nano wp-config.php
-</span><span class='line'>. . .
-</span><span class='line'>// ** MySQL settings - You can get this info from your web host ** //
-</span><span class='line'>/** The name of the database for WordPress */
-</span><span class='line'>define('DB_NAME', 'wordpress');
-</span><span class='line'>
-</span><span class='line'>/** MySQL database username */
-</span><span class='line'>define('DB_USER', 'wordpressuser');
-</span><span class='line'>
-</span><span class='line'>/** MySQL database password */
-</span><span class='line'>define('DB_PASSWORD', 'password');
-</span><span class='line'>. . .
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Make wordpress running directory and copy the source code here:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /var/www/html
-</span><span class='line'># rsync -avP ~/wordpress/ /var/www/html/
-</span><span class='line'># chown -R www-data:www-data /var/www/html/*
-</span><span class='line'># cd /var/www/html/
-</span><span class='line'>root@justfordemo:/var/www/html# mkdir wp-content/uploads
-</span><span class='line'>root@justfordemo:/var/www/html# chown -R :www-data /var/www/html/wp-content/uploads
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Modify nginx blocks</h4>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cp /etc/nginx/sites-available/default /etc/nginx/sites-available/wordpress
-</span><span class='line'># nano /etc/nginx/sites-available/wordpress
-</span><span class='line'>server {
-</span><span class='line'>        listen 80 default_server;
-</span><span class='line'>        listen [::]:80 default_server ipv6only=on;
-</span><span class='line'>
-</span><span class='line'>        root /var/www/html;
-</span><span class='line'>        index index.php index.html index.htm;
-</span><span class='line'>
-</span><span class='line'>        server_name your_domain.com;
-</span><span class='line'>
-</span><span class='line'>        location / {
-</span><span class='line'>                # try_files $uri $uri/ =404;
-</span><span class='line'>                try_files $uri $uri/ /index.php?q=$uri&$args;
-</span><span class='line'>        }
-</span><span class='line'>
-</span><span class='line'>        error_page 404 /404.html;
-</span><span class='line'>
-</span><span class='line'>        error_page 500 502 503 504 /50x.html;
-</span><span class='line'>        location = /50x.html {
-</span><span class='line'>                root /usr/share/nginx/html;
-</span><span class='line'>        }
-</span><span class='line'>
-</span><span class='line'>        location ~ \.php$ {
-</span><span class='line'>                try_files $uri =404;
-</span><span class='line'>                fastcgi_split_path_info ^(.+\.php)(/.+)$;
-</span><span class='line'>                fastcgi_pass unix:/var/run/php5-fpm.sock;
-</span><span class='line'>                fastcgi_index index.php;
-</span><span class='line'>                include fastcgi_params;
-</span><span class='line'>        }
-</span><span class='line'>}
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now restart the service via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ln -s /etc/nginx/sites-available/wordpress /etc/nginx/sites-enabled/
-</span><span class='line'># service nginx restart
-</span><span class='line'># service php5-fpm restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now visit: <br/>
-<a href="http://10.0.0.6">http://10.0.0.6/</a> you will get the wordpress configuration window, Enjoy it!!!</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/20">&larr; Older</a>
@@ -2952,6 +2777,10 @@ Open the gtk-recordMyDesktop then select the window, start and it will automatic
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/06/19/wh-worktips-4/">WH Worktips(4)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/06/18/use-virtualenv-for-downloading-pip-packages/">Use VirtualEnv for Downloading PIP Packages</a>
       </li>
     
@@ -2965,10 +2794,6 @@ Open the gtk-recordMyDesktop then select the window, start and it will automatic
     
       <li class="post">
         <a href="/blog/2015/06/17/wh-worktips-1/">WH Worktips(1)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/16/xenserver-tips/">XenServer Tips</a>
       </li>
     
   </ul>
