@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-06-19T19:20:01+08:00</updated>
+  <updated>2015-06-23T23:02:02+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,114 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Import More ISOs in Cobbler]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/23/import-more-isos-in-cobbler/"/>
+    <updated>2015-06-23T20:52:09+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/23/import-more-isos-in-cobbler</id>
+    <content type="html"><![CDATA[<h3>Ubuntu12.04</h3>
+
+<p>Since you have the iso files, import it via:</p>
+
+<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop /mnt/iso/ubuntu-12.04.3-server-amd64.iso /mnt1
+[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
+[root@CobblerServer iso]# cobbler profile list
+   CentOS-7-x86_64
+   Ubuntu-12.04-x86_64
+   Ubuntu14.04-x86_64
+</code></pre>
+
+<p>To make it quickly deployment, visit:    <br/>
+<a href="http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/</a></p>
+
+<p>Edit its profile like following:</p>
+
+<pre><code>[root@CobblerServer kickstarts]# cobbler profile edit --name=Ubuntu-12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1204.seed 
+</code></pre>
+
+<p>Create a new virtual machine for testing.</p>
+
+<pre><code>[root@CobblerServer kickstarts]# cobbler system add --name=test1204 --profile=Ubuntu-12.04-x86_64 --mac=52:54:00:e4:2c:df --interface=eth0 --ip-address=10.3.3.33 --hostname=test1204 --gateway=10.3.3.1 --dns-name=test1204
+</code></pre>
+
+<p>Testing the tftpserver via:</p>
+
+<pre><code>[dash@~]$ tftp 10.3.3.3   
+tftp&gt; get /pxelinux.0
+tftp&gt; quit
+[dash@~]$ ls pxelinux.0 
+pxelinux.0
+</code></pre>
+
+<p>Trouble-Shooting, you should very careful on your pxelinux.0 file, make sure you have the correct ones. Recently it&rsquo;s hard to get the right pxelinux.0 from cobbler loader sync.</p>
+
+<h3>Ubuntu15.04</h3>
+
+<p>Import the iso via:</p>
+
+<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop ./ubuntu-15.04-server-amd64.iso /mnt1/
+[root@CobblerServer iso]# cobbler import --name=Ubuntu-15.04 --arch=x86_64 --path=/mnt1
+</code></pre>
+
+<p>Notice, here you will met Signature mismatch problem, do following:   <br/>
+First update Cobbler: ?</p>
+
+<pre><code>$ vim /etc/yum.repos.d/cobbler26.repo
+[home_libertas-ict_cobbler26]
+name=Cobbler (2.6.x) (CentOS_CentOS-6)
+type=rpm-md
+baseurl=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/
+gpgcheck=1
+gpgkey=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/repodata/repomd.xml.key
+enabled=1
+$ sudo yum install -y cobbler cobbler-web
+</code></pre>
+
+<p>And Trouble-Shooting for iptables(If you use redsocks):</p>
+
+<pre><code># iptables -t nat -I OUTPUT -d 10.3.3.0/24 -j RETURN
+</code></pre>
+
+<p>Then signature update will OK:</p>
+
+<pre><code>[root@CobblerServer redsocks]# cobbler signature update
+task started: 2015-06-23_144247_sigupdate
+task started (id=Updating Signatures, time=Tue Jun 23 14:42:47 2015)
+Successfully got file from http://cobbler.github.com/signatures/2.6.x/latest.json
+*** TASK COMPLETE ***
+</code></pre>
+
+<p>Re-import:</p>
+
+<pre><code>[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
+*** TASK COMPLETE ***
+[root@CobblerServer mnt]# cobbler profile list
+   CentOS-7-x86_64
+   Ubuntu-12.04-x86_64
+   Ubuntu-15.04-x86_64
+   Ubuntu14.04-x86_64
+</code></pre>
+
+<p>Edit the profile via:</p>
+
+<pre><code>[root@CobblerServer lib]# cd /var/lib/cobbler/kickstarts/
+[root@CobblerServer kickstarts]# ls
+default.ks    esxi5-ks.cfg      legacy.ks     sample_autoyast.xml  sample_esx4.ks   sample_esxi5.ks  sample_old.seed  ubuntu1204.seed
+esxi4-ks.cfg  install_profiles  pxerescue.ks  sample_end.ks        sample_esxi4.ks  sample.ks        sample.seed
+[root@CobblerServer kickstarts]# vim ubuntu1504.seed
+</code></pre>
+
+<p>Test it via:</p>
+
+<pre><code>$ qemu-img create -f qcow2 Cobbler1504Test.qcow2 100G
+$ cobbler profile edit --name=Ubuntu-15.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1504.seed
+$  cobbler system add --name=test1504 --profile=Ubuntu-15.04-x86_64 --mac=52:54:00:2e:c0:ff --interface=eth0 --ip-address=10.3.3.34 --hostname=test1504 --gateway=10.3.3.1 --dns-name=test1504
+</code></pre>
+
+<p>Installed failed, verify it tomorrow.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[WH Worktips(5)]]></title>
@@ -231,139 +339,6 @@ python-pip-1.3.1-4.el6.noarch.rpm
 <p>From now on, you could visit the management server via:</p>
 
 <p><a href="http://10.47.58.112:8080/client/">http://10.47.58.112:8080/client/</a></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[WH Worktips(2)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/18/wh-worktips-2/"/>
-    <updated>2015-06-18T10:20:48+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/18/wh-worktips-2</id>
-    <content type="html"><![CDATA[<h3>Cobbler Web</h3>
-
-<p>Visit the following website:</p>
-
-<p><a href="http://10.47.58.2/cobbler_web">http://10.47.58.2/cobbler_web</a></p>
-
-<p>You will see:</p>
-
-<p><img src="/images/2015_06_18_10_21_45_755x413.jpg" alt="/images/2015_06_18_10_21_45_755x413.jpg" /></p>
-
-<h3>Added More Profiles</h3>
-
-<p>The default kickstart configuration file could found under:   <br/>
-<code>/var/lib/cobbler/kickstarts/sample_end.ks</code>, copy it to your own.</p>
-
-<pre><code>$ cp /var/lib/cobbler/kickstarts/sample_end.ks CentOS65Desktop.cfg
-$ vim CentOS65Desktop.cfg
-# Allow anaconda to partition the system as needed
-# autopart
-# 1G Swap and remains others to be ext4
-part swap --fstype="swap" --size=1024
-part / --asprimary --fstype="ext4" --grow --size=1
-.......
-%packages
-# Added from here
-@additional-devel
-@basic-desktop
-@chinese-support
-@desktop-platform
-@development
-@fonts
-@general-desktop
-@input-methods
-@x11
-git
--ibus-table-cangjie
--ibus-table-erbi
--ibus-table-wubi
-# End of added
-$SNIPPET('func_install_if_enabled')
-%end
-</code></pre>
-
-<p>More configurations could be customized.</p>
-
-<h3>Fixed IP Address Via DHCP</h3>
-
-<p>By adding the configuration in dhcp configuration:</p>
-
-<pre><code>$ sudo vim /etc/cobbler/dhcp.template
-     max-lease-time             43200;      
-     next-server                $next_server; 
-
-     host ns111 {
-         next-server $next_server;
-         hardware ethernet 52:54:00:e0:cc:18;
-         fixed-address 10.47.58.111;
-     }
-
-
-     class "pxeclients" {
-$ sudo cobbler sync
-</code></pre>
-
-<p>Now restart the deployed node, you will easily see the node.</p>
-
-<h3>Specify Fixed IP For Host</h3>
-
-<p>Add the configration of the node112, then this machine will start with our specified parameters:</p>
-
-<pre><code># cobbler system add --name=node112 --profile=CentOS6.5-Desktop --mac=52:54:00:92:8c:4d --interface=eth0 --ip-address=10.47.58.112 --hostname=node112 --gateway=10.47.58.1 --dns-name=node112
-</code></pre>
-
-<p>Now bootup the machine, then this computer will have the fixed IP address.</p>
-
-<p><img src="/images/2015_06_18_11_38_48_794x263.jpg" alt="/images/2015_06_18_11_38_48_794x263.jpg" /></p>
-
-<h3>Use Ansible For Administrate The Added Nodes</h3>
-
-<p>Install ansible via:</p>
-
-<pre><code># yum install -y ansible sshpass
-# vim /etc/hosts
-10.47.58.112    node112
-
-# mkdir -p ~/Code/Ansible
-# cd ~/Code/Ansible
-# vim ansible.cfg
-    [defaults]
-    hostfile=/root/Code/Ansible/hosts
-
-# vim hosts
-    [node112]
-    10.47.58.112
-
-# vim ssh-addkey.yml
-    ---
-    - hosts: all
-      sudo: yes
-      gather_facts: no
-      remote_user: root
-
-      tasks:
-
-      - name: install ssh key
-        authorized_key: user=root
-                        key="" 
-                        state=present
-
-# ssh-keyscan 10.47.58.112&gt;&gt;/root/.ssh/known_hosts
-# ansible-playbook ssh-addkey.yml --ask-pass
-</code></pre>
-
-<p>Now the node112 is under controlled by you.  <br/>
-Take refers to:  <br/>
-<a href="https://sysadmincasts.com/episodes/45-learning-ansible-with-vagrant-part-2-4">https://sysadmincasts.com/episodes/45-learning-ansible-with-vagrant-part-2-4</a></p>
-
-<p>Test via:</p>
-
-<pre><code>[root@z_WHServer Ansible]# ansible all -m shell -a "uptime"
-10.47.58.112 | success | rc=0 &gt;&gt;
- 06:18:59 up  1:32,  2 users,  load average: 0.00, 0.00, 0.00
-</code></pre>
-
-<p>In following parts we will try to deploy Cloudstack using playbook.</p>
 ]]></content>
   </entry>
   
