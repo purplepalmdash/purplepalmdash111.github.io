@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-06-23T23:02:02+08:00</updated>
+  <updated>2015-06-24T20:41:50+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,131 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[WH Worktips(6)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/24/wh-worktips-6/"/>
+    <updated>2015-06-24T11:54:12+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/24/wh-worktips-6</id>
+    <content type="html"><![CDATA[<h3>Migration</h3>
+
+<p>So this time we will migrate the whole machine, that is the Cobbler Server from one physical machine to another one. The steps are:  <br/>
+1. Transfer the harddisk files.   <br/>
+2. Edit the <code>/etc/udev/rules.d/70-persistent-net.rules</code>, Change the eth1 to eth0, and remove the eth0 item.  <br/>
+3. Edit the <code>/etc/sysconfig/network-scripts/ifcfg-eth0</code>, its mac address to the one you specified on step 2.   <br/>
+4. Restart the machine.</p>
+
+<h3>Modification &amp;&amp; Test</h3>
+
+<p>Create a new machine, which mac address is <code>52:54:00:3a:87:4e</code>, and define it on Cobbler server:</p>
+
+<pre><code>[root@z_WHServer ~]# cobbler system add --name=node147 --profile=CentOS-6.5-x86_64 --mac=52:54:00:3a:87:4e --interface=eth0 --ip-address=10.47.58.147 --hostname=node147 --gateway=10.47.58.1 --dns-name=node147
+</code></pre>
+
+<p>Now bootup the machine and let it be deployed by cobbler server. The deployment time depends on your disk speed.</p>
+
+<p>At the same time, edit the Ansible configuration:</p>
+
+<pre><code>[root@z_WHServer Ansible]# cat hosts
+[node147]
+10.47.58.147
+[root@z_WHServer Ansible]# pwd
+/root/Code/Ansible
+</code></pre>
+
+<p>Copy the repository to the <code>10.47.58.2:/var/www/html/</code>, and edit the Ansible configuration.   <br/>
+And Also configure the nfs server for the second host, previously we use the one we got from the external nfs server.  <br/>
+Also the download vhd template files.  <br/>
+<code>
+$ scp -r ./4.4/ root@10.47.58.2:/var/www/html/
+[root@z_WHServer html]# chmod 777 -R 4.4
+[root@z_WHServer CloudStack-Ansible-Playbook]# vim templates/cloudstack.repo.j2
+[cloudstack]
+name=cloudstack
+baseurl=http://10.47.58.2/4.4/
+clouder@pc121:/home/juju$ scp ./systemvm64template-* root@10.47.58.2:/var/www/html/
+root@10.47.58.2's password:
+systemvm64template-2014-06-23-master-xen.vhd.bz2                                                             100%  237MB  59.4MB/s   00:04
+systemvm64template-4.4.1-7-kvm.qcow2.bz2                                                                     100%  291MB  36.4MB/s   00:08
+clouder@pc121:/home/juju$ scp ./vhd-util root@10.47.58.2:/var/www/html/
+[root@z_WHServer html]# chmod 777 systemvm64template-*
+[root@z_WHServer html]# chmod 777 vhd-util
+[root@z_WHServer html]# vim /etc/exports
+/home/export *(rw,async,no_root_squash,no_subtree_check)
+[root@z_WHServer html]# mkdir -p /home/export
+[root@z_WHServer html]# chmod 777 -R /home/export/
+[root@z_WHServer html]# chkconfig nfs on
+[root@z_WHServer html]# chkconfig rpcbind on
+[root@z_WHServer html]# service nfs restart
+[root@z_WHServer html]# service rpcbind restart
+[root@z_WHServer html]# iptables -D INPUT -j REJECT --reject-with icmp-host-prohibited
+[root@z_WHServer home]# chown -R nobody /home/export/
+[root@z_WHServer CloudStack-Ansible-Playbook]# vim cloudstack.yml
+.......
+    CSManagement:
+      ManagementIP: 10.47.58.147
+      SecondaryMount: /secondary
+      NFSHost: 10.47.58.2
+      NFSSecondaryShare: /home/export
+      SysTemplateURLurl43: http://10.47.58.2/systemvm64template-2014-06-23-master-xen.vhd.bz2
+      SysTemplateURLurl44: http://10.47.58.2/systemvm64template-4.4.1-7-kvm.qcow2.bz2
+      SysTemplateURLhv: xenserver
+      VhdutilURL: http://10.47.58.2/vhd-util
+.....
+</code></p>
+
+<p>Now deploy the playbooks via the same process in:   <br/>
+<a href="http://purplepalmdash.github.io/blog/2015/06/19/wh-worktips-4/">http://purplepalmdash.github.io/blog/2015/06/19/wh-worktips-4/</a></p>
+
+<pre><code># cd /root/Code/Ansible/CloudStack-Ansible-Playbook
+# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=pip
+# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=base
+# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=mysql
+# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=mysql3306
+# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=csmanagement 
+</code></pre>
+
+<p>Visit
+<a href="http://10.47.58.147:8080/client">http://10.47.58.147:8080/client</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Install Newest Version of Cobbler]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/06/24/install-newest-version-of-cobbler/"/>
+    <updated>2015-06-24T09:38:50+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/06/24/install-newest-version-of-cobbler</id>
+    <content type="html"><![CDATA[<h3>Background</h3>
+
+<p>Cobbler has changed its homepage from <code>www.cobblerd.org</code> to <code>http://cobbler.github.io/</code>, thus some configuration will be be failed. In order to solve these problems, we have to upgrade to the newest version, current newest version is <code>2.6.9</code>.</p>
+
+<h3>Download And Install</h3>
+
+<p>Go to <a href="http://cobbler.github.io/downloads/2.6.x.html">http://cobbler.github.io/downloads/2.6.x.html</a> for selecting your distribution, and download them to your folder. Mine is configured via:</p>
+
+<pre><code>$ wget http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/home:libertas-ict:cobbler26.repo
+$ cp home\:libertas-ict\:cobbler26.repo /etc/yum.repos.d/cobbler26.repo
+$ yum install -y cobbler cobbler-web
+</code></pre>
+
+<h3>Configuration</h3>
+
+<p>After installation, configure your newest cobbler via:</p>
+
+<pre><code>$ cobbler sync
+$ reboot
+$ cobbler signature update
+</code></pre>
+
+<p>By updating the signature of the cobbler, the newest system will be supported, like Ubuntu15.04, etc.</p>
+
+<p>You can also update all of the loaders via:</p>
+
+<pre><code># cobbler get-loaders --force
+# cobbler sync
+</code></pre>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Import More ISOs in Cobbler]]></title>
@@ -230,115 +355,6 @@ It is sometimes useful to re-run the command using -vvvv, which prints SSH debug
 </code></pre>
 
 <p>Now you could enjoy a new node&rsquo;s ansible deployment.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Use VirtualEnv for Downloading PIP Packages]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/18/use-virtualenv-for-downloading-pip-packages/"/>
-    <updated>2015-06-18T20:56:30+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/18/use-virtualenv-for-downloading-pip-packages</id>
-    <content type="html"><![CDATA[<p>In order to use offline installation of pip, I tried following steps for retrieving the packages.</p>
-
-<h3>Fetch Packages</h3>
-
-<p>First install virtualenv packages on CentOS7.</p>
-
-<pre><code>$ sudo yum install -y python-virtualenv
-$ virtualenv venv
-New python executable in venv/bin/python
-Installing Setuptools..............................................................................................................................................................................................................................done.
-Installing Pip.....................................................................................................................................................................................................................................................................................................................................done.
-$ ls venv
-bin  include  lib  lib64
-$ source venv/bin/activate
-(venv)$      
-(venv)$ pip install --download-cache=/home/dash/pipcache cloudmonkey
-(venv)$ ls pipcache/
-https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fa%2Fargcomplete%2Fargcomplete-0.8.9.tar.gz
-https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fa%2Fargcomplete%2Fargcomplete-0.8.9.tar.gz.content-type
-https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fc%2Fcloudmonkey%2Fcloudmonkey-5.3.1-0.tar.gz
-https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fc%2Fcloudmonkey%2Fcloudmonkey-5.3.1-0.tar.gz.content-type
-https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2FP%2FPrettyTable%2Fprettytable-0.7.2.tar.bz2
-......
-(venv)$ mkdir ~/pipcache2
-(venv)$ pip install cloudmonkey --download=/home/dash/pipcache2
-(venv)$ ls pipcache2
-argcomplete-0.8.9.tar.gz    Pygments-2.0.2.tar.gz
-cloudmonkey-5.3.1-0.tar.gz  requests-2.7.0.tar.gz
-prettytable-0.7.2.tar.bz2
-</code></pre>
-
-<h3>Use Packages</h3>
-
-<p>In order to use packages, we did following things.</p>
-
-<pre><code>$ scp xxx@xxx.xxx.xxx.xx:/home/xxx/pipcache2.tar.gz ./
-$ tar xzvf pipcache2.tar.gz 
-$ pip install --no-index --find-links ~/pipcache2 cloudmonkey
-</code></pre>
-
-<p>Now the package has been installed. enjoy them.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[WH Worktips(3)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/18/wh-worktips-3/"/>
-    <updated>2015-06-18T15:50:11+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/18/wh-worktips-3</id>
-    <content type="html"><![CDATA[<h3>Prepare Packages</h3>
-
-<h4>System Pacakges</h4>
-
-<p>Since CentOS6.5 already deprecated, we need to use <code>http://vault.centos.org/6.5/</code> for download the packages.  <br/>
-Or we could remove all of the repo definition files except the cobbler deployed one.</p>
-
-<p>We need python-pip for usage. Download it via yum firstly to the directory.</p>
-
-<p>Download the following packages, these packages may have problems because I downloaded them from the latest repository.</p>
-
-<pre><code>$ yum install yum-plugin-downloadonly
-$ yum install --downloadonly --downloaddir=/root/Code/repo/ python-pip
-$ yum install --downloadonly --downloaddir=/root/Code/repo/ nethogs
-$ yum reinstall --downloadonly --downloaddir=/root/Code/repo/ java7
-$ yum reinstall --downloadonly --downloaddir=/root/Code/repo/ mysql-devel
-$ yum install --downloadonly --downloaddir=/root/Code/repo/ java-1.7.0-openjdk-devel
-$ yum install --downloadonly --downloaddir=/root/Code/repo/ mysql-server
-$ yum install --downloadonly --downloaddir=/root/Code/repo/ mysql-devel
-[root@z_WHServer repo]# ls
-python-pip-1.3.1-4.el6.noarch.rpm
-....
-</code></pre>
-
-<h4>Cloudstack Packages</h4>
-
-<p>Download all of the cloudstack packages from <code>http://cloudstack.apt-get.eu/rhel/4.4/</code>, and put them into a directory, run <code>createrepo</code> for generating the repodata.</p>
-
-<h4>PIP Packages</h4>
-
-<p>Manually create the offline installation resources.</p>
-
-<h3>Deployment</h3>
-
-<pre><code>#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=base
-#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=mysql
-#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=mysql3306
-#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=csmanagement -vvvv
-</code></pre>
-
-<p>There may be some problems in deployment in <code>/etc/hosts</code>, so manually add itself to the hostname:  <br/>
-!!! node112 !!!</p>
-
-<pre><code>[root@node112 yum.repos.d]# cat /etc/hosts
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-10.47.58.112    node112
-</code></pre>
-
-<p>From now on, you could visit the management server via:</p>
-
-<p><a href="http://10.47.58.112:8080/client/">http://10.47.58.112:8080/client/</a></p>
 ]]></content>
   </entry>
   
