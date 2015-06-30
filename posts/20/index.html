@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Use Popen for running ls We could use following python scripts for running the bash command ls -l: 1
+  <meta name="description" content="Building Filesystems Use following script for building the basic filesystem: 1
 2
 3
 4
@@ -17,7 +17,17 @@
 6
 7
 8
-&gt;&gt;&gt; from subprocess &hellip;">
+9
+10
+11
+12
+13
+14
+15
+16
+17
+$ cat mkrootfs #!/bin/sh
+echo &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -73,6 +83,576 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-3/">Linux2.6.39 for Utu2440(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-10-25T11:30:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:30 am</span></time>
+        
+         | <a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Building Filesystems</h3>
+
+<p>Use following script for building the basic filesystem:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat mkrootfs 
+</span><span class='line'>#!/bin/sh
+</span><span class='line'>echo "------Create rootfs directons start...--------"
+</span><span class='line'>mkdir rootfs
+</span><span class='line'>cd rootfs
+</span><span class='line'>echo "--------Create root,dev....----------"
+</span><span class='line'>mkdir bin boot dev etc home lib mnt proc root sbin sys tmp usr var  www
+</span><span class='line'>mkdir etc/init.d etc/rc.d etc/sysconfig
+</span><span class='line'>mkdir usr/sbin usr/bin usr/lib usr/modules
+</span><span class='line'>echo "make node in dev/console dev/null"
+</span><span class='line'>mknod -m 666 dev/console c 5 1
+</span><span class='line'>mknod -m 666 dev/null c 1 3
+</span><span class='line'>mkdir mnt/etc mnt/jffs2 mnt/yaffs mnt/data mnt/temp
+</span><span class='line'>mkdir var/lib var/lock var/run var/tmp
+</span><span class='line'>chmod 1777 tmp
+</span><span class='line'>chmod 1777 var/tmp
+</span><span class='line'>echo "-------make direction done---------"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run it and you will get an folder which contains the newly created directory structure.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo ./mkrootfs 
+</span><span class='line'>------Create rootfs directons start...--------
+</span><span class='line'>--------Create root,dev....----------
+</span><span class='line'>make node in dev/console dev/null
+</span><span class='line'>-------make direction done---------
+</span><span class='line'>$ ls rootfs 
+</span><span class='line'>bin  boot  dev  etc  home  lib  mnt  proc  root  sbin  sys  tmp  usr  var  www
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After making the filesystem, you should install all of the kernel modules into your fs:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ make modules_install ARCH=arm INSTALL_MOD_PATH=The_PATH_TO_YOUR_ROOTFS
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>BusyBox</h3>
+
+<p>Busybox provides almost all of the tools used in system, first we should download and cross-compile it.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://www.busybox.net/downloads/busybox-1.22.1.tar.bz2
+</span><span class='line'>$ tar xjvf busybox-1.22.1.tar.bz2
+</span><span class='line'>$ cd busybox-1.22.1
+</span><span class='line'>$ vim Makefile
+</span><span class='line'>+ CROSS_COMPILE ?= arm-linux-
+</span><span class='line'># bbox: we may have CONFIG_CROSS_COMPILER_PREFIX in .config,
+</span><span class='line'>$ make menuconfig
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Parameters:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Build Options---&gt; Build BusyBox as a static binary(no shared libs)
+</span><span class='line'>Installation Options--&gt; Busybox installation prefix(See following pictures)
+</span><span class='line'>Linux Module Utilities--&gt;  Default directory containing modules(/lib/modules)
+</span><span class='line'>Linux System Utilities ---&gt;
+</span><span class='line'>[*]Support /etc/mdev.conf
+</span><span class='line'>[*]Support command execution at device addition/removal
+</span><span class='line'>Init Utilities ---&gt;
+</span><span class='line'>"Support reading an inittab file"
+</span><span class='line'>"Support running commands with a controlling-tty"
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><img src="/images/busyboxinstall.jpg" alt="/images/busyboxinstall.jpg" />  <br/>
+Then Make and make install:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ make && make install
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now list the rootfs you have created you could see a new file named linuxrc is located under the / directory. Also you will see lots of executable files under the /bin which links to the /bin/busybox.</p>
+
+<h3>Startup Configuration</h3>
+
+<p>Create the /etc/group file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/group
+</span><span class='line'>root:*:0:
+</span><span class='line'>daemon:*:1:
+</span><span class='line'>bin:*:2:
+</span><span class='line'>sys:*:3:
+</span><span class='line'>adm:*:4:
+</span><span class='line'>tty:*:5:
+</span><span class='line'>disk:*:6:
+</span><span class='line'>lp:*:7:lp
+</span><span class='line'>mail:*:8:
+</span><span class='line'>news:*:9:
+</span><span class='line'>u p:*:10:
+</span><span class='line'>proxy:*:13:
+</span><span class='line'>kmem:*:15:
+</span><span class='line'>dialout:*:20:
+</span><span class='line'>fax:*:21:
+</span><span class='line'>voice:*:22:
+</span><span class='line'>cdrom:*:24:
+</span><span class='line'>floppy:*:25:
+</span><span class='line'>tape:*:26:
+</span><span class='line'>s o:*:27:
+</span><span class='line'>a io:*:29:
+</span><span class='line'>sshd:*:74:
+</span><span class='line'>ppp:x:99:
+</span><span class='line'>500:x:500:plg
+</span><span class='line'>501:x:501:fa
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the /etc/passwd file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/passwd
+</span><span class='line'>root::0:0:root:/:/bin/sh
+</span><span class='line'>ftp::14:50:FTP User:/var/ftp:
+</span><span class='line'>bin:*:1:1:bin:/bin:
+</span><span class='line'>daemon:*:2:2:daemon:/sbin:
+</span><span class='line'>nobody:*:99:99:Nobody:/:
+</span><span class='line'>sky::502:502:Linux User,,,:/home/sky:/bin/sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the hostname:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/sysconfig/HOSTNAME 
+</span><span class='line'>utu2440
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the inittab file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/inittab
+</span><span class='line'>#etc/inittab
+</span><span class='line'>::sysinit:/etc/init.d/rcS
+</span><span class='line'>
+</span><span class='line'># Start an "askfirst" shell on /dev/tty2-4
+</span><span class='line'>console::askfirst:-/bin/sh
+</span><span class='line'>tty2::askfirst:-/bin/sh
+</span><span class='line'>tty3::askfirst:-/bin/sh
+</span><span class='line'>tty4::askfirst:-/bin/sh
+</span><span class='line'>
+</span><span class='line'># /sbin/getty invocations for selected ttys
+</span><span class='line'>tty4::respawn:/sbin/getty 38400 tty5
+</span><span class='line'>tty5::respawn:/sbin/getty 38400 tty6
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>::ctrlaltdel:/sbin/reboot
+</span><span class='line'>::shutdown:/bin/umount -a –r
+</span><span class='line'>$ chmod 777 etc/init.d/rcS
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit etc/init.d/rcS, this file will be executed everytime we bootup the linux system:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/init.d/rcS
+</span><span class='line'>#!/bin/sh
+</span><span class='line'>PATH=/sbin:/bin:/usr/sbin:/usr/bin
+</span><span class='line'>runlevel=S 
+</span><span class='line'>prevlevel=N
+</span><span class='line'>umask 022 
+</span><span class='line'>export PATH runlevel prevlevel
+</span><span class='line'>echo "----------mount all----------------"
+</span><span class='line'>mount -a 
+</span><span class='line'>echo /sbin/mdev&gt;/proc/sys/kernel/hotplug
+</span><span class='line'>mdev -s
+</span><span class='line'>### Added from utu2440
+</span><span class='line'>
+</span><span class='line'>trap ":" INT QUIT TSTP
+</span><span class='line'>##################################
+</span><span class='line'>#/bin/mount -t tmpfs tmpfs /dev
+</span><span class='line'>#/bin/mount -t sysfs sysfs /sys
+</span><span class='line'>
+</span><span class='line'>################################## 
+</span><span class='line'>mkdir /dev/pts
+</span><span class='line'>/bin/mknod /dev/pts/0 c 136 0
+</span><span class='line'>/bin/mknod /dev/pts/1 c 136 1
+</span><span class='line'>/bin/mknod /dev/pts/2 c 136 2
+</span><span class='line'>/bin/mknod /dev/pts/3 c 136 3
+</span><span class='line'>/bin/mknod /dev/pts/4 c 136 4
+</span><span class='line'>/bin/mknod /dev/pts/5 c 136 5
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>/bin/mount -t devpts devpts /dev/pts
+</span><span class='line'>#/bin/mount -t proc none /proc
+</span><span class='line'>ln -s /dev/ts0 /dev/h3600_tsraw
+</span><span class='line'>/sbin/ifconfig eth0 10.0.0.15
+</span><span class='line'>/usr/sbin/telnetd -l /bin/login
+</span><span class='line'>echo "After telnetd"
+</span><span class='line'>/usr/bin/tty&gt;/root/tty.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create a new fstab file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/fstab 
+</span><span class='line'>#device mount-point  type       option      dump  fsck  order
+</span><span class='line'>proc      /proc             proc      defaults        0      0
+</span><span class='line'>none     /tmp              ramfs     defaults       0       0
+</span><span class='line'>sysfs     /sys              sysfs      defaults        0      0
+</span><span class='line'>mdev    /dev              ramfs     defaults        0       0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Testing filesystem</h3>
+
+<p>Set the nfs boot options:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>utu-bootloader=&gt;&gt;&gt;setenv bootargs 'console=ttySAC0 init=/linuxrc root=/dev/nfs nfsroot=10.0.0.11:/media/nfs/rootfs,proto=tcp,nolock ip=10.0.0.15:10.0.0.1:10.0.0.1:255.255.255.0:www.yctek.com:eth0:off'
+</span><span class='line'>utu-bootloader=&gt;&gt;&gt;setenv bootargs 'console=ttySAC0 init=/linuxrc root=/dev/nfs nfsroot=10.0.0.11:/media/nfs/rootfs,proto=tcp,nolock ip=10.0.0.15'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>then we could boot into the nfs based filesystem.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Please press Enter to activate this console. NET: Registered protocol family 10
+</span><span class='line'>
+</span><span class='line'>[root@www ~]# 
+</span><span class='line'>[root@www ~]# uname -a
+</span><span class='line'>Linux www 2.6.39 #6 Mon Oct 20 16:12:43 CST 2014 armv4tl GNU/Linux
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-2/">Linux2.6.39 for Utu2440(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-10-25T11:10:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:10 am</span></time>
+        
+         | <a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Serial Port Support</h3>
+
+<p>Enable the Device Driver&mdash;-> Character deivces &mdash;-> Serial drivers &mdash;-> Samsung related settings, My setting is listed as following:   <br/>
+<img src="/images/serialport.jpg" alt="/images/serialport.jpg" />   <br/>
+Then you will see serial output during kernel boot.</p>
+
+<h3>DM9000 Support</h3>
+
+<p>Add following code into the linux/arch/arm/mach-s3c2440/mach-smdk2440.c:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#include &lt;linux/serial_core.h&gt;
+</span><span class='line'>+ /* Added dm9000 support for utu2400 */
+</span><span class='line'>+ #include &lt;linux/dm9000.h&gt;
+</span><span class='line'>#include &lt;linux/platform_device.h&gt;
+</span><span class='line'>
+</span><span class='line'>#include &lt;plat/common-smdk.h&gt;
+</span><span class='line'>
+</span><span class='line'>+ /* DM9000 Base address for SMDK2440 */
+</span><span class='line'>+ #define MACH_SMDK2440_DM9K_BASE (S3C2410_CS3 + 0x300)
+</span><span class='line'>
+</span><span class='line'>static struct map_desc smdk2440_iodesc[] __initdata = {
+</span><span class='line'>
+</span><span class='line'>+ /* Added for dm9000 */
+</span><span class='line'>+ static struct resource smdk2440_dm9k_resource[] = 
+</span><span class='line'>+ {
+</span><span class='line'>+     [0] = 
+</span><span class='line'>+      {
+</span><span class='line'>+           .start = MACH_SMDK2440_DM9K_BASE,
+</span><span class='line'>+           .end   = MACH_SMDK2440_DM9K_BASE + 3,
+</span><span class='line'>+           .flags = IORESOURCE_MEM
+</span><span class='line'>+      },
+</span><span class='line'>+     [1] = 
+</span><span class='line'>+      {
+</span><span class='line'>+           .start = MACH_SMDK2440_DM9K_BASE + 4,
+</span><span class='line'>+           .end   = MACH_SMDK2440_DM9K_BASE + 7,
+</span><span class='line'>+           .flags = IORESOURCE_MEM
+</span><span class='line'>+      },
+</span><span class='line'>+     [2] = 
+</span><span class='line'>+     {
+</span><span class='line'>+         .start = IRQ_EINT9,
+</span><span class='line'>+         .end   = IRQ_EINT9,
+</span><span class='line'>+         .flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
+</span><span class='line'>+     }
+</span><span class='line'>+ };
+</span><span class='line'>+ 
+</span><span class='line'>+ /*
+</span><span class='line'>+  * The DM9000 has no eeprom, and it's MAC address is set by
+</span><span class='line'>+  * the bootloader before starting the kernel.
+</span><span class='line'>+  */
+</span><span class='line'>+ static struct dm9000_plat_data smdk2440_dm9k_pdata = 
+</span><span class='line'>+ {
+</span><span class='line'>+     .flags        = (DM9000_PLATF_16BITONLY | DM9000_PLATF_NO_EEPROM),
+</span><span class='line'>+ };
+</span><span class='line'>+ 
+</span><span class='line'>+ static struct platform_device smdk2440_device_eth = 
+</span><span class='line'>+ {
+</span><span class='line'>+     .name        = "dm9000",
+</span><span class='line'>+     .id      = -1,
+</span><span class='line'>+     .num_resources = ARRAY_SIZE(smdk2440_dm9k_resource),
+</span><span class='line'>+     .resource  = smdk2440_dm9k_resource,
+</span><span class='line'>+     .dev       = {
+</span><span class='line'>+         .platform_data   = &smdk2440_dm9k_pdata,
+</span><span class='line'>+     },
+</span><span class='line'>+ };
+</span><span class='line'>
+</span><span class='line'>static struct platform_device *smdk2440_devices[] __initdata = {
+</span><span class='line'>  &s3c_device_ohci,
+</span><span class='line'>  &s3c_device_lcd,
+</span><span class='line'>  &s3c_device_wdt,
+</span><span class='line'>  &s3c_device_i2c0,
+</span><span class='line'>  &s3c_device_iis,
+</span><span class='line'>+     &smdk2440_device_eth,
+</span><span class='line'>};
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then select the dm9000 support from:  <br/>
+Device Driver&mdash;-> Network device support -> Ethernet(10 or 100Mbit) &mdash;-> DM9000 support   <br/>
+Now testing the kernel, you will see the kernel starts with dm9000 support, thus we could use NFS for booting the system.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1373,1170 +1953,6 @@ Edit the /usr/share/lxc/templates/lxc-ubuntu file, add &ndash;no-check-gpg after
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/18/linux-tips/">Linux Tips</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-18T19:21:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>7:21 pm</span></time>
-        
-         | <a href="/blog/2014/10/18/linux-tips/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>1. Know the System Installation Date</h3>
-
-<p>You can use tune2fs to know the installation date of your Linux System, be ware the /dev/sda[] should be the root partition of your disk. See my following example:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>tune2fs -l /dev/sda1 or /dev/sdb1* | grep 'Filesystem created:'
-</span><span class='line'>$ sudo tune2fs -l /dev/sda2  | grep 'Filesystem created:' 
-</span><span class='line'>Filesystem created:       Mon May  5 17:31:40 2014
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>2. View Thread Status</h3>
-
-<p>View the thread status via proc filesystem.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ps -ef | grep conky
-</span><span class='line'>Trusty      1396     1  0 19:15 ?        00:00:03 conky
-</span><span class='line'>Trusty      7410  6161  0 19:23 pts/5    00:00:00 grep --color=always conky
-</span><span class='line'>$ cd /proc/1396/task
-</span><span class='line'>$ ls
-</span><span class='line'>1396  1397  1398  1399  1400  1401  1402  1403
-</span><span class='line'>$ cat 1396/status| grep "State"
-</span><span class='line'>State:    S (sleeping)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>3. Write to other users</h3>
-
-<p>Use w to get the tty, then write to other users.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@lilimarleen:/# w
-</span><span class='line'> 00:47:04 up 28 min,  2 users,  load average: 0.00, 0.01, 0.02
-</span><span class='line'>USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
-</span><span class='line'>root     pts/0    1xx.xxx.xxx.xxx  00:26    0.00s  0.08s  0.00s w
-</span><span class='line'>root     pts/2    18x.xxx.xxx.xx   00:40   32.00s  0.03s  0.03s -bash
-</span><span class='line'>root@lilimarleen:/# echo "Hi, LiliMarleen"&gt;/dev/pts/2
-</span><span class='line'>root@lilimarleen:/# echo "Do you have lunch"&gt;/dev/pts/2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>4. Share Terminals</h3>
-
-<p>Make sure the screen command is available on your machine, then:  <br/>
-Server side:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ screen -S share
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Client side:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ screen -x share
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now both side input could be seen.</p>
-
-<h3>5. Create xz file</h3>
-
-<p>xz file will greatly decrease the file size, we use following command for create a xz file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>tar cvfJ tar_xz_file.tar.xz folder_or_file
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>extract from xz from could be:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>tar -xJf tar_xz_file.tar.xz
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>6. Login issue</h3>
-
-<p>When you met</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>file /home/xxx/.Xauthority does not exist
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>simply run following command once you login:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ startx
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Next time you won&rsquo;t met this complains.</p>
-
-<h3>7. Execution priviledge</h3>
-
-<p>Login to Opensuse, run ifconfig will complains it needs root priviledge:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Absolute path to 'ifconfig' is '/sbin/ifconfig', so running it may require superuser privileges (eg. root)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Simply add one line to the end of your ~/.bashrc file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>export PATH=/sbin/:$PATH
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Next time you could directly run <code>ifconfig</code>, or if you don&rsquo;t want to change your .bashrc file, do <code>/sbin/ifconfig</code>.</p>
-
-<h3>8. Show history timestap</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@Linux01 ~]$  export HISTTIMEFORMAT="%F %T `whoami` "
-</span><span class='line'>[Trusty@Linux01 ~]$ history | more
-</span><span class='line'>    6  2014-10-29 03:33:01 Trusty ls | grep trb
-</span><span class='line'>    7  2014-10-29 03:33:01 Trusty ./trbTest.py 
-</span><span class='line'>    8  2014-10-29 03:33:01 Trusty history |grep export
-</span><span class='line'>    9  2014-10-29 03:33:01 Trusty su root
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>9. Vrome setting</h3>
-
-<p>Chromium install the vrome then set the options of</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>set useletter=0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The keyshorts: go to address line Ctrl+L, in MAC Win+L.</p>
-
-<h3>10. Replace the word until end of the line</h3>
-
-<p>In vim by following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>:%s/\&lt;foo\&gt;.*//
-</span><span class='line'>On each line, delete the whole word "foo" and all following text (to end of line).
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>11. Managing all of the running vagrants</h3>
-
-<p>See following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@/media/y/Vagrant/vccw/myproxy/vccw-1.9.1]$ VBoxManage list runningvms
-</span><span class='line'>"vccw-191_default_1417846604747_55987" {7b802d9e-dee2-4662-9694-e7cff6cbc49b}
-</span><span class='line'>[Trusty@/media/y/Vagrant/vccw/myproxy/vccw-1.9.1]$ VBoxManage controlvm vccw-191_default_1417846604747_55987 savestate
-</span><span class='line'>0%...10%...20%...30%...40%...50%...60%...70%...80%...90%...100%
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>12. Battery</h3>
-
-<p>To know the current battery via acpi, run:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ acpi -b
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>To know the more detailed info of Battery, goto:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd /sys/class/power_supply/BAT0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>13. Add arp entry</h3>
-
-<p>So if you have rebooted the existing testing environment, your arp entries may be lost, simply use following command for adding it:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arp -s 192.168.1.10 00:01:02:03:04:05
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you will directly reached 192.168.1.10 via the specified mac address.</p>
-
-<h3>14. Enable opera proxy</h3>
-
-<p>After Opera upgraded to latest version its configuration for proxy is failed, so I change the startup command from <code>opera</code> to:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ opera --proxy-server="socks://127.0.0.1:1395"
-</span><span class='line'>$ alias opera='opera --proxy-server="socks://127.0.0.1:1395"'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>15. Delete a package and its configuration file</h3>
-
-<p>Use <code>pacman -R --help</code> for more detailed infos, so remove the vagrant including its configuration will be:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -R vagrant -n
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>16. Install rar/unrar on CentOS</h3>
-
-<p>Install the rar/unrar via following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  wget http://pkgs.repoforge.org/rpmforge-release/rpmforge-release-0.5.2-2.el6.rf.i686.rpm
-</span><span class='line'>#  sudo rpm -ivh rpmforge-release-0.5.2-2.el6.rf.i686.rpm
-</span><span class='line'>#  sudo yum install rar unrar
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<h3>17. zsh History</h3>
-
-<p>The default installed zsh has no history record, thus we have to enable the history via following setting:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ touch $HOME/.zsh_history
-</span><span class='line'>$ tail ~/.zshrc
-</span><span class='line'># For setting zsh history
-</span><span class='line'>HISTFILE=$HOME/.zsh_history
-</span><span class='line'>setopt INC_APPEND_HISTORY
-</span><span class='line'>setopt SHARE_HISTORY
-</span><span class='line'>HISTSIZE=5000
-</span><span class='line'>SAVEHIST=5000
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you will got the history recorded for 5000 lines, and each of them could be shared to each other.</p>
-
-<h3>18. Calculate Code Lines</h3>
-
-<p>We could use cloc for calculate the code lines. In Ubuntu, simply run following commands for installing cloc:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install cloc
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>cloc via following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cloc Your_Source_Code_Directory
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After a while your statistics result will be displayed on the screen.</p>
-
-<h3>19. CMAKE prefix</h3>
-
-<p>For specify the cmake&rsquo;s prefix we use following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ./ && make && sudo make install
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>20. xclip</h3>
-
-<p>Sometimes we have to quickly redirect some output from the system output to system clipboard, we use xclip, add following alias to your ~/.bashrc or ~/.zshrc:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># Alias the xclip for directly to my system buffer, thus we could use shift+insert for copy the content.
-</span><span class='line'>alias myclip='xclip -selection clipboard'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>21. Virtualbox Fixed Address</h3>
-
-<p>The host-only adapter should have the static addresses, thus you won&rsquo;t mix each other.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/network/interfaces
-</span><span class='line'>auto eth1
-</span><span class='line'>iface eth1 inet static
-</span><span class='line'>    address 192.168.56.101
-</span><span class='line'>    netmask 255.255.255.0
-</span><span class='line'>    gateway 192.168.56.1
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>22. Autologin Using ssh</h3>
-
-<p>When you add the rsa content into the ~/.ssh/authorized_keys, but you still can&rsquo;t auto-login, then you have to consider the priviledge problem:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls ~/.ssh/authorized_keys  -l 
-</span><span class='line'>-rw-r--r--. 1 Trusty Trusty 392 Feb 11 11:36 /home/Trusty/.ssh/authorized_keys
-</span><span class='line'>$ chmod g-w ~/.ssh/authorized_keys
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could reach the machine without inputting password.</p>
-
-<h3>23. Change Static Address For CentOS</h3>
-
-<p>Change the following file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/sysconfig/network-scripts/ifcfg-eth*
-</span><span class='line'>DEVICE=eth0 
-</span><span class='line'>BOOTPROTO=none 
-</span><span class='line'>ONBOOT=yes 
-</span><span class='line'>NETWORK=10.0.1.0 
-</span><span class='line'>NETMASK=255.255.255.0 
-</span><span class='line'>IPADDR=10.0.1.27 
-</span><span class='line'>USERCTL=no
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Restart and then you could find your CentOS have static address.</p>
-
-<h3>24. Disable Touchpad</h3>
-
-<p>First use <code>xinput list</code> for list all of the input devices for X, then set the property of them via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ xinput list
-</span><span class='line'>⎡ Virtual core pointer                          id=2    [master pointer  (3)]
-</span><span class='line'>⎜   ↳ Virtual core XTEST pointer                id=4    [slave  pointer  (2)]
-</span><span class='line'>⎜   ↳ Logitech USB Optical Mouse                id=9    [slave  pointer  (2)]
-</span><span class='line'>⎜   ↳ PS/2 Generic Mouse                        id=12   [slave  pointer  (2)]
-</span><span class='line'>⎜   ↳ SynPS/2 Synaptics TouchPad                id=13   [slave  pointer  (2)]
-</span><span class='line'>
-</span><span class='line'>......
-</span><span class='line'>
-</span><span class='line'>$ xinput set-prop 13 "Device Enabled" 0
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>25. visudo</h3>
-
-<p>Sometimes in the visudo we set NOPASSWD, but it didn&rsquo;t take effects, why? because you are belong to some groups, while these group rules overwrite the previous rules you set, simply change all of the corresponding rules to:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>NOPASSWD:ALL
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Save the file and now you will see <code>sudo command</code> won&rsquo;t ask you input anything.</p>
-
-<h3>26. Youtube download</h3>
-
-<p>Ubuntu could directly download youtube videos via install youtube-dl:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install youtube-dl
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>27. perl-rename</h3>
-
-<p>As ArchLinux&rsquo;s default rename tool is very simple use following rename tools provided via perl:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S perl-rename
-</span><span class='line'>$  vim ~/.zshrc
-</span><span class='line'>### The default rename didn't support regex, use perl-rename instead.
-</span><span class='line'>alias rename='perl-rename'
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>28. udiskie</h3>
-
-<p>udiskie is for automatically mount/umount usb disks, but the ubuntu won&rsquo;t support it in official repository, we could install it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pip install udiskie
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>mount and umount disks via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo udiskie-mount -a
-</span><span class='line'>$ sudo udiskie-umount -a
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>29. git merge conflicts</h3>
-
-<p>Sometimes when you <code>git pull</code> from remote repository, you will got some anoying hint messages which shows you have merge conflicts, following is the steps for solving this issue:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git pull
-</span><span class='line'>$ git stash
-</span><span class='line'>$ git pull
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you are ready to work under merged trees.</p>
-
-<h3>30. Git remote repository</h3>
-
-<p>When first git clone to local, then git push origin master, it will complains:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~/Code/herokublog]$ git push origin master
-</span><span class='line'>fatal: remote error: 
-</span><span class='line'>  You can't push to git://github.com/xxxx/herokublog.git
-</span><span class='line'>  Use https://github.com/xxxx/herokublog.git
-</span><span class='line'>[Trusty@~/Code/herokublog]$ ssh -T git@github.com
-</span><span class='line'>X11 forwarding request failed on channel 0
-</span><span class='line'>Hi xxxx! You've successfully authenticated, but GitHub does not provide shell access.
-</span><span class='line'>[Trusty@~/Code/herokublog]$ git remote set-url origin git@github.com:xxxx/herokublog.git
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After setting this, we could use <code>git push origin master</code> for submitting our changes.</p>
-
-<h3>31. Replace all of the strings under one folder</h3>
-
-<p>Simply use sed for replacing these strings:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl "http://archive.ubuntu.com" ./ | wc -l
-</span><span class='line'>3
-</span><span class='line'>Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl "http://archive.ubuntu.com" ./ | xargs sed -i 's|http://archive.ubuntu.com|http://http://mirrors.aliyun.com|g'
-</span><span class='line'>Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl "http://archive.ubuntu.com" ./ | wc -l
-</span><span class='line'>0
-</span><span class='line'>Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl "http://mirrors" ./ | wc -l
-</span><span class='line'>3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>32. Use local LXC repository</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>So, let's say you downloaded the ubuntu trusty amd64 tarballs, you need to do:
-</span><span class='line'> - mkdir -p /var/cache/lxc/download/ubuntu/trusty/amd64/default/
-</span><span class='line'> - copy rootfs.tar.xz in /var/cache/lxc/download/ubuntu/trusty/amd64/default/
-</span><span class='line'> - unpack the content of meta.tar.xz in /var/cache/lxc/download/ubuntu/trusty/amd64/default/
-</span><span class='line'> - Then run the download template with: -d ubuntu -r trusty -a amd64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>33. Use rsync for syncing the files</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ rsync -e 'ssh -p 1234' username@hostname:SourceFile DestFile
-</span><span class='line'>Example:    
-</span><span class='line'>$ rsync -avH --progress '-e ssh -p 2223' Trusty@1xx.xxx.xxx.xxx:/home/Trusty/charms/trusty/ ~/charms/trusty/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>34. Use dmidecode to view your hardware configuration</h3>
-
-<p>dmidecode is a tool-set for dump out your SMIBIOS configuration in readable format, use following command for readout the maximum support moemory of your system, and the already installed memory information on your system:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dmidecode -t 16
-</span><span class='line'>$ sudo dmidecode -t 17
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>35. Use fslint for searching out the duplicated files</h3>
-
-<p>fslint could search the directory and find out the duplicated files. <br/>
-Install it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install fslint
-</span><span class='line'>$ fslint-gui
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>36. Limitation Bandwidth</h3>
-
-<p>Use following command could limit the specified userspace programs' bandwidth:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ trickle -s -d 50 -w 100 firefox
-</span><span class='line'>http://stackoverflow.com/questions/10328568/simulate-limited-bandwidth-from-within-chrome
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>37. Grep with color</h3>
-
-<p>grep&rsquo;s default output is without colorful output, do following for enable the colorful output:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>alias grep='grep --color=always'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add this into your .zshrc, so everytime it boots up the grep will output with colors.</p>
-
-<h3>38. RaspberryPI items</h3>
-
-<p>For optimize the RaspberryPI, need to do following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>relatime/atime, use relatime
-</span><span class='line'>cat /sys/block/mmcblk0/queue/scheduler/
-</span><span class='line'>noop deadline cfq
-</span><span class='line'>use noop
-</span><span class='line'>[noop] deadline cfq
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>39. Install OpenStack On CentOS</h3>
-
-<p>The following tips:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>   35  packstack --answer-file=/root/answer.txt
-</span><span class='line'>   41  cat /etc/sysconfig/selinux
-</span><span class='line'>   42  vim /etc/selinux/config
-</span><span class='line'>Disable selinux, then try it again
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</p>
-
-<h3>40. Install OpenContrail/OpenStack</h3>
-
-<p><a href="https://fosskb.wordpress.com/2014/10/18/openstack-juno-on-ubuntu-14-10/">https://fosskb.wordpress.com/2014/10/18/openstack-juno-on-ubuntu-14-10/</a></p>
-
-<h1><a href="https://techwiki.juniper.net/Documentation/Contrail/Contrail_Controller_Getting_Started_Guide/10_In_Context%3A_Contrail_Controller_Getting_Started_Guide">https://techwiki.juniper.net/Documentation/Contrail/Contrail_Controller_Getting_Started_Guide/10_In_Context%3A_Contrail_Controller_Getting_Started_Guide</a>     </h1>
-
-<h3>40. Docker save/load</h3>
-
-<p>In the server, do:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>docker save ubuntu&gt;/root/myubuntu.tar
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Scp it to client machine, and in client machine, do:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>docker load&lt;/root/myubuntu.tar
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Examine it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@10-17-17-183 ~]# docker images
-</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-</span><span class='line'>ubuntu              latest              d0955f21bf24        2 weeks ago         188.3 MB
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>41. Build Maas Based CentOS Image</h3>
-
-<p>Following is just the commands:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@pc121:~/iso/CentOSImage/maas-image-builder# #./bin/maas-image-builder -o centos6-amd64-root-tgz centos --edition 6                        
-</span><span class='line'>root@pc121:~/iso/CentOSImage/maas-image-builder# pwd
-</span><span class='line'>/home/clouder/iso/CentOSImage/maas-image-builder
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<blockquote><blockquote><blockquote><blockquote><blockquote><blockquote><blockquote><p>58372fecc80eeda12cddd4001534fc541cab8f30</p></blockquote></blockquote></blockquote></blockquote></blockquote></blockquote></blockquote>
-
-<h3>42. View multiply errors</h3>
-
-<p>For displaying all of the error/warnings.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>for file in $(ls /var/log/nova/); do cat /var/log/nova/$file | grep -iE 'error|warn' ; done
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>43. Reference for docker and contrail</h3>
-
-<p><a href="http://www.opencontrail.org/docker-with-opencontrail/">http://www.opencontrail.org/docker-with-opencontrail/</a></p>
-
-<h3>44. Run Jobs at certain time</h3>
-
-<p>Following is an example for automatically download the iso file at the spare time of the office network.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># echo "wget http://mirrors.aliyun.com/ubuntu-releases/15.04/ubuntu-15.04-server-amd64.iso -O /home/juju/iso/ubuntu-15.04-server-amd64.iso " | at 12:27
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>45. Check kvm</h3>
-
-<p>We could use <code>kvm-ok</code> for checking your cpu is compatible for use kvm acceleration.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install cpu-checker
-</span><span class='line'>$ kvm-ok
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The output will shows whether your cpu support kvm or not.</p>
-
-<h3>46. Quickly Installation the Desktop</h3>
-
-<p>Turn your minimal CentOS into a full Desktop:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$  sudo yum install system-config-kickstart
-</span><span class='line'>$  sudo yum install gnome-desktop
-</span><span class='line'>$  sudo yum -y groupinstall "X Window System" "Desktop"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enter the desktop via <code>startx</code></p>
-
-<h3>47. Restart bluetooth in Ubuntu</h3>
-
-<p>Sometimes the bluetooth will fail on Ubuntu, using following command for restart the bluetooth service:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo /etc/init.d/bluetooth restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could continue to detect the devices and setup the configuration.</p>
-
-<h3>48. Control the network flow</h3>
-
-<p>Use wondershapt for controlling the network flow:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wondershaper eth0 3000 500</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The first parameter is the download rate, while the second parameter is the upload rate..</p>
-
-<h3>49. Can&rsquo;t git remote</h3>
-
-<p>You should edit the remote branch like following to enable the git push origin:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git push origin master
-</span><span class='line'>fatal: remote error: 
-</span><span class='line'>  You can't push to git://github.com/User/xxx.git
-</span><span class='line'>  Use https://github.com/User/xxx.git
-</span><span class='line'>  Use https://github.com/purplepalmdash/NewBlog.git
-</span><span class='line'>$ git remote rm origin
-</span><span class='line'>$ git remote add origin git@github.com:User/xxx.git
-</span><span class='line'>$ git push origin master
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>50. Quickly Setup NFS Server</h3>
-
-<p>On Ubuntu, first install the nfs-server:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install nfs-kernel-server
-</span><span class='line'>$ sudo vim /etc/exports 
-</span><span class='line'>/media/repo     192.168.1.0/255.255.255.0(rw,sync,no_subtree_check)
-</span><span class='line'>$ sudo /etc/init.d/nfs-kernel-server restart</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Mount it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mount -t nfs 192.168.1.13:/media/repo /mnt</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>51. Set Aliyun For CentOS7</h3>
-
-<p>Run following commands will update the CentOS repository and import the epel repository for CentOS7</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup
-</span><span class='line'># wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo
-</span><span class='line'># yum makecache
-</span><span class='line'>wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
-</span><span class='line'># yum  -y  update</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>52. Set apt-proxy for Ubuntu</h3>
-
-<p>If you have set the apt-proxy, remember the listening port is:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/apt/apt.conf
-</span><span class='line'>Acquire::http::Proxy "http://10.3.3.5:3142"</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The configuration for apt-proxy could be found via google.</p>
-
-<h3>54. Use gem taobao source</h3>
-
-<p>For avoiding the GFW.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>/opt/chef/embedded/bin/gemsources -a http://ruby.taobao.org/</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>53. Use Aliyun Repository</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>gem source -r https://rubygems.org/
-</span><span class='line'>gem source -a http://mirrors.aliyun.com/rubygems/</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>54. XDMCP Error</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> XDMCP fatal error: Session declined Maximum number of open sessions from your host reached from .
-</span><span class='line'>
-</span><span class='line'>[root:~]# cat /etc/gdm/custom.conf
-</span><span class='line'>[xdmcp]
-</span><span class='line'>Port=177
-</span><span class='line'>+ DisplaysPerHost=5
-</span><span class='line'>Enable=true
-</span><span class='line'>
-</span><span class='line'># reboot</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now your client will successfully login to the remote server.</p>
-
-<h3>55. Upgrade Ubuntu14.04.2 Kernel</h3>
-
-<p>For upgrade it to 3.16.xxx, simplying use following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install linux-image-generic-lts-utopic</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>56. Install Docker on Ubuntu</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget -qO- https://get.docker.com/ | sh</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>57. Permanent Change Hostname on Fedora</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo hostnamectl set-hostname --static "YOUR-HOSTNAME-HERE"</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>58. Remote VNC via SSH</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Home machine:     
-</span><span class='line'>ssh -R *:6234:localhost:5901 xxxx@1xxx.xxx.xxx.xxx -p xxxx4
-</span><span class='line'>
-</span><span class='line'>Server, forward 6234 to 16234:    
-</span><span class='line'>ssh -NfL *:16234:localhost:6234 localhost -p xxxx4
-</span><span class='line'>
-</span><span class='line'>Company:    
-</span><span class='line'>vncviewer 1zxxx.xxx.xxx.xxx:16234</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>59. Disable byobu from scrolling</h3>
-
-<p>This is because the byobu use tmux for the backend. Change it into screen.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ byobu-select-backend 
-</span><span class='line'># and selecting screen (option 2).</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>60. Add items into the host file</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ifconfig | awk -v MYHOST=$(hostname) '/inet addr/{print substr($2,6),"\t",MYHOST}'&gt;&gt;/etc/hosts</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>61. GPG Issues</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>https://help.ubuntu.com/community/GnuPrivacyGuardHowto#Using_GnuPG_to_generate_a_key</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>62. Mirror Whole Website</h3>
-
-<p>Use Wget for retrieving all of the items:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:/home/juju/Fuel61Repository]# wget --recursive -c -np -k -L http://mirror.fuel-infra.org/</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>63. Grouplist for yum</h3>
-
-<p>yum install the group of the X window System, thus we could forwarding X11.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum grouplist
-</span><span class='line'>$ sudo yum groupinstall "X Window System"</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/18/linux2-dot-6-39-for-utu2440/">Linux2.6.39 for Utu2440</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-18T16:33:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:33 pm</span></time>
-        
-         | <a href="/blog/2014/10/18/linux2-dot-6-39-for-utu2440/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Kernel Preparation</h3>
-
-<p>First download the kernel source from kernel.org:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget https://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.39.tar.bz2
-</span><span class='line'>$ tar xjvf lnux-2.6.39.tar.bz2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the Makefile:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat Makefile
-</span><span class='line'>export KBUILD_BUILDHOST := $(SUBARCH)
-</span><span class='line'>ARCH      ?= $(SUBARCH)
-</span><span class='line'>CROSS_COMPILE ?= $(CONFIG_CROSS_COMPILE:"%"=%)
-</span><span class='line'>
-</span><span class='line'># Added our own cross-compiler here.
-</span><span class='line'>ARCH      ?= arm
-</span><span class='line'>CROSS_COMPILE ?= arm-linux-
-</span><span class='line'># End of added own cross-compiler. 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the pltf input clock:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim  arch/arm/mach-s3c2440/mach-smdk2440.c
-</span><span class='line'>static void __init smdk2440_map_io(void)
-</span><span class='line'>{
-</span><span class='line'>  s3c24xx_init_io(smdk2440_iodesc, ARRAY_SIZE(smdk2440_iodesc));
-</span><span class='line'>  //s3c24xx_init_clocks(16934400);
-</span><span class='line'>  // Change the input clock adjust to utu2440
-</span><span class='line'>  s3c24xx_init_clocks(12000000);
-</span><span class='line'>  s3c24xx_init_uarts(smdk2440_uartcfgs, ARRAY_SIZE(smdk2440_uartcfgs));
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the machine code(this code is the same as the bootloader&rsquo;s parameter, bootloader transfer 5244 to Linux Kernel.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim arch/arm/tools/mach-types 
-</span><span class='line'>s3c2440           ARCH_S3C2440        S3C2440         5244
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the Nand flash partitions:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim  arch/arm/plat-s3c24xx/common-smdk.c
-</span><span class='line'>static struct mtd_partition smdk_default_nand_part[] = {
-</span><span class='line'>  // partition for utu2440
-</span><span class='line'>  [0]= {
-</span><span class='line'>      .name = "bootloader", 
-</span><span class='line'>      .size = 0x00040000,
-</span><span class='line'>      .offset = 0x00000000,
-</span><span class='line'>  },
-</span><span class='line'>  [1]= {
-</span><span class='line'>      .name = "kernel", 
-</span><span class='line'>      .size = 0x00060000,
-</span><span class='line'>      .offset = 0x00200000,
-</span><span class='line'>  },
-</span><span class='line'>  [2]= {
-</span><span class='line'>      .name = "root", 
-</span><span class='line'>      .size = 0x00260000,
-</span><span class='line'>      .offset = 0x03dac000,
-</span><span class='line'>  }
-</span><span class='line'>  
-</span><span class='line'>
-</span><span class='line'>};
-</span><span class='line'>
-</span><span class='line'>static struct s3c2410_platform_nand smdk_nand_info = {
-</span><span class='line'>  .tacls      = 0,
-</span><span class='line'>  .twrph0     = 30,
-</span><span class='line'>  .twrph1     = 0,
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Begin to configure:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># export PATH=/opt/cross/arm-linux-gcc_4.3.2/bin:$PATH
-</span><span class='line'># vim Makefile
-</span><span class='line'>//ARCH                 ?= $(SUBARCH)
-</span><span class='line'>//CROSS_COMPILE     ?=
-</span><span class='line'>ARCH                 ?= arm
-</span><span class='line'>CROSS_COMPILE     ?= arm-linux-
-</span><span class='line'># make s3c2410_defconfig
-</span><span class='line'># make menuconfig
-</span><span class='line'>System Type-&gt; ARM system type(Samsung S3C2410, S3C2412, ......
-</span><span class='line'>S3C2410 Machines  ---&gt;    [*] SMDK2410/A9M2410
-</span><span class='line'>S3C2440 AND S3C2442 Machines ---&gt; [*] SMDK2440     [*] SMDK2440 with S3C2440 CPU module 
-</span><span class='line'>Kernel Features  ---&gt;   [*] Use the ARM EABI to compile the kernel
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then <code>make all V=1</code>  <br/>
-Generate uImage:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cp arch/arm/boot/zImage ./
-</span><span class='line'>[root@TrustyArch linux-2.6.39]# mkimage -A arm -O linux -n $(date --iso-8601=seconds) -C NONE -a 0x30008000 -e 0x30008000 -d zImage uImage
-</span><span class='line'>Image Name:   2014-10-18T20:27:54+0800
-</span><span class='line'>Created:      Sat Oct 18 20:27:54 2014
-</span><span class='line'>Image Type:   ARM Linux Kernel Image (uncompressed)
-</span><span class='line'>Data Size:    2094940 Bytes = 2045.84 kB = 2.00 MB
-</span><span class='line'>Load Address: 30008000
-</span><span class='line'>Entry Point:  30008000
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now copy the uImage to the tftp directory for testing</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/21">&larr; Older</a>
@@ -2554,6 +1970,14 @@ Generate uImage:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/06/29/insert-public-key-into-cobbler-deployed-system/">Insert Public Key Into Cobbler Deployed System</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/06/29/linux-tips-2/">Linux Tips(2)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/06/25/for-deploying-148-tips/">For Deploying 148 Tips</a>
       </li>
     
@@ -2563,14 +1987,6 @@ Generate uImage:</p>
     
       <li class="post">
         <a href="/blog/2015/06/24/install-newest-version-of-cobbler/">Install Newest Version of Cobbler</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/23/import-more-isos-in-cobbler/">Import More ISOs in Cobbler</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/19/wh-worktips-5/">WH Worktips(5)</a>
       </li>
     
   </ul>
