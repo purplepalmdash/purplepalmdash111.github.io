@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-07-04T21:58:01+08:00</updated>
+  <updated>2015-07-05T19:37:40+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,267 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Install CloudStack All-In-One on Ubuntu14.04]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/"/>
+    <updated>2015-07-05T16:08:59+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04</id>
+    <content type="html"><![CDATA[<h3>Preparation For Packages</h3>
+
+<p>TBD</p>
+
+<h3>Installation Steps</h3>
+
+<h4>System Preparation</h4>
+
+<p>First install Ubuntu14.04, I use Cobbler Server&rsquo;s PXE Installation.</p>
+
+<p>Change the Root Permit login under <code>/etc/ssh/sshd_config</code> and restart the ssh service.</p>
+
+<p>Change the IP Address to 10.10.10.2 via:</p>
+
+<pre><code>root@Ubuntu-14:~# cat /etc/network/interfaces
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.10.10.2
+netmask 255.255.255.0
+gateway 10.10.10.1
+dns-nameservers 180.76.76.76
+</code></pre>
+
+<p>Relogin to the system, and begin to install the packages.</p>
+
+<pre><code># vi /etc/apt/source.list
+deb http://192.168.1.111 amd64/
+deb http://192.168.1.111/reprepro/      trusty  cloudstack44
+# apt-get update &amp;&amp; apt-get install vim
+</code></pre>
+
+<p>I use 192.168.1.111 because I cached all of the required packages in this server, thus it could speed-up the deployment.</p>
+
+<h4>Server Configuration</h4>
+
+<p>Configure the Server&rsquo;s hostname:</p>
+
+<pre><code>root@Ubuntu-14:~# cat /etc/hostname 
+CS
+root@Ubuntu-14:~# cat /etc/hosts
+127.0.0.1       localhost
+10.10.0.2       CS
+127.0.1.1       CS.CSDomain     CS
+
+root@Ubuntu-14:~# reboot
+# hostname --fqdn
+CS
+</code></pre>
+
+<p>Now configure the NTP via:</p>
+
+<pre><code># apt-get purge ntp
+# apt-get install openntpd
+</code></pre>
+
+<p>Configure the Network:</p>
+
+<pre><code># apt-get install bridge-utils
+# cat /etc/network/interfaces
+
+    # The loopback network interface
+    auto lo
+    iface lo inet loopback
+
+    # The primary network interface
+    auto eth0
+    iface eth0 inet manual
+
+
+    auto cloudbr0
+    iface cloudbr0 inet static
+            address 10.10.10.2
+            netmask 255.255.255.0
+            gateway 10.10.10.1
+            dns-nameservers 180.76.76.76
+            bridge-ports eth0
+            bridge_fd 5
+            bridge_stp off
+            bridge_maxwait 1
+
+    # Private network
+    auto cloudbr1
+    iface cloudbr1 inet manual
+            bridge_ports none
+            bridge_fd 5
+            bridge_stp off
+            bridge_maxwait 1
+# reboot
+</code></pre>
+
+<p>Now the Network Bridge is configured.</p>
+
+<h4>CloudStack Installation</h4>
+
+<p>Since all of the packages are cached into LAN environment, simply type following command for installing:</p>
+
+<pre><code># apt-get install cloudstack-management
+</code></pre>
+
+<p>Then Install the database server:</p>
+
+<pre><code># apt-get install mysql-server
+# vim /etc/mysql/conf.d/cloudstack.cnf
+[mysqld]
+innodb_rollback_on_timeout=1
+innodb_lock_wait_timeout=600
+max_connections=350
+log-bin=mysql-bin
+binlog-format = 'ROW'
+root@CS:~# service mysql restart
+root@CS:~# cloudstack-setup-databases cloud:engine@localhost --deploy-as=root:engine -e file -m mymskey44 -k mydbkey00
+</code></pre>
+
+<h4>NFS Storage Preparation</h4>
+
+<p>Add export directory:</p>
+
+<pre><code># mkdir -p /export/primary /export/secondary
+# apt-get install nfs-kernel-server
+# vim /etc/exports
+/export  *(rw,async,no_root_squash,no_subtree_check)
+# cp /etc/default/nfs-common /etc/default/nfs-common.orig
+# sed -i '/NEED_STATD=/ a NEED_STATD=yes' /etc/default/nfs-common
+# sed -i '/STATDOPTS=/ a STATDOPTS="--port 662 --outgoing-port 2020"' /etc/default/nfs-common
+# diff -du /etc/default/nfs-common.orig /etc/default/nfs-common
+
+root@CS:~# cat /etc/modprobe.d/lockd.conf 
+options lockd nlm_udpport=32769 nlm_tcpport=32803
+root@CS:~# service nfs-kernel-server restart
+root@CS:~# showmount -e 127.0.0.1
+Export list for 127.0.0.1:
+/export *
+</code></pre>
+
+<p>Mount it via:</p>
+
+<pre><code>root@CS:~# mkdir -p /mnt/primary /mnt/secondary
+root@CS:~# tail -2 /etc/fstab
+10.10.10.2:/export/primary   /mnt/primary    nfs rsize=8192,wsize=8192,timeo=14,intr,vers=3,noauto  0   2
+10.10.10.2:/export/secondary /mnt/secondary  nfs rsize=8192,wsize=8192,timeo=14,intr,vers=3,noauto  0   2
+root@CS:~# mount /mnt/primary/
+root@CS:~# mount /mnt/secondary/
+root@CS:~# mount | tail -2
+10.10.10.2:/export/primary on /mnt/primary type nfs (rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3,addr=10.10.10.2)
+10.10.10.2:/export/secondary on /mnt/secondary type nfs (rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3,addr=10.10.10.2)
+</code></pre>
+
+<h4>Cloudstack Agent Installation</h4>
+
+<p>Install it via:</p>
+
+<pre><code>root@CS:~# apt-get install cloudstack-agent
+root@CS:~# cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.orig
+root@CS:~# sed -i '/#listen_tls = 0/ a listen_tls = 0' /etc/libvirt/libvirtd.conf
+root@CS:~# sed -i '/#listen_tcp = 1/ a listen_tcp = 1' /etc/libvirt/libvirtd.conf
+root@CS:~# sed -i '/#tcp_port = "16509"/ a tcp_port = "16509"' /etc/libvirt/libvirtd.conf
+root@CS:~# sed -i '/#auth_tcp = "sasl"/ a auth_tcp = "none"' /etc/libvirt/libvirtd.conf
+root@CS:~# diff -du /etc/libvirt/libvirtd.conf.orig /etc/libvirt/libvirtd.conf
+root@CS:~# cp /etc/default/libvirt-bin /etc/default/libvirt-bin.orig
+root@CS:~# sed -i -e 's/libvirtd_opts="-d"/libvirtd_opts="-d -l"/' /etc/default/libvirt-bin
+root@CS:~# service libvirt-bin restart
+root@CS:~# cp /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.orig
+root@CS:~# sed -i '/#vnc_listen = "0.0.0.0"/ a vnc_listen = "0.0.0.0"' /etc/libvirt/qemu.conf
+root@CS:~# diff -du /etc/libvirt/qemu.conf.orig /etc/libvirt/qemu.conf
+root@CS:~# service libvirt-bin restart
+root@CS:~# ln -s /etc/apparmor.d/usr.sbin.libvirtd /etc/apparmor.d/disable/
+root@CS:~# ln -s /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper /etc/apparmor.d/disable/
+root@CS:~# apparmor_parser -R /etc/apparmor.d/usr.sbin.libvirtd
+root@CS:~# apparmor_parser -R /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper
+root@CS:~# service libvirt-bin restart
+</code></pre>
+
+<h4>Configure FireWall</h4>
+
+<p>Open the following ports:</p>
+
+<pre><code>root@CS:~# ufw allow proto tcp from any to any port 22
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 1798
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 16509
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 5900:6100
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 49152:49216
+Rules updated
+Rules updated (v6)
+</code></pre>
+
+<p>Now restart and verify the NFS working.</p>
+
+<pre><code>root@CS:~# rpcinfo -u 10.10.10.2 mount
+program 100005 version 1 ready and waiting
+program 100005 version 2 ready and waiting
+program 100005 version 3 ready and waiting
+root@CS:~# showmount -e 10.10.10.2
+Export list for 10.10.10.2:
+/export *
+root@CS:~# mount /mnt/primary/
+root@CS:~# mount /mnt/secondary/
+</code></pre>
+
+<p>Added the System Template:</p>
+
+<pre><code>root@CS:~# /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /mnt/secondary -u http://192.168.1.111/systemvm64template-4.4.1-7-kvm.qcow2.bz2  -h kvm -F
+......
+Successfully installed system VM template  to /mnt/secondary/template/tmpl/1/3/
+</code></pre>
+
+<h3>Cloudstack</h3>
+
+<p>First manually start the services:</p>
+
+<pre><code>service cloudstack-management status
+service cloudstack-agent status
+service tomcat6 status
+
+service cloudstack-management stop
+service tomcat6 stop
+service cloudstack-agent stop
+ps -efl | grep java
+
+service cloudstack-management start
+service cloudstack-management status
+service cloudstack-agent start
+service cloudstack-agent status
+</code></pre>
+
+<p>Now setup the UI via visiting <code>http://10.10.10.2:8080/client</code>, usename/password: admin/password:</p>
+
+<pre><code>Choose "Continue with basic installation". This will start a wizard that will walk through the configuration. You will need to adjust the network values for your environment, and make sure you use appropiate, free, ranges.
+
+Add a new zone named "zone1", DNS1 10.10.10.1 and Internal DNS 10.10.10.1.
+Add a new pod named "pod1", gateway 10.10.10.1, netmask 255.255.255.0, IP range 10.10.10.160-10.10.10.169.
+Add a guest network, gateway 10.10.10.1, netmask 255.255.255.0, IP range 10.10.10.170-192.168.77.230.
+Add a cluster named cluster1, Hypervisor KVM.
+Add a host. Host Name "CS", user root, passsword for the root linux user.
+Add primary storage: name primary1, protocol NFS, Scope Cluster, server 10.10.10.10, path /export/primary.
+Add secondary storage: NFS server 10.10.10.10, path /export/secondary.
+Hit Launch and pray.
+This should go through a sequence of setup.
+</code></pre>
+
+<p>Now you could enjoy the cloudstack all-in-one</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Preseed File for Ubuntu1404 in CobblerServer]]></title>
@@ -250,114 +511,6 @@ $ cobbler signature update
 <pre><code># cobbler get-loaders --force
 # cobbler sync
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Import More ISOs in Cobbler]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/23/import-more-isos-in-cobbler/"/>
-    <updated>2015-06-23T20:52:09+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/23/import-more-isos-in-cobbler</id>
-    <content type="html"><![CDATA[<h3>Ubuntu12.04</h3>
-
-<p>Since you have the iso files, import it via:</p>
-
-<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop /mnt/iso/ubuntu-12.04.3-server-amd64.iso /mnt1
-[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
-[root@CobblerServer iso]# cobbler profile list
-   CentOS-7-x86_64
-   Ubuntu-12.04-x86_64
-   Ubuntu14.04-x86_64
-</code></pre>
-
-<p>To make it quickly deployment, visit:    <br/>
-<a href="http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/</a></p>
-
-<p>Edit its profile like following:</p>
-
-<pre><code>[root@CobblerServer kickstarts]# cobbler profile edit --name=Ubuntu-12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1204.seed 
-</code></pre>
-
-<p>Create a new virtual machine for testing.</p>
-
-<pre><code>[root@CobblerServer kickstarts]# cobbler system add --name=test1204 --profile=Ubuntu-12.04-x86_64 --mac=52:54:00:e4:2c:df --interface=eth0 --ip-address=10.3.3.33 --hostname=test1204 --gateway=10.3.3.1 --dns-name=test1204
-</code></pre>
-
-<p>Testing the tftpserver via:</p>
-
-<pre><code>[dash@~]$ tftp 10.3.3.3   
-tftp&gt; get /pxelinux.0
-tftp&gt; quit
-[dash@~]$ ls pxelinux.0 
-pxelinux.0
-</code></pre>
-
-<p>Trouble-Shooting, you should very careful on your pxelinux.0 file, make sure you have the correct ones. Recently it&rsquo;s hard to get the right pxelinux.0 from cobbler loader sync.</p>
-
-<h3>Ubuntu15.04</h3>
-
-<p>Import the iso via:</p>
-
-<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop ./ubuntu-15.04-server-amd64.iso /mnt1/
-[root@CobblerServer iso]# cobbler import --name=Ubuntu-15.04 --arch=x86_64 --path=/mnt1
-</code></pre>
-
-<p>Notice, here you will met Signature mismatch problem, do following:   <br/>
-First update Cobbler: ?</p>
-
-<pre><code>$ vim /etc/yum.repos.d/cobbler26.repo
-[home_libertas-ict_cobbler26]
-name=Cobbler (2.6.x) (CentOS_CentOS-6)
-type=rpm-md
-baseurl=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/
-gpgcheck=1
-gpgkey=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/repodata/repomd.xml.key
-enabled=1
-$ sudo yum install -y cobbler cobbler-web
-</code></pre>
-
-<p>And Trouble-Shooting for iptables(If you use redsocks):</p>
-
-<pre><code># iptables -t nat -I OUTPUT -d 10.3.3.0/24 -j RETURN
-</code></pre>
-
-<p>Then signature update will OK:</p>
-
-<pre><code>[root@CobblerServer redsocks]# cobbler signature update
-task started: 2015-06-23_144247_sigupdate
-task started (id=Updating Signatures, time=Tue Jun 23 14:42:47 2015)
-Successfully got file from http://cobbler.github.com/signatures/2.6.x/latest.json
-*** TASK COMPLETE ***
-</code></pre>
-
-<p>Re-import:</p>
-
-<pre><code>[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
-*** TASK COMPLETE ***
-[root@CobblerServer mnt]# cobbler profile list
-   CentOS-7-x86_64
-   Ubuntu-12.04-x86_64
-   Ubuntu-15.04-x86_64
-   Ubuntu14.04-x86_64
-</code></pre>
-
-<p>Edit the profile via:</p>
-
-<pre><code>[root@CobblerServer lib]# cd /var/lib/cobbler/kickstarts/
-[root@CobblerServer kickstarts]# ls
-default.ks    esxi5-ks.cfg      legacy.ks     sample_autoyast.xml  sample_esx4.ks   sample_esxi5.ks  sample_old.seed  ubuntu1204.seed
-esxi4-ks.cfg  install_profiles  pxerescue.ks  sample_end.ks        sample_esxi4.ks  sample.ks        sample.seed
-[root@CobblerServer kickstarts]# vim ubuntu1504.seed
-</code></pre>
-
-<p>Test it via:</p>
-
-<pre><code>$ qemu-img create -f qcow2 Cobbler1504Test.qcow2 100G
-$ cobbler profile edit --name=Ubuntu-15.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1504.seed
-$  cobbler system add --name=test1504 --profile=Ubuntu-15.04-x86_64 --mac=52:54:00:2e:c0:ff --interface=eth0 --ip-address=10.3.3.34 --hostname=test1504 --gateway=10.3.3.1 --dns-name=test1504
-</code></pre>
-
-<p>Installed failed, verify it tomorrow.</p>
 ]]></content>
   </entry>
   

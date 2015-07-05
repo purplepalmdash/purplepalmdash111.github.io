@@ -9,8 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="MySQL数据库 绝大多数的OpenStack服务使用SQL数据库来存储信息，一般情况下数据库运行在控制节点上，这里我们使用MariaDB或者MySQL来作为SQL数据库。 安装, 注意安装过程中需要输入密码: 1
-# apt-get install mariadb-server python- &hellip;">
+  <meta name="description" content="In order to make exsiting kvm based machine to be lxc container, following is the steps. Refers to: https://www.stgraber.org/2012/03/04/booting-an- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -66,6 +65,181 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM Machine</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-25T11:46:28+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:46 am</span></time>
+        
+         | <a href="/blog/2015/05/25/lxcize-the-kvm-machine/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In order to make exsiting kvm based machine to be lxc container, following is the steps.    <br/>
+Refers to:  <br/>
+<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
+
+<h3>Convert Disk Formats</h3>
+
+<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
+
+<h3>LXC the KVM</h3>
+
+<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> myvm.conf
+</span><span class='line'>lxc.network.type = veth
+</span><span class='line'>lxc.network.flags = up
+</span><span class='line'>lxc.network.link = br0
+</span><span class='line'>lxc.network.name = eth0
+</span><span class='line'>lxc.network.ipv4 = xxx.xxx.10.230/24
+</span><span class='line'>lxc.network.ipv4.gateway = xxx.xxx.0.176
+</span><span class='line'>#lxc.network.link = lxcbr0
+</span><span class='line'>lxc.utsname = myvminlxc
+</span><span class='line'>
+</span><span class='line'>lxc.tty = 4
+</span><span class='line'>lxc.pts = 1024
+</span><span class='line'>lxc.rootfs = /dev/mapper/loop0p1
+</span><span class='line'>lxc.arch = amd64
+</span><span class='line'>lxc.cap.drop = sys_module mac_admin
+</span><span class='line'>
+</span><span class='line'>lxc.cgroup.devices.deny = a
+</span><span class='line'># Allow any mknod (but not using the node)
+</span><span class='line'>lxc.cgroup.devices.allow = c *:* m
+</span><span class='line'>lxc.cgroup.devices.allow = b *:* m
+</span><span class='line'># /dev/null and zero
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:3 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:5 rwm
+</span><span class='line'># consoles
+</span><span class='line'>lxc.cgroup.devices.allow = c 5:1 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 5:0 rwm
+</span><span class='line'>#lxc.cgroup.devices.allow = c 4:0 rwm
+</span><span class='line'>#lxc.cgroup.devices.allow = c 4:1 rwm
+</span><span class='line'># /dev/{,u}random
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:9 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:8 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 136:* rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 5:2 rwm
+</span><span class='line'># rtc
+</span><span class='line'>lxc.cgroup.devices.allow = c 254:0 rwm
+</span><span class='line'>#fuse
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:229 rwm
+</span><span class='line'>#tun
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:200 rwm
+</span><span class='line'>#full
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:7 rwm
+</span><span class='line'>#hpet
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:228 rwm
+</span><span class='line'>#kvm
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:232 rwm</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo kpartx -a Contrail.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now start the machine via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-start -n myvminlxc -f ./myvm.conf</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
+
+<h3>TroubleShooting</h3>
+
+<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/selinux/config
+</span><span class='line'>#SELINUX=permissive
+</span><span class='line'>SELINUX=disabled
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>kpartx -a /home/xxxxx/iso/Contrail.raw
+</span><span class='line'>lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1990,7 +2164,7 @@ The steps are followed by following URL:  <br/>
 
 <h3>Github Account</h3>
 
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#x6d;&#x61;&#105;&#x6c;&#x74;&#111;&#x3a;&#x67;&#105;&#116;&#64;&#x67;&#105;&#116;&#104;&#x75;&#x62;&#46;&#x63;&#x6f;&#109;">&#103;&#105;&#x74;&#64;&#x67;&#105;&#116;&#104;&#x75;&#x62;&#x2e;&#99;&#x6f;&#109;</a></p>
+<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#x6d;&#97;&#x69;&#108;&#116;&#x6f;&#x3a;&#x67;&#105;&#x74;&#64;&#x67;&#105;&#x74;&#x68;&#117;&#98;&#x2e;&#99;&#x6f;&#109;">&#103;&#x69;&#116;&#x40;&#x67;&#x69;&#116;&#x68;&#117;&#98;&#x2e;&#99;&#x6f;&#x6d;</a></p>
 
 <h3>Repository</h3>
 
@@ -2127,490 +2301,6 @@ DNS Server is for automatically analyze the dns in server, install it via:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-14T09:38:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:38 am</span></time>
-        
-         | <a href="/blog/2015/05/14/setup-the-cobbler-server/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>The reference material is mainly from:  <br/>
-<a href="http://www.cobblerd.org/manuals/quickstart/">http://www.cobblerd.org/manuals/quickstart/</a></p>
-
-<h3>Prepartion</h3>
-
-<p>First install the CentOS6.6, choose the basic server. <br/>
-After installation, update to the latest system via <code>yum -y update</code>. <br/>
-Disable the SELinux via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/selinux/config
-</span><span class='line'>#SELINUX=enforcing                                                                                                                       │
-</span><span class='line'>SELINUX=disabled 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then restart the compute.  <br/>
-Add epel repository:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
-</span><span class='line'># yum update
-</span><span class='line'># yum install -y cobbler cobbler-web
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configuration</h3>
-
-<p>Change the default password:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># openssl passwd -1                                                                                                     │
-</span><span class='line'>Password:                                                                                                                                 │
-</span><span class='line'>Verifying - Password:                                                                                                                     │
-</span><span class='line'>igaowugoauwgoueougo
-</span><span class='line'>[root@CobblerServer ~]# vim /etc/cobbler/settings          
-</span><span class='line'>default_password_crypted: "agowuoguwoawoguwoe"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Set the Server and Next_Server to the specified IP Address, DO NOT use 0.0.0.0:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># default, localhost
-</span><span class='line'>server: 10.3.3.3.
-</span><span class='line'>
-</span><span class='line'># default, localhost
-</span><span class='line'>next_server: 10.3.3.3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the dhcp managed:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>manage_dhcp: 0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the dhcp template via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>vi /etc/cobbler/dhcp.template
-</span><span class='line'>subnet 10.3.3.0 netmask 255.255.255.0 {
-</span><span class='line'>     option routers             10.3.3.1;                                                                                                  
-</span><span class='line'>     range dynamic-bootp        10.3.3.4 10.3.3.254;
-</span><span class='line'>     option domain-name-servers 114.114.114.114, 8.8.8.8;     
-</span><span class='line'>     option subnet-mask         255.255.255.0;         
-</span><span class='line'>     filename                   "/pxelinux.0";       
-</span><span class='line'>     default-lease-time         21600;           
-</span><span class='line'>     max-lease-time             43200;      
-</span><span class='line'>     next-server                $next_server; 
-</span><span class='line'>}          
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start and check the service status:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# service cobblerd start                                                                                           
-</span><span class='line'>Starting cobbler daemon:                                   [  OK  ]
-</span><span class='line'>[root@CobblerServer ~]# chkconfig cobblerd on                     
-</span><span class='line'>[root@CobblerServer ~]# chkconfig httpd on                     
-</span><span class='line'>[root@CobblerServer ~]# service cobblerd status                  
-</span><span class='line'>cobblerd (pid 1564) is running...     
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Better you restart the machine and verify your installation via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler check
-</span><span class='line'>The following are potential configuration items that you may want to fix:
-</span><span class='line'>
-</span><span class='line'>1 : dhcpd is not installed
-</span><span class='line'>2 : some network boot-loaders are missing from /var/lib/cobbler/loaders, you may run 'cobbler get-loaders' to download them, or, if you only want to handle x86/x86_64 netbooting, you may ensure that you have installed a *recent* version of the syslinux package installed and can ignore this message entirely.  Files in this directory, should you want to support all architectures, should include pxelinux.0, menu.c32, elilo.efi, and yaboot. The 'cobbler get-loaders' command is the easiest way to resolve these requirements.
-</span><span class='line'>3 : change 'disable' to 'no' in /etc/xinetd.d/rsync
-</span><span class='line'>4 : since iptables may be running, ensure 69, 80/443, and 25151 are unblocked
-</span><span class='line'>5 : debmirror package is not installed, it will be required to manage debian deployments and repositories
-</span><span class='line'>6 : ksvalidator was not found, install pykickstart
-</span><span class='line'>7 : fencing tools were not found, and are required to use the (optional) power management features. install cman or fence-agents to use them
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>OOOOPs, so many errors, so first install dhcpd:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y dhcpd
-</span><span class='line'># chkconfig dhcpd on
-</span><span class='line'># chkconfig xinetd on
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Manullly edit the dhcpd configuration file as in following files:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cat /etc/dhcp/dhcpd.conf 
-</span><span class='line'>#
-</span><span class='line'># DHCP Server Configuration file.
-</span><span class='line'>#   see /usr/share/doc/dhcp*/dhcpd.conf.sample
-</span><span class='line'>#   see 'man 5 dhcpd.conf'
-</span><span class='line'>#
-</span><span class='line'># create new
-</span><span class='line'># specify domain name
-</span><span class='line'>option domain-name "server.world";
-</span><span class='line'># specify name server's hostname or IP address
-</span><span class='line'>option domain-name-servers 114.114.114.114;
-</span><span class='line'># default lease time
-</span><span class='line'>default-lease-time 600;
-</span><span class='line'># max lease time
-</span><span class='line'>max-lease-time 7200;
-</span><span class='line'># this DHCP server to be declared valid
-</span><span class='line'>authoritative;
-</span><span class='line'># specify network address and subnet mask
-</span><span class='line'>subnet 10.3.3.0 netmask 255.255.255.0 {
-</span><span class='line'>    # specify the range of lease IP address
-</span><span class='line'>    range dynamic-bootp 10.3.3.4 10.3.3.254;
-</span><span class='line'>    # specify broadcast address
-</span><span class='line'>    option broadcast-address 10.3.3.255;
-</span><span class='line'>    # specify default gateway
-</span><span class='line'>    option routers 10.3.3.1;
-</span><span class='line'>}
-</span><span class='line'># service dhcpd restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>One trouble after another, solve them:  <br/>
-Get Loaders:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler get-loaders
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the rsync configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>  # vim /etc/xinetd.d/rsync 
-</span><span class='line'>        disable = no
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the following lines into the /etc/sysconfig/iptables:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>:OUTPUT ACCEPT [0:0]
-</span><span class='line'>-A INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT 
-</span><span class='line'>-A INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT 
-</span><span class='line'>-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Or:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -I INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT
-</span><span class='line'># iptables -I INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The difference is the latter won&rsquo;t last for long once the machine got restarted.</p>
-
-<p>Install following packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# yum install -y debmirror pykickstart cman
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now check again:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cobbler check
-</span><span class='line'>$ cobbler sync
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Import ISO</h3>
-
-<p>I use the CentOS7 iso(CentOS-7-x86_64-Everything-1503-01.iso).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# mount -o loop -t iso9660 ./CentOS-7-x86_64-Everything-1503-01.iso  /mnt
-</span><span class='line'>[root@CobblerServer ~]# cobbler import --name=CentOS-7 --arch=x86_64 --path=/mnt
-</span><span class='line'>path=/mnt
-</span><span class='line'>task started: 2015-05-14_035209_import
-</span><span class='line'>task started (id=Media import, time=Thu May 14 03:52:09 2015)
-</span><span class='line'>Found a candidate signature: breed=redhat, version=rhel6
-</span><span class='line'>Found a candidate signature: breed=redhat, version=rhel7
-</span><span class='line'>Found a matching signature: breed=redhat, version=rhel7
-</span><span class='line'>Adding distros from path /var/www/cobbler/ks_mirror/CentOS-7-x86_64:
-</span><span class='line'>creating new distro: CentOS-7-x86_64
-</span><span class='line'>trying symlink: /var/www/cobbler/ks_mirror/CentOS-7-x86_64 -&gt; /var/www/cobbler/links/CentOS-7-x86_64
-</span><span class='line'>creating new profile: CentOS-7-x86_64
-</span><span class='line'>associating repos
-</span><span class='line'>checking for rsync repo(s)
-</span><span class='line'>checking for rhn repo(s)
-</span><span class='line'>checking for yum repo(s)
-</span><span class='line'>starting descent into /var/www/cobbler/ks_mirror/CentOS-7-x86_64 for CentOS-7-x86_64
-</span><span class='line'>processing repo at : /var/www/cobbler/ks_mirror/CentOS-7-x86_64
-</span><span class='line'>need to process repo/comps: /var/www/cobbler/ks_mirror/CentOS-7-x86_64
-</span><span class='line'>looking for /var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata/*comps*.xml
-</span><span class='line'>Keeping repodata as-is :/var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata
-</span><span class='line'>*** TASK COMPLETE ***
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler distro list
-</span><span class='line'>   CentOS-7-x86_64
-</span><span class='line'>[root@CobblerServer ~]# cobbler profile list
-</span><span class='line'>   CentOS-7-x86_64
-</span><span class='line'>[root@CobblerServer ~]# cobbler distro report --name=CentOS-7-x86_64
-</span><span class='line'>Name                           : CentOS-7-x86_64
-</span><span class='line'>Architecture                   : x86_64
-</span><span class='line'>TFTP Boot Files                : {}
-</span><span class='line'>Breed                          : redhat
-</span><span class='line'>Comment                        : 
-</span><span class='line'>Fetchable Files                : {}
-</span><span class='line'>Initrd                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/initrd.img
-</span><span class='line'>Kernel                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/vmlinuz
-</span><span class='line'>Kernel Options                 : {}
-</span><span class='line'>Kernel Options (Post Install)  : {}
-</span><span class='line'>Kickstart Metadata             : {'tree': 'http://@@http_server@@/cblr/links/CentOS-7-x86_64'}
-</span><span class='line'>Management Classes             : []
-</span><span class='line'>OS Version                     : rhel7
-</span><span class='line'>Owners                         : ['admin']
-</span><span class='line'>Red Hat Management Key         : &lt;&lt;inherit&gt;&gt;
-</span><span class='line'>Red Hat Management Server      : &lt;&lt;inherit&gt;&gt;
-</span><span class='line'>Template Files                 : {}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Installation</h3>
-
-<p>Install the system, via setup a machine which boot from PXE in the same subnet, then this machine will hint you with installing the corresponding system. <br/>
-The new system&rsquo;s username/password is the same as we set in the cobbler configuration file.</p>
-
-<h3>Enable Web Interface</h3>
-
-<p>Change the default password via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cp /etc/cobbler/users.digest /etc/cobbler/users.digest.back
-</span><span class='line'>$ htdigest /etc/cobbler/users.digest "Cobbler" cobbler
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now restart the cobblerd, you could visit following URL for visiting the Web Inteface:  <br/>
-<a href="http://10.3.3.3/cobbler_web">http://10.3.3.3/cobbler_web</a></p>
-
-<h3>Import Multiple ISOs</h3>
-
-<p>Import the first iso as usual.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mount -o loop -t iso9660 ./CentOS-6.6-x86_64-bin-DVD1.iso  /mnt
-</span><span class='line'># cobbler import --name=CentOS-6.6 --arch=x86_64 --path=/mnt
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The Second iso first mount to /mnt1/ directory, then import with following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  rsync -a '/mnt1/' /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/ --exclude-from=/etc/cobbler/rsync.exclude --progress
-</span><span class='line'>#  COMPSXML=$(ls /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/repodata/*comps*.xml)
-</span><span class='line'>#  createrepo -c cache -s sha --update --groupfile ${COMPSXML} /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cobbler distro list
-</span><span class='line'># cobbler profile list
-</span><span class='line'># cobbler distro report --name=CentOS-6.6-x86_64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via installing a new machine running CentOS6.6.</p>
-
-<h3>Trouble-Shooting on fence</h3>
-
-<p>Lacking of fence equipment.</p>
-
-<p>Trouble shooting for controlling the Systems(which is the node information which added into cobbler system).   <br/>
-For Power Management:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler system poweroff --name Node1
-</span><span class='line'>task started: 2015-05-14_064600_power
-</span><span class='line'>task started (id=Power management (off), time=Thu May 14 06:46:00 2015)
-</span><span class='line'>cobbler power configuration is:
-</span><span class='line'>      type   : virsh
-</span><span class='line'>      address: qemu+ssh://root@10.3.3.1/system
-</span><span class='line'>      user   : root
-</span><span class='line'>      id     : CobblerTest
-</span><span class='line'>running: /usr/sbin/fence_virsh
-</span><span class='line'>received on stdout: 
-</span><span class='line'>received on stderr: Unable to connect/login to fencing device
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/5">&larr; Older</a>
@@ -2628,6 +2318,10 @@ For Power Management:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/">Install CloudStack All-In-One on Ubuntu14.04</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File for Ubuntu1404 in CobblerServer</a>
       </li>
     
@@ -2641,10 +2335,6 @@ For Power Management:</p>
     
       <li class="post">
         <a href="/blog/2015/06/29/linux-tips-2/">Linux Tips(2)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/25/for-deploying-148-tips/">For Deploying 148 Tips</a>
       </li>
     
   </ul>

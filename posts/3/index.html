@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="When adding the existing qcow2 files to a new machine, following steps needs to be done to enable the new configuration for the networking: Change &hellip;">
+  <meta name="description" content="Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it. Preparation I use two VMs for this experiment, &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,288 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-06-08T09:48:20+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:48 am</span></time>
+        
+         | <a href="/blog/2015/06/08/openvswitch-and-vxlan-how-to/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it.</p>
+
+<h3>Preparation</h3>
+
+<p>I use two VMs for this experiment, created a new virtual network, it&rsquo;s 10.94.94.0/24, every vm machines adds into this network. <br/>
+VM1, VM2, both have 1G Memory. 1 Core. <br/>
+VM1: 10.94.94.11, VM2: 10.94.94.12.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get update && sudo apt-get -y upgrade
+</span><span class='line'>$ sudo apt-get install build-essential$
+</span><span class='line'>$ sudo reboot
+</span><span class='line'>$ uname -a
+</span><span class='line'>$ uname -a
+</span><span class='line'>Linux OpenVSwitchVM1 3.13.0-24-generic #47-Ubuntu SMP Fri May 2 23:30:00 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>Generate DEB</h3>
+
+<p>Following steps includes install dependencies, fetching source code, build, generate package, notice we use 2.3.0 version of the openvswitch.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y build-essential fakeroot debhelper \
+</span><span class='line'>                    autoconf automake bzip2 libssl-dev \
+</span><span class='line'>                    openssl graphviz python-all procps \
+</span><span class='line'>                    python-qt4 python-zopeinterface \
+</span><span class='line'>                    python-twisted-conch libtool
+</span><span class='line'>$ wget http://openvswitch.org/releases/openvswitch-2.3.0.tar.gz
+</span><span class='line'>$ tar xzvf openvswitch-2.3.0.tar.gz
+</span><span class='line'>$ cd openvsiwtch-2.3.0
+</span><span class='line'>$ DEB_BUILD_OPTIONS='parallel=8 nocheck' fakeroot debian/rules binary
+</span><span class='line'>$ cd ..
+</span><span class='line'>$ ls -al *.deb
+</span><span class='line'>openvswitch-common_2.3.0-1_amd64.deb         openvswitch-ipsec_2.3.0-1_amd64.deb   openvswitch-vtep_2.3.0-1_amd64.deb
+</span><span class='line'>openvswitch-datapath-dkms_2.3.0-1_all.deb    openvswitch-pki_2.3.0-1_all.deb       python-openvswitch_2.3.0-1_all.deb
+</span><span class='line'>openvswitch-datapath-source_2.3.0-1_all.deb  openvswitch-switch_2.3.0-1_amd64.deb
+</span><span class='line'>openvswitch-dbg_2.3.0-1_amd64.deb            openvswitch-test_2.3.0-1_all.deb
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also copy all of the deb files into another PC.</p>
+
+<h3>Installation</h3>
+
+<p>In two machines, do following steps for installing.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y bridge-utils
+</span><span class='line'>$ sudo dpkg -i openvswitch-common_2.3.1-1_amd64.deb \
+</span><span class='line'>         openvswitch-switch_2.3.1-1_amd64.deb</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>VM Netorking Configuration</h3>
+
+<p>For VM1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-br br0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-br br1
+</span><span class='line'># ovs-vsctl add-port br0 eth0
+</span><span class='line'># ifconfig eth0 0 up
+</span><span class='line'># ifconfig br0 10.94.94.11
+</span><span class='line'># route add default gw 10.94.94.1 br0
+</span><span class='line'># ifconfig br1 172.10.0.1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For VM2:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># ovs-vsctl add-br br0
+</span><span class='line'># ovs-vsctl add-br br1
+</span><span class='line'># ovs-vsctl add-port br0 eth0
+</span><span class='line'># ifconfig eth0 0 up && ifconfig br0 10.94.94.12
+</span><span class='line'># route add default gw 10.94.94.1
+</span><span class='line'># ifconfig br1 172.10.1.1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Ping each other, we could see br1 is not OK.</p>
+
+<h3>VXLAN Setup</h3>
+
+<p>On VM1, do following operation, to set the vx1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.12
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl show
+</span><span class='line'>a1e9afb6-345a-4f79-8e0b-131cd43cfb67
+</span><span class='line'>    Bridge "br0"
+</span><span class='line'>        Port "eth0"
+</span><span class='line'>            Interface "eth0"
+</span><span class='line'>        Port "br0"
+</span><span class='line'>            Interface "br0"
+</span><span class='line'>                type: internal
+</span><span class='line'>    Bridge "br1"
+</span><span class='line'>        Port "br1"
+</span><span class='line'>            Interface "br1"
+</span><span class='line'>                type: internal
+</span><span class='line'>        Port "vx1"
+</span><span class='line'>            Interface "vx1"
+</span><span class='line'>                type: vxlan
+</span><span class='line'>                options: {remote_ip="10.94.94.12"}
+</span><span class='line'>    ovs_version: "2.3.0"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>On VM2, do following operation, to set vx1</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM2:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.11
+</span><span class='line'>root@OpenVSwitchVM2:~# ovs-vsctl show
+</span><span class='line'>bce3f2b5-9b77-41dc-8130-b8922dd7ac9e
+</span><span class='line'>    Bridge "br1"
+</span><span class='line'>        Port "vx1"
+</span><span class='line'>            Interface "vx1"
+</span><span class='line'>                type: vxlan
+</span><span class='line'>                options: {remote_ip="10.94.94.11"}
+</span><span class='line'>        Port "br1"
+</span><span class='line'>            Interface "br1"
+</span><span class='line'>                type: internal
+</span><span class='line'>    Bridge "br0"
+</span><span class='line'>        Port "br0"
+</span><span class='line'>            Interface "br0"
+</span><span class='line'>                type: internal
+</span><span class='line'>        Port "eth0"
+</span><span class='line'>            Interface "eth0"
+</span><span class='line'>    ovs_version: "2.3.0"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So now you could ping each other via the br1 address.</p>
+
+<h3>Mirror Port</h3>
+
+<p>Do the following things for setting up the mirror port.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#  modprobe dummy
+</span><span class='line'>#  ip link set up dummy0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 dummy0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl --id=@m create mirror name=mirror0 -- add bridge br1 mirrors @m
+</span><span class='line'>33931f5a-008f-44cf-abc6-38afb3062b5e
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl list port dummy0
+</span><span class='line'>_uuid               : 5f5fe675-b1ee-4acd-a0ab-f14e952d1603
+</span><span class='line'>bond_downdelay      : 0
+</span><span class='line'>bond_fake_iface     : false
+</span><span class='line'>bond_mode           : []
+</span><span class='line'>bond_updelay        : 0
+</span><span class='line'>external_ids        : {}
+</span><span class='line'>fake_bridge         : false
+</span><span class='line'>interfaces          : [a6fbabe9-790d-4be8-a362-b7cbdd46db89]
+</span><span class='line'>lacp                : []
+</span><span class='line'>mac                 : []
+</span><span class='line'>name                : "dummy0"
+</span><span class='line'>other_config        : {}
+</span><span class='line'>qos                 : []
+</span><span class='line'>statistics          : {}
+</span><span class='line'>status              : {}
+</span><span class='line'>tag                 : []
+</span><span class='line'>trunks              : []
+</span><span class='line'>vlan_mode           : []
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2518,181 +2800,6 @@ Chef Workstation: 4-Core, 8G Memory, a physical machine, IP address: xxx.xxx.0.1
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM Machine</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-25T11:46:28+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:46 am</span></time>
-        
-         | <a href="/blog/2015/05/25/lxcize-the-kvm-machine/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In order to make exsiting kvm based machine to be lxc container, following is the steps.    <br/>
-Refers to:  <br/>
-<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
-
-<h3>Convert Disk Formats</h3>
-
-<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
-
-<h3>LXC the KVM</h3>
-
-<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> myvm.conf
-</span><span class='line'>lxc.network.type = veth
-</span><span class='line'>lxc.network.flags = up
-</span><span class='line'>lxc.network.link = br0
-</span><span class='line'>lxc.network.name = eth0
-</span><span class='line'>lxc.network.ipv4 = xxx.xxx.10.230/24
-</span><span class='line'>lxc.network.ipv4.gateway = xxx.xxx.0.176
-</span><span class='line'>#lxc.network.link = lxcbr0
-</span><span class='line'>lxc.utsname = myvminlxc
-</span><span class='line'>
-</span><span class='line'>lxc.tty = 4
-</span><span class='line'>lxc.pts = 1024
-</span><span class='line'>lxc.rootfs = /dev/mapper/loop0p1
-</span><span class='line'>lxc.arch = amd64
-</span><span class='line'>lxc.cap.drop = sys_module mac_admin
-</span><span class='line'>
-</span><span class='line'>lxc.cgroup.devices.deny = a
-</span><span class='line'># Allow any mknod (but not using the node)
-</span><span class='line'>lxc.cgroup.devices.allow = c *:* m
-</span><span class='line'>lxc.cgroup.devices.allow = b *:* m
-</span><span class='line'># /dev/null and zero
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:3 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:5 rwm
-</span><span class='line'># consoles
-</span><span class='line'>lxc.cgroup.devices.allow = c 5:1 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 5:0 rwm
-</span><span class='line'>#lxc.cgroup.devices.allow = c 4:0 rwm
-</span><span class='line'>#lxc.cgroup.devices.allow = c 4:1 rwm
-</span><span class='line'># /dev/{,u}random
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:9 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:8 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 136:* rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 5:2 rwm
-</span><span class='line'># rtc
-</span><span class='line'>lxc.cgroup.devices.allow = c 254:0 rwm
-</span><span class='line'>#fuse
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:229 rwm
-</span><span class='line'>#tun
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:200 rwm
-</span><span class='line'>#full
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:7 rwm
-</span><span class='line'>#hpet
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:228 rwm
-</span><span class='line'>#kvm
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:232 rwm</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo kpartx -a Contrail.img</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now start the machine via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-start -n myvminlxc -f ./myvm.conf</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
-
-<h3>TroubleShooting</h3>
-
-<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/selinux/config
-</span><span class='line'>#SELINUX=permissive
-</span><span class='line'>SELINUX=disabled
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>kpartx -a /home/xxxxx/iso/Contrail.raw
-</span><span class='line'>lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/4">&larr; Older</a>
@@ -2710,6 +2817,10 @@ Refers to:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/">Install CloudStack All-In-One on Ubuntu14.04</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File for Ubuntu1404 in CobblerServer</a>
       </li>
     
@@ -2723,10 +2834,6 @@ Refers to:  <br/>
     
       <li class="post">
         <a href="/blog/2015/06/29/linux-tips-2/">Linux Tips(2)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/06/25/for-deploying-148-tips/">For Deploying 148 Tips</a>
       </li>
     
   </ul>
