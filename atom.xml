@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-07-05T22:43:43+08:00</updated>
+  <updated>2015-07-06T19:34:45+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,104 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Add Private NAT Networking in XenServer]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/07/06/add-private-nat-networking-in-xenserver/"/>
+    <updated>2015-07-06T11:42:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/07/06/add-private-nat-networking-in-xenserver</id>
+    <content type="html"><![CDATA[<h3>Create Networking In XenCenter</h3>
+
+<p>Create the networking under the XenCenter UI&rsquo;s tab &ldquo;Networking&rdquo;.</p>
+
+<h3>Networking Setting</h3>
+
+<p>Enable the ip forward:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/sysctl.conf
+</span><span class='line'>net.ipv4.ip_forward = 1
+</span><span class='line'># sysctl -p 
+</span><span class='line'># cat /proc/sys/net/ipv4/ip_forward 
+</span><span class='line'>1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use iptables for forwarding the network flow:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -A FORWARD --in-interface xapi0 -j ACCEPT
+</span><span class='line'># iptables --table nat -A POSTROUTING --out-interface eth0 -j MASQUERADE</span></code></pre></td></tr></table></div></figure>
+
+
+<p>But this didn&rsquo;t bring up the internal networking, after discussing with college, edit the file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@xenserver-WolfHunter ~]# cat /etc/sysconfig/iptables
+</span><span class='line'>+++++  *nat
+</span><span class='line'>+++++  :PREROUTING ACCEPT [7019:539216]
+</span><span class='line'>+++++  :INPUT ACCEPT [77:3825]
+</span><span class='line'>+++++  :OUTPUT ACCEPT [104:6495]
+</span><span class='line'>+++++  :POSTROUTING ACCEPT [53:3228]
+</span><span class='line'>+++++  -A POSTROUTING -o xenbr0 -j MASQUERADE
+</span><span class='line'>+++++  COMMIT
+</span><span class='line'>*filter
+</span><span class='line'>:INPUT ACCEPT [0:0]
+</span><span class='line'>:FORWARD ACCEPT [0:0]
+</span><span class='line'>:OUTPUT ACCEPT [0:0]
+</span><span class='line'>:RH-Firewall-1-INPUT - [0:0]
+</span><span class='line'>-A INPUT -j RH-Firewall-1-INPUT
+</span><span class='line'>++++ -A FORWARD -i xapi0 -j ACCEPT
+</span><span class='line'>-A FORWARD -j RH-Firewall-1-INPUT
+</span><span class='line'>-A RH-Firewall-1-INPUT -i lo -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -p icmp --icmp-type any -j ACCEPT
+</span><span class='line'># DHCP for host internal networks (CA-6996)
+</span><span class='line'>-A RH-Firewall-1-INPUT -p udp -m udp --dport 67 --in-interface xenapi -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+</span><span class='line'># Linux HA hearbeat (CA-9394)
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m udp -p udp --dport 694 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 22 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 80 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 443 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -j REJECT --reject-with icmp-host-prohibited
+</span><span class='line'>COMMIT
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Restart XenServer and waiting for verification.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Install CloudStack All-In-One on Ubuntu14.04]]></title>
@@ -3617,55 +3715,6 @@ An example file is listed as following:</p>
 <p>QuickClient is the node we just added.</p>
 
 <p>Here provides a good start-point for following operations, next step you could do more magics on newly added nodes, also you could add more nodes for deployment.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Chef TroubleShooting 2]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/08/chef-troubleshooting-2/"/>
-    <updated>2015-06-08T19:43:13+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/08/chef-troubleshooting-2</id>
-    <content type="html"><![CDATA[<p>The ssl checking for adding new nodes is still a horrible procedure, following shows the correct steps for adding new node:</p>
-
-<p>On Chef Workstation, add node via its ip address rather than via its hostname:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ knife bootstrap 172.16.0.12 -x username_on_12 -P password_on_12 --sudo</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The example knife.rb file should be written like following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>current_dir = File.dirname(__FILE__)
-</span><span class='line'>log_level                :info
-</span><span class='line'>log_location             STDOUT
-</span><span class='line'>node_name                "nodename"
-</span><span class='line'>client_key               "#{current_dir}/node.pem"
-</span><span class='line'>validation_client_name   "nodename"
-</span><span class='line'>validation_key           "#{current_dir}/node_org.pem"
-</span><span class='line'>chef_server_url          "https://tmpChefServer/organizations/nodename"
-</span><span class='line'>syntax_check_cache_path  "#{ENV['HOME']}/.chef/syntaxcache"
-</span><span class='line'>cookbook_path            ["#{current_dir}/../cookbooks"]</span></code></pre></td></tr></table></div></figure>
-
-
-<p>On Chef Client, first fetching the ssl, then manually passed the verification.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ knife ssl fetch --config /etc/chef/client.rb
-</span><span class='line'>$ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxxxx.pem</span></code></pre></td></tr></table></div></figure>
-
-
-<p>On Chef Server, bootstrap again via the same command, now you could work.</p>
 ]]></content>
   </entry>
   
