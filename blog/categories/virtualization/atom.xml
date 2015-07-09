@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-07-06T19:34:45+08:00</updated>
+  <updated>2015-07-09T20:22:07+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,125 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[WH Worktips(8)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/07/09/wh-worktips-8/"/>
+    <updated>2015-07-09T11:08:00+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/07/09/wh-worktips-8</id>
+    <content type="html"><![CDATA[<p>After Cobbler import and deployment, simply install download plugins,
+Create the repo, and edit the repo definition file in the deployed node:</p>
+
+<pre><code>[root@node164 ~]# cat /etc/yum.repos.d/cloudstack.repo 
+[cloudstack]
+name=cloudstack
+baseurl=http://10.47.58.2/4.5CentOS7/
+enabled=1
+gpgcheck=0
+</code></pre>
+
+<p>Steps for installing the cloudstack on CentOS7:</p>
+
+<pre><code># yum install -y ntp
+[root@node164 ~]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+10.47.58.164    node164
+[root@node164 ~]# vim /etc/selinux/config 
+SELINUX=permissive
+SELINUXTYPE=targeted
+[root@node164 ~]# yum install libselinux-python
+# yum install -y wget 
+# wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+# yum install -y python-pip
+# yum install -y mysql
+
+[root@node164 ~]# sudo rpm -Uvh http://dev.mysql.com/get/mysql-community-release-el7-5.noarch.rpm
+[root@node164 ~]# sudo yum -y install mysql-community-server
+[root@node164 ~]# yum install -y MySQL-python
+# vim /etc/my.cnf
+    # CloudStack MySQL settings
+    innodb_rollback_on_timeout=1
+    innodb_lock_wait_timeout=600
+    max_connections=700
+    log-bin=mysql-bin
+    binlog-format = 'ROW'
+    bind-address=0.0.0.0
+
+    [mysqld_safe]
+    log-error=/var/log/mariadb/mariadb.log
+[root@node164 ~]# service mysqld start
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[WH Worktips(7)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/07/07/wh-worktips-7/"/>
+    <updated>2015-07-07T15:22:23+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/07/07/wh-worktips-7</id>
+    <content type="html"><![CDATA[<h3>Cloudstack Agent Repository</h3>
+
+<p>Setup the CloudStack Agent Repository via:</p>
+
+<pre><code># yum install yum-plugin-downloadonly
+# vim /etc/yum.repos.d/cloudstack.repo
+[cloudstack]
+name=cloudstack
+baseurl=http://cloudstack.apt-get.eu/rhel/4.3/
+enabled=1
+gpgcheck=0
+# mkdir Code
+# yum install --downloadonly --downloaddir=/root/Code/ cloud-agent
+</code></pre>
+
+<p>Now all of the installation rpm packages has been downloaded to directory, simply upload them to a server, use <code>createrepo .</code> to generate the repository, and link them to nginx&rsquo;s root directory.  <br/>
+Mine is under:  <br/>
+<a href="http://192.168.0.79/4.4.3CloudStackAgent/">http://192.168.0.79/4.4.3CloudStackAgent/</a></p>
+
+<h3>Agent Installation Steps</h3>
+
+<p>In a new deployed machine:</p>
+
+<pre><code># mv CentOS-* /root/
+[root@node161 yum.repos.d]# cat cloudstack.repo 
+[cloudstack]
+name=cloudstack
+baseurl=http://192.168.0.79/4.4.3CloudStackAgent/
+enabled=1
+gpgcheck=0
+# yum install -y cloud-agent
+</code></pre>
+
+<p>Configure qemu and libvirt:</p>
+
+<pre><code>[root@node161 yum.repos.d]# cp /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.orig
+[root@node161 yum.repos.d]# sed -i '/#vnc_listen = "0.0.0.0"/ a vnc_listen = "0.0.0.0"' /etc/libvirt/qemu.conf
+[root@node161 yum.repos.d]# diff -du /etc/libvirt/qemu.conf.orig /etc/libvirt/qemu.conf
+
+
+# cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.orig
+# sed -i '/#listen_tls = 0/ a listen_tls = 0' /etc/libvirt/libvirtd.conf
+# sed -i '/#listen_tcp = 1/ a listen_tcp = 1' /etc/libvirt/libvirtd.conf
+# sed -i '/#tcp_port = "16509"/ a tcp_port = "16509"' /etc/libvirt/libvirtd.conf
+# sed -i '/#auth_tcp = "sasl"/ a auth_tcp = "none"' /etc/libvirt/libvirtd.conf
+# sed -i '/#mdns_adv = 1/ a mdns_adv = 0' /etc/libvirt/libvirtd.conf
+# diff -du /etc/libvirt/libvirtd.conf.orig  /etc/libvirt/libvirtd.conf
+
+[root@node161 yum.repos.d]# cp /etc/sysconfig/libvirtd /etc/sysconfig/libvirtd.orig
+[root@node161 yum.repos.d]# sed -i '/#LIBVIRTD_ARGS="--listen"/ a LIBVIRTD_ARGS="--listen"' /etc/sysconfig/libvirtd
+[root@node161 yum.repos.d]# diff -du /etc/sysconfig/libvirtd.orig  /etc/sysconfig/libvirtd
+[root@node161 yum.repos.d]# rm -f /etc/libvirt/libvirtd.conf.orig 
+
+# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+127.0.0.1       node161
+</code></pre>
+
+<p>Now you could add the host into the cloudstack management interface.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Add Private NAT Networking in XenServer]]></title>
@@ -496,133 +615,6 @@ root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt &amp;&amp; apt
 </code></pre>
 
 <p>After updating, you have the same system as your server.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Insert Public Key Into Cobbler Deployed System]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/29/insert-public-key-into-cobbler-deployed-system/"/>
-    <updated>2015-06-29T14:13:08+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/29/insert-public-key-into-cobbler-deployed-system</id>
-    <content type="html"><![CDATA[<p>First edit your kickstart file, add following line before the end of your kickstart:</p>
-
-<pre><code>[root@z_WHServer kickstarts]# pwd
-/var/lib/cobbler/kickstarts
-[root@z_WHServer kickstarts]# cat sample_end.ks
-# Start final steps
-+ $SNIPPET('publickey_root')
-$SNIPPET('kickstart_done')
-# End final steps
-%end
-</code></pre>
-
-<p>And the <code>publickey_root</code> should be edited as following:</p>
-
-<pre><code>[root@z_WHServer snippets]# pwd
-/var/lib/cobbler/snippets
-[root@z_WHServer snippets]# cat publickey_root
-# Install CobblerServer's(10.47.58.2) public key for root user
-cd /root
-mkdir --mode=700 .ssh
-cat &gt;&gt; .ssh/authorized_keys &lt;&lt; "PUBLIC_KEY"
-ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA3B3GtGuKY0l2Ak9+WSkorY7R+Cx5/u3RMua/7GrvP05IPywQdkR+mqwdRydNjyhB96nHlYZtr8Fbfn5iwqn0j8dz8wmTZicBNeRqIdbe/YUje5NjXxDXjYda63VfDhpgzJ53KICTx6pBhGaeOKS/U5HqCpDbF7ODP8siU7bRhk1LkIQ6VwZYUg7b0oR+Sw6XJ31Z7gs4CWF6zfjfQQoF7EoMA+dnqvt2K4PQPXNSBJQx3qb9jyXIXvo333PcfIX6mD1TW1wDAIXLm4qz4mi7C8Ax9h+T/D98r08WX360vC5Tzr8feXMs6H4il4s4Ftq7RVoqCNKmG3AB1LTp4AQAzw== root@z_WHServer
-PUBLIC_KEY
-chmod 600 .ssh/authorized_keys
-cat &gt;&gt; .ssh/config &lt;&lt;EOF
-StrictHostKeyChecking no
-UserKnownHostsFile /dev/null
-EOF
-</code></pre>
-
-<p>Better you run <code>cobber sync</code> after updating your kickstart file.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[WH Worktips(6)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/06/24/wh-worktips-6/"/>
-    <updated>2015-06-24T11:54:12+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/06/24/wh-worktips-6</id>
-    <content type="html"><![CDATA[<h3>Migration</h3>
-
-<p>So this time we will migrate the whole machine, that is the Cobbler Server from one physical machine to another one. The steps are:  <br/>
-1. Transfer the harddisk files.   <br/>
-2. Edit the <code>/etc/udev/rules.d/70-persistent-net.rules</code>, Change the eth1 to eth0, and remove the eth0 item.  <br/>
-3. Edit the <code>/etc/sysconfig/network-scripts/ifcfg-eth0</code>, its mac address to the one you specified on step 2.   <br/>
-4. Restart the machine.</p>
-
-<h3>Modification &amp;&amp; Test</h3>
-
-<p>Create a new machine, which mac address is <code>52:54:00:3a:87:4e</code>, and define it on Cobbler server:</p>
-
-<pre><code>[root@z_WHServer ~]# cobbler system add --name=node147 --profile=CentOS-6.5-x86_64 --mac=52:54:00:3a:87:4e --interface=eth0 --ip-address=10.47.58.147 --hostname=node147 --gateway=10.47.58.1 --dns-name=node147
-</code></pre>
-
-<p>Now bootup the machine and let it be deployed by cobbler server. The deployment time depends on your disk speed.</p>
-
-<p>At the same time, edit the Ansible configuration:</p>
-
-<pre><code>[root@z_WHServer Ansible]# cat hosts
-[node147]
-10.47.58.147
-[root@z_WHServer Ansible]# pwd
-/root/Code/Ansible
-</code></pre>
-
-<p>Copy the repository to the <code>10.47.58.2:/var/www/html/</code>, and edit the Ansible configuration.   <br/>
-And Also configure the nfs server for the second host, previously we use the one we got from the external nfs server.  <br/>
-Also the download vhd template files.  <br/>
-<code>
-$ scp -r ./4.4/ root@10.47.58.2:/var/www/html/
-[root@z_WHServer html]# chmod 777 -R 4.4
-[root@z_WHServer CloudStack-Ansible-Playbook]# vim templates/cloudstack.repo.j2
-[cloudstack]
-name=cloudstack
-baseurl=http://10.47.58.2/4.4/
-clouder@pc121:/home/juju$ scp ./systemvm64template-* root@10.47.58.2:/var/www/html/
-root@10.47.58.2's password:
-systemvm64template-2014-06-23-master-xen.vhd.bz2                                                             100%  237MB  59.4MB/s   00:04
-systemvm64template-4.4.1-7-kvm.qcow2.bz2                                                                     100%  291MB  36.4MB/s   00:08
-clouder@pc121:/home/juju$ scp ./vhd-util root@10.47.58.2:/var/www/html/
-[root@z_WHServer html]# chmod 777 systemvm64template-*
-[root@z_WHServer html]# chmod 777 vhd-util
-[root@z_WHServer html]# vim /etc/exports
-/home/export *(rw,async,no_root_squash,no_subtree_check)
-[root@z_WHServer html]# mkdir -p /home/export
-[root@z_WHServer html]# chmod 777 -R /home/export/
-[root@z_WHServer html]# chkconfig nfs on
-[root@z_WHServer html]# chkconfig rpcbind on
-[root@z_WHServer html]# service nfs restart
-[root@z_WHServer html]# service rpcbind restart
-[root@z_WHServer html]# iptables -D INPUT -j REJECT --reject-with icmp-host-prohibited
-[root@z_WHServer home]# chown -R nobody /home/export/
-[root@z_WHServer CloudStack-Ansible-Playbook]# vim cloudstack.yml
-.......
-    CSManagement:
-      ManagementIP: 10.47.58.147
-      SecondaryMount: /secondary
-      NFSHost: 10.47.58.2
-      NFSSecondaryShare: /home/export
-      SysTemplateURLurl43: http://10.47.58.2/systemvm64template-2014-06-23-master-xen.vhd.bz2
-      SysTemplateURLurl44: http://10.47.58.2/systemvm64template-4.4.1-7-kvm.qcow2.bz2
-      SysTemplateURLhv: xenserver
-      VhdutilURL: http://10.47.58.2/vhd-util
-.....
-</code></p>
-
-<p>Now deploy the playbooks via the same process in:   <br/>
-<a href="http://purplepalmdash.github.io/blog/2015/06/19/wh-worktips-4/">http://purplepalmdash.github.io/blog/2015/06/19/wh-worktips-4/</a></p>
-
-<pre><code># cd /root/Code/Ansible/CloudStack-Ansible-Playbook
-# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=pip
-# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=base
-# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=mysql
-# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=mysql3306
-# ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=csmanagement 
-</code></pre>
-
-<p>Visit
-<a href="http://10.47.58.147:8080/client">http://10.47.58.147:8080/client</a></p>
 ]]></content>
   </entry>
   
