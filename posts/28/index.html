@@ -9,7 +9,12 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Risk On Google App Engine it&rsquo;s very convinient to setup a crontab task, while in heroku setting up a crontab task will occupy the material, &hellip;">
+  <meta name="description" content="Installation Install and run rabbitmq server via: 1
+2
+$ yaourt rabbitmq
+$ rabbitmq-server Install celery in python virtual enviroment: 1
+2
+$ workon &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +70,183 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/10/celery-and-rabbitmq-on-archlinux/">Celery and RabbitMQ on ArchLinux</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-10T22:19:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:19 pm</span></time>
+        
+         | <a href="/blog/2014/05/10/celery-and-rabbitmq-on-archlinux/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Installation</h3>
+
+<p>Install and run rabbitmq server via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt rabbitmq
+</span><span class='line'>$ rabbitmq-server
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install celery in python virtual enviroment:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ workon venv2
+</span><span class='line'>(venv2) $ pip install celery
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Run Simple Tasks</h3>
+
+<p>Following python file, named &ldquo;tasks.py&rdquo; defines two tasks:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>from celery import Celery
+</span><span class='line'>
+</span><span class='line'>app = Celery('tasks', backend='amqp', broker='amqp://')
+</span><span class='line'>
+</span><span class='line'>@app.task(ignore_result=True)
+</span><span class='line'>def print_hello():
+</span><span class='line'>    print 'hello there'
+</span><span class='line'>
+</span><span class='line'>@app.task
+</span><span class='line'>def gen_prime(x):
+</span><span class='line'>    multiples = []
+</span><span class='line'>    results = []
+</span><span class='line'>    for i in xrange(2, x+1):
+</span><span class='line'>        if i not in multiples:
+</span><span class='line'>            results.append(i)
+</span><span class='line'>            for j in xrange(i*i, x+1, i):
+</span><span class='line'>                multiples.append(j)
+</span><span class='line'>    return results
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>celery worker -A tasks &
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now in another terminal you can use python interractive window for:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>from tasks import print_hello
+</span><span class='line'>from tasks import gen_prime
+</span><span class='line'>print_hello()
+</span><span class='line'>primes = gen_prime(1000)
+</span><span class='line'>primes = gen_prime(50000)
+</span><span class='line'># CTRL+C will stop it. 
+</span><span class='line'># Access the background worker
+</span><span class='line'>primes = gen_prime.delay(50000)
+</span><span class='line'># by the worker executing now, because we configured the backend for application
+</span><span class='line'>primes.ready()
+</span><span class='line'>False
+</span><span class='line'>...
+</span><span class='line'>True
+</span><span class='line'>print primes.get()
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Periodic Tasks</h3>
+
+<p>Add following lines into the tasks.py:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>from celery.task import periodic_task
+</span><span class='line'>from datetime import timedelta
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>@periodic_task(run_every=timedelta(minutes=1))
+</span><span class='line'>def print_minutes():
+</span><span class='line'>    print 'Hello, 1 minute reached'
+</span><span class='line'>
+</span><span class='line'>@periodic_task(run_every=timedelta(seconds=3))
+</span><span class='line'>def every_3_seconds():
+</span><span class='line'>    print("Running periodic task!")
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now start the tasks.py via following commands:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ celery -A tasks worker --loglevel=info --beat
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>You will see Celery output &ldquo;Running periodic tasks!&rdquo; every 3 seconds, while every 1 minutes the &ldquo;Hello, 1 minute reached&rdquo; will be printed out.</p>
+
+<h3>To Be Thought</h3>
+
+<p>How to mirgrate it with our heroku web app ?  <br/>
+The periodic_task is good for fetching pages/datas and generate the result, then store the results into the database.</p>
+
+<p>But the webapp should response to user&rsquo;s http request, this will be the main task.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1918,117 +2100,6 @@ Setting up tunnel:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/05/03/deploy-snova-on-heroku/">Deploy Snova on Heroku</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-05-03T11:55:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2014</span></span> <span class='time'>11:55 am</span></time>
-        
-         | <a href="/blog/2014/05/03/deploy-snova-on-heroku/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Setting Account</h3>
-
-<p>First you have to install heroku deploy tool via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku plugins:install https://github.com/heroku/heroku-deploy 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then login and create the app:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku login
-</span><span class='line'>Enter your Heroku credentials.
-</span><span class='line'>Email: xxx@gmail.com
-</span><span class='line'>Password (typing will be hidden): 
-</span><span class='line'>Authentication failed.
-</span><span class='line'>$ $ heroku apps:create xxx
-</span><span class='line'>Creating xxx... done, stack is cedar
-</span><span class='line'>http://xxx.herokuapp.com/ | git@heroku.com:xxx.git
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Source Code Preparation</h3>
-
-<p>Download the source code from <a href="https://code.google.com/p/snova/">https://code.google.com/p/snova/</a>, here you need to cross the Greatwall.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>wget https://code.google.com/p/snova/downloads/detail?name=snova-c4-java-server-0.22.0.war
-</span><span class='line'>wget https://code.google.com/p/snova/downloads/detail?name=snova-0.22.0.zip&can=2&q=
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Here, we use the java version of the snova.</p>
-
-<h3>Deploy Apps On Heroku</h3>
-
-<p>Now begin to deploy your Snova:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>heroku deploy:war --war ./snova-c4-java-server-0.22.0.war --app "Your_App_Name" 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configure Client</h3>
-
-<p>unzip the snova-0.22.0.zip and configure it:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>unzip snova-0.22.0.zip
-</span><span class='line'>cd snova-0.22.0
-</span><span class='line'>vim conf/snova.conf
-</span><span class='line'>[C4]
-</span><span class='line'>Enable=1
-</span><span class='line'>WorkerNode[0]=Your_App_Name.herokuapp.com 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>You can create a shortcut for calling the Snova, add following line into ~/.bashrc:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>alias snova='/home/Trusty/code/gfw/snova/snova-0.22.0/bin/start.sh'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configure Browser</h3>
-
-<p>The proxy address is 127.0.0.1, the port is 48100 or 48102.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/29">&larr; Older</a>
@@ -2046,6 +2117,10 @@ Setting up tunnel:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/10/wh-worktips-9/">WH Worktips(9)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/09/wh-worktips-8/">WH Worktips(8)</a>
       </li>
     
@@ -2059,10 +2134,6 @@ Setting up tunnel:</p>
     
       <li class="post">
         <a href="/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/">Install CloudStack All-In-One on Ubuntu14.04</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File for Ubuntu1404 in CobblerServer</a>
       </li>
     
   </ul>
