@@ -9,18 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Fresh steps. 1
-2
-3
-4
-5
-6
-7
-8
-$ sudo yum update
-$ sudo yum install vim
-$ sudo yum install net-tools
-$ sudo yum install -y scons git python-lxml wget &hellip;">
+  <meta name="description" content="In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -76,6 +65,169 @@ $ sudo yum install -y scons git python-lxml wget &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/02/13/libvirt-on-opensuse/">Libvirt on OpenSuse</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-02-13T03:48:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>3:48 am</span></time>
+        
+         | <a href="/blog/2015/02/13/libvirt-on-opensuse/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested virtualization is not OK. So that&rsquo;s why I have to try libvirt.</p>
+
+<h3>Installation</h3>
+
+<p>Install the virt-manager related software via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo zypper install kvm libvirt libvirt-python qemu virt-manager
+</span><span class='line'>$ sudo zypper in patterns-openSUSE-kvm_server
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now if you directly call virt-manager you will got the following hint:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> error: authentication failed: Authorization requires authentication but no agent is available.
+</span><span class='line'>    error: failed to connect to the hypervisor
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or if you run <code>virsh -c qemu:///system</code> you will got the same hint message.   <br/>
+Solution is we have to enable the polkit service, add following script:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /usr/bin/polkitexec
+</span><span class='line'>#! /bin/bash
+</span><span class='line'>
+</span><span class='line'>prg=$1
+</span><span class='line'>
+</span><span class='line'>[ "$prg" ] || exec echo "missing argument"
+</span><span class='line'>[ -x "$prg" ] || which $prg &&gt;/dev/null || exec echo "program not found: $1"
+</span><span class='line'>
+</span><span class='line'>shift
+</span><span class='line'>args=$*
+</span><span class='line'>
+</span><span class='line'>[ `id -u` -eq 0 ] && exec $prg $args
+</span><span class='line'>
+</span><span class='line'>uname -m | grep -q 64 && lib=/usr/lib64 || lib=/usr/lib
+</span><span class='line'>
+</span><span class='line'>if [ "$DESKTOP_SESSION" = "kde" ]; then 
+</span><span class='line'>        pga=polkit-kde-authentication-agent-1
+</span><span class='line'>        lpga=/usr/$lib/kde4/libexec/$pka
+</span><span class='line'>else
+</span><span class='line'>        pga=polkit-gnome-authentication-agent-1
+</span><span class='line'>        lpga=/usr/lib/$pga
+</span><span class='line'>fi
+</span><span class='line'>
+</span><span class='line'>case $DESKTOP_SESSION in
+</span><span class='line'>        gnome|gnome-shell|cinnamon*) exec $prg $args ;;
+</span><span class='line'>        *) ps nc -C $pga &&gt;/dev/null && exec $prg $args || { [ ! -x $lpga ] && exec echo "program not found: $lpga" || $lpga & $prg $args ;} ;;
+</span><span class='line'>esac
+</span><span class='line'>$ sudo chmod 777 /sur/bin/polkitexec
+</span><span class='line'>$ vim ~/.zshrc
+</span><span class='line'># Wrap virt-manager with polkitexec. 
+</span><span class='line'>alias virt-manager='polkitexec virt-manager'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the virt-manager could be run correctly.</p>
+
+<h3>Trouble-Shooting</h3>
+
+<p>If you met following error, add root to your kvm.conf is OK.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Could not access KVM kernel module: Permission denied
+</span><span class='line'>failed to initialize KVM: Permission denied
+</span><span class='line'>No accelerator found!
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>First change the priviledge:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#chown root:kvm /dev/kvm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then modify the /etc/libvirt/qemu.conf:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#user="root"
+</span><span class='line'>user="root"
+</span><span class='line'>#group="root"
+</span><span class='line'>group="root"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Restart the libvirtd and restart the virt-manager:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#service libvirtd restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now continue to install OpenContrail.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -954,62 +1106,6 @@ More and more.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/30/speed-up-the-wp-website-in-tianchao/">Speed-Up the WP Website in TianChao</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-30T23:09:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:09 pm</span></time>
-        
-         | <a href="/blog/2015/01/30/speed-up-the-wp-website-in-tianchao/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since our Great Fire Wall forbidden the google, thus all of the google related service becomes available in china, this leads to access to wordpress based website which uses google online fonts pretty slow. Following is how to speedup your website without too many changes:   <br/>
-First go to your website&rsquo;s folder, find the files which calls <code>fonts.googleapis.com</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ grep -i "fonts.googleapis.com" ./ -r
-</span><span class='line'>./wp-content/themes/twentytwelve/functions.php:       $font_url = add_query_arg( $query_args, "$protocol://fonts.googleapis.com/css" );
-</span><span class='line'>./wp-content/themes/twentyfifteen/functions.php:      ), '//fonts.googleapis.com/css' );
-</span><span class='line'>./wp-content/themes/twentyfourteen/functions.php:     $font_url = add_query_arg( 'family', urlencode( 'Lato:300,400,700,900,300italic,400italic,700italic' ), "//fonts.googleapis.com/css" );
-</span><span class='line'>./wp-content/themes/tdpersona/functions.php:  wp_enqueue_style( 'tdpersona-googlefonts', '//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700' );
-</span><span class='line'>./wp-content/themes/twentythirteen/functions.php:     $fonts_url = add_query_arg( $query_args, "//fonts.googleapis.com/css" );
-</span><span class='line'>./wp-includes/script-loader.php:      $open_sans_font_url = "//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,300,400,600&subset=$subsets";
-</span><span class='line'>./wp-includes/js/tinymce/plugins/compat3x/css/dialog.css:@import url(//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,300,400,600&subset=latin-ext,latin);
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Replace all of the <code>fonts.googleapis.com</code> with <code>fonts.useso.com</code>, this could be done via scripts. <br/>
-After modification, your website will be much more faster than before.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/12">&larr; Older</a>
@@ -1027,6 +1123,10 @@ After modification, your website will be much more faster than before.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/13/wh-worktips-11/">WH Worktips(11)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/12/wh-worktips-10/">WH Worktips(10)</a>
       </li>
     
@@ -1040,10 +1140,6 @@ After modification, your website will be much more faster than before.</p>
     
       <li class="post">
         <a href="/blog/2015/07/07/wh-worktips-7/">WH Worktips(7)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/06/add-private-nat-networking-in-xenserver/">Add Private NAT Networking in XenServer</a>
       </li>
     
   </ul>
