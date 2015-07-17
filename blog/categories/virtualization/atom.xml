@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-07-13T22:00:34+08:00</updated>
+  <updated>2015-07-17T19:11:48+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,188 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[ISCSI Installed Debian Jessie]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/07/17/iscsi-installed-debian-jessie/"/>
+    <updated>2015-07-17T14:24:20+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/07/17/iscsi-installed-debian-jessie</id>
+    <content type="html"><![CDATA[<h3>FreeNAS Installation And Configuration</h3>
+
+<p>Install Procedure ignored, because it&rsquo;s simple.   <br/>
+Following steps are used for adding iscsi partition.</p>
+
+<p><img src="/images/2015_07_17_14_25_57_558x549.jpg" alt="/images/2015_07_17_14_25_57_558x549.jpg" />  <br/>
+Manually setup the volumn and now you could add your volumn into the FreeNAS System.</p>
+
+<p>Configure iscsi:  <br/>
+<img src="/images/2015_07_17_14_33_57_530x370.jpg" alt="/images/2015_07_17_14_33_57_530x370.jpg" /> <br/>
+Add the name of <code>iqn.onecloud.iscsi</code>, next we add portal:  <br/>
+<img src="/images/2015_07_17_14_35_12_617x403.jpg" alt="/images/2015_07_17_14_35_12_617x403.jpg" />  <br/>
+Add Authorized Access Now:  <br/>
+<img src="/images/2015_07_17_14_37_03_491x195.jpg" alt="/images/2015_07_17_14_37_03_491x195.jpg" />  <br/>
+Add Initator:  <br/>
+<img src="/images/2015_07_17_14_39_25_498x234.jpg" alt="/images/2015_07_17_14_39_25_498x234.jpg" />  <br/>
+Create target:  <br/>
+<img src="/images/2015_07_17_14_40_30_460x487.jpg" alt="/images/2015_07_17_14_40_30_460x487.jpg" />  <br/>
+Add extent: <br/>
+<img src="/images/2015_07_17_14_41_55_559x613.jpg" alt="/images/2015_07_17_14_41_55_559x613.jpg" /> <br/>
+LUM RPMs could also be spcified:  <br/>
+<img src="/images/2015_07_17_14_42_51_386x351.jpg" alt="/images/2015_07_17_14_42_51_386x351.jpg" /> <br/>
+Associate Targets:  <br/>
+<img src="/images/2015_07_17_14_44_09_619x310.jpg" alt="/images/2015_07_17_14_44_09_619x310.jpg" /></p>
+
+<p>Enable the iscsi service:  <br/>
+<img src="/images/2015_07_17_14_45_04_366x302.jpg" alt="/images/2015_07_17_14_45_04_366x302.jpg" /></p>
+
+<p>Better you change the IP Address into static IP address.</p>
+
+<h3>Install Debian Jessie Onto ISCSI Disk:</h3>
+
+<p>On a installed Ubuntu, I choose Ubuntu14.04, do following for connecting the exising created iscsi partition:</p>
+
+<pre><code>$ sudo apt-get install -y open-iscsi gdisk
+[root:~]# iscsiadm -m discovery -t sendtargets -p 10.47.58.40
+10.47.58.40:3260,-1 iqn.onecloud.iscsi:iscsidisk1
+</code></pre>
+
+<p>Login and listed the device :</p>
+
+<pre><code>[root:~]# iscsiadm -m node -T 'iqn.onecloud.iscsi:iscsidisk1' -p 10.47.58.40 -l
+Logging in to [iface: default, target: iqn.onecloud.iscsi:iscsidisk1, portal: 10.47.58.40,3260] (multiple)
+Login to [iface: default, target: iqn.onecloud.iscsi:iscsidisk1, portal: 10.47.58.40,3260] successful.
+[root:~]# ls -l /dev/disk/by-path
+total 0
+lrwxrwxrwx 1 root root 9 Jul 17 05:39 ip-10.47.58.40:3260-iscsi-iqn.onecloud.iscsi:iscsidisk1-lun-0 -&gt; ../../sda
+</code></pre>
+
+<p>Use gdisk for partition the /dev/sda, and creating the filesystem on them:</p>
+
+<pre><code># gdisk -l /dev/sda
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048            8191   3.0 MiB     EF02  BIOS boot partition
+   2            8192         1056767   512.0 MiB   8200  Linux swap
+   3         1056768        40959966   19.0 GiB    8300  Linux filesystem
+# mkfs.ext4 /dev/sda3
+# mkswap /dev/sda2 
+</code></pre>
+
+<p>Now install system, first mount usable systems:</p>
+
+<pre><code># mkdir /mnt/chroot
+# mount /dev/sda3 /mnt/chroot
+# debootstrap wheezy /mnt/chroot
+# debootstrap jessie /mnt/chroot http://mirrors.aliyun.com/debian/ 
+</code></pre>
+
+<p>chroot into the newly install jessie:</p>
+
+<pre><code>root@Ubuntu-14:~# mount -t proc none /mnt/chroot/proc
+root@Ubuntu-14:~# mount -t sysfs none /mnt/chroot/sys
+root@Ubuntu-14:~# mount --bind /dev /mnt/chroot/dev
+root@Ubuntu-14:~# chroot /mnt/chroot /bin/bash
+</code></pre>
+
+<p>Disk configuration:</p>
+
+<pre><code>root@Ubuntu-14:/# cp /proc/mounts /etc/mtab
+root@Ubuntu-14:/# sed -i '\|^/dev/sda3|,$!d' /etc/mtab
+root@Ubuntu-14:/# blkid /dev/sda2 /dev/sda3
+/dev/sda2: UUID="0c570265-543a-41ec-9edb-65bc55d677cd" TYPE="swap" PARTLABEL="Linux swap" PARTUUID="bfb7c1b1-c6cd-4302-9cb4-d6c1de43a0ad"
+/dev/sda3: UUID="c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b" TYPE="ext4" PARTLABEL="Linux filesystem" PARTUUID="00ccaf63-b3b3-46c4-92ab-1933d31cbcb7"
+root@Ubuntu-14:/# echo 'UUID=c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b / ext4 errors=remount-ro 0 1' &gt;&gt; /etc/fstab
+root@Ubuntu-14:/# echo 'UUID=0c570265-543a-41ec-9edb-65bc55d677cd none swap sw 0 0' &gt;&gt; /etc/fstab
+root@Ubuntu-14:/# cat /etc/fstab
+# UNCONFIGURED FSTAB FOR BASE SYSTEM
+UUID=c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b / ext4 errors=remount-ro 0 1
+UUID=0c570265-543a-41ec-9edb-65bc55d677cd none swap sw 0 0
+</code></pre>
+
+<p>Install some packages, be sure to make grub2 installed to /dev/sda:</p>
+
+<pre><code># apt-get install vim less openssh-server locales
+# apt-get install linux-image-amd64 grub2 initramfs-tools
+</code></pre>
+
+<p>Configure the Grub:</p>
+
+<pre><code># apt-get install open-iscsi
+# vim /etc/default/grub
+GRUB_CMDLINE_LINUX_DEFAULT=""
+GRUB_CMDLINE_LINUX=""ISCSI_INITIATOR=iqn.onecloud.iscsi.client:client ISCSI_TARGET_NAME=iqn.onecloud.iscsi:iscsidisk1 ISCSI_TARGET_IP=10.47.58.40 ISCSI_TARGET_PORT=3260 root=UUID=c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b ip=10.47.58.176::10.47.58.1:255.255.255.0:client:eth0:off""
+# touch /etc/iscsi/iscsi.initramfs
+# echo "InitiatorName=iqn.onecloud.iscsi.client:client" &gt; /etc/iscsi/initiatorname.iscsi
+# update-grub
+# update-initramfs -u
+# passwd
+</code></pre>
+
+<p>Configure the network interfaces:</p>
+
+<pre><code>root@Ubuntu-14:/etc/network# cat interfaces
+# interfaces(5) file used by ifup(8) and ifdown(8)
+# Include files from /etc/network/interfaces.d:
+#source-directory /etc/network/interfaces.d
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+#iface eth0 inet manual
+address 10.47.58.176
+netmask 255.255.255.0
+gateway 10.47.58.1
+dns-nameservers 114.114.114.114
+</code></pre>
+
+<p>Now exit and umount all of the mounted partitions.</p>
+
+<pre><code># exit
+# umount /mnt/chroot/{dev,proc,sys,}
+root@Ubuntu-14:~# iscsiadm -m node -T 'iqn.onecloud.iscsi:iscsidisk1' -p 10.47.58.40 -u
+# echo "InitiatorName=iqn.onecloud.iscsi.client:client" &gt; /etc/iscsi/initiatorname.iscsi
+#!ipxe
+set initiator-iqn iqn.2007-08.com.example.client:client
+sanboot iscsi:san.example.com:6:3260:0:iqn.2007-08.com.example.san:rootp
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[WH Worktips(12)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/07/14/wh-worktips-12/"/>
+    <updated>2015-07-14T19:09:11+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/07/14/wh-worktips-12</id>
+    <content type="html"><![CDATA[<h3>How to quickly get all packages</h3>
+
+<p>First deploy a new system, Then:</p>
+
+<pre><code># cd /etc/yum.repos.d/
+# mv CentOS-* /root/
+# wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-6.repo
+# wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
+</code></pre>
+
+<p>If you previously downloaded the 4.5 packages, then put them under one web server&rsquo;s directory,  do following:</p>
+
+<pre><code>[root@node161 yum.repos.d]# vim cloudstack.repo 
+[cloudstack]
+name=cloudstack
+baseurl=http://10.47.58.2/4.5/
+enabled=1
+gpgcheck=0
+</code></pre>
+
+<p>Now install the yum-download plugin, and begin to create local repository:</p>
+
+<pre><code># yum install -y yum-plugin-downloadonly
+# mkdir ~/Code
+</code></pre>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[WH Worktips(11)]]></title>
@@ -206,134 +388,6 @@ subnet 172.16.10.0 netmask 255.255.255.0 {
 <p>After modification, simply use <code>cobbler sync</code> for syncing your changes, now restart the cobbler server, your operation should be the same as the above situations.</p>
 
 <p>Also if you have playbooks of ansible which uses the static IP address, you also have to replace the IP related settings.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[WH Worktips(8)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/07/09/wh-worktips-8/"/>
-    <updated>2015-07-09T11:08:00+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/07/09/wh-worktips-8</id>
-    <content type="html"><![CDATA[<p>After Cobbler import and deployment, simply install download plugins,
-Create the repo, and edit the repo definition file in the deployed node:</p>
-
-<pre><code>[root@node164 ~]# cat /etc/yum.repos.d/cloudstack.repo 
-[cloudstack]
-name=cloudstack
-baseurl=http://10.47.58.2/4.5CentOS7/
-enabled=1
-gpgcheck=0
-</code></pre>
-
-<p>Steps for installing the cloudstack on CentOS7:</p>
-
-<pre><code># yum install -y ntp
-[root@node164 ~]# cat /etc/hosts
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-10.47.58.164    node164
-[root@node164 ~]# vim /etc/selinux/config 
-SELINUX=permissive
-SELINUXTYPE=targeted
-[root@node164 ~]# yum install libselinux-python
-# yum install -y wget 
-# wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
-# yum install -y python-pip
-# yum install -y mysql
-
-[root@node164 ~]# sudo rpm -Uvh http://dev.mysql.com/get/mysql-community-release-el7-5.noarch.rpm
-[root@node164 ~]# sudo yum -y install mysql-community-server
-[root@node164 ~]# yum install -y MySQL-python
-# vim /etc/my.cnf
-    # CloudStack MySQL settings
-    innodb_rollback_on_timeout=1
-    innodb_lock_wait_timeout=600
-    max_connections=700
-    log-bin=mysql-bin
-    binlog-format = 'ROW'
-    bind-address=0.0.0.0
-
-    [mysqld_safe]
-    log-error=/var/log/mariadb/mariadb.log
-[root@node164 ~]# service mysqld start
-</code></pre>
-
-<h3>Specify Static IP</h3>
-
-<p>The static IP should be specified via:</p>
-
-<pre><code>[root@z_WHServer ~]# cobbler system add --name=node166 --profile=CentOS-6.5-x86_64 --mac=52:54:00:73:f9:9f --interface=eth0 --ip-address=10.47.58.166 --hostname=node166 --gateway=10.47.58.1 --dns-name=node166 --static=1 --ip-address=10.47.58.166 --subnet=255.255.255.0
-[root@z_WHServer ~]# cobbler system add --name=node167 --profile=CentOS-6.5-x86_64 --mac=52:54:00:8b:c2:15 --interface=eth0 --ip-address=10.47.58.167 --hostname=node167 --gateway=10.47.58.1 --dns-name=node167 --static=1 --ip-address=10.47.58.167 --subnet=255.255.255.0 --name-servers="114.114.114.114 180.76.76.76"
-[root@z_WHServer ~]# cobbler system add --name=node2 --profile=CentOS-6.5-x86_64 --mac=52:54:00:7f:c5:16 --interface=eth0 --static=1 --ip-address=10.49.49.2 --subnet=255.255.255.0 --name-servers="114.114.114.114 180.76.76.76" --gateway=10.49.49.1
-</code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[WH Worktips(7)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/07/07/wh-worktips-7/"/>
-    <updated>2015-07-07T15:22:23+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/07/07/wh-worktips-7</id>
-    <content type="html"><![CDATA[<h3>Cloudstack Agent Repository</h3>
-
-<p>Setup the CloudStack Agent Repository via:</p>
-
-<pre><code># yum install yum-plugin-downloadonly
-# vim /etc/yum.repos.d/cloudstack.repo
-[cloudstack]
-name=cloudstack
-baseurl=http://cloudstack.apt-get.eu/rhel/4.3/
-enabled=1
-gpgcheck=0
-# mkdir Code
-# yum install --downloadonly --downloaddir=/root/Code/ cloud-agent
-</code></pre>
-
-<p>Now all of the installation rpm packages has been downloaded to directory, simply upload them to a server, use <code>createrepo .</code> to generate the repository, and link them to nginx&rsquo;s root directory.  <br/>
-Mine is under:  <br/>
-<a href="http://192.168.0.79/4.4.3CloudStackAgent/">http://192.168.0.79/4.4.3CloudStackAgent/</a></p>
-
-<h3>Agent Installation Steps</h3>
-
-<p>In a new deployed machine:</p>
-
-<pre><code># mv CentOS-* /root/
-[root@node161 yum.repos.d]# cat cloudstack.repo 
-[cloudstack]
-name=cloudstack
-baseurl=http://192.168.0.79/4.4.3CloudStackAgent/
-enabled=1
-gpgcheck=0
-# yum install -y cloud-agent
-</code></pre>
-
-<p>Configure qemu and libvirt:</p>
-
-<pre><code>[root@node161 yum.repos.d]# cp /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.orig
-[root@node161 yum.repos.d]# sed -i '/#vnc_listen = "0.0.0.0"/ a vnc_listen = "0.0.0.0"' /etc/libvirt/qemu.conf
-[root@node161 yum.repos.d]# diff -du /etc/libvirt/qemu.conf.orig /etc/libvirt/qemu.conf
-
-
-# cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.orig
-# sed -i '/#listen_tls = 0/ a listen_tls = 0' /etc/libvirt/libvirtd.conf
-# sed -i '/#listen_tcp = 1/ a listen_tcp = 1' /etc/libvirt/libvirtd.conf
-# sed -i '/#tcp_port = "16509"/ a tcp_port = "16509"' /etc/libvirt/libvirtd.conf
-# sed -i '/#auth_tcp = "sasl"/ a auth_tcp = "none"' /etc/libvirt/libvirtd.conf
-# sed -i '/#mdns_adv = 1/ a mdns_adv = 0' /etc/libvirt/libvirtd.conf
-# diff -du /etc/libvirt/libvirtd.conf.orig  /etc/libvirt/libvirtd.conf
-
-[root@node161 yum.repos.d]# cp /etc/sysconfig/libvirtd /etc/sysconfig/libvirtd.orig
-[root@node161 yum.repos.d]# sed -i '/#LIBVIRTD_ARGS="--listen"/ a LIBVIRTD_ARGS="--listen"' /etc/sysconfig/libvirtd
-[root@node161 yum.repos.d]# diff -du /etc/sysconfig/libvirtd.orig  /etc/sysconfig/libvirtd
-[root@node161 yum.repos.d]# rm -f /etc/libvirt/libvirtd.conf.orig 
-
-# cat /etc/hosts
-127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-127.0.0.1       node161
-</code></pre>
-
-<p>Now you could add the host into the cloudstack management interface.</p>
 ]]></content>
   </entry>
   

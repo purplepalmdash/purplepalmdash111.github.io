@@ -9,7 +9,21 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="1. 在家庭主机上配置DDNS服务，可以从no-ip.com申请一个免费的动态域名。no-ip同时提供了适用于不同平台的客户端，可以在其主页下载，并在家庭主机上安装之。家里的路由器上也可以配置DDNS，国内的可以用花生壳服务，而后开放DMZ主机给内网的主机即可。家庭主机需要开启sshd服务， &hellip;">
+  <meta name="description" content="我用Qemu来仿真RaspberryPI以便快速测试内核模块的开发。下面是仿真的步骤： 1. 下载镜像文件2013-07-26-wheezy-raspbian.img，并更改其配置使得可以被qemu-system-arm加载： 1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +79,294 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/09/04/qemu-for-raspberrypi/">Qemu for RaspberryPI</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-04T17:26:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>4</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:26 pm</span></time>
+        
+         | <a href="/blog/2013/09/04/qemu-for-raspberrypi/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>我用Qemu来仿真RaspberryPI以便快速测试内核模块的开发。下面是仿真的步骤：</p>
+
+<p>1. 下载镜像文件2013-07-26-wheezy-raspbian.img，并更改其配置使得可以被qemu-system-arm加载：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ fdisk -l 2013-07-26-wheezy-raspbian.img 
+</span><span class='line'>Disk 2013-05-25-wheezy-raspbian.img: 1939 MB, 1939865600 bytes, 3788800 sectors
+</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
+</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
+</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
+</span><span class='line'>Disk label type: dos
+</span><span class='line'>Disk identifier: 0x000c7b31
+</span><span class='line'>
+</span><span class='line'>                         Device Boot      Start         End      Blocks   Id  System
+</span><span class='line'>2013-05-25-wheezy-raspbian.img1            8192      122879       57344    c  W95 FAT32 (LBA)
+</span><span class='line'>2013-05-25-wheezy-raspbian.img2          122880     3788799     1832960   83  Linux
+</span><span class='line'>
+</span><span class='line'>#从上面可以看到，根文件分区的地址偏移为512*122880=62914560
+</span><span class='line'>
+</span><span class='line'>#更改根分区文件里preload信息:
+</span><span class='line'>$ sudo mount ./2013-07-26-wheezy-raspbian.img -o offset=62914560 /mnt3
+</span><span class='line'>$ sudo vim /mnt3/etc/ld.so.preload 
+</span><span class='line'>#注释掉这一行，否则在qemu启动完系统后将自动提示配置rpi而造成系统无法登陆
+</span><span class='line'>#/usr/lib/arm-linux-gnueabihf/libcofi_rpi.so
+</span><span class='line'>$ sudo umount /mnt3</span></code></pre></td></tr></table></div></figure>
+
+
+<p>2. 拷贝一个此时的img文件以便将来备用</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cp 2013-07-26-wheezy-raspbian.img 2.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>3. 配置qemu为bridge网络</p>
+
+<p>qemu启动时需要调用的脚本：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/qemu-ifup 
+</span><span class='line'>#!/bin/sh
+</span><span class='line'>  
+</span><span class='line'>echo "Executing /etc/qemu-ifup"
+</span><span class='line'>echo "Bringing up $1 for bridged mode..."
+</span><span class='line'>sudo /usr/bin/ip link set $1 up promisc on
+</span><span class='line'>echo "Adding $1 to br0..."
+</span><span class='line'>sudo /usr/bin/brctl addif br0 $1
+</span><span class='line'>sleep 2</span></code></pre></td></tr></table></div></figure>
+
+
+<p>qemu关闭时自动调用的脚本：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/qemu-ifdown
+</span><span class='line'>#!/bin/sh
+</span><span class='line'> 
+</span><span class='line'>echo "Executing /etc/qemu-ifdown"
+</span><span class='line'>sudo /usr/bin/ip link set $1 down
+</span><span class='line'>sudo /usr/bin/brctl delif br0 $1
+</span><span class='line'>sudo /usr/bin/ip link delete dev $1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在镜像的当前目录下，创建run-qemu文件：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#!/bin/bash
+</span><span class='line'>USERID=$(whoami)
+</span><span class='line'>
+</span><span class='line'># Get name of newly created TAP device; see https://bbs.archlinux.org/viewtopic.php?pid=1285079#p1285079
+</span><span class='line'>precreationg=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+</span><span class='line'>sudo /usr/bin/ip tuntap add user $USERID mode tap
+</span><span class='line'>postcreation=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+</span><span class='line'>IFACE=$(comm -13 &lt;(echo "$precreationg") &lt;(echo "$postcreation"))
+</span><span class='line'>
+</span><span class='line'># This line creates a random mac address. The downside is the dhcp server will assign a different ip each time
+</span><span class='line'>printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff )) $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff ))
+</span><span class='line'># Instead, uncomment and edit this line to set an static mac address. The benefit is that the dhcp server will assign the same ip.
+</span><span class='line'># macaddr='52:54:be:36:42:a9'
+</span><span class='line'> 
+</span><span class='line'>qemu-system-arm -net nic,macaddr=$macaddr -net tap,ifname="$IFACE" $*
+</span><span class='line'>  
+</span><span class='line'>sudo ip link set dev $IFACE down &> /dev/null
+</span><span class='line'>sudo ip tuntap del $IFACE mode tap &> /dev/null</span></code></pre></td></tr></table></div></figure>
+
+
+<p>因为tap需要用到tun模块，所以增加tun到自动加载的模块中</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/modules-load.d/tun.conf 
+</span><span class='line'># Load tun at boot
+</span><span class='line'>tun</span></code></pre></td></tr></table></div></figure>
+
+
+<p>添加visudo条目：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Cmnd_Alias      QEMU=/usr/bin/ip,/usr/bin/modprobe,/usr/bin/brctl
+</span><span class='line'>%kvm     ALL=NOPASSWD: QEMU</span></code></pre></td></tr></table></div></figure>
+
+
+<p>添加用户到kvm组：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ usermod -a -G kvm username</span></code></pre></td></tr></table></div></figure>
+
+
+<p>4. 启动qemu，使用两个镜像，以调整磁盘大小。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># 增加2G大小给镜像
+</span><span class='line'>$ qemu-img resize ./2013-07-26-wheezy-raspbian.img +2G
+</span><span class='line'>$ ./run-qemu -kernel kernel-qemu -cpu arm1176 -m 256 -M versatilepb -no-reboot -serial stdio -append "root=/dev/sda2 panic=1" -hda ./2.img -hdb ./2013-07-26-wheezy-raspbian.img 
+</span><span class='line'>进入Qemu后，
+</span><span class='line'>$ sudo apt-get install gparted
+</span><span class='line'>$ sudo gparted /dev/sdb
+</span><span class='line'>调整到自己想要的大小即可。</span></code></pre></td></tr></table></div></figure>
+
+
+<p>5. 重新启动后用下列命令启动Qemu:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./run-qemu -kernel kernel-qemu -cpu arm1176 -m 256 -M versatilepb -no-reboot -serial stdio -append "root=/dev/sda2 panic=1" -hda ./2013-07-26-wheezy-raspbian.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使用上列步骤所启动起来的RaspberryPI镜像，具备完整的网络支持和足够的存储空间，而运行速度也令人满意。对比于真实的RaspberryPI板，编译、验证、烧写过程都较为简单，大部分研发工作可以基于这个平台来做。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/09/03/add-netfilter-nat-for-pogoplug/">Add Netfilter NAT for Pogoplug</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-03T16:06:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>4:06 pm</span></time>
+        
+         | <a href="/blog/2013/09/03/add-netfilter-nat-for-pogoplug/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Pogoplug上了debian wheezy后，想配置成VPN服务器，在最后一步配置iptables时发现无法激活NAT表。</p>
+
+<p>显示结果为：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ iptables -t nat -A POSTROUTING -s 10.10.10.0/24 -o eth0 -j MASQUERADE
+</span><span class='line'>can't initialize iptables table 'NAT': Table does not exist (do you need to insmod?)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>解决方法:重新编译NetFilter模块。</p>
+
+<p>下载Linux3.1.10内核并解压到/usr/src</p>
+
+<p>$ make menuconfig</p>
+
+<p><img class="img" src="/images/2013_09_03_12_53_06_868x411.jpg"></p>
+
+<p>而后：</p>
+
+<p><img class="img" src="/images/2013_09_03_12_54_08_749x362.jpg"></p>
+
+<p>确保以下选项被激活：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>CONFIG_NF_CONNTRACK
+</span><span class='line'>CONFIG_NF_CONNTRACK_IPV4
+</span><span class='line'>CONFIG_NF_NAT
+</span><span class='line'>CONFIG_IP_NF_IPTABLES</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而后编译，由于在嵌入式系统上编译速度较慢，所以只是编译目录下对应的模块，其他的则不编：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ make M=net/netfilter modules  # Make all modules in specified dir
+</span><span class='line'>$ make M=net/netfilter          # Same as 'make M=dir modules'
+</span><span class='line'>$ make M=net/netfilter  modules_install # Install modules</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这样就应该可以了，具体的验证等回家再看。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1530,765 +1832,6 @@ Procedure Call Standard
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-3/">用Qemu和GNU编译链研究ARM汇编(3)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-10T20:50:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>8:50 pm</span></time>
-        
-         | <a href="/blog/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-3/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>在多个文件构成的程序中，源文件首先被编译成多个对象(object)文件(.o文件),
-然后交由链接器生成最终的可执行文件，如下图所示：</p>
-
-<p><img class="img" src="/images/linker.png"></p>
-
-<p>在组建可执行文件时，链接器主要完成下列操作:</p>
-
-<ul>
-<li>解析符号</li>
-<li>重定位</li>
-</ul>
-
-
-<p>1. 符号解析</p>
-
-<p>在编译单个文件组成的程序时，所有标号的解析都可以由汇编器替代为对应的地址。而在多文件组成的程序中，如果有储存在其他文件中的符号引用，汇编器会将其标识为"unresolved"(未解析).当对象文件被传递给链接器时，链接器从这些文件中决定对应的值，并把code中的unresolved的值替代为正确的值。</p>
-
-<p>我们用上一节的求和函数来演示链接器是如何进行符号解析的。
-这两个文件汇编后，会在链接时被检查未被解析的引用。</p>
-
-<figure class='code'><figcaption><span>main.s - main.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>main.s
-</span><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>        b start                 <span class="o">@</span> Skip over the data
-</span><span class='line'>arr<span class="o">:</span>    <span class="m">.</span>byte <span class="m">10</span><span class="p">,</span> <span class="m">20</span><span class="p">,</span> <span class="m">25</span>        <span class="o">@</span> Read<span class="o">-</span>only <span class="kt">array</span> of bytes
-</span><span class='line'>eoa<span class="o">:</span>                            <span class="o">@</span> Address of end of <span class="kt">array</span> <span class="o">+</span> <span class="m">1</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>align
-</span><span class='line'>start<span class="o">:</span>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>arr          <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>arr
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>eoa          <span class="o">@</span> r1 <span class="o">=</span> <span class="o">&amp;</span>eoa
-</span><span class='line'>
-</span><span class='line'>        bl    sum               <span class="o">@</span> Invoke the sum subroutine
-</span><span class='line'>
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<figure class='code'><figcaption><span>sum-sub.s - sum-sub.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'><span class="kp">sum</span><span class="o">-</span>sub.s
-</span><span class='line'>        <span class="o">@</span> Args
-</span><span class='line'>        <span class="o">@</span> r0<span class="o">:</span> Start address of <span class="kt">array</span>
-</span><span class='line'>        <span class="o">@</span> r1<span class="o">:</span> End address of <span class="kt">array</span>
-</span><span class='line'>        <span class="o">@</span>
-</span><span class='line'>        <span class="o">@</span> Result
-</span><span class='line'>        <span class="o">@</span> r3<span class="o">:</span> Sum of Array
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>global <span class="kp">sum</span>
-</span><span class='line'>
-</span><span class='line'><span class="kp">sum</span><span class="o">:</span>    mov   r3<span class="p">,</span> <span class="c1">#0            @ r3 = 0</span>
-</span><span class='line'>loop<span class="o">:</span>   ldrb  r2<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1      @ r2 = *r0++    ; Get array element</span>
-</span><span class='line'>        add   r3<span class="p">,</span> r2<span class="p">,</span> r3        <span class="o">@</span> r3 <span class="o">+=</span> r2      <span class="p">;</span> Calculate <span class="kp">sum</span>
-</span><span class='line'>        cmp   r0<span class="p">,</span> r1            <span class="o">@</span> <span class="kr">if</span> <span class="p">(</span>r0 <span class="o">!=</span> r1<span class="p">)</span> <span class="p">;</span> Check <span class="kr">if</span> hit end<span class="o">-</span>of<span class="o">-</span><span class="kt">array</span>
-</span><span class='line'>        bne   loop              <span class="o">@</span>    goto loop  <span class="p">;</span> Loop
-</span><span class='line'>        mov   pc<span class="p">,</span> lr            <span class="o">@</span> pc <span class="o">=</span> lr       <span class="p">;</span> Return when done
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>查看.o文件符号信息：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-nm main.o
-</span><span class='line'>00000004 t arr
-</span><span class='line'>00000007 t eoa
-</span><span class='line'>00000008 t start
-</span><span class='line'>00000014 t stop
-</span><span class='line'>         U sum
-</span><span class='line'>$ arm-none-eabi-nm sum-sub.o 
-</span><span class='line'>00000004 t loop
-</span><span class='line'>00000000 T sum</span></code></pre></td></tr></table></div></figure>
-
-
-<p>t代表符号已经被定义了， 而u则代表符号未被定义。大写字母表示该符号是全局变量。</p>
-
-<p>从上面的输出结果看，sum是被定义在sum-sub.o的全局变量，而该变量在main.o中未被解析到。当linker被调用时，符号引用将被解析到，对应的可执行文件将被生成。</p>
-
-<p>总结： as程序负责把.s文件编译成object文件，而生成最终的可执行文件时，ld负责把未被定位的符号定位到实际的库函数所在的位置。</p>
-
-<p>2. 重定位.</p>
-
-<p>重定位用于改变已经分配给标号的地址。它包括将所有符号引用映射到新分配的内存地址。</p>
-
-<p>合并段后的符号列表情况，可以对比于上面的main.o和sum-sub.o来看：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-ld -Ttext=0x0 -o sum.elf main.o sum-sub.o
-</span><span class='line'>arm-none-eabi-ld: warning: cannot find entry symbol _start; defaulting to 00000000
-</span><span class='line'>$ arm-none-eabi-nm sum.elf
-</span><span class='line'>00000004 t arr
-</span><span class='line'>00008038 T __bss_end__
-</span><span class='line'>00008038 T _bss_end__
-</span><span class='line'>00008038 T __bss_start
-</span><span class='line'>00008038 T __bss_start__
-</span><span class='line'>00008038 T __data_start
-</span><span class='line'>00008038 T _edata
-</span><span class='line'>00008038 T _end
-</span><span class='line'>00008038 T __end__
-</span><span class='line'>00000007 t eoa
-</span><span class='line'>00000024 t loop
-</span><span class='line'>00080000 T _stack
-</span><span class='line'>00000008 t start
-</span><span class='line'>         U _start
-</span><span class='line'>00000014 t stop
-</span><span class='line'>00000020 T sum</span></code></pre></td></tr></table></div></figure>
-
-
-<p>可以看到stop后面的sum已经被定位好了(之前是main.o中的U标记)，而loop则相应延后，被定位到了再往后的00000024。</p>
-
-<p>地址的变更： loop原本地址为00000004, 现在是00000024, 而sum原本为0x00000000，现在为00000020, 这是因为sum-sub.o中的.text和main.o中的.text部分一起组成了sum.elf中的.text部分。</p>
-
-<p>整体移动某个段到指定内存位置, 注意在-Ttext中我们增加的0x100的偏移量，使得地址对比于上面的结果整体上移了0x100:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-ld -Ttext=0x100 -o sum100.elf main.o sum-sub.o
-</span><span class='line'>arm-none-eabi-ld: warning: cannot find entry symbol _start; defaulting to 00000100
-</span><span class='line'>$ arm-none-eabi-nm sum100.elf 
-</span><span class='line'>00000104 t arr
-</span><span class='line'>00008138 T __bss_end__
-</span><span class='line'>00008138 T _bss_end__
-</span><span class='line'>00008138 T __bss_start
-</span><span class='line'>00008138 T __bss_start__
-</span><span class='line'>00008138 T __data_start
-</span><span class='line'>00008138 T _edata
-</span><span class='line'>00008138 T _end
-</span><span class='line'>00008138 T __end__
-</span><span class='line'>00000107 t eoa
-</span><span class='line'>00000124 t loop
-</span><span class='line'>00080000 T _stack
-</span><span class='line'>00000108 t start
-</span><span class='line'>         U _start
-</span><span class='line'>00000114 t stop
-</span><span class='line'>00000120 T sum</span></code></pre></td></tr></table></div></figure>
-
-
-<p>3. 重定位.data到RAM中。</p>
-
-<p>我们可以通过撰写链接脚本，将程序的.data段放置在RAM中。这也是通常嵌入式系统所谓bootloader干的活儿，从Flash中加载启动代码到RAM中而后执行。</p>
-
-<p>例程从RAM中加载两个数值，将两者相加而后将结果写回RAM，两个值和结果都放置在.data部分。</p>
-
-<p>代码：</p>
-
-<figure class='code'><figcaption><span>sum_ram.s - sum_ram.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>data
-</span><span class='line'>val1<span class="o">:</span>   <span class="m">.4</span>byte <span class="m">10</span>               <span class="o">@</span> First number
-</span><span class='line'>val2<span class="o">:</span>   <span class="m">.4</span>byte <span class="m">30</span>               <span class="o">@</span> Second number
-</span><span class='line'>result<span class="o">:</span> <span class="m">.4</span>byte <span class="m">0</span>                <span class="o">@</span> <span class="m">4</span> byte space <span class="kr">for</span> result
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>        <span class="m">.</span>align
-</span><span class='line'>start<span class="o">:</span>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>val1         <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>val1
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>val2         <span class="o">@</span> r1 <span class="o">=</span> <span class="o">&amp;</span>val2
-</span><span class='line'>
-</span><span class='line'>        ldr   r2<span class="p">,</span> <span class="p">[</span>r0<span class="p">]</span>          <span class="o">@</span> r2 <span class="o">=</span> <span class="o">*</span>r0
-</span><span class='line'>        ldr   r3<span class="p">,</span> <span class="p">[</span>r1<span class="p">]</span>          <span class="o">@</span> r3 <span class="o">=</span> <span class="o">*</span>r1
-</span><span class='line'>
-</span><span class='line'>        add   r4<span class="p">,</span> r2<span class="p">,</span> r3        <span class="o">@</span> r4 <span class="o">=</span> r2 <span class="o">+</span> r3
-</span><span class='line'>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>result       <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>result
-</span><span class='line'>        str   r4<span class="p">,</span> <span class="p">[</span>r0<span class="p">]</span>          <span class="o">@</span> <span class="o">*</span>r0 <span class="o">=</span> r4
-</span><span class='line'>
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>链接脚本：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>SECTIONS {
-</span><span class='line'>        . = 0x00000000;
-</span><span class='line'>        .text : { * (.text); }
-</span><span class='line'>
-</span><span class='line'>        . = 0xA0000000;
-</span><span class='line'>        .data : { * (.data); }
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>从connex的内存布局来看，内存地址为0xa000_0000到0xa400_0000，因而A0000000刚好在内存中。</p>
-
-<p>查看链接后的内存符号地址:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-as -o sum.o sum.s
-</span><span class='line'>$ arm-none-eabi-ld -T sum_link.ld -o sum.elf sum.o 
-</span><span class='line'>$ arm-none-eabi-nm -n sum.elf 
-</span><span class='line'>00000000 t start
-</span><span class='line'>0000001c t stop
-</span><span class='line'>a0000000 d val1
-</span><span class='line'>a0000004 d val2
-</span><span class='line'>a0000008 d result</span></code></pre></td></tr></table></div></figure>
-
-
-<p>这样就完了？NO！！！！！！！！因为：RAM is Volatile! 内存是易变的！</p>
-
-<p>RAM是易失性介质，怎可保证每次加电时就有代码洗干净PP在等着被运行？嵌入式系统里必然有非易失性存储，所有的代码和数据在加电前都需要放在这些非易失性存储介质中，例如在FLASH中。这样在加电后我们就可以利用一段启动代码把代码从FLASH搬到RAM中。</p>
-
-<p>从这个设计思路出发，我们需要程序的.data有两个地址，一个是加载地址，另一个是运行地址。
-这就是常说的：LMA(Load Memory Address)  VS    VMA(Virtual Memory Address)。</p>
-
-<p>上面的代码需要做两个修改:</p>
-
-<ol>
-<li>需要在.data中指定load地址和运行地址</li>
-<li>需要写一段代码用于将数据从FLASH读取到RAM中, 从存储地址到运行地址。</li>
-</ol>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>SECTIONS {
-</span><span class='line'>        . = 0x00000000;
-</span><span class='line'>        .text : { * (.text); }
-</span><span class='line'>        etext = .;
-</span><span class='line'>
-</span><span class='line'>        . = 0xA0000000;
-</span><span class='line'>        .data : AT (etext) { * (.data); }
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>etext包含了FLASH中放置完地址后的空白地址，记住这个地址以便在接下来将这个数值传送给.data部分，以便程序将.data部分从FLASH拷贝到RAM中。etext只是符号表中的一个，本身并不占据任何内存(可以回去翻上一篇日志)。</p>
-
-<p>关于AT关键字:  它指定了.data部分的加载地址，一个地址或符号被传递给AT关键字，以便它从该地址拷贝数据。 在这里，我们传递etext符号给AT。</p>
-
-<p>要把代码从FLASH拷贝到RAM中，下列信息需要被提供：</p>
-
-<ol>
-<li>Flash中数据地址(flash_sdata)</li>
-<li>RAM中数据地址(ram_sdata)</li>
-<li>.data部分大小(data_size)</li>
-</ol>
-
-
-<p>拷贝代码：</p>
-
-<figure class='code'><figcaption><span>modified_sum_ram.s - modified_sum_ram.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>flash_sdata
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>ram_sdata
-</span><span class='line'>        ldr   r2<span class="p">,</span> <span class="o">=</span>data_size
-</span><span class='line'>
-</span><span class='line'>copy<span class="o">:</span>
-</span><span class='line'>        ldrb  r4<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1</span>
-</span><span class='line'>        strb  r4<span class="p">,</span> <span class="p">[</span>r1<span class="p">],</span> <span class="c1">#1</span>
-</span><span class='line'>        subs  r2<span class="p">,</span> r2<span class="p">,</span> <span class="c1">#1</span>
-</span><span class='line'>        bne   copy
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>由此，我们需要在链接脚本中生成这三个数值：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>SECTIONS {
-</span><span class='line'>        . = 0x00000000;
-</span><span class='line'>        .text : {
-</span><span class='line'>              * (.text);
-</span><span class='line'>        }
-</span><span class='line'>        flash_sdata = .;
-</span><span class='line'>
-</span><span class='line'>        . = 0xA0000000;
-</span><span class='line'>        ram_sdata = .;
-</span><span class='line'>        .data : AT (flash_sdata) {* (.data); }
-</span><span class='line'>        ram_edata = .;
-</span><span class='line'>        data_size = ram_edata - ram_sdata;
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>ram_sdata为ram中数据开始地址，而ram_edata为结束地址，两者相减则为数据块大小。</p>
-
-<p>改变后的带有copy数据的代码：</p>
-
-<figure class='code'><figcaption><span>final_sum_ram.s - final_sum_ram.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>data
-</span><span class='line'>val1<span class="o">:</span>   <span class="m">.4</span>byte <span class="m">10</span>               <span class="o">@</span> First number
-</span><span class='line'>val2<span class="o">:</span>   <span class="m">.4</span>byte <span class="m">30</span>               <span class="o">@</span> Second number
-</span><span class='line'>result<span class="o">:</span> <span class="m">.</span>space <span class="m">4</span>                <span class="o">@</span> <span class="m">1</span> byte space <span class="kr">for</span> result
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>
-</span><span class='line'>        <span class="p">;;</span> Copy data to RAM.
-</span><span class='line'>start<span class="o">:</span>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>flash_sdata
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>ram_sdata
-</span><span class='line'>        ldr   r2<span class="p">,</span> <span class="o">=</span>data_size
-</span><span class='line'>
-</span><span class='line'>copy<span class="o">:</span>
-</span><span class='line'>        ldrb  r4<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1</span>
-</span><span class='line'>        strb  r4<span class="p">,</span> <span class="p">[</span>r1<span class="p">],</span> <span class="c1">#1</span>
-</span><span class='line'>        subs  r2<span class="p">,</span> r2<span class="p">,</span> <span class="c1">#1</span>
-</span><span class='line'>        bne   copy
-</span><span class='line'>
-</span><span class='line'>        <span class="p">;;</span> Add and store result.
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>val1         <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>val1
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>val2         <span class="o">@</span> r1 <span class="o">=</span> <span class="o">&amp;</span>val2
-</span><span class='line'>
-</span><span class='line'>        ldr   r2<span class="p">,</span> <span class="p">[</span>r0<span class="p">]</span>          <span class="o">@</span> r2 <span class="o">=</span> <span class="o">*</span>r0
-</span><span class='line'>        ldr   r3<span class="p">,</span> <span class="p">[</span>r1<span class="p">]</span>          <span class="o">@</span> r3 <span class="o">=</span> <span class="o">*</span>r1
-</span><span class='line'>
-</span><span class='line'>        add   r4<span class="p">,</span> r2<span class="p">,</span> r3        <span class="o">@</span> r4 <span class="o">=</span> r2 <span class="o">+</span> r3
-</span><span class='line'>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>result       <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>result
-</span><span class='line'>        str   r4<span class="p">,</span> <span class="p">[</span>r0<span class="p">]</span>          <span class="o">@</span> <span class="o">*</span>r0 <span class="o">=</span> r4
-</span><span class='line'>
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>使用修改过的final_sum_ram.s和link脚本编译，并生成flash.bin后，就可以在qemu-system-arm中验证结果了。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
-</span><span class='line'>QEMU 1.4.2 monitor - type 'help' for more information
-</span><span class='line'>(qemu) info registers
-</span><span class='line'>R00=a0000008 R01=a0000004 R02=0000000a R03=0000001e
-</span><span class='line'>R04=00000028 R05=00000000 R06=00000000 R07=00000000
-</span><span class='line'>R08=00000000 R09=00000000 R10=00000000 R11=00000000
-</span><span class='line'>R12=00000000 R13=00000000 R14=00000000 R15=00000038
-</span><span class='line'>PSR=600001d3 -ZC- A svc32
-</span><span class='line'>FPSCR: 00000000
-</span><span class='line'>
-</span><span class='line'>(qemu) xp /4dw 0xA0000000
-</span><span class='line'>00000000a0000000:         10         30         40          0</span></code></pre></td></tr></table></div></figure>
-
-
-<p>R04包含了我们相加后的结果, 为0x28=40, R02/R03则分别为操作数10/30. 而通过显示0xA0000000也显示了内存中的值分别为val1/val2/result的值。</p>
-
-<p>接下来的章节中，我们将讲到C代码入口。</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-2/">用Qemu和GNU编译链研究ARM汇编(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-10T16:30:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>4:30 pm</span></time>
-        
-         | <a href="/blog/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>研究两个汇编程序, 通过研究这两个程序，初步了解ARM汇编的知识：</p>
-
-<ul>
-<li>用于求数组和的程序</li>
-<li>用于计算字符串长度的程序</li>
-</ul>
-
-
-<p>1. 数组求和</p>
-
-<figure class='code'><figcaption><span>sum.s - sum.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>entry<span class="o">:</span>  b start                 <span class="o">@</span> Skip over the data
-</span><span class='line'>arr<span class="o">:</span>    <span class="m">.</span>byte <span class="m">10</span><span class="p">,</span> <span class="m">20</span><span class="p">,</span> <span class="m">25</span>        <span class="o">@</span> Read<span class="o">-</span>only <span class="kt">array</span> of bytes
-</span><span class='line'>eoa<span class="o">:</span>                            <span class="o">@</span> Address of end of <span class="kt">array</span> <span class="o">+</span> <span class="m">1</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>align
-</span><span class='line'>start<span class="o">:</span>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>eoa          <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>eoa
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>arr          <span class="o">@</span> r1 <span class="o">=</span> <span class="o">&amp;</span>arr
-</span><span class='line'>        mov   r3<span class="p">,</span> <span class="c1">#0            @ r3 = 0</span>
-</span><span class='line'>loop<span class="o">:</span>   ldrb  r2<span class="p">,</span> <span class="p">[</span>r1<span class="p">],</span> <span class="c1">#1      @ r2 = *r1++</span>
-</span><span class='line'>        add   r3<span class="p">,</span> r2<span class="p">,</span> r3        <span class="o">@</span> r3 <span class="o">+=</span> r2
-</span><span class='line'>        cmp   r1<span class="p">,</span> r0            <span class="o">@</span> <span class="kr">if</span> <span class="p">(</span>r1 <span class="o">!=</span> r2<span class="p">)</span>
-</span><span class='line'>        bne   loop              <span class="o">@</span>    goto loop
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>.byte声明：</p>
-
-<p>.byte声明的变量在内存中以连续的比特存在，.2byte和.4byte与之类似，分别用于存储16位值和32位值。联想到C语言中的内建数据结构定义，不难想象char/int/long int 预编译完是哪一种类型。</p>
-
-<p>通用语法结构如下：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>.byte   exp1, exp2, ...
-</span><span class='line'>.2byte  exp1, exp2, ...
-</span><span class='line'>.4byte  exp1, exp2, ...</span></code></pre></td></tr></table></div></figure>
-
-
-<p>你可以指定数据的格式，二进制用前缀0b/0B修饰，八进制以前缀0修饰，十进制/十六进制以0x/0X开头。整数也可以用字符常量来表示，加上单引号即可，在这种情况下ASCII码会被用到。</p>
-
-<p>也可以用C表达式，包含文字和其他符号的组合，如下例：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>pattern:  .byte 0b01010101, 0b00110011, 0b00001111
-</span><span class='line'>npattern: .byte npattern - pattern
-</span><span class='line'>halpha:   .byte 'A', 'B', 'C', 'D', 'E', 'F'
-</span><span class='line'>dummy:    .4byte 0xDEADBEEF
-</span><span class='line'>nalpha:   .byte 'Z' - 'A' + 1</span></code></pre></td></tr></table></div></figure>
-
-
-<p>.align声明：</p>
-
-<p>ARM指令需要32位对齐，指令的起始内存地址需要是4的倍数，所以用.align指令来插入无用的byte，来确保下一条指令的起始地址是4的倍数。在代码中存在byte或是半字(half words)的时候，需要用到这条指令。</p>
-
-<p>编译&amp;运行：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># assemble
-</span><span class='line'>$ arm-none-eabi-as -o sum.o sum.s 
-</span><span class='line'># link to elf file
-</span><span class='line'>$ arm-none-eabi-ld -Ttext=0x0 -o sum.elf sum.o
-</span><span class='line'># form bin file
-</span><span class='line'>$ arm-none-eabi-objcopy -O binary sum.elf sum.bin
-</span><span class='line'># form flash image
-</span><span class='line'>$ dd if=/dev/zero of=flash.bin bs=4k count=4k
-</span><span class='line'>$ dd if=sum.bin of=flash.bin bs=4K conv=notrunc
-</span><span class='line'># emulate with flash image
-</span><span class='line'>$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
-</span><span class='line'># examine the result
-</span><span class='line'>R00=00000007 R01=00000007 R02=00000019 R03=00000037
-</span><span class='line'>R04=00000000 R05=00000000 R06=00000000 R07=00000000
-</span><span class='line'>R08=00000000 R09=00000000 R10=00000000 R11=00000000
-</span><span class='line'>R12=00000000 R13=00000000 R14=00000000 R15=00000024
-</span><span class='line'>PSR=600001d3 -ZC- A svc32
-</span><span class='line'>FPSCR: 00000000</span></code></pre></td></tr></table></div></figure>
-
-
-<p>R03的值正是我们求和的结果:  0x37==55==10+20+25, 可以用一张流程图来表示程序的运行过程</p>
-
-<p>2. 字符串长度</p>
-
-<figure class='code'><figcaption><span>string.s - string.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>        b start
-</span><span class='line'>
-</span><span class='line'>str<span class="o">:</span>    <span class="m">.</span>asciz <span class="s">&quot;Hello World&quot;</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>equ   nul<span class="p">,</span> <span class="m">0</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>align
-</span><span class='line'>start<span class="o">:</span>  ldr   r0<span class="p">,</span> <span class="o">=</span>str          <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>str
-</span><span class='line'>        mov   r1<span class="p">,</span> <span class="c1">#0</span>
-</span><span class='line'>
-</span><span class='line'>loop<span class="o">:</span>   ldrb  r2<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1      @ r2 = *(r0++)</span>
-</span><span class='line'>        add   r1<span class="p">,</span> r1<span class="p">,</span> <span class="c1">#1        @ r1 += 1</span>
-</span><span class='line'>        cmp   r2<span class="p">,</span> <span class="c1">#nul          @ if (r1 != nul)</span>
-</span><span class='line'>        bne   loop              <span class="o">@</span>    goto loop
-</span><span class='line'>
-</span><span class='line'>        sub   r1<span class="p">,</span> r1<span class="p">,</span> <span class="c1">#1        @ r1 -= 1</span>
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>运行结果：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>(qemu) info registers
-</span><span class='line'>R00=00000010 R01=0000000b R02=00000000 R03=00000000
-</span><span class='line'>R04=00000000 R05=00000000 R06=00000000 R07=00000000
-</span><span class='line'>R08=00000000 R09=00000000 R10=00000000 R11=00000000
-</span><span class='line'>R12=00000000 R13=00000000 R14=00000000 R15=0000002c
-</span><span class='line'>PSR=600001d3 -ZC- A svc32
-</span><span class='line'>FPSCR: 00000000</span></code></pre></td></tr></table></div></figure>
-
-
-<p>r1是用来存储字符串长度的，计算结果为11。</p>
-
-<p>.asciz声明:
- .asciz声明接受一个字符串作为参数，字符串以双引号修饰的字符表示。汇编器自动在字符串后面加nul字符（即\0字符）</p>
-
-<p>.equ声明
-汇编器维持一张符号表，符号表维持键->值的格式。当汇编器遇到一个标号时，汇编器将在符号表中自动建立一个条目。以后当汇编器遇到一个关于label的引用时，将自动替换为符号表中储存的label的地址。</p>
-
-<p>使用汇编器指令.equ，我们可以手动在符号表中插入条目。</p>
-
-<p>.equ通常这样定义:
-    .equ name, expression</p>
-
-<p>.equ不会分配任何内存，它们只是在符号表中插入条目罢了。</p>
-
-<p>bne的意思是(!=) , b means bit. bit not equal. ble (&lt;=), beq (==), bge (>=), bgt (>), and bne (!=).</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/50">&larr; Older</a>
@@ -2306,6 +1849,14 @@ Procedure Call Standard
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/17/iscsi-installed-debian-jessie/">ISCSI Installed Debian Jessie</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/07/14/wh-worktips-12/">WH Worktips(12)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/13/wh-worktips-11/">WH Worktips(11)</a>
       </li>
     
@@ -2315,14 +1866,6 @@ Procedure Call Standard
     
       <li class="post">
         <a href="/blog/2015/07/10/wh-worktips-9/">WH Worktips(9)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/09/wh-worktips-8/">WH Worktips(8)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/07/wh-worktips-7/">WH Worktips(7)</a>
       </li>
     
   </ul>
