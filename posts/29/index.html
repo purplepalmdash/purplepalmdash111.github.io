@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Get Current Weather Data Now we begin to change our APP to a real funny staff. First we change the hello.py and begin to write our own &ldquo;genhtml &hellip;">
+  <meta name="description" content="In fact this is a migration from sqlite3 to postgresql. View the historical sqlite3 We will refer to our own design of database. First fetch the data &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,970 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/10/write-python-weather-app-on-heroku-5/">Write Python Weather APP on Heroku(5)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-10T09:02:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:02 am</span></time>
+        
+         | <a href="/blog/2014/05/10/write-python-weather-app-on-heroku-5/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In fact this is a migration from sqlite3 to postgresql.</p>
+
+<h3>View the historical sqlite3</h3>
+
+<p>We will refer to our own design of database. First fetch the data file, this is a sqlite3 file, so we use sqlite3 to view its structure.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sqlite3  
+</span><span class='line'>SQLite version 3.8.4.3 2014-04-03 16:53:12
+</span><span class='line'>Enter ".help" for usage hints.
+</span><span class='line'>Connected to a transient in-memory database.
+</span><span class='line'>Use ".open FILENAME" to reopen on a persistent database.
+</span><span class='line'>sqlite&gt; .open ./weather.db
+</span><span class='line'>sqlite&gt; .tables
+</span><span class='line'>foo
+</span><span class='line'>sqlite&gt; .schema foo
+</span><span class='line'>CREATE TABLE foo (d_temper integer, d_humi integer, d_pm10 integer, d_pm25 real, d_time timestamp);
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Although sqlite3 is supported on heroku, we&rsquo;d better use heroku&rsquo;s suggestion, to use postgre for storing out database.</p>
+
+<h3>Create Database In Postgres</h3>
+
+<h4>Datatime selection:</h4>
+
+<p>Postgres provides a very fantanstic way for handling the datatime, it supports the timezone, comparing to GAE&rsquo;s database, this feature will let us get the current time based on timezone. So we did the following tests:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># CREATE TABLE my_tbl (
+</span><span class='line'>mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+</span><span class='line'>mylocaldb(# CHECK(EXTRACT(TIMEZONE FROM my_timestamp) = '0')
+</span><span class='line'>mylocaldb(# );
+</span><span class='line'>CREATE TABLE
+</span><span class='line'>mylocaldb=# \dt my_tbl
+</span><span class='line'>        List of relations
+</span><span class='line'> Schema |  Name  | Type  | Owner 
+</span><span class='line'>--------+--------+-------+-------
+</span><span class='line'> public | my_tbl | table | Trusty
+</span><span class='line'>(1 row)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When we want to insert the datatime into table &lsquo;my_tbl&rsquo;, simply do following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# SET timezone = 'UTC';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# INSERT INTO my_tbl (my_timestamp) VALUES (NOW());
+</span><span class='line'>INSERT 0 1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And for querying out the inserted records, we do following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# select * from public.my_tbl
+</span><span class='line'>;
+</span><span class='line'>         my_timestamp          
+</span><span class='line'>-------------------------------
+</span><span class='line'> 2014-05-10 01:39:52.87532+00
+</span><span class='line'> 2014-05-10 01:42:44.130269+00
+</span><span class='line'>(2 rows)
+</span><span class='line'>
+</span><span class='line'>mylocaldb=# SET timezone='Asia/Shanghai';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# select * from public.my_tbl
+</span><span class='line'>mylocaldb-# ;
+</span><span class='line'>         my_timestamp          
+</span><span class='line'>-------------------------------
+</span><span class='line'> 2014-05-10 09:39:52.87532+08
+</span><span class='line'> 2014-05-10 09:42:44.130269+08
+</span><span class='line'>(2 rows)
+</span><span class='line'>
+</span><span class='line'>mylocaldb=# SET timezone='America/Los_Angeles';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# select * from public.my_tbl;
+</span><span class='line'>         my_timestamp          
+</span><span class='line'>-------------------------------
+</span><span class='line'> 2014-05-09 18:39:52.87532-07
+</span><span class='line'> 2014-05-09 18:42:44.130269-07
+</span><span class='line'>(2 rows)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We can see the output formats depends on our &ldquo;timezone&rdquo; value.</p>
+
+<h4>Select Other Data Formats</h4>
+
+<p>We listed following table for describing the Data we inserted:  <br/>
+Timestamp       integer     integer    integer    integer  <br/>
+Insert_Time     Temperature Humidity   PMTen       PMTwoFive</p>
+
+<p>Thus the sql sentense is as following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# CREATE TABLE weather (
+</span><span class='line'>mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+</span><span class='line'>mylocaldb(# Temperature ^C
+</span><span class='line'>mylocaldb=# CREATE TABLE weather (
+</span><span class='line'>mylocaldb(# Insert_Time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+</span><span class='line'>mylocaldb(# Temperature integer,
+</span><span class='line'>mylocaldb(# Humidity integer,
+</span><span class='line'>mylocaldb(# PMTen integer,
+</span><span class='line'>mylocaldb(# PMTwoFive integer,
+</span><span class='line'>mylocaldb(#  CHECK(EXTRACT(TIMEZONE FROM Insert_Time) = '0'));
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Check the tables:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# \dt
+</span><span class='line'>        List of relations
+</span><span class='line'> Schema |  Name   | Type  | Owner 
+</span><span class='line'>--------+---------+-------+-------
+</span><span class='line'> public | my_tbl  | table | Trusty
+</span><span class='line'> public | user    | table | Trusty
+</span><span class='line'> public | weather | table | Trusty
+</span><span class='line'>(3 rows)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Insert one record:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# INSERT INTO weather (Insert_Time, Temperature, Humidity, PMTen, PMTwoFive) VALUES(NOW(), 25, 80, 150, 75);
+</span><span class='line'>INSERT 0 1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Displaying the inserted record:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mylocaldb=# SET timezone='Asia/Shanghai';
+</span><span class='line'>SET
+</span><span class='line'>mylocaldb=# select * from public.weather;
+</span><span class='line'>          insert_time          | temperature | humidity | pmten | pmtwofive 
+</span><span class='line'>-------------------------------+-------------+----------+-------+-----------
+</span><span class='line'> 2014-05-10 10:38:27.276043+08 |          25 |       80 |   150 |        75
+</span><span class='line'>(1 row)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Database Operation</h4>
+
+<p>We need to create just once database, So this function should be Check_Or_Create().   <br/>
+We need to insert records, so Insert_Record() should be written.  <br/>
+Other Operation, modification or delete shouldn&rsquo;t care at the very beginning.  <br/>
+We will use a new file for recording all of the function.</p>
+
+<p>The code for Create and Insert record into weather table is listed as following:</p>
+
+<figure class='code'><figcaption><span>database.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">create_engine</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">MetaData</span><span class="p">,</span> <span class="n">Column</span><span class="p">,</span> <span class="n">Table</span><span class="p">,</span> <span class="n">ForeignKey</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">Integer</span><span class="p">,</span> <span class="n">String</span><span class="p">,</span> <span class="n">DateTime</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">datetime</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Create the engine for connecting the local database</span>
+</span><span class='line'><span class="c"># How to connect the remote engine, heroku postgres? </span>
+</span><span class='line'><span class="c"># Yes, it&#39;s possible. The DATABASE_URL environment variable provided by heroku fits perfectly as argument for create_engine. Behind the scene, it&#39;s a postgresql database, which is perfectly handled by sqlalchemy.</span>
+</span><span class='line'><span class="c"># </span>
+</span><span class='line'><span class="c"># The way to do it may vary depending on the framework you use, but there shouldn&#39;t be any difficulty.</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">engine</span> <span class="o">=</span> <span class="n">create_engine</span><span class="p">(</span><span class="s">&#39;postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb&#39;</span><span class="p">,</span><span class="n">echo</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</span><span class='line'><span class="n">metadata</span><span class="o">=</span><span class="n">MetaData</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">engine</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Definition of the weather table</span>
+</span><span class='line'><span class="n">weather_table</span><span class="o">=</span><span class="n">Table</span><span class="p">(</span><span class="s">&#39;weather&#39;</span><span class="p">,</span><span class="n">metadata</span><span class="p">,</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Insert_Time&#39;</span><span class="p">,</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">timezone</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span><span class="n">primary_key</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Temperature&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;Humidity&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTen&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'>  <span class="n">Column</span><span class="p">(</span><span class="s">&#39;PmTwoFive&#39;</span><span class="p">,</span> <span class="n">Integer</span><span class="p">),</span>
+</span><span class='line'><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Create the table in mylocaldb</span>
+</span><span class='line'><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">checkfirst</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The actual SQL Language</span>
+</span><span class='line'><span class="c">#CREATE TABLE weather (</span>
+</span><span class='line'><span class="c"># &quot;Insert_Time&quot; TIMESTAMP WITH TIME ZONE NOT NULL, </span>
+</span><span class='line'><span class="c"># &quot;Temperature&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># &quot;Humidity&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># &quot;PmTen&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># &quot;PmTwoFive&quot; INTEGER, </span>
+</span><span class='line'><span class="c"># PRIMARY KEY (&quot;Insert_Time&quot;)</span>
+</span><span class='line'><span class="c">#)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># mylocaldb=# select * from public.weather;</span>
+</span><span class='line'><span class="c">#  Insert_Time | Temperature | Humidity | PmTen | PmTwoFive </span>
+</span><span class='line'><span class="c"># -------------+-------------+----------+-------+-----------</span>
+</span><span class='line'><span class="c"># (0 rows)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Record Insertion</span>
+</span><span class='line'><span class="c"># First generate an insertion sentense:</span>
+</span><span class='line'><span class="n">ins</span> <span class="o">=</span> <span class="n">weather_table</span><span class="o">.</span><span class="n">insert</span><span class="p">()</span>
+</span><span class='line'><span class="c">#&gt;&gt;&gt; str(ins)</span>
+</span><span class='line'><span class="c">#&#39;INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">ins</span> <span class="o">=</span> <span class="n">weather_table</span><span class="o">.</span><span class="n">insert</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">Insert_Time</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">(),</span> <span class="n">Temperature</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">Humidity</span><span class="o">=</span><span class="mi">75</span><span class="p">,</span> <span class="n">PmTen</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">PmTwoFive</span><span class="o">=</span><span class="mi">55</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">#&gt;&gt;&gt; str(ins)</span>
+</span><span class='line'><span class="c">#&#39;INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)&#39;</span>
+</span><span class='line'><span class="c">#</span>
+</span><span class='line'><span class="c">#&gt;&gt;&gt; ins.compile().params</span>
+</span><span class='line'><span class="c">#{&#39;PmTen&#39;: 100, &#39;PmTwoFive&#39;: 55, &#39;Temperature&#39;: 25, &#39;Insert_Time&#39;: datetime.datetime(2014, 5, 10, 5, 58, 21, 677234), &#39;Humidity&#39;: 75}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Connect to engine and execute. </span>
+</span><span class='line'><span class="n">conn</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+</span><span class='line'><span class="c"># &gt;&gt;&gt; conn</span>
+</span><span class='line'><span class="c"># &lt;sqlalchemy.engine.base.Connection object at 0x2715890&gt;</span>
+</span><span class='line'><span class="n">result</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ins</span><span class="p">)</span>
+</span><span class='line'><span class="c"># View result in psql</span>
+</span><span class='line'><span class="c"># mylocaldb=# select * from public.weather;</span>
+</span><span class='line'><span class="c">#           Insert_Time          | Temperature | Humidity | PmTen | PmTwoFive </span>
+</span><span class='line'><span class="c"># -------------------------------+-------------+----------+-------+-----------</span>
+</span><span class='line'><span class="c">#  2014-05-10 05:58:21.677234+08 |          25 |       75 |   100 |        55</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The critical functions has been pointed out in the above python file. Now we will consider how to run these functions at background. This will lead to next topic, &ldquo;Run multiple process in a single Heroku dyno&rdquo;.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/09/write-python-weather-app-on-heroku-4/">Write Python Weather APP on Heroku(4)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-09T22:50:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:50 pm</span></time>
+        
+         | <a href="/blog/2014/05/09/write-python-weather-app-on-heroku-4/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Local Database Sync</h3>
+
+<p>First fetch the remote database to localdb via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:pull DATABASE_URL mylocaldb --app  python-weather-app
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This command will pull down your database down and create a copy version locally. You can easily view all of the database via psql mylocaldb.</p>
+
+<p>As root, edit following files:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
+</span><span class='line'>/var/lib/postgres/data
+</span><span class='line'># vim postgresql.conf
+</span><span class='line'>listen_addresses = 'localhost'        # what IP address(es) to listen on;
+</span><span class='line'>                  # comma-separated list of addresses;
+</span><span class='line'>                  # defaults to 'localhost'; use '*' for all
+</span><span class='line'>                  # (change requires restart)
+</span><span class='line'>port = 5432               # (change requires restart)
+</span><span class='line'># vim pb_hba.conf
+</span><span class='line'># IPv4 local connections:
+</span><span class='line'>host    all             all             127.0.0.1/32            trust
+</span><span class='line'>host    all             all             127.0.0.1/32            md5
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After editing, save the file and restart the postgresql service.</p>
+
+<h3>Connecting to LocalDatabase</h3>
+
+<p>Following shows how to add/query the records. Now your environment could be totally debugged locally.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&gt;&gt;&gt; import psycopg2
+</span><span class='line'>&gt;&gt;&gt; psycopg2.connect(database="mylocaldb",user="Trusty",password="",host="127.0.0.1",port="5432")
+</span><span class='line'>&lt;connection object at 0x30f0cd0; dsn: 'dbname=mylocaldb user=Trusty password=xx host=127.0.0.1 port=5432', closed: 0&gt;
+</span><span class='line'>&gt;&gt;&gt; db_conn = 'postgresql+psycopg2://Trusty:@localhost/mylocaldb'
+</span><span class='line'>&gt;&gt;&gt; app = Flask(__name__) 
+</span><span class='line'>&gt;&gt;&gt; app.config['SQLALCHEMY_DATABASE_URI'] = db_conn
+</span><span class='line'>&gt;&gt;&gt; db = SQLAlchemy(app)
+</span><span class='line'>&gt;&gt;&gt; db.create_all()
+</span><span class='line'>&gt;&gt;&gt; class User(db.Model):
+</span><span class='line'>...     id = db.Column(db.Integer, primary_key=True)
+</span><span class='line'>...     name = db.Column(db.String(80))
+</span><span class='line'>...     email = db.Column(db.String(120), unique=True)
+</span><span class='line'>...     def __init__(self, name, email):
+</span><span class='line'>...         self.name = name
+</span><span class='line'>...         self.email = email
+</span><span class='line'>...     def __repr__(self):
+</span><span class='line'>...         return '&lt;Name %r&gt;' % self.name
+</span><span class='line'>... 
+</span><span class='line'>&gt;&gt;&gt; user = User('John Doe', 'john.doe@example.com')
+</span><span class='line'>&gt;&gt;&gt; all_users=User.query.all()
+</span><span class='line'>&gt;&gt;&gt; print all_users
+</span><span class='line'>[&lt;Name u'John Doe'&gt;]
+</span><span class='line'>&gt;&gt;&gt; user1 = User('Jim Green', 'jim.green@english.com')
+</span><span class='line'>&gt;&gt;&gt; db.session.add(user1)
+</span><span class='line'>&gt;&gt;&gt; db.session.commit()
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In genhtml.py we need to do corresponding changes in order to enable the local database.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/09/write-python-weather-app-on-heroku-3/">Write Python Weather APP on Heroku(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-09T19:12:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>7:12 pm</span></time>
+        
+         | <a href="/blog/2014/05/09/write-python-weather-app-on-heroku-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Database Introduction</h3>
+
+<h4>Heroku Postgres Installation</h4>
+
+<p>Before using postgres, we have to install this add-ons, we call this step &ldquo;attach Heroku POSTGRES to heroku application&rdquo;:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku addons
+</span><span class='line'>python-weather-app has no add-ons.
+</span><span class='line'>$ heroku addons:add heroku-postgresql:dev
+</span><span class='line'>Adding heroku-postgresql:dev on python-weather-app... done, v7 (free)
+</span><span class='line'>Attached as HEROKU_POSTGRESQL_OLIVE_URL
+</span><span class='line'>Database has been created and is available
+</span><span class='line'> ! This database is empty. If upgrading, you can transfer
+</span><span class='line'> ! data from another database with pgbackups:restore.
+</span><span class='line'>Use `heroku addons:docs heroku-postgresql` to view documentation.
+</span><span class='line'>$ heroku addons | grep POSTGRES
+</span><span class='line'>heroku-postgresql:dev  HEROKU_POSTGRESQL_OLIVE
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If you want to refer the documentation of heroku postgres, simply use following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku addons:docs heroku-postgresql
+</span><span class='line'>Opening heroku-postgresql docs... done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>A new browser window will be opened and you can view the help here.  <br/>
+View the configuration of heroku postgres via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:info
+</span><span class='line'>=== HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>Plan:        Dev
+</span><span class='line'>Status:      Available
+</span><span class='line'>Connections: 0
+</span><span class='line'>PG Version:  9.3.4
+</span><span class='line'>Created:     2014-05-09 11:25 UTC
+</span><span class='line'>Data Size:   6.4 MB
+</span><span class='line'>Tables:      0
+</span><span class='line'>Rows:        0/10000 (In compliance)
+</span><span class='line'>Fork/Follow: Unsupported
+</span><span class='line'>Rollback:    Unsupported
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>10000 rows means, if we use 24 rows per day, then around 1 year this database will be fulfilled. But anyway, at the very beginning developing, we won&rsquo;t consider the latter problem.  <br/>
+After you installed the postgre for around 5 minutes, you can use following commands for displaying your database:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:ps
+</span><span class='line'> pid | state | source | running_for | waiting | query 
+</span><span class='line'>-----+-------+--------+-------------+---------+-------
+</span><span class='line'>(0 rows)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you can connect to pg via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:psql
+</span><span class='line'>---&gt; Connecting to HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>psql (9.3.4)
+</span><span class='line'>SSL connection (cipher: DHE-RSA-AES256-SHA, bits: 256)
+</span><span class='line'>Type "help" for help.
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>What for next?</p>
+
+<h4>Local Postgres Installation</h4>
+
+<p>Install postgres via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacamn -S postgre
+</span><span class='line'>$ sudo -i -u postgres
+</span><span class='line'>[postgres@DashArch ~]$ initdb --locale en_US.UTF-8 -E UTF8 -D '/var/lib/postgres/data'
+</span><span class='line'># In another terminal, enable and start the service
+</span><span class='line'>$ sudo systemctl start postgresql
+</span><span class='line'>$ sudo systemctl enable postgresql
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now add current user into the postgres user:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[postgres@DashArch ~]$ createuser --interactive
+</span><span class='line'>Enter name of role to add: Trusty
+</span><span class='line'>Shall the new role be a superuser? (y/n) y
+</span><span class='line'># Now 'Trusty' as postgres user, can create the weatherData database. 
+</span><span class='line'>$ createdb weatherData
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Basic user of postgres:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ psql -d weatherData   
+</span><span class='line'>psql (9.3.4)
+</span><span class='line'>Type "help" for help.
+</span><span class='line'>
+</span><span class='line'>weatherData=# \help
+</span><span class='line'>......
+</span><span class='line'>weatherData=# \q
+</span><span class='line'>$ 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Connect Database In Python(Local Way)</h4>
+
+<p>Install the python packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install psycopg2
+</span><span class='line'>$ pip freeze 
+</span><span class='line'># Add the psycopg2 related line into the requirements.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>A simple example on how to connect Database and view the content of the database:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$ sudo -u postgres createuser jim
+</span><span class='line'>[Trusty@~]$ sudo -u postgres createdb testdb -O jim
+</span><span class='line'>[Trusty@~/code/herokuWeatherApp]$ source venv/bin/activate
+</span><span class='line'>(venv)[Trusty@~/code/herokuWeatherApp]$ python
+</span><span class='line'>Python 2.7.6 (default, Feb 26 2014, 12:07:17) 
+</span><span class='line'>[GCC 4.8.2 20140206 (prerelease)] on linux2
+</span><span class='line'>Type "help", "copyright", "credits" or "license" for more information.
+</span><span class='line'>&gt;&gt;&gt; import psycopg2
+</span><span class='line'>&gt;&gt;&gt; import sys
+</span><span class='line'>&gt;&gt;&gt; con = None
+</span><span class='line'>&gt;&gt;&gt; con = psycopg2.connect(database='testdb', user='jim')
+</span><span class='line'>&gt;&gt;&gt; cur = con.cursor()
+</span><span class='line'>&gt;&gt;&gt; cur.execute('SELECT version()')   
+</span><span class='line'>&gt;&gt;&gt; ver = cur.fetchone()
+</span><span class='line'>&gt;&gt;&gt; print ver
+</span><span class='line'>('PostgreSQL 9.3.4 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.2 20140206 (prerelease), 64-bit',)
+</span><span class='line'>&gt;&gt;&gt; con.close()
+</span><span class='line'>&gt;&gt;&gt; quit()
+</span><span class='line'>(venv)[Trusty@~/code/herokuWeatherApp]$ 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Connect Heroku Postgres</h4>
+
+<p>Now commit our modifications into heroku, and verify to see if we can really do some magic things with postgres:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git add .
+</span><span class='line'>$ git commit -m "commit for postgres"
+</span><span class='line'>$ git push heroku master
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install a new library:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install flask-sqlalchemy
+</span><span class='line'>$ pip freeze  # grep the line and add it into the requirement.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Promoting the URL to DATABASE_URL:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:promote HEROKU_POSTGRESQL_OLIVE_URL
+</span><span class='line'>Promoting HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL) to DATABASE_URL... done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then Add the following lines into genhtml.py:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>from flask.ext.sqlalchemy import SQLAlchemy
+</span><span class='line'>app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+</span><span class='line'>db = SQLAlchemy(app)
+</span><span class='line'>
+</span><span class='line'>##############FenGe_Line####################
+</span><span class='line'>class User(db.Model):
+</span><span class='line'>    id = db.Column(db.Integer, primary_key=True)
+</span><span class='line'>    name = db.Column(db.String(80))
+</span><span class='line'>    email = db.Column(db.String(120), unique=True)
+</span><span class='line'>
+</span><span class='line'>    def __init__(self, name, email):
+</span><span class='line'>        self.name = name
+</span><span class='line'>        self.email = email
+</span><span class='line'>
+</span><span class='line'>    def __repr__(self):
+</span><span class='line'>        return '&lt;Name %r&gt;' % self.name
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Commit again and begin for verifying the database via CLI:  <br/>
+Create a python interactive command window via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&gt;&gt;&gt; from genhtml import db
+</span><span class='line'>&gt;&gt;&gt; db.create_all()
+</span><span class='line'>&gt;&gt;&gt; from genhtml import User
+</span><span class='line'>&gt;&gt;&gt; user = User('John Doe', 'john.doe@example.com')
+</span><span class='line'>&gt;&gt;&gt; db.session.add(user)
+</span><span class='line'>&gt;&gt;&gt; db.session.commit()
+</span><span class='line'>&gt;&gt;&gt; all_users =User.query.all()
+</span><span class='line'>&gt;&gt;&gt; print all_users
+</span><span class='line'>[&lt;Name u'John Doe'&gt;]
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can see 1 record has been inserted into the database:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~/code/herokuWeatherApp]$ heroku pg:info
+</span><span class='line'>=== HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>Plan:        Dev
+</span><span class='line'>Status:      Available
+</span><span class='line'>Connections: 2
+</span><span class='line'>PG Version:  9.3.4
+</span><span class='line'>Created:     2014-05-09 11:25 UTC
+</span><span class='line'>Data Size:   6.5 MB
+</span><span class='line'>Tables:      1
+</span><span class='line'>Rows:        1/10000 (In compliance)
+</span><span class='line'>Fork/Follow: Unsupported
+</span><span class='line'>Rollback:    Unsupported
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>How to see the inserted data?</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:psql
+</span><span class='line'>---&gt; Connecting to HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>psql (9.3.4)
+</span><span class='line'>SSL connection (cipher: DHE-RSA-AES256-SHA, bits: 256)
+</span><span class='line'>Type "help" for help.
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; select current_database();
+</span><span class='line'> current_database 
+</span><span class='line'>------------------
+</span><span class='line'> d47ena4men35jn
+</span><span class='line'>(1 row)
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; \dt
+</span><span class='line'>           List of relations
+</span><span class='line'> Schema | Name | Type  |     Owner      
+</span><span class='line'>--------+------+-------+----------------
+</span><span class='line'> public | user | table | yjusdsrpwpplxp
+</span><span class='line'>(1 row)
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; \d user;
+</span><span class='line'>                                 Table "public.user"
+</span><span class='line'> Column |          Type          |                     Modifiers                     
+</span><span class='line'>--------+------------------------+---------------------------------------------------
+</span><span class='line'> id     | integer                | not null default nextval('user_id_seq'::regclass)
+</span><span class='line'> name   | character varying(80)  | 
+</span><span class='line'> email  | character varying(120) | 
+</span><span class='line'>Indexes:
+</span><span class='line'>    "user_pkey" PRIMARY KEY, btree (id)
+</span><span class='line'>    "user_email_key" UNIQUE CONSTRAINT, btree (email)
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; SELECT * FROM public.user;
+</span><span class='line'> id |   name   |        email         
+</span><span class='line'>----+----------+----------------------
+</span><span class='line'>  1 | John Doe | john.doe@example.com
+</span><span class='line'>(1 row)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We can use python&rsquo;s interface for add/delete records, drop tables, etc.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1125,306 +2089,6 @@ First we use loop device for setting up the partition 1:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/04/30/customize-awesome/">Customize Awesome</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-04-30T21:12:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:12 pm</span></time>
-        
-         | <a href="/blog/2014/04/30/customize-awesome/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Wallpaper Setting</h3>
-
-<p>When switching to big display in awesome, the desktop background will not fill the whole screen, thus we need to automatically set the background when we execute the ./singleview script, ./singleview script is a script which I wrote for switching to big display. Listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>killall conky
-</span><span class='line'>xrandr --output LVDS1 --off
-</span><span class='line'>xrandr --newmode $(gtf 1680 1050 60 | grep Modeline | sed s/Modeline\ // | tr -d '"')
-</span><span class='line'>xrandr --addmode VGA1 1680x1050_60.00
-</span><span class='line'>xrandr --output VGA1 --mode 1680x1050_60.00 
-</span><span class='line'>xscreensaver -nosplash &
-</span><span class='line'>xset -b
-</span><span class='line'>xmodmap -e "pointer = 3 2 1"
-</span><span class='line'>fcitx &
-</span><span class='line'>sleep 4
-</span><span class='line'>###Add bluetooth
-</span><span class='line'>pactl load-module module-alsa-sink device=btheadset 
-</span><span class='line'>pacmd load_module module-bluetooth-discover
-</span><span class='line'>###Set Background
-</span><span class='line'>feh --bg-scale /home/Trusty/document/water.jpg
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The last line is the newly-added one which is used for re-setting the background wallpaper.</p>
-
-<h3>Conky Background Setting</h3>
-
-<p>But when you set the background, your conky will become ugly, just like following picture:  <br/>
-<img src="/images/nobg.jpg" alt="/images/nobg.jpg" /></p>
-
-<p>So you need to set the ~/.conky.rc, add following lines:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>own_window yes
-</span><span class='line'>own_window_colour 41A834
-</span><span class='line'>TEXT
-</span><span class='line'>......
-</span><span class='line'>${image  /home/Trusty/document/greenleaf2.jpg  -p 0,0 -s 300x540}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The &ldquo;own_window yes&rdquo; could be commented.  <br/>
-So now you got conky looks like following:  <br/>
-<img src="/images/goodbg.jpg" alt="/images/goodbg.jpg" /></p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/04/26/customize-awesome-startup-application/">Customize Awesome Startup Application</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-04-26T08:21:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>8:21 am</span></time>
-        
-         | <a href="/blog/2014/04/26/customize-awesome-startup-application/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Let applications automatically start at boot will greatly save your time in configurating the system. Following is some tips on how to automatically start applications in awesome desktop environment.</p>
-
-<h3>Xinit Way</h3>
-
-<p>My startup configuration is listed as:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>export GTK_IM_MODULE=fcitx
-</span><span class='line'>export QT_IM_MODULE=fcitx
-</span><span class='line'>export XMODIFIERS="@im=fcitx"
-</span><span class='line'>exec awesome
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So the awesome environment will be started.</p>
-
-<h3>Awesome Way</h3>
-
-<p>Run only once in awesome desktop, via following configuration file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>function run_once(cmd)
-</span><span class='line'>  findme = cmd
-</span><span class='line'>  firstspace = cmd:find(" ")
-</span><span class='line'>  if firstspace then
-</span><span class='line'>    findme = cmd:sub(0, firstspace-1)
-</span><span class='line'>  end
-</span><span class='line'>  awful.util.spawn_with_shell("pgrep -u $USER -x " .. findme .. " &gt; /dev/null || (" .. cmd .. ")")
-</span><span class='line'>end
-</span><span class='line'>
-</span><span class='line'>run_once("udiskie -2 --tray")
-</span><span class='line'>run_once("wicd-client --tray")
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the code into ~/.config/awesome/rc.lua, then you can get the udiskie and wicd-client icon in the tray.</p>
-
-<h3>Change View Way</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#dualview
-</span><span class='line'>killall conky
-</span><span class='line'>xrandr --output LVDS1 --mode 1366x768
-</span><span class='line'>xrandr --newmode $(gtf 1920 1080 60 | grep Modeline | sed s/Modeline\ // | tr -d '"')
-</span><span class='line'>xrandr --addmode VGA1 1920x1080_60.00
-</span><span class='line'>xrandr --output VGA1 --mode 1920x1080_60.00 --right-of LVDS1
-</span><span class='line'>xscreensaver -nosplash &
-</span><span class='line'>xset -b
-</span><span class='line'>xmodmap -e "pointer = 3 2 1"
-</span><span class='line'>fcitx &
-</span><span class='line'>sleep 2
-</span><span class='line'>sudo whatpulse &
-</span><span class='line'>conky &
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Systemd Way</h3>
-
-<p>For example, we want to enable xampp.service on every start:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@DashArch system]# pwd
-</span><span class='line'>/etc/systemd/system
-</span><span class='line'>[root@DashArch system]# cat xampp.service
-</span><span class='line'>
-</span><span class='line'>[Unit]
-</span><span class='line'>Description=xampp for ArchLinux, locate in /opt/lampp
-</span><span class='line'>After=network.target
-</span><span class='line'>
-</span><span class='line'>[Service]
-</span><span class='line'>ExecStart=/opt/lampp/lampp start 
-</span><span class='line'>ExecStop=/opt/lampp/lampp stop
-</span><span class='line'>Type=forking
-</span><span class='line'>
-</span><span class='line'>[Install]
-</span><span class='line'>WantedBy=multi-user.target
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then we can start/stop the service, enable/disable the service via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>systemctl start xampp.service
-</span><span class='line'>systemctl stop xampp.service
-</span><span class='line'>systemctl enable xampp.service
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/04/25/qemu-emulated-kali/">Qemu Emulated Kali</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-04-25T10:35:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:35 am</span></time>
-        
-         | <a href="/blog/2014/04/25/qemu-emulated-kali/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Preparation</h3>
-
-<p>Create the image file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img create -f qcow2 kali.qcow2 20G
-</span><span class='line'>Formatting 'kali.qcow2', fmt=qcow2 size=21474836480 encryption=off cluster_size=65536 lazy_refcounts=off 
-</span><span class='line'>$ ls -l -h
-</span><span class='line'>total 136K
-</span><span class='line'>-rw-r--r-- 1 Trusty root 193K Apr 25 10:34 kali.qcow2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Since I&rsquo;ve created the kali, ignore this article.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/30">&larr; Older</a>
@@ -1442,23 +2106,23 @@ So now you got conky looks like following:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/27/tips-on-packer/">Tips on Packer</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/07/25/chromebook-kernel-issue/">Chromebook Kernel Issue</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/07/22/libvirtd-trouble-shooting-on-centos7-dot-1/">Libvirtd Trouble-Shooting on CentOS7.1</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/19/on-migration-of-kvm/">On Migration of KVM</a>
       </li>
     
       <li class="post">
         <a href="/blog/2015/07/17/iscsi-installed-debian-jessie/">ISCSI Installed Debian Jessie</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/14/wh-worktips-12/">WH Worktips(12)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/13/wh-worktips-11/">WH Worktips(11)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/12/wh-worktips-10/">WH Worktips(10)</a>
       </li>
     
   </ul>
