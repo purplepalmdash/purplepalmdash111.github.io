@@ -9,7 +9,20 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="下面是使用SPI在RaspberryPI和Arduino Nano w之间进行双机通信的一个例子。借助它可以很好的理解SPI的工作原理。 背景知识 RaspberryPI GPIO布局图： 从图中我们可以看到，RaspberryPI上与SPI通信相关的主要是GPIO 10（MOSI), GPIO &hellip;">
+  <meta name="description" content="接着上一个日志来，玩一个小tricky，通过SPI总线自己想输入的字符。 主机端，添加下列头文件 #include &lt;string.h>
+这使得可以使用strcpy等函数。 重写transfer()函数 spidev_test.c1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +78,104 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/12/29/little-tricky-on-spi/">Little Tricky on SPI</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-12-29T17:13:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:13 pm</span></time>
+        
+         | <a href="/blog/2013/12/29/little-tricky-on-spi/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>接着上一个日志来，玩一个小tricky，通过SPI总线自己想输入的字符。 <br/>
+主机端，添加下列头文件
+    #include &lt;string.h>
+这使得可以使用strcpy等函数。  <br/>
+重写transfer()函数</p>
+
+<figure class='code'><figcaption><span>spidev_test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">transfer_mine</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">tx</span><span class="p">[</span><span class="mi">140</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">memcpy</span><span class="p">(</span><span class="n">tx</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">tx</span><span class="p">[</span><span class="n">strlen</span><span class="p">(</span><span class="n">tx</span><span class="p">)]</span> <span class="o">=</span> <span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">rx</span><span class="p">[</span><span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">tx</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="p">};</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">spi_ioc_transfer</span> <span class="n">tr</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">tx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">tx</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">rx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">rx</span><span class="p">,</span>
+</span><span class='line'>      <span class="c1">//.len = ARRAY_SIZE(tx),</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">len</span> <span class="o">=</span> <span class="n">len</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">delay_usecs</span> <span class="o">=</span> <span class="n">delay</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">speed_hz</span> <span class="o">=</span> <span class="n">speed</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">bits_per_word</span> <span class="o">=</span> <span class="n">bits</span><span class="p">,</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_MESSAGE</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tr</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t send spi message&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在main()函数里，改写调用的方式：</p>
+
+<figure class='code'><figcaption><span>spidev_test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">char</span> <span class="n">myinput</span><span class="p">[</span><span class="mi">140</span><span class="p">]</span><span class="o">=</span><span class="s">&quot;Trustywill, Hi, this is Trusty&quot;</span><span class="p">;</span>
+</span><span class='line'><span class="n">transfer_mine</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">myinput</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这样就可以将自定义的字符传输过去了，140是随便设置的值，可以设置为别的更大或者更小的值。 <br/>
+当然你也可以从命令行输入想传输的字符, 这里就不深入了。。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2087,157 +2198,6 @@ The right steps for using bluetooth:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/12/19/enable-bluetooth-headset-on-jogger-2/">Enable Bluetooth Headset on Jogger(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-12-19T09:11:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>19</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:11 am</span></time>
-        
-         | <a href="/blog/2013/12/19/enable-bluetooth-headset-on-jogger-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since trying to enable BT headset failed on Ubuntu12.04 Server, I decide to try xubuntu version. So I download the image from <a href="http://joggler.exotica.org.uk/ubuntu/">http://joggler.exotica.org.uk/ubuntu/</a>, then extract it to get the image.</p>
-
-<h3>Get the filesystem</h3>
-
-<p>Use fdisk to get the img layout</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:/media/nfs/xubuntu# fdisk -l xubuntu_12.04-v1.4-ext4.img 
-</span><span class='line'>                      Device Boot      Start         End      Blocks   Id  System
-</span><span class='line'>xubuntu_12.04-v1.4-ext4.img1   *        2048      126975       62464    e  W95 FAT16 (LBA)
-</span><span class='line'>xubuntu_12.04-v1.4-ext4.img2          126976      626687      249856   82  Linux swap / Solaris
-</span><span class='line'>xubuntu_12.04-v1.4-ext4.img3          626688     7800831     3587072   83  Linux
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So we can caculate the offset is 626688X512=320864256.   <br/>
-Use following commands to copy the filesystem out to the actual disk:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mount ./xubuntu_12.04-v1.4-ext4.img  -o offset=320864256 /mnt3/
-</span><span class='line'>$ mount /dev/uba5 /mnt
-</span><span class='line'>$ cp -ar /mnt3/* /mnt/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>My disk layout is:   <br/>
-<img src="/images/playout.jpg" alt="playout.jpg" /></p>
-
-<h3>Modification for bootup Xubuntu</h3>
-
-<h4>Add new item for grub:</h4>
-
-<p>Get the disk labels:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls /dev/disk/by-label/
-</span><span class='line'>Xubuntu  linux-boot  linux-root  linux-swap  mmc-boot  mmc-root
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The newly added label &ldquo;Xubuntu&rdquo; is the one we store the filesystem of Xubuntu. We need to add a new item to point at this partition.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:/boot# cat grub.cfg
-</span><span class='line'>loadfont /unicode.pf2
-</span><span class='line'>terminal_output gfxterm
-</span><span class='line'>set timeout=5
-</span><span class='line'>menuentry "XUbuntu 12.04 LTS (Precise) - 3.2.32joggler1" {
-</span><span class='line'>  linux /vmlinuz-3.2.32joggler1 root=LABEL=Xubuntu ro quiet splash text
-</span><span class='line'>  initrd /initrd.img-3.2.32joggler1
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h5>Change the fstab</h5>
-
-<p>We have to change the root partition to &ldquo;Xubuntu&rdquo;</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:/mnt3# cat /mnt3/etc/fstab
-</span><span class='line'># /etc/fstab: static file system information.
-</span><span class='line'>#
-</span><span class='line'># Use 'blkid -o value -s UUID' to print the universally unique identifier
-</span><span class='line'># for a device; this may be used with UUID= as a more robust way to name
-</span><span class='line'># devices that works even if disks are added and removed. See fstab(5).
-</span><span class='line'>#
-</span><span class='line'># &lt;file system&gt; &lt;mount point&gt;   &lt;type&gt;  &lt;options&gt;       &lt;dump&gt;  &lt;pass&gt;
-</span><span class='line'>proc             /proc        proc    nodev,noexec,nosuid 0       0
-</span><span class='line'>LABEL=Xubuntu  /      ext4    errors=remount-ro,noatime       0       1
-</span><span class='line'>LABEL=linux-boot /boot        vfat    defaults        0       0
-</span><span class='line'>LABEL=linux-swap none     swap    sw          0       0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now reboot to see if we could enter xubuntu?  Since we cannot use keyboard in grub, we could only enable one distribution, this is different from the tranditional grub.</p>
-
-<h4>Configure Bluetooth</h4>
-
-<p>Install module for pulseaudio</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get install pulseaudio-module-bluetooth
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then reboot. Currently connect the bluetooth, then in pulseaudio you will select the corresponding sound card. Enjoy it!  <br/>
-Tips for avoiding auto hiberate of usb disk, as root:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ crontab -e
-</span><span class='line'>*/4 * * * * fdisk -l /dev/uba &gt;/dev/null
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now your disk will never be hiberate, avoiding system from broken.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/38">&larr; Older</a>
@@ -2255,6 +2215,10 @@ Tips for avoiding auto hiberate of usb disk, as root:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/28/worktips-on-landscape/">WorkTips on LandScape</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/27/tips-on-packer/">Tips on Packer</a>
       </li>
     
@@ -2268,10 +2232,6 @@ Tips for avoiding auto hiberate of usb disk, as root:</p>
     
       <li class="post">
         <a href="/blog/2015/07/19/on-migration-of-kvm/">On Migration of KVM</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/17/iscsi-installed-debian-jessie/">ISCSI Installed Debian Jessie</a>
       </li>
     
   </ul>
