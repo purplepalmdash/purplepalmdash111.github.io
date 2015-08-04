@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署 &hellip;">
+  <meta name="description" content="在OpenStack HA部署好的基础上集成OpenContrail是一个比较繁琐的过程，所以这一节里我们主要做集成前的准备工作，准备网络拓扑和创建好OpenContrail本地部署仓库。 网络规划 在Miranti提供的集成参考里，有如下的图，定义了整个环境的网络拓扑。 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,284 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-3/">使用Fuel部署OpenContrail(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-27T18:56:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>6:56 pm</span></time>
+        
+         | <a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>在OpenStack HA部署好的基础上集成OpenContrail是一个比较繁琐的过程，所以这一节里我们主要做集成前的准备工作，准备网络拓扑和创建好OpenContrail本地部署仓库。</p>
+
+<h3>网络规划</h3>
+
+<p>在Miranti提供的集成参考里，有如下的图，定义了整个环境的网络拓扑。  <br/>
+<img src="/images/2015_04_27_19_06_11_1147x804.jpg" alt="images/2015_04_27_19_06_11_1147x804.jpg" /> <br/>
+从图中可以看到各个节点所接入到的物理网络。我们根据这些节点接入网络的不同，来定义对应系统上的网络配置。  <br/>
+在安装完毕后的虚拟机里，可以看到该节点的DNS名称，例如node-19, node-20之类，在Fuel Controller上可以通过<code>ssh root@node-19</code>来登入相应角色的机器上。  <br/>
+以下是三个OpenStack节点的网络部署, N/A代表不需要配置，可以直接把对应的接口文件删除:  <br/>
+对应的接口分别是从eth0 ~ eth4.</p>
+
+<p>OS1: node-19, PXE:10.20.0.14, Public: 172.16.0.6, Management: 10.55.55.6, Storage: 10.66.66.5, Private: N/A.   <br/>
+OS2: node-20, PXE:10.20.0.15, Public: 172.16.0.7, Management: 10.55.55.7, Storage: 10.66.66.6, Private: N/A.   <br/>
+OS3: node-22, PXE:10.20.0.16, Public: 172.16.0.8, Management: 10.55.55.8, Storage: 10.66.66.7, Private: N/A.</p>
+
+<p>Compute: node-18, PXE: 10.20.0.13, Public: 172.16.0.5, Management: 10.55.55.5, Storage: 10.66.66.4, Private: N/A.</p>
+
+<p>Contrail1: node-24, PXE: 10.20.0.10, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.10
+Contrail2: node-21, PXE: 10.20.0.11, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.11
+Contrail3: node-23, PXE: 10.20.0.12, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.12</p>
+
+<p>OpenStack和Compute各个节点的配置是自动配置好的，Contrail节点上的Private节点则需要手动配置，具体步骤如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-24:~# vim /etc/network/interfaces.d/ifcfg-eth4 
+</span><span class='line'>auto eth4
+</span><span class='line'>iface eth4 inet static
+</span><span class='line'>
+</span><span class='line'>address 10.77.77.10
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.77.77.1
+</span><span class='line'>
+</span><span class='line'>post-up  ethtool  -K  eth4  gso off  gro off || true
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>删除三个Contrail Controller节点上的未用端口, 并重启后得到我们要的配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth3 
+</span><span class='line'>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth2
+</span><span class='line'>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth1 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>到这里，我们节点机的网络单机就配置完毕了。</p>
+
+<h3>网间互通</h3>
+
+<p>我们需要让Management网络和Private网络可以通过某种途径互相连通，这里为了部署的方便，直接在主机(Host机器)上用iptables加上以下规则：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -D FORWARD -i virbr5 -j REJECT --reject-with icmp-port-unreachable
+</span><span class='line'># iptables -D FORWARD -o virbr5 -j REJECT --reject-with icmp-port-unreachable
+</span><span class='line'># iptables -D FORWARD -o virbr3 -j REJECT --reject-with icmp-port-unreachable
+</span><span class='line'># iptables -D FORWARD -i virbr3 -j REJECT --reject-with icmp-port-unreachable
+</span><span class='line'># iptables -t nat -A POSTROUTING -s 10.55.55.0/24 -d 10.77.77.0/24 -j MASQUERADE
+</span><span class='line'># iptables -t nat -A POSTROUTING -s 10.77.77.0/24 -d 10.55.55.0/24 -j MASQUERADE
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>值得注意的是，virbr5和virbr3就是10.55.55.0/24和10.77.77.0/24所附属的网口，具体可以在Virt-Manager的配置菜单里看到。   <br/>
+添加完毕后，在OpenStack的节点(OS1,OS2,OS3)ping Private网络里的地址，如<code>ping 10.77.77.10</code>, 确保可以ping通；在Contrail Controller的节点(Contrail1, Contrail2, Contrail3)上ping Management网络里的地址，如10.55.55.6，确保可以ping通。 <br/>
+集成OpenContrail的一个先决条件是Private网络和Management网络可以互通。</p>
+
+<h3>OpenContrail安装仓库准备</h3>
+
+<p>我们在Fuel Controller上建立OpenContrail的安装仓库，这样有利于快速部署， 具体的操作是从Juniper官方提供的deb包里释出OpenContrail安装所需要的包，形成一个本地仓库。具体步骤如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># yum -y install dpkg-devel
+</span><span class='line'># cd ~/Deb
+</span><span class='line'># mkdir -p /var/www/nailgun/contrail
+</span><span class='line'># mv /root/contrail-install-packages_2.0-22~icehouse_all.deb  ./
+</span><span class='line'># ar vx contrail-install-packages_2.0-22~icehouse_all.deb
+</span><span class='line'># rm -f contrail-install-packages_2.0-22~icehouse_all.deb 
+</span><span class='line'># tar xf data.tar.gz
+</span><span class='line'># tar xf opt/contrail/contrail_packages/contrail_debs.tgz -C /var/www/nailgun/contrail
+</span><span class='line'># cd /var/www/nailgun/contrail
+</span><span class='line'># dpkg-scanpackages . /dev/null | gzip -9c &gt; Packages.gz
+</span><span class='line'># rm -rf ~/Deb
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+这时候如果在本机上访问  <br/>
+<a href="http://10.20.0.2:8080/contrail/">http://10.20.0.2:8080/contrail/</a>  <br/>
+就可以看到整个仓库的包列表及详情。这个仓库将在后面部署Contrail时被用到。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/">使用Fuel部署OpenContrail(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-27T17:04:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:04 pm</span></time>
+        
+         | <a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>本节在前面部署完Fuel 控制节点的基础上，接着部署一个OpenStack HA环境，并准备好OpenContrail的三个部署节点。</p>
+
+<h3>节点初始化准备</h3>
+
+<p>所有加入到Fuel控制节点里的机器，在加入前都需要进行初始化配置，而后才可以被Fuel所识别.  <br/>
+在所有配置好的机器里，点击Details-> Boot Options, 设置如下：  <br/>
+<img src="/images/2015_04_27_17_14_26_532x372.jpg" alt="/images/2015_04_27_17_14_26_532x372.jpg" />  <br/>
+因为第一次启动的时候，磁盘里是没有内容的，机器会自动从第二选项启动(PXE). 机器将自动侦测5个网段上的PXE Server， 因为Fuel Controller接管了10.20.0.0/24 网段上的PXE请求，它将会把机器从PXE变成可部署的状态。</p>
+
+<h3>OpenStack HA环境创建</h3>
+
+<p>创建一个OpenStack HA环境，如下步骤，因为是HA，所以需要至少三个OpenStack Controller节点和一个OpenStack Compute节点。  <br/>
+点击界面里的New OpenStack Environment, 在弹出的窗口中，命名需要部署的HA环境名，并选择部署所需要的镜像，这里我们选择Ubuntu作为部署OpenStack的基础镜像。  <br/>
+<img src="/images/2015_04_27_17_18_22_680x435.jpg" alt="/images/2015_04_27_17_18_22_680x435.jpg" />  <br/>
+点击下一步，选择HA模式：  <br/>
+<img src="/images/2015_04_27_17_20_13_681x427.jpg" alt="/images/2015_04_27_17_20_13_681x427.jpg" /> <br/>
+点击下一步，选择计算节点模式，这里选择qemu或者kvm问题都不大，不要选vcenter就是了:   <br/>
+<img src="/images/2015_04_27_17_21_48_683x435.jpg" alt="/images/2015_04_27_17_21_48_683x435.jpg" />   <br/>
+点击下一步，进入到网络模式选择，选择Legacy Network(nova-network), 先部署成这种形式，接下来我们会使用neutron和contrail的组合重新规划网络:   <br/>
+<img src="/images/2015_04_27_17_23_03_682x428.jpg" alt="/images/2015_04_27_17_23_03_682x428.jpg" /> <br/>
+点击下一步，Storage Backend，因为我们不打算引入任何存储节点，这里选择Default，直接进入下一步， Additional Service里我们也不打算启任何额外的服务，一路Next直到最后Create出整个OpenStack环境。</p>
+
+<p>依次创建另一个OpenStack HA环境，用来部署三台Contrail Controller的节点机.</p>
+
+<h3>OpenStack环境网络</h3>
+
+<p>Fuel默认的网络配置会激活三个物理端口，第一个端口接入PXE网络，第二个接入Public网络，第三个上启三个VLAN，分别接入到Management/Storage/Private网络。我认为VLAN的配置增加了配置和部署的复杂度，更改为五个物理网络，分别使用我们在Virt-Manager中创建出的五个物理网卡接入。更改方法如下:   <br/>
+点击Network, 更改Management下的CIDR，手动填入10.55.55.0/24，然后去掉前面的Use VLAN Tag:      <br/>
+<img src="/images/2015_04_27_17_32_09_465x466.jpg" alt="/images/2015_04_27_17_32_09_465x466.jpg" /></p>
+
+<p>依次修改Storage网络和Private网络，更改完毕后，你的配置应该看起来是这样的:    <br/>
+<img src="/images/2015_04_27_17_34_33_387x388.jpg" alt="/images/2015_04_27_17_34_33_387x388.jpg" /></p>
+
+<p>对于Public网络我们不需要有任何修改，保持172.16网段的配置即可。</p>
+
+<p>确认Network的配置为FlatDHCP Manager:   <br/>
+<img src="/images/2015_04_27_17_35_37_391x149.jpg" alt="/images/2015_04_27_17_35_37_391x149.jpg" /></p>
+
+<h3>建立OpenStack HA环境</h3>
+
+<p>经PXE启动的虚拟机会把自己加入到"Unallocated Nodes"的队列里，在创建好的环境里，点击Node后，可以看到Fuel对角色的分配，添加一个OpenStack Controller的步骤如下：  <br/>
+在Assign Roles里选择"Controller", 下面的备选节点里选择一台机器后，Apply Changes按钮会变绿，点击进入下一步.   <br/>
+<img src="/images/2015_04_27_17_42_34_800x530.jpg" alt="/images/2015_04_27_17_42_34_800x530.jpg" />  <br/>
+在切换到的页面中，点击节点最右边的齿轮，配置该节点机器的网络、存储等，这里只配置网络：  <br/>
+<img src="/images/2015_04_27_17_44_05_797x203.jpg" alt="/images/2015_04_27_17_44_05_797x203.jpg" />  <br/>
+点击Configure Network配置网络:   <br/>
+<img src="/images/2015_04_27_17_45_19_448x349.jpg" alt="/images/2015_04_27_17_45_19_448x349.jpg" />  <br/>
+可以看到前4个节点已经配置好了，我们只需要把VM(Fix)这个框从eth0拖动到eth4即可:    <br/>
+<img src="/images/2015_04_27_17_46_34_524x342.jpg" alt="/images/2015_04_27_17_46_34_524x342.jpg" />  <br/>
+添加完毕后，网络配置应该如下图:  <br/>
+<img src="/images/2015_04_27_17_48_22_489x436.jpg" alt="/images/2015_04_27_17_48_22_489x436.jpg" /> <br/>
+点击Apply后，保存当前配置，然后点击Back to node list可以顺次添加其他节点。</p>
+
+<p>下面是一个添加好的OpenStack HA环境示例(3 Controller + 2 Compute):   <br/>
+<img src="/images/2015_04_27_17_57_01_948x432.jpg" alt="/images/2015_04_27_17_57_01_948x432.jpg" /></p>
+
+<p>这里要注意，因为我们要启用嵌套虚拟化，所以确保Compute节点是把Host CPU Configuration下发了的那台。 <br/>
+添加完三个OpenStack Controller节点和一个OpenStack Compute节点后，就可以点击Deploy Changes开始部署了。整个部署的过程至少需要1个小时，取决于机器配置和磁盘读写快慢。</p>
+
+<p>部署完毕后，Fuel会弹出提示信息，并给出可访问OpenStack HA Horizon界面的URL。</p>
+
+<h3>准备Contrail部署节点</h3>
+
+<p>在OpenStack HA节点部署的同时，我们可以准备好Contrail部署节点。  <br/>
+同样创建出一个新的OpenStack HA部署环境，记住我们不能在已有的OpenStack HA环境里添加节点机，因为那样部署出来的节点机都会带上OpenStack的一些包，我们需要一个纯净的Ubuntu环境进行Contrail组件的配置。 <br/>
+同样添加3个Compute节点，进行同样的网络配置，添加完节点后，Deploy Changes按钮是不能被点下的，因为我们的环境里没有OpenStack Controller. 一个环境示例如下:  <br/>
+<img src="/images/2015_04_27_17_59_13_837x489.jpg" alt="/images/2015_04_27_17_59_13_837x489.jpg" /></p>
+
+<p>我们需要登录到Fuel Controller的终端，就是10.20.0.2那台机器(用户名root,密码r00tme)，手动对添加的三个Contrail节点进行provision:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fuel --env &lt;ENVIRONMENT_ID&gt; node --list
+</span><span class='line'># fuel node --node-id &lt;NODE1_ID&gt;,&lt;NODE2_ID&gt;,&lt;NODE3_ID&gt; --env-id &lt;ENVIRONMENT_ID&gt; --provision
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如何得到当前的ENVIRONMENT_ID, 下面提供了一个例子:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@fuel ~]# fuel --env environment
+</span><span class='line'>id | status      | name                              | mode       | release_id | changes                                                                                                                                                               | pending_release_id
+</span><span class='line'>---|-------------|-----------------------------------|------------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------
+</span><span class='line'>36 | operational | JunoOpenStack                     | multinode  | 2          | []                                       
+</span><span class='line'>[root@fuel ~]# fuel --env 36 node --list
+</span><span class='line'>id | status | name             | cluster | ip        | mac               | roles      | pending_roles | online | group_id
+</span><span class='line'>---|--------|------------------|---------|-----------|-------------------|------------|---------------|--------|---------
+</span><span class='line'>3  | ready  | Untitled (e5:f2) | 36      | 10.20.0.3 | da:98:96:c5:c3:4b | compute    |               | False  | 36      
+</span><span class='line'>4  | ready  | Untitled (71:15) | 36      | 10.20.0.4 | 1a:ff:37:1f:26:44 | controller |               | False  | 36  
+</span><span class='line'>[root@fuel ~]# fuel node --node-id 3 --env-id 36 --provision2
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>同样需要大约30分钟时间用来在三台Contrail Controller的节点机上部署完可用的Ubuntu系统，部署完毕后，node界面上可以看到绿色的小字"ubuntu installed".</p>
+
+<p>这一节我们通过Fuel部署完毕OpenStack HA, 并准备了用于后续部署OpenContrail的三台Contrail Controller节点。接下来我们可以进入到OpenStack和OpenContrail的集成了。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1644,1524 +1922,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-5/">安装Icehouse@Ubuntu14.04(5)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-04-13T19:17:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>7:17 pm</span></time>
-        
-         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-5/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Neutron Database</h3>
-
-<p>Follow following steps for create the database:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 58
-</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE neutron;
-</span><span class='line'>Query OK, 1 row affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY 'xxxxx'
-</span><span class='line'>    -&gt; ;
-</span><span class='line'>Query OK, 0 rows affected (0.01 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY 'xxxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
-</span><span class='line'>Query OK, 0 rows affected (0.01 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; quit
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Keystone items</h3>
-
-<p>创建用户:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# source ~/openstack/admin-openrc.sh
-</span><span class='line'>root@JunoController:~# keystone user-create --name neutron --pass xxxxx
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |                                  |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | a4cbae42a2164c6e9a4c05c3f6835782 |
-</span><span class='line'>|   name   |             neutron              |
-</span><span class='line'>| username |             neutron              |
-</span><span class='line'>+----------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>更改权限，服务为tenant, 角色是admin:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-role-add --user neutron --tenant service --role admin
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建服务：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name neutron --type network --description "OpenStack Networking"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |       OpenStack Networking       |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 1142b316e4e04061bb676b73d0cf6f68 |
-</span><span class='line'>|     name    |             neutron              |
-</span><span class='line'>|     type    |             network              |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建服务的end-point:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ network / {print $2}') --publicurl http://10.17.17.211:9696 --adminurl http://10.17.17.211:9696 --internalurl http://10.17.17.211:9696 --region regionOne
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   adminurl  |     http://10.17.17.211:9696     |
-</span><span class='line'>|      id     | 77bb946d42dc4d099875ecc377510937 |
-</span><span class='line'>| internalurl |     http://10.17.17.211:9696     |
-</span><span class='line'>|  publicurl  |     http://10.17.17.211:9696     |
-</span><span class='line'>|    region   |            regionOne             |
-</span><span class='line'>|  service_id | 1142b316e4e04061bb676b73d0cf6f68 |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>安装组件</h3>
-
-<p>在Controller端安装:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  apt-get -y install neutron-server neutron-plugin-ml2 python-neutronclient
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>取得tenant service id:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# source ~/openstack/admin-openrc.sh
-</span><span class='line'>root@JunoController:~# keystone tenant-get service
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |          Service Tenant          |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 4b22bf4e6a68419aa91da6e0ffaca2dc |
-</span><span class='line'>|     name    |             service              |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>编辑nova配置文件，修改如下：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# vim /etc/neutron/neutron.conf
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>rpc_backend = neutron.openstack.common.rpc.impl_kombu
-</span><span class='line'>rabbit_host = 10.17.17.211
-</span><span class='line'>rabbit_password = xxxxx
-</span><span class='line'>
-</span><span class='line'>notify_nova_on_port_status_changes = True
-</span><span class='line'>notify_nova_on_port_data_changes = True
-</span><span class='line'>nova_url = http://10.17.17.211:8774/v2
-</span><span class='line'>nova_admin_username = nova
-</span><span class='line'>nova_admin_tenant_id = 4b22bf4e6a68419aa91da6e0ffaca2dc
-</span><span class='line'>nova_admin_password = xxxxx
-</span><span class='line'>nova_admin_auth_url = http://10.17.17.211:35357/v2.0
-</span><span class='line'>
-</span><span class='line'>core_plugin = ml2
-</span><span class='line'>service_plugins = router
-</span><span class='line'>allow_overlapping_ips = True
-</span><span class='line'>
-</span><span class='line'>auth_strategy = keystone
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = neutron
-</span><span class='line'>admin_password = xxxxx
-</span><span class='line'>signing_dir = $state_path/keystone-signing
-</span><span class='line'>[database]
-</span><span class='line'>connection = mysql://neutron:xxxxx@10.17.17.211/neutron
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>编辑ML2(Modular Layer2)插件， 在控制节点上：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# vim /etc/neutron/plugins/ml2/ml2_conf.ini | more
-</span><span class='line'>[ml2]
-</span><span class='line'>type_drivers = gre
-</span><span class='line'>tenant_network_types = gre
-</span><span class='line'>mechanism_drivers = openvswitch
-</span><span class='line'>
-</span><span class='line'>[ml2_type_gre]
-</span><span class='line'>tunnel_id_ranges = 1:1000
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>[securitygroup]
-</span><span class='line'># Controls if neutron security group is enabled or not.
-</span><span class='line'># It should be false when you use nova security group.
-</span><span class='line'># enable_security_group = True
-</span><span class='line'>firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-</span><span class='line'>enable_security_group = True
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>调整Compute Service使用Neutron服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/nova/nova.conf
-</span><span class='line'>network_api_class = nova.network.neutronv2.api.API
-</span><span class='line'>neutron_url = http://10.17.17.211:9696
-</span><span class='line'>neutron_auth_strategy = keystone
-</span><span class='line'>neutron_admin_tenant_name = service
-</span><span class='line'>neutron_admin_username = neutron
-</span><span class='line'>neutron_admin_password = xxxxx
-</span><span class='line'>neutron_admin_auth_url = http://10.17.17.211:35357/v2.0
-</span><span class='line'>linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-</span><span class='line'>firewall_driver = nova.virt.firewall.NoopFirewallDriver
-</span><span class='line'>security_group_api = neutron
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service nova-api restart
-</span><span class='line'># service nova-scheduler restart
-</span><span class='line'># service nova-conductor restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启网络服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service neutron-server restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>检查是否完成的命令:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# neutron ext-list
-</span><span class='line'>+-----------------------+-----------------------------------------------+
-</span><span class='line'>| alias                 | name                                          |
-</span><span class='line'>+-----------------------+-----------------------------------------------+
-</span><span class='line'>| security-group        | security-group                                |
-</span><span class='line'>| l3_agent_scheduler    | L3 Agent Scheduler                            |
-</span><span class='line'>| ext-gw-mode           | Neutron L3 Configurable external gateway mode |
-</span><span class='line'>| binding               | Port Binding                                  |
-</span><span class='line'>| provider              | Provider Network                              |
-</span><span class='line'>| agent                 | agent                                         |
-</span><span class='line'>| quotas                | Quota management support                      |
-</span><span class='line'>| dhcp_agent_scheduler  | DHCP Agent Scheduler                          |
-</span><span class='line'>| multi-provider        | Multi Provider Network                        |
-</span><span class='line'>| external-net          | Neutron external network                      |
-</span><span class='line'>| router                | Neutron L3 Router                             |
-</span><span class='line'>| allowed-address-pairs | Allowed Address Pairs                         |
-</span><span class='line'>| extra_dhcp_opt        | Neutron Extra DHCP opts                       |
-</span><span class='line'>| extraroute            | Neutron Extra Route                           |
-</span><span class='line'>+-----------------------+-----------------------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>配置网络节点</h3>
-
-<p>激活以下选项:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# vim /etc/sysctl.conf
-</span><span class='line'>net.ipv4.ip_forward=1
-</span><span class='line'>net.ipv4.conf.all.rp_filter=0
-</span><span class='line'>net.ipv4.conf.default.rp_filter=0
-</span><span class='line'>net.bridge.bridge-nf-call-arptables=1
-</span><span class='line'>net.bridge.bridge-nf-call-iptables=1
-</span><span class='line'>net.bridge.bridge-nf-call-ip6tables=1
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>提交更改(这里有错误):</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# sysctl -p
-</span><span class='line'>net.ipv4.ip_forward = 1
-</span><span class='line'>net.ipv4.conf.all.rp_filter = 0
-</span><span class='line'>net.ipv4.conf.default.rp_filter = 0
-</span><span class='line'>sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-arptables: No such file or directory
-</span><span class='line'>sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-iptables: No such file or directory
-</span><span class='line'>sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-ip6tables: No such file or directory
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>安装网络组件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# apt-get install neutron-plugin-ml2 neutron-plugin-openvswitch-agent neutron-l3-agent neutron-dhcp-agent
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置通用组件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/neutron/neutron.conf
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>rpc_backend = neutron.openstack.common.rpc.impl_kombu
-</span><span class='line'>rabbit_host = 10.17.17.211
-</span><span class='line'>rabbit_password = xxxxx
-</span><span class='line'>core_plugin = ml2
-</span><span class='line'>service_plugins = router
-</span><span class='line'>allow_overlapping_ips = True
-</span><span class='line'>verbose = True
-</span><span class='line'>auth_strategy = keystone
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = neutron
-</span><span class='line'>admin_password = xxxxx
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>编辑L3 agent:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/neutron/l3_agent.ini
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
-</span><span class='line'>use_namespaces = True
-</span><span class='line'>verbose = True
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>编辑DHCP插件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/neutron/dhcp_agent.ini
-</span><span class='line'> [DEFAULT]
-</span><span class='line'>interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
-</span><span class='line'>dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
-</span><span class='line'>use_namespaces = True
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置DHCP：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# vim /etc/neutron/dhcp_agent.ini
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>dnsmasq_config_file = /etc/neutron/dnsmasq-neutron.conf
-</span><span class='line'>root@JunoNetwork:~# vim /etc/neutron/dnsmasp-neutron.conf
-</span><span class='line'>dhcp-option-force=26,1454
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置metadata agent:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# vim /etc/neutron/metadata_agent.ini
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>auth_url = http://10.17.17.211:5000/v2.0
-</span><span class='line'>auth_region = regionOne
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = neutron
-</span><span class='line'>admin_password = xxxxx
-</span><span class='line'>nova_metadata_ip = 10.17.17.211
-</span><span class='line'>metadata_proxy_shared_secret = xxxxx
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>回到controller节点，编辑:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/nova/nova.conf
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>service_neutron_metadata_proxy = true
-</span><span class='line'>neutron_metadata_proxy_shared_secret = xxxxx
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启compute api服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service nva-api restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置 ml2:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# vim /etc/neutron/plugins/ml2/ml2_conf.ini 
-</span><span class='line'>[ml2]
-</span><span class='line'>type_drivers = gre
-</span><span class='line'>tenant_network_types = gre
-</span><span class='line'>mechanism_drivers = openvswitch
-</span><span class='line'>[ml2_type_gre]
-</span><span class='line'>tunnel_id_ranges = 1:1000
-</span><span class='line'>[ovs]
-</span><span class='line'>local_ip = 10.19.19.212
-</span><span class='line'>tunnel_type = gre
-</span><span class='line'>enable_tunneling = True
-</span><span class='line'>[securitygroup]
-</span><span class='line'>firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-</span><span class='line'>enable_security_group = True
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启openvswitch 服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# service openvswitch-switch restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>增加bridge配置：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# ovs-vsctl add-br br-ex
-</span><span class='line'>root@JunoNetwork:~# cat /etc/network/interfaces
-</span><span class='line'>auto eth2
-</span><span class='line'>iface eth2 inet manual
-</span><span class='line'>
-</span><span class='line'>iface br-ex inet static
-</span><span class='line'>address 10.22.22.212
-</span><span class='line'>netmask 255.255.255.0
-</span><span class='line'>gateway 10.22.22.1
-</span><span class='line'>bridge_ports eth2
-</span><span class='line'>bridge_stp off
-</span><span class='line'>auto br-ex
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>增加桥接端口，并且重启机器:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# ovs-vsctl add-port br-ex eth2
-</span><span class='line'>root@JunoNetwork:~# reboot
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>计算节点配置</h3>
-
-<p>更改sysctl配置:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# vim /etc/sysctl.conf
-</span><span class='line'>net.ipv4.conf.all.rp_filter=0
-</span><span class='line'>net.ipv4.conf.default.rp_filter=0
-</span><span class='line'>net.bridge.bridge-nf-call-arptables=1
-</span><span class='line'>net.bridge.bridge-nf-call-iptables=1
-</span><span class='line'>net.bridge.bridge-nf-call-ip6tables=1
-</span><span class='line'>root@JunoCompute:~# sysctl -p 
-</span><span class='line'>net.ipv4.conf.all.rp_filter = 0
-</span><span class='line'>net.ipv4.conf.default.rp_filter = 0
-</span><span class='line'>net.bridge.bridge-nf-call-arptables = 1
-</span><span class='line'>net.bridge.bridge-nf-call-iptables = 1
-</span><span class='line'>net.bridge.bridge-nf-call-ip6tables = 1
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>安装下列包:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install neutron-common neutron-plugin-ml2 neutron-plugin-openvswitch-agent openvswitch-datapath-dkms
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置compute节点上的网络通用组件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# vim /etc/neutron/neutron.conf
-</span><span class='line'>    [DEFAULT]
-</span><span class='line'>    auth_strategy = keystone
-</span><span class='line'>    rpc_backend = neutron.openstack.common.rpc.impl_kombu
-</span><span class='line'>    rabbit_host = controller
-</span><span class='line'>    rabbit_password = xxxx
-</span><span class='line'>    core_plugin = ml2
-</span><span class='line'>    service_plugins = router
-</span><span class='line'>    allow_overlapping_ips = True
-</span><span class='line'>    verbose = True
-</span><span class='line'>    [keystone_authtoken]
-</span><span class='line'>    auth_uri = http://10.17.17.211:5000
-</span><span class='line'>    auth_host = 10.17.17.211
-</span><span class='line'>    auth_port = 35357
-</span><span class='line'>    auth_protocol = http
-</span><span class='line'>    admin_tenant_name = service
-</span><span class='line'>    admin_user = neutron
-</span><span class='line'>    admin_password = xxxx
-</span><span class='line'>    signing_dir = $state_path/keystone-signing
-</span><span class='line'>    [database]
-</span><span class='line'>root@JunoCompute:~# vim /etc/neutron/plugins/ml2/ml2_conf.ini 
-</span><span class='line'>    [DEFAULT]
-</span><span class='line'>    ...
-</span><span class='line'>    core_plugin = ml2
-</span><span class='line'>    service_plugins = router
-</span><span class='line'>    allow_overlapping_ips = True
-</span><span class='line'>    [ml2]
-</span><span class='line'>    ...
-</span><span class='line'>    type_drivers = gre
-</span><span class='line'>    tenant_network_types = gre
-</span><span class='line'>    mechanism_drivers = openvswitch
-</span><span class='line'>    [ml2_type_gre]
-</span><span class='line'>    ...
-</span><span class='line'>    tunnel_id_ranges = 1:1000
-</span><span class='line'>    [ovs]
-</span><span class='line'>    ...
-</span><span class='line'>    local_ip = 10.19.19.213
-</span><span class='line'>    tunnel_type = gre
-</span><span class='line'>    enable_tunneling = True
-</span><span class='line'>    [securitygroup]
-</span><span class='line'>    ...
-</span><span class='line'>    firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-</span><span class='line'>    enable_security_group = True
-</span><span class='line'>root@JunoCompute:~# service openvswitch-switch restart
-</span><span class='line'>root@JunoCompute:~# service nova-compute restart
-</span><span class='line'>root@JunoCompute:~# service neutron-plugin-openvswitch-agent restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>接下来我们配置Compute节点上的nova,让它使用neutron作为网络管理器.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# vim /etc/nova/nova.conf 
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>network_api_class = nova.network.neutronv2.api.API
-</span><span class='line'>neutron_url = http://10.17.17.211:9696
-</span><span class='line'>neutron_auth_strategy = keystone
-</span><span class='line'>neutron_admin_tenant_name = service
-</span><span class='line'>neutron_admin_username = neutron
-</span><span class='line'>neutron_admin_password = xxxx
-</span><span class='line'>neutron_admin_auth_url = http://10.17.17.211:35357/v2.0
-</span><span class='line'>linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-</span><span class='line'>firewall_driver = nova.virt.firewall.NoopFirewallDriver
-</span><span class='line'>security_group_api = neutron
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>修改完毕后，重启Compute节点上的服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# service nova-compute restart
-</span><span class='line'>nova-compute stop/waiting
-</span><span class='line'>nova-compute start/running, process 2266
-</span><span class='line'>root@JunoCompute:~# service neutron-plugin-openvswitch-agent restart
-</span><span class='line'>stop: Unknown instance: 
-</span><span class='line'>neutron-plugin-openvswitch-agent start/running, process 2303
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置Network节点的网络，因为我们需要br-ex作为对外网络的接口。  <br/>
-配置网络如下：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ovs-vsctl add-br br-ex
-</span><span class='line'># ovs-vsctl add-port br-ex eth2
-</span><span class='line'># cat /etc/network/interfaces
-</span><span class='line'># 
-</span><span class='line'>auto eth2
-</span><span class='line'>iface eth2 inet manual
-</span><span class='line'>
-</span><span class='line'>iface br-ex inet static
-</span><span class='line'>address 10.22.22.212
-</span><span class='line'>netmask 255.255.255.0
-</span><span class='line'>gateway 10.22.22.1
-</span><span class='line'>bridge_ports eth2
-</span><span class='line'>bridge_stp off
-</span><span class='line'>auto br-ex
-</span><span class='line'># reboot
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>增加ext-net:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# neutron net-create ext-net --shared --router:external=True
-</span><span class='line'>Created a new network:
-</span><span class='line'>+---------------------------+--------------------------------------+
-</span><span class='line'>| Field                     | Value                                |
-</span><span class='line'>+---------------------------+--------------------------------------+
-</span><span class='line'>| admin_state_up            | True                                 |
-</span><span class='line'>| id                        | d879d5b1-f16e-4e28-beda-eb2b433e1f39 |
-</span><span class='line'>| name                      | ext-net                              |
-</span><span class='line'>| provider:network_type     | gre                                  |
-</span><span class='line'>| provider:physical_network |                                      |
-</span><span class='line'>| provider:segmentation_id  | 1                                    |
-</span><span class='line'>| router:external           | True                                 |
-</span><span class='line'>| shared                    | True                                 |
-</span><span class='line'>| status                    | ACTIVE                               |
-</span><span class='line'>| subnets                   |                                      |
-</span><span class='line'>| tenant_id                 | ea1f0a6b15dc4796958f087c38756ed1     |
-</span><span class='line'>+---------------------------+--------------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>外部子网：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# neutron subnet-create ext-net --name ext-subnet --allocation-pool start=10.22.22.10,end=10.22.22.50 --disable-dhcp --gateway 10.22.22.1 --gateway 10.22.22.1 10.22.22.10/24
-</span><span class='line'>Created a new subnet:
-</span><span class='line'>+------------------+------------------------------------------------+
-</span><span class='line'>| Field            | Value                                          |
-</span><span class='line'>+------------------+------------------------------------------------+
-</span><span class='line'>| allocation_pools | {"start": "10.22.22.10", "end": "10.22.22.50"} |
-</span><span class='line'>| cidr             | 10.22.22.0/24                                  |
-</span><span class='line'>| dns_nameservers  |                                                |
-</span><span class='line'>| enable_dhcp      | False                                          |
-</span><span class='line'>| gateway_ip       | 10.22.22.1                                     |
-</span><span class='line'>| host_routes      |                                                |
-</span><span class='line'>| id               | 3c7e2224-0979-4eb6-b95f-16401ecbfef0           |
-</span><span class='line'>| ip_version       | 4                                              |
-</span><span class='line'>| name             | ext-subnet                                     |
-</span><span class='line'>| network_id       | d879d5b1-f16e-4e28-beda-eb2b433e1f39           |
-</span><span class='line'>| tenant_id        | ea1f0a6b15dc4796958f087c38756ed1               |
-</span><span class='line'>+------------------+------------------------------------------------+
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# source openstack/demo-openrc.sh 
-</span><span class='line'>root@JunoController:~# neutron net-create demo-net
-</span><span class='line'>Created a new network:
-</span><span class='line'>+----------------+--------------------------------------+
-</span><span class='line'>| Field          | Value                                |
-</span><span class='line'>+----------------+--------------------------------------+
-</span><span class='line'>| admin_state_up | True                                 |
-</span><span class='line'>| id             | 01c966ce-88cf-43a2-a7b7-2ebf6d6b6d60 |
-</span><span class='line'>| name           | demo-net                             |
-</span><span class='line'>| shared         | False                                |
-</span><span class='line'>| status         | ACTIVE                               |
-</span><span class='line'>| subnets        |                                      |
-</span><span class='line'>| tenant_id      | 2ac9cae777014d3d94458f521b013e94     |
-</span><span class='line'>+----------------+--------------------------------------+
-</span><span class='line'>root@JunoController:~# neutron subnet-create demo-net --name demo-subnet --gateway 10.44.44.1 10.44.44.0/24
-</span><span class='line'>Created a new subnet:
-</span><span class='line'>+------------------+------------------------------------------------+
-</span><span class='line'>| Field            | Value                                          |
-</span><span class='line'>+------------------+------------------------------------------------+
-</span><span class='line'>| allocation_pools | {"start": "10.44.44.2", "end": "10.44.44.254"} |
-</span><span class='line'>| cidr             | 10.44.44.0/24                                  |
-</span><span class='line'>| dns_nameservers  |                                                |
-</span><span class='line'>| enable_dhcp      | True                                           |
-</span><span class='line'>| gateway_ip       | 10.44.44.1                                     |
-</span><span class='line'>| host_routes      |                                                |
-</span><span class='line'>| id               | c6181123-f729-4ad2-bddc-93cfc761d0e1           |
-</span><span class='line'>| ip_version       | 4                                              |
-</span><span class='line'>| name             | demo-subnet                                    |
-</span><span class='line'>| network_id       | 01c966ce-88cf-43a2-a7b7-2ebf6d6b6d60           |
-</span><span class='line'>| tenant_id        | 2ac9cae777014d3d94458f521b013e94               |
-</span><span class='line'>+------------------+------------------------------------------------+
-</span><span class='line'>
-</span><span class='line'>root@JunoController:~# neutron router-create demo-router
-</span><span class='line'>Created a new router:
-</span><span class='line'>+-----------------------+--------------------------------------+
-</span><span class='line'>| Field                 | Value                                |
-</span><span class='line'>+-----------------------+--------------------------------------+
-</span><span class='line'>| admin_state_up        | True                                 |
-</span><span class='line'>| external_gateway_info |                                      |
-</span><span class='line'>| id                    | e5a010ba-371c-43d2-b3fb-a30e0dc5302b |
-</span><span class='line'>| name                  | demo-router                          |
-</span><span class='line'>| status                | ACTIVE                               |
-</span><span class='line'>| tenant_id             | 2ac9cae777014d3d94458f521b013e94     |
-</span><span class='line'>+-----------------------+--------------------------------------+
-</span><span class='line'>
-</span><span class='line'>root@JunoController:~# neutron router-interface-add demo-router demo-subnet
-</span><span class='line'>Added interface c862f772-a1ef-4401-9a3b-2bdf5444e41b to router demo-router.
-</span><span class='line'>
-</span><span class='line'>root@JunoController:~# neutron router-gateway-set demo-router ext-net
-</span><span class='line'>Set gateway for router demo-router
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>检查，在外网上ping 10.22.22.10这个地址，因为路由器占用了一个地址，所以如果能ping通这个地址，说明我们创建的网络是好的。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:~]# ping 10.22.22.212                                                                                                                    
-</span><span class='line'>PING 10.22.22.212 (10.22.22.212) 56(84) bytes of data.                                                                                         
-</span><span class='line'>64 bytes from 10.22.22.212: icmp_seq=1 ttl=64 time=0.152 ms                                                                                    
-</span><span class='line'>64 bytes from 10.22.22.212: icmp_seq=2 ttl=64 time=0.136 ms    
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>检查agent状态:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# neutron agent-list
-</span><span class='line'>+--------------------------------------+--------------------+-------------+-------+----------------+
-</span><span class='line'>| id                                   | agent_type         | host        | alive | admin_state_up |
-</span><span class='line'>+--------------------------------------+--------------------+-------------+-------+----------------+
-</span><span class='line'>| 0b7191e1-ecd2-4808-b87a-f616d0a3bc7b | Metadata agent     | JunoNetwork | :-)   | True           |
-</span><span class='line'>| 34511134-8392-44a9-a889-0ff03d85a995 | Open vSwitch agent | JunoCompute | :-)   | True           |
-</span><span class='line'>| 474065d1-a50a-4d11-89d3-37c7a88e449c | DHCP agent         | JunoNetwork | :-)   | True           |
-</span><span class='line'>| 5569c590-df83-4ee1-a073-15c908ef8d20 | L3 agent           | JunoNetwork | :-)   | True           |
-</span><span class='line'>| a22c6e2a-7af0-4404-9e5b-46996b370672 | Open vSwitch agent | JunoNetwork | :-)   | True           |
-</span><span class='line'>+--------------------------------------+--------------------+-------------+-------+----------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在 Compute Node 上的 OVS agent出现后，才能代表我们的网络配置成功。</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/">安装Icehouse@Ubuntu14.04(4)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-04-13T17:34:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:34 pm</span></time>
-        
-         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>这里将配置计算节点。计算节点我们使用了一台2G内存的虚拟机，并使用了嵌套虚拟化，可以通过<code>lscpu</code>来看到CPU的VMX/VT-X标志都已经被下发到虚拟机中。</p>
-
-<h3>数据库准备</h3>
-
-<p>使用下列命令来创建nova所需数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 35
-</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE nova;
-</span><span class='line'>Query OK, 1 row affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'xxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY 'xxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; quit
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>nova用户</h3>
-
-<p>创建nova用户:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# source ~/openstack/admin-openrc.sh
-</span><span class='line'>root@JunoController:~# keystone user-create --name nova --pass xxxx
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |                                  |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | 845c22d1a781458a8b28ba54534b73dd |
-</span><span class='line'>|   name   |               nova               |
-</span><span class='line'>| username |               nova               |
-</span><span class='line'>+----------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>制定nova属于service tenant, 并赋予admin权限:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-role-add --user nova --tenant service --role admin
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在keystone注册nova:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name nova --type compute --description "OpenStack Compute"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |        OpenStack Compute         |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 8733caba0b9742a39ee9ac53ad4d8e27 |
-</span><span class='line'>|     name    |               nova               |
-</span><span class='line'>|     type    |             compute              |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在keystone注册nova end-point:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ compute / {print $2}') --publicurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --internalurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --adminurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --region regionOne
-</span><span class='line'>+-------------+-------------------------------------------+
-</span><span class='line'>|   Property  |                   Value                   |
-</span><span class='line'>+-------------+-------------------------------------------+
-</span><span class='line'>|   adminurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
-</span><span class='line'>|      id     |      d16c91bfacf2474ebee36314535a146f     |
-</span><span class='line'>| internalurl | http://10.17.17.211:8774/v2/%(tenant_id)s |
-</span><span class='line'>|  publicurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
-</span><span class='line'>|    region   |                 regionOne                 |
-</span><span class='line'>|  service_id |      8733caba0b9742a39ee9ac53ad4d8e27     |
-</span><span class='line'>+-------------+-------------------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Compute服务安装</h3>
-
-<h4>Controller节点配置</h4>
-
-<p>在Controller节点上，安装以下包:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get -y install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置nova所需的配置文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/nova/nova.conf
-</span><span class='line'>[database]
-</span><span class='line'>connection = mysql://nova:xxxxx@10.17.17.211/nova
-</span><span class='line'>
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>....
-</span><span class='line'>rpc_backend = rabbit
-</span><span class='line'>rabbit_host = 10.17.17.211
-</span><span class='line'>rabbit_password = xxxxxx
-</span><span class='line'>my_ip=10.17.17.211
-</span><span class='line'>vncserver_listen = 0.0.0.0
-</span><span class='line'>vncserver_proxyclient_address = 10.17.17.211
-</span><span class='line'>auth_strategy = keystone 
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = nova
-</span><span class='line'>admin_password = xxxx
-</span><span class='line'>[glance]
-</span><span class='line'>host=10.17.17.211
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除sqlite3数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# rm /var/lib/nova/nova.sqlite 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建数据库：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# su -s /bin/sh -c "nova-manage db sync" nova
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启服务，使用nova检查本机可用镜像情况:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service nova-api restart
-</span><span class='line'>root@JunoController:~# service nova-cert restart
-</span><span class='line'>root@JunoController:~#  service nova-consoleauth restart
-</span><span class='line'>root@JunoController:~# service nova-scheduler restart
-</span><span class='line'>root@JunoController:~# service nova-conductor restart
-</span><span class='line'>root@JunoController:~# service nova-novncproxy restart
-</span><span class='line'>root@JunoController:~# nova image-list
-</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
-</span><span class='line'>| ID                                   | Name                | Status | Server |
-</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
-</span><span class='line'>| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | ACTIVE |        |
-</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Compute节点安装</h4>
-
-<p>安装下列包:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~#  apt-get -y install nova-compute sysfsutils
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# vim /etc/nova/nova.conf 
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>......
-</span><span class='line'>auth_strategy = keystone
-</span><span class='line'>rpc_backend = rabbit
-</span><span class='line'>rabbit_host = 10.17.17.211
-</span><span class='line'>rabbit_password = xxxx
-</span><span class='line'>my_ip = 10.17.17.213
-</span><span class='line'>vnc_enabled = True
-</span><span class='line'>vncserver_listen = 0.0.0.0
-</span><span class='line'>vncserver_proxyclient_address = 10.17.17.213
-</span><span class='line'>novncproxy_base_url = http://10.17.17.211:6080/vnc_auto.html
-</span><span class='line'>glance_host = 10.17.17.211
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = nova
-</span><span class='line'>admin_password = xxxx
-</span><span class='line'>
-</span><span class='line'>[database]
-</span><span class='line'>#The SQLAlchemy connection string used to connect to the database
-</span><span class='line'>connection = mysql://nova:xxxx@10.17.17.211/nova
-</span><span class='line'>[glance]
-</span><span class='line'>host=10.17.17.211
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>看cpu硬件是否支持硬件加速:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# egrep -c '(vmx|svm)' /proc/cpuinfo
-</span><span class='line'>2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>如果支持加速，则配置nova-compute.conf为:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# cat /etc/nova/nova-compute.conf
-</span><span class='line'>[libvirt]
-</span><span class='line'>virt_type=kvm
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除不需要的nova.sqlite文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# rm -f /var/lib/nova/nova.sqlite 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重起nova服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# service nova-compute restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>验证</h3>
-
-<p>在控制节点上,列出所有的service:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# nova service-list
-</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-</span><span class='line'>| Binary           | Host           | Zone     | Status  | State | Updated_at                 | Disabled Reason |
-</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-</span><span class='line'>| nova-cert        | JunoController | internal | enabled | up    | 2015-04-13T10:16:10.000000 | -               |
-</span><span class='line'>| nova-consoleauth | JunoController | internal | enabled | up    | 2015-04-13T10:16:12.000000 | -               |
-</span><span class='line'>| nova-scheduler   | JunoController | internal | enabled | up    | 2015-04-13T10:16:05.000000 | -               |
-</span><span class='line'>| nova-conductor   | JunoController | internal | enabled | up    | 2015-04-13T10:16:08.000000 | -               |
-</span><span class='line'>| nova-compute     | JunoCompute    | nova     | enabled | up    | 2015-04-13T10:16:09.000000 | -               |
-</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>现在compute节点已经配置完了，接下来可以配置网络节点。配置完网络节点后，就可以启动虚拟机了。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/9">&larr; Older</a>
@@ -3179,6 +1939,10 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/08/04/tips-on-using-spacewalker-for-deploying-centos7/">Tips on Using SpaceWalker for Deploying CentOS7</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/08/04/install-spacewalk-2-dot-2-steps/">Install SpaceWalk 2.2 Steps</a>
       </li>
     
@@ -3187,15 +1951,11 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
       </li>
     
       <li class="post">
+        <a href="/blog/2015/07/29/trying-spacewalk.markdown~/">Trying SpaceWalk</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/29/trying-spacewalk/">Trying SpaceWalk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/28/worktips-on-landscape/">WorkTips on LandScape</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/27/tips-on-packer/">Tips on Packer</a>
       </li>
     
   </ul>
