@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-08-05T15:17:58+08:00</updated>
+  <updated>2015-08-06T16:51:12+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,291 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Enlarge RootFS in CentOS7]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/08/06/enlarge-rootfs-in-centos7/"/>
+    <updated>2015-08-06T14:48:50+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/08/06/enlarge-rootfs-in-centos7</id>
+    <content type="html"><![CDATA[<h3>Disk Preparation</h3>
+
+<p>Create a new disk via following command in host machine:</p>
+
+<pre><code># qemu-img create -f qcow2 Added.qcow2 200G
+</code></pre>
+
+<p>Boot the machine and you will have the newly added disk as <code>/dev/vdb</code>, format it via
+<code>fdisk</code>.</p>
+
+<pre><code>[root@spacewalker ~]# fdisk /dev/vdb
+Welcome to fdisk (util-linux 2.23.2).
+
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+Device does not contain a recognized partition table
+Building a new DOS disklabel with disk identifier 0x694e59ec.
+
+Command (m for help): n
+Partition type:
+   p   primary (0 primary, 0 extended, 4 free)
+   e   extended
+Select (default p): p
+Partition number (1-4, default 1): 
+First sector (2048-419430399, default 2048): 
+Using default value 2048
+Last sector, +sectors or +size{K,M,G} (2048-419430399, default 419430399): 
+Using default value 419430399
+Partition 1 of type Linux and of size 200 GiB is set
+
+Command (m for help): t
+Selected partition 1
+Hex code (type L to list all codes): 8e
+Changed type of partition 'Linux' to 'Linux LVM'
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+</code></pre>
+
+<h3>Physical Volume</h3>
+
+<p>Create a physical volume and display the pv:</p>
+
+<pre><code>[root@spacewalker ~]# pvcreate /dev/vdb1
+  Physical volume "/dev/vdb1" successfully created
+[root@spacewalker ~]# pvdisplay 
+  --- Physical volume ---
+  PV Name               /dev/vda3
+  VG Name               rootvg01
+  PV Size               96.46 GiB / not usable 23.00 MiB
+  Allocatable           yes (but full)
+  PE Size               32.00 MiB
+  Total PE              3086
+  Free PE               0
+  Allocated PE          3086
+  PV UUID               rq51pP-o3Pw-8mMs-kBiN-wLva-nfLf-Svd9uk
+
+  "/dev/vdb1" is a new physical volume of "200.00 GiB"
+  --- NEW Physical volume ---
+  PV Name               /dev/vdb1
+  VG Name               
+  PV Size               200.00 GiB
+  Allocatable           NO
+  PE Size               0   
+  Total PE              0
+  Free PE               0
+  Allocated PE          0
+  PV UUID               cPijvf-qPYT-w4yi-MsFo-yEHs-O9t8-6FmXUU
+</code></pre>
+
+<h3>Add pv into VG(Volume group)</h3>
+
+<p>First vgdisplay for get the VG name, then added it into vg, check the free pe, now its
+200 GiB available.</p>
+
+<pre><code>[root@spacewalker ~]# vgdisplay 
+  --- Volume group ---
+  VG Name               rootvg01
+  System ID             
+  Format                lvm2
+  Metadata Areas        1
+  Metadata Sequence No  2
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                1
+  Open LV               1
+  Max PV                0
+  Cur PV                1
+  Act PV                1
+  VG Size               96.44 GiB
+  PE Size               32.00 MiB
+  Total PE              3086
+  Alloc PE / Size       3086 / 96.44 GiB
+  Free  PE / Size       0 / 0   
+  VG UUID               U98QSe-V6Kv-aYSf-cSsp-ln0H-IhuS-1oNsgV
+
+[root@spacewalker ~]# vgextend  rootvg01 /dev/vdb1
+  Volume group "rootvg01" successfully extended
+[root@spacewalker ~]# vgdisplay 
+  --- Volume group ---
+  VG Name               rootvg01
+  System ID             
+  Format                lvm2
+  Metadata Areas        2
+  Metadata Sequence No  3
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                1
+  Open LV               1
+  Max PV                0
+  Cur PV                2
+  Act PV                2
+  VG Size               296.41 GiB
+  PE Size               32.00 MiB
+  Total PE              9485
+  Alloc PE / Size       3086 / 96.44 GiB
+  Free  PE / Size       6399 / 199.97 GiB
+  VG UUID               U98QSe-V6Kv-aYSf-cSsp-ln0H-IhuS-1oNsgV
+</code></pre>
+
+<h3>Enlarge the lv</h3>
+
+<p>Use following command for first get the lv name, then lvextend to the most available
+space of the volume group.</p>
+
+<pre><code>[root@spacewalker ~]# lvdisplay 
+  --- Logical volume ---
+  LV Path                /dev/rootvg01/lv01
+  LV Name                lv01
+  VG Name                rootvg01
+  LV UUID                5U4JM5-nG7G-TdPd-6zZ0-fE05-oysa-jEJHQu
+  LV Write Access        read/write
+  LV Creation host, time localhost, 2015-07-29 18:11:18 +0800
+  LV Status              available
+  # open                 1
+  LV Size                96.44 GiB
+  Current LE             3086
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     8192
+  Block device           253:0
+
+[root@spacewalker ~]# lvextend -l +100%FREE /dev/rootvg01/lv01 
+  Size of logical volume rootvg01/lv01 changed from 96.44 GiB (3086 extents) to 296.41 GiB (9485 extents).
+  Logical volume lv01 successfully resized
+[root@spacewalker ~]# lvdisplay 
+  --- Logical volume ---
+  LV Path                /dev/rootvg01/lv01
+  LV Name                lv01
+  VG Name                rootvg01
+  LV UUID                5U4JM5-nG7G-TdPd-6zZ0-fE05-oysa-jEJHQu
+  LV Write Access        read/write
+  LV Creation host, time localhost, 2015-07-29 18:11:18 +0800
+  LV Status              available
+  # open                 1
+  LV Size                296.41 GiB
+  Current LE             9485
+  Segments               2
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     8192
+  Block device           253:0
+</code></pre>
+
+<p>Enlarge in the system level:</p>
+
+<pre><code>[root@spacewalker ~]# df -HT
+Filesystem                Type      Size  Used Avail Use% Mounted on
+/dev/mapper/rootvg01-lv01 xfs       104G   19G   85G  19% /
+devtmpfs                  devtmpfs  1.1G     0  1.1G   0% /dev
+tmpfs                     tmpfs     1.1G     0  1.1G   0% /dev/shm
+tmpfs                     tmpfs     1.1G  8.7M  1.1G   1% /run
+tmpfs                     tmpfs     1.1G     0  1.1G   0% /sys/fs/cgroup
+/dev/vda1                 xfs       207M  111M   96M  54% /boot
+[root@spacewalker ~]# xfs_growfs /dev/rootvg01/lv01 
+meta-data=/dev/mapper/rootvg01-lv01 isize=256    agcount=4, agsize=6320128 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=0        finobt=0
+data     =                       bsize=4096   blocks=25280512, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=0
+log      =internal               bsize=4096   blocks=12344, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+data blocks changed from 25280512 to 77701120
+[root@spacewalker ~]# df -HT
+Filesystem                Type      Size  Used Avail Use% Mounted on
+/dev/mapper/rootvg01-lv01 xfs       319G   19G  300G   6% /
+devtmpfs                  devtmpfs  1.1G     0  1.1G   0% /dev
+tmpfs                     tmpfs     1.1G     0  1.1G   0% /dev/shm
+tmpfs                     tmpfs     1.1G  8.7M  1.1G   1% /run
+tmpfs                     tmpfs     1.1G     0  1.1G   0% /sys/fs/cgroup
+/dev/vda1                 xfs       207M  111M   96M  54% /boot
+</code></pre>
+
+<p>Now you could enjoy the 300G size diskspace.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Setup SpaceWalker Trusty Channel]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/08/06/setup-spacewalker-trusty-channel/"/>
+    <updated>2015-08-06T11:47:31+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/08/06/setup-spacewalker-trusty-channel</id>
+    <content type="html"><![CDATA[<h3>Channel Definition</h3>
+
+<p>The definition for this channel should includes Architecture to &lsquo;amd64-debian&rsquo;, and Yum
+Repository to SHA256:</p>
+
+<p>Yum Repository Checksum Type
+sha256
+Architecture
+AMD64 Debian</p>
+
+<h3>Channel Definition</h3>
+
+<p>The definition for this channel should includes Architecture to &lsquo;amd64-debian&rsquo;, and Yum
+Repository to SHA256:</p>
+
+<pre><code>Yum Repository Checksum Type
+sha256
+Architecture
+AMD64 Debian
+</code></pre>
+
+<p>Then create more channels with its parent channel to your named channel.</p>
+
+<p><img src="/images/2015_08_06_11_54_16_776x378.jpg" alt="/images/2015_08_06_11_54_16_776x378.jpg" /></p>
+
+<p>Also create <code>trusty-security</code> and <code>trusty-backports</code>, after all configuration, your
+channel would be looks like following:</p>
+
+<p><img src="/images/2015_08_06_11_57_47_649x191.jpg" alt="/images/2015_08_06_11_57_47_649x191.jpg" /></p>
+
+<p>Enable epel-testing and install python-debian:</p>
+
+<pre><code># wget http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+# rpm -ivh epel-release-7-5.noarch.rpm 
+# yum-config-manager --enable epel-testing 
+# cat epel-testing.repo
+    [epel-testing]
+    name=Extra Packages for Enterprise Linux 7 - Testing - $basearch
+    #baseurl=http://download.fedoraproject.org/pub/epel/testing/7/$basearch
+    #mirrorlist=https://mirrors.fedoraproject.org/metalink?repo=testing-epel7&amp;arch=$basearch
+    baseurl=http://mirrors.aliyun.com/epel/testing/7/x86_64/
+# yum update python-debian
+</code></pre>
+
+<p>Patch the <code>debfile.py</code>:</p>
+
+<pre><code># vim /usr/lib/python2.7/site-packages/debian/debfile.py
+- PART_EXTS = ['gz', 'bz2', 'xz']   # possible extensions
++ PART_EXTS = ['gz', 'bz2', 'xz', 'lzma']   # possible extensions
+</code></pre>
+
+<p>Repo sync:</p>
+
+<pre><code># git clone https://github.com/stevemeier/spacewalk-debian-sync.git
+# cd spacewalk-debian-sync/
+# mv spacewalk-debian-sync.pl /usr/bin/
+# chmod 777 /usr/bin/spacewalk-debian-sync.pl
+# yum install perl-WWW-Mechanize
+</code></pre>
+
+<p>Now sync the repository from remote server:</p>
+
+<pre><code>spacewalk-debian-sync.pl --username xxxxx --password xxxxx --channel 'trusty-backports' --url 'http://192.168.0.79/ubuntu/dists/trusty-backports/main/binary-amd64/'
+</code></pre>
+
+<p>After the sync finished, the channel will be setup.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Enable DHCP/DNS Server for SpaceWalker Server]]></title>
@@ -143,6 +428,24 @@ In /etc/cobbler/settings change the value of the parameters server and redhat_ma
 
 <pre><code># yum install -y cobbler-loaders
 </code></pre>
+
+<h3>Build Customized ISO</h3>
+
+<p>via <code>cobbler buildiso</code>, and in the same folder you will get generated.iso.</p>
+
+<h3>Add Customized Channel</h3>
+
+<p>Under the Channel-> Management Software Channel-> Create New Channel.</p>
+
+<p><img src="/images/2015_08_05_16_50_50_649x442.jpg" alt="/images/2015_08_05_16_50_50_649x442.jpg" /></p>
+
+<p>Repo sync via:</p>
+
+<pre><code># spacewalk-repo-sync -c spacewalker_rhel7_23 -u \ 
+http://yum.spacewalkproject.org/2.3/RHEL/7/x86_64/
+</code></pre>
+
+<h3>Add Ubuntu Deployment</h3>
 ]]></content>
   </entry>
   
@@ -159,359 +462,6 @@ In /etc/cobbler/settings change the value of the parameters server and redhat_ma
 # sudo add-apt-repository "deb http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/xUbuntu_15.04/ ./"
 # sudo apt-get install cobbler
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Trying SpaceWalk]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/07/29/trying-spacewalk/"/>
-    <updated>2015-07-29T16:43:23+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/07/29/trying-spacewalk</id>
-    <content type="html"><![CDATA[<h3>Server Installation &amp;&amp; Configration</h3>
-
-<p>Server have 2-core and 3072MB, running CentOS6.6, IP address is 10.9.10.2.</p>
-
-<p>Installation:</p>
-
-<pre><code># rpm -Uvh http://yum.spacewalkproject.org/2.3/RHEL/6/x86_64/spacewalk-repo-2.3-4.el6.noarch.rpm
-# wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
-# yum update
-# yum install -y spacewalk-postgresql 
-</code></pre>
-
-<p>Now add a new repository:</p>
-
-<pre><code># cat /etc/yum.repos.d/jpackage-generic.repo 
-[jpackage-generic]
-name=JPackage generic
-#baseurl=http://mirrors.dotsrc.org/pub/jpackage/5.0/generic/free/
-mirrorlist=http://www.jpackage.org/mirrorlist.php?dist=generic&amp;type=free&amp;release=5.0
-enabled=1
-gpgcheck=1
-gpgkey=http://www.jpackage.org/jpackage.asc
-</code></pre>
-
-<p>Met some problems on CentOS6.6, mainly the dependencies problem, switches to CentOS7(10.9.10.100) :</p>
-
-<p>Install it via:</p>
-
-<pre><code># rpm -Uvh http://yum.spacewalkproject.org/2.3/RHEL/7/x86_64/spacewalk-repo-2.3-4.el7.noarch.rpm
-</code></pre>
-
-<p>Setup Database for spacewalk:</p>
-
-<pre><code># yum install spacewalk-setup-postgresql
-</code></pre>
-
-<p>Install spacewalk with postgresql as its backend database:</p>
-
-<pre><code># yum install spacewalk-postgresql
-</code></pre>
-
-<p>Install spacecmd for using cmd of spacewalker:</p>
-
-<pre><code># yum install -y spacecmd
-</code></pre>
-
-<h3>Configuration</h3>
-
-<p>Configuration, first remove the possible db, then setup.</p>
-
-<pre><code># /usr/bin/spacewalk-setup-postgresql remove --db
-rhnschema --user rhnuser
-# spacewalk-setup --disconnected                                          
-** Database: Setting up database connection for PostgreSQL backend.
-Database "rhnschema" does not exist
-** Database: Installing the database:
-** Database: This is a long process that is logged in:
-** Database:   /var/log/rhn/install_db.log
-*** Progress: ##
-** Database: Installation complete.
-** Database: Populating database.
-*** Progress: ############################
-* Configuring tomcat.
-* Setting up users and groups.
-** GPG: Initializing GPG and importing key.
-** GPG: Creating /root/.gnupg directory
-You must enter an email address.
-Admin Email Address? xxxxxx@gmail.com
-* Performing initial configuration.
-* Activating Spacewalk.
-** Loading Spacewalk Certificate.
-** Verifying certificate locally.
-** Activating Spacewalk.
-* Configuring apache SSL virtual host.
-Should setup configure apache's default ssl server for you (saves original ssl.conf)
-[Y]? y
-** /etc/httpd/conf.d/ssl.conf has been backed up to ssl.conf-swsave
-* Configuring jabberd.
-* Creating SSL certificates.
-CA certificate password? 
-Re-enter CA certificate password? 
-Organization? Lxxzxxx University
-Organization Unit [SpaceWalker]? XXU
-Email Address [xxxxx@gmail.com]? XXXXX@gmail.com
-City? LxxZxx
-State? xxxx
-Country code (Examples: "US", "JP", "IN", or type "?" to see a list)? CN
-** SSL: Generating CA certificate.
-** SSL: Deploying CA certificate.
-** SSL: Generating server certificate.
-** SSL: Storing SSL certificates.
-* Deploying configuration files.
-* Update configuration in database.
-* Setting up Cobbler..
-Cobbler requires tftp and xinetd services be turned on for PXE provisioning
-functionality. Enable these services [Y]? Y
-* Restarting services.
-Installation complete.
-Visit https://SpaceWalker to create the Spacewalk administrator account.
-</code></pre>
-
-<p>Open the iptables rules:</p>
-
-<pre><code># iptables -A INPUT -p tcp -m multiport --dport 22,443,5222,69,5432 -j ACCEPT 
-</code></pre>
-
-<p>For better use the spacewalk&rsquo;s utilities, install the following packages:</p>
-
-<pre><code># yum install -y spacewalk-utils
-</code></pre>
-
-<p>With this package, you could use <code>spacewalk-common-channels</code> and other commands.</p>
-
-<h3>Setup Repository</h3>
-
-<p>Add a channel of CentOS7:</p>
-
-<pre><code>[root@SpaceWalker ~]# /usr/bin/spacewalk-common-channels -v -u YourUserName -p \
-YourPassword -a x86_64 -k unlimited 'centos7*'
-Connecting to http://localhost/rpc/api
-Base channel 'CentOS 7 (x86_64)' - creating...
-* Activation key 'centos7-x86_64' - creating...
-* Child channel 'CentOS 7 Addons (x86_64)' - creating...
-** Activation key '1-centos7-x86_64' - adding child channel...
-* Child channel 'CentOS 7 Plus (x86_64)' - creating...
-** Activation key '1-centos7-x86_64' - adding child channel...
-* Child channel 'CentOS 7 Contrib (x86_64)' - creating...
-** Activation key '1-centos7-x86_64' - adding child channel...
-* Child channel 'CentOS 7 Extras (x86_64)' - creating...
-** Activation key '1-centos7-x86_64' - adding child channel...
-* Child channel 'CentOS 7 FastTrack (x86_64)' - creating...
-** Activation key '1-centos7-x86_64' - adding child channel...
-* Child channel 'CentOS 7 Updates (x86_64)' - creating...
-** Activation key '1-centos7-x86_64' - adding child channel...
-</code></pre>
-
-<p>Now in the SpaceWalk Backend you will see:  <br/>
-<img src="/images/2015_07_30_15_22_27_807x526.jpg" alt="/images/2015_07_30_15_22_27_807x526.jpg" /></p>
-
-<p>Import ISO as the repository:</p>
-
-<pre><code># mkdir /var/distro-trees/centos7_64 -p
-# chmod 755 /var/
-# chmod 755 /var/distro-trees/
-# chmod 755 /var/distro-trees/centos7_64/
-# mount -t nfs 192.168.0.79:/home/juju /mnt
-#  mount -t iso9660 -o loop /mnt/iso/CentOS-7-x86_64-Everything-1503-01.iso \ 
-/var/distro-trees/centos7_64/
-# wget https://127.0.0.1/pub/RHN-ORG-TRUSTED-SSL-CERT -O \
-/usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT --no-check-certificate 
-# /usr/bin/rhnpush -v --channel=centos7-x86_64 --server=https://localhost/APP
---dir="/var/distro-trees/centos7_64/Packages"
-Connecting to https://localhost/APP
-Username: xxxxxx
-Password: 
-</code></pre>
-
-<p>The import process will cost pretty long times.</p>
-
-<h3>Cobbler Configuration</h3>
-
-<p>Via <code>cobbler check</code> and fix some errors, notice in CentOS7, the rsyncd is managed via
-systemd, so we just enable the rsyncd via:</p>
-
-<pre><code># systemctl enable rsyncd.service
-# systemctl start rsyncd.service
-</code></pre>
-
-<p>debmirror  missing:</p>
-
-<pre><code># wget http://archive.ubuntu.com/ubuntu/pool/universe/d/debmirror/debmirror_2.10ubuntu1.tar.gz
-# tar -xzvf debmirror_2.10ubuntu1.tar.gz
-# ...
-# cd debmirror-2.10ubuntu1
-# make
-# cp debmirror /usr/bin/
-# cp debmirror.1 /usr/share/man/man1/
-# yum install -y cpan
-# cpan install Net::INET6Glue 
-</code></pre>
-
-<p>rsync won&rsquo;t be a problem.</p>
-
-<pre><code># mount -t iso9660 -o loop /media/material/iso/CentOS-7-x86_64-Everything-1503.iso  /mnt1
-# cp -ar /mnt1/*  /var/distro-trees/centos7_64
-</code></pre>
-
-<p>Now create the distribution:</p>
-
-<pre><code># spacecmd  -u YourUserName -p YourPassword -- distribution_create -n centos7 -p /var/distro-trees/centos7_64/ -b centos7-x86_64 -t rhel_6
-</code></pre>
-
-<p>Steps:</p>
-
-<pre><code># yum install -y spacewalk-postgresql spacewalk-setup-postgresql spacecmd spacewalk-utils firefox
-[root@localhost ~]# cat /etc/yum.repos.d/SpaceWalk22.repo 
-[SpaceWalk22]
-name=SpaceWalk22
-baseurl=http://192.168.1.11/SpaceWalk22
-enabled=1
-gpgcheck=0
-</code></pre>
-
-<h3>Use Answer File</h3>
-
-<p>Define the answer file and deploy using answer.txt:</p>
-
-<pre><code># cat /root/Code/spacewalker/answer.txt
-admin-email = root@localhost
-ssl-set-org = Spacewalk Org
-ssl-set-org-unit = spacewalk
-ssl-set-city = My City
-ssl-set-state = My State
-ssl-set-country = US
-ssl-password = spacewalk
-ssl-set-email = root@localhost
-ssl-config-sslvhost = Y
-db-backend=postgresql
-db-name=spaceschema
-db-user=spacewalk
-db-password=spacewalk
-db-host=localhost
-db-port=5432
-enable-tftp=N
-</code></pre>
-
-<p>Reconfigure the LC:</p>
-
-<pre><code>$ sudo su postgres
-$ psql
-# 
-# UPDATE pg_database SET datallowconn = TRUE WHERE datname = 'template0';
-# \c template0
-# UPDATE pg_database SET datistemplate = FALSE WHERE datname = 'template1';
-# drop database template1;
-# CREATE DATABASE template1 ENCODING = 'utf8' TEMPLATE = template0 LC_CTYPE =
-'en_US.utf8' LC_COLLATE = 'en_US.utf8';
-# UPDATE pg_database SET datistemplate = TRUE WHERE datname = 'template1';
-# \c template1
-# UPDATE pg_database SET datallowconn = FALSE WHERE datname = 'template0';
-# \q
-</code></pre>
-
-<p>Now use the answser file for configure the spacewalk installation:</p>
-
-<pre><code># spacewalk-setup --disconnected --answer-file=/root/Code/spacewalker/answer.txt 
-</code></pre>
-
-<p>Verify the installation, first visit <code>https://Your_IP</code>, to setup the username/password.</p>
-
-<p>Create the channel,</p>
-
-<pre><code># /usr/bin/spacewalk-common-channels -v -u Username -p Password \ 
--a x86_64 -k unlimited  'centos7*'
-# mkdir /var/distro-trees/centos7_64 -p
-# chmod 755 /var/
-# chmod 755 /var/distro-trees/
-# chmod 755 /var/distro-trees/centos7_64/
-# cp -ar ContentOfISO /var/distro-trees/centos7_64/
-#  spacecmd  -u YourUserName -p YourPass -- distribution_create -n centos7 -p \
-/var/distro-trees/centos7_64/ -b centos7-x86_64 -t rhel_7
-</code></pre>
-
-<p>Now check the installed distribution under(System->Kickstart->Distributions):</p>
-
-<p><img src="/images/2015_08_03_15_35_04_703x499.jpg" alt="/images/2015_08_03_15_35_04_703x499.jpg" /></p>
-
-<p>Check the kickstart via create the new kickstart file, fail again, why&hellip;.</p>
-
-<h3>2.2.1 Version</h3>
-
-<p>Use 2.2.1 version:</p>
-
-<pre><code>$ vim jpackage.repo
-$ rpm -Uvh http://yum.spacewalkproject.org/2.2/RHEL/6/x86_64/spacewalk-repo-2.2-1.el6.noarch.rpm
-$ sudo yum clean all &amp;&amp; sudo yum makecache
-</code></pre>
-
-<h3>2.2.3 Version - Correct way</h3>
-
-<p>Disable the cobbler package in epel repository via:</p>
-
-<pre><code># vim epel.repo 
-[epel]
-name=Extra Packages for Enterprise Linux 7 - $basearch
-baseurl=http://mirrors.aliyun.com/epel/7/$basearch
-        http://mirrors.aliyuncs.com/epel/7/$basearch
-#mirrorlist=https://mirrors.fedoraproject.org/metalink?repo=epel-7&amp;arch=$basearch
-failovermethod=priority
-enabled=1
-gpgcheck=0
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
-### Blacklist cobbler and cobbler-web package ###
-exclude=cobbler*
-</code></pre>
-
-<p>Cause the spacewalk has its own cobbler packages in repository, by addeding epel&rsquo;s
-cobbler into blacklist we could continue the setup.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[WorkTips on LandScape]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/07/28/worktips-on-landscape/"/>
-    <updated>2015-07-28T16:10:49+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/07/28/worktips-on-landscape</id>
-    <content type="html"><![CDATA[<h3>Installation</h3>
-
-<p>Landscape is now in PPA repository, add it via:</p>
-
-<pre><code>$ sudo apt-get install software-properties-common
-$ sudo add-apt-repository ppa:landscape/15.01
-$ sudo apt-get update
-$ sudo apt-get install landscape-server-quickstart 
-</code></pre>
-
-<p>During the installation will ask you the configuration of postfix, specify local.</p>
-
-<h3>Configuration</h3>
-
-<p>First time you login into the LandScape Root machine, you have to setup your email
-address and your password.     <br/>
-Then you could visit <code>https://YourIPAddress</code> for the configuration page.</p>
-
-<p>Add the node into the Landscape Root Node.</p>
-
-<p>In to-be-added node, copy the root node&rsquo;s <code>/etc/ssl/certs/landscape_server_ca.crt</code> to
-<code>/etc/landscape</code>, and modify the following configuration:</p>
-
-<pre><code># vim /etc/landscape/client.conf
-ssl_public_key = /etc/landscape/landscape_server_ca.crt
-</code></pre>
-
-<p>Now register the node into the Root Node.</p>
-
-<pre><code>$ sudo apt-get install landscape-client
-$ sudo landscape-config --computer-title "LSNode0" --account-name standalone \
---url https://packer-ubuntu-1404-server/message-system --ping-url \
-http://packer-ubuntu-1404-server/ping
-</code></pre>
-
-<p><img src="/images/2015_07_29_11_27_27_582x380.jpg" alt="/images/2015_07_29_11_27_27_582x380.jpg" /></p>
-
-<p>The following steps is to use or configurating the landscape based cluster
-administration.</p>
 ]]></content>
   </entry>
   
