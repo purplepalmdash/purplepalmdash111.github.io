@@ -9,7 +9,13 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Neutron和nova-network的区别在于，nova-network可以让你在每个instance上部署一种网络类型，适合基本的网络功能。而Neutron则使得你可以在一个instance上部署多种网络类型，并且以插件的方式支持多种虚拟化网络。 详细的介绍，以后慢慢加，理解吃透了再加上来， &hellip;">
+  <meta name="description" content="Get the existing subnet: 1
+2
+3
+4
+5
+6
+root@Controller:~# neutron subnet-list &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +71,116 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/25/tips-on-deleteing-neutron-subnet-and-router/">Tips on Deleteing Neutron Subnet and Router</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-25T21:44:54+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:44 pm</span></time>
+        
+         | <a href="/blog/2015/05/25/tips-on-deleteing-neutron-subnet-and-router/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Get the existing subnet:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# neutron subnet-list 
+</span><span class='line'>+--------------------------------------+-------------+----------------+--------------------------------------------------+
+</span><span class='line'>| id                                   | name        | cidr           | allocation_pools                                 |
+</span><span class='line'>+--------------------------------------+-------------+----------------+--------------------------------------------------+
+</span><span class='line'>| 98725e3a-7ee2-4e3f-83e3-eaca0236918f | demo-subnet | 192.168.1.0/24 | {"start": "192.168.1.2", "end": "192.168.1.254"} |
+</span><span class='line'>+--------------------------------------+-------------+----------------+--------------------------------------------------+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Delete it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# neutron subnet-delete --name demo-subnet
+</span><span class='line'>Unable to complete operation on subnet 98725e3a-7ee2-4e3f-83e3-eaca0236918f. One or more ports have an IP allocation from this subnet. (HTTP 409) (Request-ID: req-7d729bcc-ec50-4de6-83d9-5d2b98332127)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Because we have the router, so we list the router via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# neutron router-list
+</span><span class='line'>+--------------------------------------+-------------+-----------------------+
+</span><span class='line'>| id                                   | name        | external_gateway_info |
+</span><span class='line'>+--------------------------------------+-------------+-----------------------+
+</span><span class='line'>| a745487e-8e7c-4cc2-aff7-a8423d0a6614 | demo-router | null                  |
+</span><span class='line'>+--------------------------------------+-------------+-----------------------+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Get the ports of this router:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
+</span><span class='line'>+--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+</span><span class='line'>| id                                   | name | mac_address       | fixed_ips                                                                          |
+</span><span class='line'>+--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+</span><span class='line'>| e56fe57e-e939-493b-8984-b5adfa64e2cc |      | fa:16:3e:b3:7b:e6 | {"subnet_id": "98725e3a-7ee2-4e3f-83e3-eaca0236918f", "ip_address": "192.168.1.1"} |
+</span><span class='line'>+--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So we remove the interface from this router via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# neutron router-interface-delete demo-router 98725e3a-7ee2-4e3f-83e3-eaca0236918f
+</span><span class='line'>Removed interface from router demo-router.
+</span><span class='line'>root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we could remove the router and the subnet:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# neutron router-delete demo-router
+</span><span class='line'>Deleted router: demo-router
+</span><span class='line'>root@Controller:~# neutron subnet-delete demo-subnet
+</span><span class='line'>Deleted subnet: demo-subnet</span></code></pre></td></tr></table></div></figure>
+
+
+<p>From now on ,you could create another subnet and router.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3382,158 +3498,6 @@ The steps are followed by following URL:  <br/>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">My Configuration on Cobbler for Deploying Ubuntu12.04</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-18T18:15:47+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>6:15 pm</span></time>
-        
-         | <a href="/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Configuration file for preseed, put it under: /var/lib/cobbler/kickstarts/autoinstall.seed:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># BASIC
-</span><span class='line'>d-i  debian-installer/locale    string en_US.UTF-8
-</span><span class='line'>d-i  debian-installer/splash    boolean false
-</span><span class='line'>d-i  console-setup/ask_detect   boolean false
-</span><span class='line'>d-i  console-setup/layoutcode   string us
-</span><span class='line'>d-i  console-setup/variantcode  string
-</span><span class='line'>d-i  clock-setup/utc            boolean true
-</span><span class='line'>d-i  clock-setup/ntp            boolean true
-</span><span class='line'>
-</span><span class='line'># DISKPART
-</span><span class='line'>d-i  partman-auto/method                string regular
-</span><span class='line'>d-i  partman-lvm/device_remove_lvm      boolean true
-</span><span class='line'>d-i  partman-lvm/confirm                boolean true
-</span><span class='line'>d-i  partman/confirm_write_new_label    boolean true
-</span><span class='line'>d-i  partman/choose_partition           select Finish partitioning and write changes to disk
-</span><span class='line'>d-i  partman/confirm                    boolean true
-</span><span class='line'>d-i  partman/confirm_nooverwrite        boolean true
-</span><span class='line'>d-i  partman/default_filesystem         string ext3
-</span><span class='line'>
-</span><span class='line'># SOFTWARE
-</span><span class='line'># /var/www/cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu/
-</span><span class='line'>d-i  mirror/country             string manual
-</span><span class='line'>d-i  mirror/http/hostname       string $http_server
-</span><span class='line'>d-i  mirror/http/directory      string /cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu
-</span><span class='line'>d-i  mirror/http/proxy          string
-</span><span class='line'>d-i  apt-setup/security_host    string $http_server
-</span><span class='line'>d-i  apt-setup/security_path    string /cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu
-</span><span class='line'>d-i  apt-setup/services-select  multiselect none
-</span><span class='line'>d-i  pkgsel/upgrade             select none
-</span><span class='line'>d-i  pkgsel/language-packs      multiselect
-</span><span class='line'>d-i  pkgsel/update-policy       select none
-</span><span class='line'>d-i  pkgsel/updatedb            boolean true
-</span><span class='line'>d-i  pkgsel/include             string openssh-server
-</span><span class='line'>
-</span><span class='line'># USER
-</span><span class='line'>d-i  passwd/root-login                  boolean true
-</span><span class='line'>d-i  passwd/make-user                   boolean false
-</span><span class='line'>d-i  passwd/root-password               password root
-</span><span class='line'>d-i  passwd/root-password-again         password root
-</span><span class='line'>d-i  user-setup/allow-password-weak     boolean true
-</span><span class='line'>
-</span><span class='line'># FINISH
-</span><span class='line'>d-i  grub-installer/skip                boolean false
-</span><span class='line'>d-i  lilo-installer/skip                boolean false
-</span><span class='line'>d-i  grub-installer/only_debian         boolean true
-</span><span class='line'>d-i  grub-installer/with_other_os       boolean true
-</span><span class='line'>d-i  finish-install/keep-consoles       boolean false
-</span><span class='line'>d-i  finish-install/reboot_in_progress  note
-</span><span class='line'>d-i  cdrom-detect/eject                 boolean true
-</span><span class='line'>d-i  debian-installer/exit/halt         boolean false
-</span><span class='line'>d-i  debian-installer/exit/poweroff     boolean false
-</span><span class='line'>
-</span><span class='line'># EXTRA
-</span><span class='line'>d-i  preseed/late_command       string echo "UseDNS no" &gt;&gt; /target/etc/ssh/sshd_config
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the profile via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cobbler profile list
-</span><span class='line'>$ cobbler profile edit --name=Ubuntu12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/autoinstall.seed </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now select the installation, your installation will use local repository.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/7">&larr; Older</a>
@@ -3551,6 +3515,10 @@ The steps are followed by following URL:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/08/11/added-precise-repository-in-spacewalk/">Added Precise Repository in SpaceWalk</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/08/10/add-ubuntu-agent-into-spacewalk/">Add Ubuntu Agent Into SpaceWalk</a>
       </li>
     
@@ -3564,10 +3532,6 @@ The steps are followed by following URL:  <br/>
     
       <li class="post">
         <a href="/blog/2015/08/06/setup-spacewalker-trusty-channel/">Setup SpaceWalker Trusty Channel</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/">Enable DHCP/DNS Server for SpaceWalker Server</a>
       </li>
     
   </ul>
