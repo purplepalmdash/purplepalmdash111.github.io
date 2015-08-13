@@ -9,12 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Operate On Device Tree Turn off the trigger and then shine on the LED USR3 via following command: 1
-2
-3
-4
-5
-root@arm:~# cd /sys/class/leds/beaglebone &hellip;">
+  <meta name="description" content="Connection HMC5883L magnetometer runs in 400KHZ I2C bus, it&rsquo;s for measuring the magnetic field vector in 3 dimensions. We use its 4 ports: VCC, &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -70,6 +65,251 @@ root@arm:~# cd /sys/class/leds/beaglebone &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/16/i2c-and-bbb/">EBC Exercises on BBB -i2c and BBB</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-16T13:21:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>16</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:21 pm</span></time>
+        
+         | <a href="/blog/2014/11/16/i2c-and-bbb/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Connection</h3>
+
+<p>HMC5883L magnetometer runs in 400KHZ I2C bus, it&rsquo;s for measuring the magnetic field vector in 3 dimensions.   <br/>
+We use its 4 ports: VCC,GND,SDA, SCL. SDA is for Data, while SCL is for Clock.</p>
+
+<p>Use P9 for connecting the HMC5883L.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>P9_02(GND) &lt;----&gt; GND    
+</span><span class='line'>P9_04(VCC) &lt;----&gt; VCC
+</span><span class='line'>P9_19(I2C2_SCL) &lt;----&gt; SCL   I2C bus 2(pin 19 on header p9 to SCL) 
+</span><span class='line'>P9_20(I2C2_SDA) &lt;----&gt; SDA   
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>I2C Detect</h3>
+
+<p>First you should install i2cdetect, then list the avaiable i2c bus via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:~# i2cdetect -l
+</span><span class='line'>i2c-0   i2c             OMAP I2C adapter                        I2C adapter
+</span><span class='line'>i2c-1   i2c             OMAP I2C adapter                        I2C adapter
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We choose i2c bus2, thus the command for detecting the connected device should be:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:~# i2cdetect -y -r 1
+</span><span class='line'>     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+</span><span class='line'>00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+</span><span class='line'>10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- 1e -- 
+</span><span class='line'>20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+</span><span class='line'>30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+</span><span class='line'>40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+</span><span class='line'>50: -- -- -- -- UU UU UU UU -- -- -- -- -- -- -- -- 
+</span><span class='line'>60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+</span><span class='line'>70: -- -- -- -- -- -- -- --     
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The address should be 0x1e.</p>
+
+<h3>Communicate with HMC5883L</h3>
+
+<p>The registers are listed as following, notice eavh value for each axis are 16-bits, thus we have to read them seperately and combine them:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Address  Name    Access
+</span><span class='line'>00    Configuration Register A    Read/Write
+</span><span class='line'>01    Configuration Register B    Read/Write
+</span><span class='line'>02    Mode Register   Read/Write
+</span><span class='line'>03    Data Output X MSB Register  Read
+</span><span class='line'>04    Data Output X LSB Register  Read
+</span><span class='line'>05    Data Output Z MSB Register  Read
+</span><span class='line'>06    Data Output Z LSB Register  Read
+</span><span class='line'>07    Data Output Y MSB Register  Read
+</span><span class='line'>08    Data Output Y LSB Register  Read
+</span><span class='line'>09    Status Register Read
+</span><span class='line'>10    Identification register A   Read
+</span><span class='line'>11    Identification register B   Read
+</span><span class='line'>12    Identification register C   Read
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Thus we could read out the X MSB Restier and X LSB Register via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:~# i2cget -y 1 0x1e 3
+</span><span class='line'>0xfe
+</span><span class='line'>root@arm:~# i2cget -y 1 0x1e 4
+</span><span class='line'>0x91
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Different Mode</h4>
+
+<p>Notice Mode Register, this will set the mesurement mode.  <br/>
+<img src="/images/moderegister.jpg" alt="/images/moderegister.jpg" /></p>
+
+<p>From the above table, we know for setting the lower 2 bits we could enable the operation mode of HMC5883L.  <br/>
+Now we set to single measurement mode, for one-time measure.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># i2cset -y 1 0x1e 2 1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>2 means we set the register 2, and its number equals to 01(Single-Measurement Mode). After one-time measurement, it wil fall back to idle Mode.      <br/>
+After one-time measurement, get the register mode:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:~# i2cget -y 1 0x1e 2
+</span><span class='line'>0x03
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Get the value of x-axis:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:~# i2cget -y 1 0x1e 3
+</span><span class='line'>0xfe
+</span><span class='line'>root@arm:~# i2cget -y 1 0x1e 4
+</span><span class='line'>0x77
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>C Code</h3>
+
+<p>Running Result:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:~/code/i2c# ./myi2cget 1 30 2
+</span><span class='line'>0x03 (3)
+</span><span class='line'>root@arm:~/code/i2c# ./myi2cget 1 30 34
+</span><span class='line'>0x00 (0)
+</span><span class='line'>root@arm:~/code/i2c# ./myi2cget 1 30 4
+</span><span class='line'>0x77 (119)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Critical Code:  <br/>
+Open the i2c-xxx:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>    sprintf(filename, "/dev/i2c-%d", i2cbus);
+</span><span class='line'>    file = open(filename, O_RDWR);
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>ioctl for setting the address:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>    if (ioctl(file, I2C_SLAVE, address) &lt; 0) {
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now read the byte from:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>    res = i2c_smbus_read_byte_data(file, daddress);
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Comparing the official i2cget, myi2cget could print out the human-readable format of data.</p>
+
+<h3>Web Displaying</h3>
+
+<p>Git clone the following project form github.com:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># git clone https://github.com/duganje/ECE497_duganje.git
+</span><span class='line'># cd  ECE497_duganje/
+</span><span class='line'># ls
+</span><span class='line'>MiniProject01  MiniProject02  MiniProject03  MiniProject04  README.md
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Upload the project MiniProject04 to the BBB board.  <br/>
+Notice change the code in buttonBox.js from <code>i2cset -y 3</code> to <code>i2cset -y 1 and</code>i2cget -y 3<code>to</code>i2cget -y 1`</p>
+
+<p>After modification, run buttonBox.js via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ node buttonBox.js
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now visit the <code>http://xx.xx.xx.xxx:8081/buttonBox.html</code> you could see the data displayed as following:</p>
+
+<p><img src="/images/magnetometer.jpg" alt="/images/magnetometer.jpg" /></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1694,52 +1934,6 @@ All of the files and folder are located under <code>$BBB/201411</code> folder.</
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/11/08/install-new-image-to-sd-card-for-bbb/">Install New Image to Sd Card for BBB</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-11-08T16:37:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:37 pm</span></time>
-        
-         | <a href="/blog/2014/11/08/install-new-image-to-sd-card-for-bbb/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Mainly for installing the OpenWRT system on the BBB, following is the steps:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># zImage
-</span><span class='line'>cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage ./zImage
-</span><span class='line'># dtb file
-</span><span class='line'>cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb ./dtbs/
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/21">&larr; Older</a>
@@ -1757,6 +1951,10 @@ All of the files and folder are located under <code>$BBB/201411</code> folder.</
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/08/13/build-nbd-kernel-module-on-centos7/">Build Nbd Kernel Module on CentOS7</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/08/13/automatically-create-virtual-machine/">Automatically Create Virtual Machine</a>
       </li>
     
@@ -1770,10 +1968,6 @@ All of the files and folder are located under <code>$BBB/201411</code> folder.</
     
       <li class="post">
         <a href="/blog/2015/08/11/added-precise-repository-in-spacewalk/">Added Precise Repository in SpaceWalk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/10/add-ubuntu-agent-into-spacewalk/">Add Ubuntu Agent Into SpaceWalk</a>
       </li>
     
   </ul>
