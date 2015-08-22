@@ -9,20 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Following is the build procedure. 1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-$ sudo apt-get build-dep qemu
-$ sudo apt-get install libvde-dev libvdeplug2-dev libcap- &hellip;">
+  <meta name="description" content="项目的需要，手动基于多台Ubuntu虚拟机部署OpenStack Icehouse, 然后在部署好的Icehouse的基础上，部署OpenContrail, 最终达到OpenContrail解耦的过程。 环境准备 物理机: i7-3770/24G Memory/CentOS 6.6 软件: &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -78,6 +65,738 @@ $ sudo apt-get install libvde-dev libvdeplug2-dev libcap- &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-1/">安装Icehouse@Ubuntu14.04(1)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-13T11:29:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:29 am</span></time>
+        
+         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-1/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>项目的需要，手动基于多台Ubuntu虚拟机部署OpenStack Icehouse, 然后在部署好的Icehouse的基础上，部署OpenContrail, 最终达到OpenContrail解耦的过程。</p>
+
+<h3>环境准备</h3>
+
+<p>物理机: i7-3770/24G Memory/CentOS 6.6   <br/>
+软件: virt-manager/qemu等  <br/>
+节点机(虚拟机):  <br/>
+节点机1: 控制节点(JunoController), 2 CPU+3G内存+单网卡(管理网络,10.17.17.211).  <br/>
+节点机2: 网络节点(JunoNetwork), 1 CPU+1G内存+3 网卡(管理网络:10.17.17.212, GRE Tunnel网络:10.19.19.212, 外部网络:10.22.22.212).  <br/>
+节点机3: 计算节点(JunoCompute), 2 CPU(Nested)+2G内存+2 网卡(管理网络:10.17.17.213, GRE Tunnel网络:10.19.19.213).  <br/>
+网络配置:  <br/>
+Virt-manager里需要配置三个网络，一个是管理网络10.17.17.0/24, 另一个GRE Tunnel网络10.19.19.0/24, 外部网络为10.22.22.0/24.  <br/>
+参考资料:  <br/>
+不错的指南文件:<a href="http://godleon.github.io/blog/2015/02/10/install-openstack-juno-in-ubuntu-basic-environment-setting/">http://godleon.github.io/blog/2015/02/10/install-openstack-juno-in-ubuntu-basic-environment-setting/</a>  <br/>
+官方文档:<a href="http://docs.openstack.org/icehouse/install-guide/install/apt/content/">http://docs.openstack.org/icehouse/install-guide/install/apt/content/</a></p>
+
+<h3>虚拟机准备</h3>
+
+<p>用以下命令创建三台虚拟机的磁盘，而后按照上面的节点机配置完毕后，启动三台虚拟机。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
+</span><span class='line'>/home/juju/img/OpenStack
+</span><span class='line'># qemu-img create -f qcow2 -b ./UbuntuBase1404.qcow2 JunoController.qcow2
+</span><span class='line'># qemu-img create -f qcow2 -b ./UbuntuBase1404.qcow2 JunoNetwork.qcow2
+</span><span class='line'># qemu-img create -f qcow2 -b ./UbuntuBase1404.qcow2 JunoCompute.qcow2
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改节点机的/etc/hostname文件，更改各自的名字为JunoController, JunoNetwork和JunoCompute.  <br/>
+每台机器的/etc/network/interfaces文件配置如下:  <br/>
+JunoController:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.17.17.211
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.17.17.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>JunoNetwork:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'># auto eth0
+</span><span class='line'># iface eth0 inet dhcp
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.17.17.212
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>#gateway 10.17.17.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span><span class='line'>
+</span><span class='line'># Network, have the tunnel, which locates at the 10.19.19.0/24
+</span><span class='line'>auto eth1
+</span><span class='line'>iface eth1 inet static
+</span><span class='line'>address 10.19.19.212
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>up route add -net 10.19.19.0/24 dev eth1
+</span><span class='line'>
+</span><span class='line'># Directly to internet, used for ovs
+</span><span class='line'>auto eth2
+</span><span class='line'>iface eth2 inet dhcp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>JunoCompute:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.17.17.213
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.17.17.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span><span class='line'>
+</span><span class='line'># Network, have the tunnel, which locates at the 10.19.19.0/24
+</span><span class='line'>auto eth1
+</span><span class='line'>iface eth1 inet static
+</span><span class='line'>address 10.19.19.213
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>up route add -net 10.19.19.0/24 dev eth1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>把下列条目添加到各台节点机的 /etc/hosts文件中:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>10.17.17.211    JunoController
+</span><span class='line'>10.17.17.212    JunoNetwork
+</span><span class='line'>10.17.17.213    JunoCompute
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>NTP服务部署</h3>
+
+<h4>NTP 服务器</h4>
+
+<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将JunoController作为NTP服务器,在JunoController上，安装和配置NTP服务器：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get -y install ntp
+</span><span class='line'>root@JunoController:~# vim /etc/ntp.conf
+</span><span class='line'>    # 修改成大陆时间
+</span><span class='line'>    server 2.cn.pool.ntp.org
+</span><span class='line'>    server 1.asia.pool.ntp.org
+</span><span class='line'>    server 2.asia.pool.ntp.org
+</span><span class='line'>    # 修改 restrict 設定
+</span><span class='line'>    restrict -4 default kod notrap nomodify
+</span><span class='line'>    restrict -6 default kod notrap nomodify
+</span><span class='line'>root@JunoController:~# service ntp restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>NTP客户端</h4>
+
+<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get -y install ntp
+</span><span class='line'># vim /etc/ntp.conf
+</span><span class='line'>    # 設定 controller 為參照的 time server
+</span><span class='line'>    # 並將其他 server 開頭的設定進行註解
+</span><span class='line'>    server 10.17.17.211 iburst
+</span><span class='line'># service ntp restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>检查结果是否正确:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# ntpq -c peers
+</span><span class='line'>     remote           refid      st t when poll reach   delay   offset  jitter
+</span><span class='line'>==============================================================================
+</span><span class='line'> JunoController  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>添加软件仓库</h3>
+
+<p>官方文档中说icehouse已经在14.04的官方仓库中了，所以下面的步骤并不是必须的。   <br/>
+在所有节点上，执行以下操作:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install python-software-properties
+</span><span class='line'># add-apt-repository cloud-archive:icehouse
+</span><span class='line'># apt-get update && apt-get -y dist-upgrade && reboot
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>安装/配置数据库</h3>
+
+<p>OpenStack需要一个数据库用于存储相关数据，一般情况下采用MySQL. &ldquo;你问我支持不支持MySQL？我说不支持，我就明确告诉你，你们呀，我感觉你们开源界也要学习，你们非常熟悉MYSQL被Oracle这一套的，你们毕竟是Too Young，明白这意思吗？&rdquo;&mdash;-所以装一个MariaDB来代替它.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get -y install mariadb-server python-mysqldb
+</span><span class='line'>root@JunoController:~# vim /etc/mysql/my.cnf 
+</span><span class='line'>    [mysqld]
+</span><span class='line'>    # 修改 bind-address 設定
+</span><span class='line'>    bind-address = 10.17.17.211
+</span><span class='line'>    
+</span><span class='line'>    # 加入以下 UTF-8 的相關設定
+</span><span class='line'>    default-storage-engine = innodb
+</span><span class='line'>    innodb_file_per_table
+</span><span class='line'>    collation-server = utf8_general_ci
+</span><span class='line'>    init-connect = 'SET NAMES utf8'
+</span><span class='line'>    character-set-server = utf8
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service mysql restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>安装消息服务器</h3>
+
+<p>同样在控制节点上安装，OpenStack使用rabbitmq作为消息服务器：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get install -y rabbitmq-server
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>修改初始化guest密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# rabbitmqctl change_password guest RABBITMQ_PASSWD
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>第一部分跑完，这里我们完成了OpenStack创建的基本设定，接下来就可以挨个搭建OpenStack的服务了。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/07/deploy-opencontrail-on-centos-with-docker/">Deploy OpenContrail on CentOS With Docker as Hypervisor</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-07T16:50:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>7</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:50 pm</span></time>
+        
+         | <a href="/blog/2015/04/07/deploy-opencontrail-on-centos-with-docker/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Reference:  <br/>
+<a href="https://software.intel.com/en-us/blogs/2014/12/28/experimenting-with-openstack-sahara-on-docker-containers">https://software.intel.com/en-us/blogs/2014/12/28/experimenting-with-openstack-sahara-on-docker-containers</a>  <br/>
+I wanna enable the docker as hypervisor then it would greatly save the resources, and benefit with docker&rsquo;s rich resources. Following is the steps:</p>
+
+<h3>Preparation</h3>
+
+<p>First create the image file via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># qemu-img create -f qcow2 CentOSOpenContrail.qcow2 100G
+</span><span class='line'>Formatting 'CentOSOpenContrail.qcow2', fmt=qcow2 size=107374182400 encryption=off cluster_size=65536 
+</span><span class='line'>[root:/home/juju/img/CentOSOpenContrail]# pwd
+</span><span class='line'>/home/juju/img/CentOSOpenContrail
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then create a virtual machine based on KVM, allocate 8G Memory, 4-core, which copies the host CPU configuration.</p>
+
+<h3>Installation</h3>
+
+<p>After installation, update the installed software via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup   
+</span><span class='line'>$ wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo 
+</span><span class='line'>$ sudo yum makecache
+</span><span class='line'>$ sudo yum update -y
+</span><span class='line'>$ sudo reboot
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install following packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget https://repos.fedorapeople.org/repos/openstack/openstack-juno/rdo-release-juno-1.noarch.rpm
+</span><span class='line'># rpm -ivh rdo-release-juno-1.noarch.rpm 
+</span><span class='line'># yum install –y https://rdo.fedorapeople.org/rdo-release.rpm
+</span><span class='line'># yum install openstack-packstack
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you could use packstack for installing the packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># packstack --gen-answer-file=/root/answer.txt
+</span><span class='line'># packstack --answer-file=/root/answer.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install openstack-sahara via following command, the python-tox enable tox for generating the configuration files for sahara:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># yum install openstack-sahara 
+</span><span class='line'># yum install python-tox
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create the username and password for sahara to use:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@10-17-17-183 etc]# mysql
+</span><span class='line'>MariaDB [(none)]&gt; create user 'sahara'@'localhost' identified by 'saharapass';
+</span><span class='line'>Query OK, 0 rows affected (0.07 sec)
+</span><span class='line'>MariaDB [(none)]&gt; show databases;
+</span><span class='line'>+--------------------+
+</span><span class='line'>| Database           |
+</span><span class='line'>+--------------------+
+</span><span class='line'>| information_schema |
+</span><span class='line'>| cinder             |
+</span><span class='line'>| glance             |
+</span><span class='line'>| keystone           |
+</span><span class='line'>| mysql              |
+</span><span class='line'>| neutron            |
+</span><span class='line'>| nova               |
+</span><span class='line'>| performance_schema |
+</span><span class='line'>| test               |
+</span><span class='line'>+--------------------+
+</span><span class='line'>9 rows in set (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; use mysql
+</span><span class='line'>MariaDB [mysql]&gt; show tables;
+</span><span class='line'>MariaDB [mysql]&gt; select * from user;
+</span><span class='line'>+-----------+----------------+-----------------------------------
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>How to get all of the password configuration information of packstack?</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd /etc/
+</span><span class='line'>$ grep -i "sql://" ./ -r
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create a database named &lsquo;saharaDB" and grant it to user sahra:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>MariaDB [(none)]&gt; create database saharaDB;
+</span><span class='line'>MariaDB [(none)]&gt; grant all on saharaDB.* to 'sahara'@'localhost';
+</span><span class='line'>Query OK, 0 rows affected (0.02 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>[root@10-17-17-183 etc]# mysql -h 127.0.0.1 -u sahara -p saharaDB
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 1481
+</span><span class='line'>Server version: 5.5.40-MariaDB-wsrep MariaDB Server, wsrep_25.11.r4026
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [saharaDB]&gt; 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So the syntax for sahara to use is like:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat /etc/sahara/sahara.conf
+</span><span class='line'>connection = mysql://sahara:saharapass@127.0.0.1/saharaDB
+</span><span class='line'>use_neutron=true
+</span><span class='line'>
+</span><span class='line'># sahara-db-manage --config-file /etc/sahara/sahara.conf upgrade head
+</span><span class='line'>INFO  [alembic.migration] Context impl MySQLImpl.
+</span><span class='line'>INFO  [alembic.migration] Will assume non-transactional DDL.
+</span><span class='line'>INFO  [alembic.migration] Running upgrade None -&gt; 001, Icehouse release
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 001 -&gt; 002, placeholder
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 002 -&gt; 003, placeholder
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 003 -&gt; 004, placeholder
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 004 -&gt; 005, placeholder
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 005 -&gt; 006, placeholder
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 006 -&gt; 007, convert clusters.status_description to LongText
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 007 -&gt; 008, add security_groups field to node groups
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 008 -&gt; 009, add rollback info to cluster
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 009 -&gt; 010, add auto_security_groups flag to node group
+</span><span class='line'>INFO  [alembic.migration] Running upgrade 010 -&gt; 011, add Sahara settings info to cluster
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>REgister the service and specify the endpoint:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@10-17-17-183 etc]# cat ./nagios/keystonerc_admin                                                                                         
+</span><span class='line'>export OS_USERNAME=admin                                                                                                                       
+</span><span class='line'>export OS_TENANT_NAME=admin                                                                                                                    
+</span><span class='line'>export OS_PASSWORD=5d4e62e79d314477                                                                                                            
+</span><span class='line'>export OS_AUTH_URL=http://10.17.17.183:35357/v2.0/ 
+</span><span class='line'>[root@10-17-17-183 etc]# pwd                                                                
+</span><span class='line'>/etc  
+</span><span class='line'># keystone service-create --name sahara --type data_processing --description "Data processing service"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |     Data processing service      |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 5f711f0d42754b349931349bd0c325d1 |
+</span><span class='line'>|     name    |              sahara              |
+</span><span class='line'>|     type    |         data_processing          |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>[root@10-17-17-183 ~]# keystone endpoint-create --service-id $(keystone service-list | awk '/ sahara / {print $2}') --publicurl http://127.0.0.1:8386/v1.1/%\(tenant_id\)s --internalurl http://127.0.0.1:8386/v1.1/%\(tenant_id\)s --adminurl http://127.0.0.1:8386/v1.1/%\(tenant_id\)s --region regionOne
+</span><span class='line'>+-------------+------------------------------------------+
+</span><span class='line'>|   Property  |                  Value                   |
+</span><span class='line'>+-------------+------------------------------------------+
+</span><span class='line'>|   adminurl  | http://127.0.0.1:8386/v1.1/%(tenant_id)s |
+</span><span class='line'>|      id     |     b2115bab8bd743f589b1ed68eef69b4c     |
+</span><span class='line'>| internalurl | http://127.0.0.1:8386/v1.1/%(tenant_id)s |
+</span><span class='line'>|  publicurl  | http://127.0.0.1:8386/v1.1/%(tenant_id)s |
+</span><span class='line'>|    region   |                regionOne                 |
+</span><span class='line'>|  service_id |     5f711f0d42754b349931349bd0c325d1     |
+</span><span class='line'>+-------------+------------------------------------------+
+</span><span class='line'>[root@10-17-17-183 ~]# systemctl start openstack-sahara-all
+</span><span class='line'>[root@10-17-17-183 ~]# systemctl enable openstack-sahara-all
+</span><span class='line'>ln -s '/usr/lib/systemd/system/openstack-sahara-all.service' '/etc/systemd/system/multi-user.target.wants/openstack-sahara-all.service'
+</span><span class='line'>[root@10-17-17-183 ~]# systemctl status openstack-sahara-all.service
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>More detailed info could be fetched from:   <br/>
+<a href="http://docs.openstack.org/juno/install-guide/install/apt/content/sahara-install.html">http://docs.openstack.org/juno/install-guide/install/apt/content/sahara-install.html</a>  <br/>
+Now login to the <a href="http://10.17.17.183">http://10.17.17.183</a> then you could visit the Trustyboard. The password is the one we used in the <code>OS_PASSWORD</code>.  <br/>
+Install docker:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$  yum install docker
+</span><span class='line'>Or
+</span><span class='line'>$  wget https://get.docker.com/builds/Linux/x86_64/docker-latest -O docker
+</span><span class='line'>$  docker --version
+</span><span class='line'>[root@10-17-17-183 ~]#  usermod -G dockerroot nova
+</span><span class='line'>[root@10-17-17-183 ~]# service openstack-nova-compute restart
+</span><span class='line'>Redirecting to /bin/systemctl restart  openstack-nova-compute.service
+</span><span class='line'># systemctl restart docker
+</span><span class='line'># systemctl enable docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install nova-docker support:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$  yum install python-pip
+</span><span class='line'>$  pip install -e git+https://github.com/stackforge/nova-docker#egg=novadocker
+</span><span class='line'>$  cd src/novadocker/
+</span><span class='line'>$  python setup.py install
+</span><span class='line'>$ vim /etc/nova/nova.conf
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>compute_driver = novadocker.virt.docker.DockerDriver
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the nova&rsquo;s rootwrap like following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@10-17-17-183 nova]# mkdir rootwrap.d
+</span><span class='line'>[root@10-17-17-183 nova]# cd rootwrap.d/
+</span><span class='line'>[root@10-17-17-183 rootwrap.d]# touch docker.filters
+</span><span class='line'>[root@10-17-17-183 rootwrap.d]# vim docker.filters 
+</span><span class='line'>[Filters]
+</span><span class='line'># nova/virt/docker/driver.py:'ln', '-sf', '/var/run/netns/.*'
+</span><span class='line'>ln: CommandFilter, /bin/ln, root
+</span><span class='line'>[root@10-17-17-183 rootwrap.d]# vim /etc/nova/rootwrap.conf 
+</span><span class='line'>[root@10-17-17-183 rootwrap.d]# pwd
+</span><span class='line'>/etc/nova/rootwrap.d
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the glance-api.conf</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@10-17-17-183 glance]# vim ./glance-api.conf 
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>container_formats = ami,ari,aki,bare,ovf,docker
+</span><span class='line'>[root@10-17-17-183 glance]# pwd
+</span><span class='line'>/etc/glance
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create the ubuntu Container images via following commands:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker pull ubuntu
+</span><span class='line'>$ docker save ubuntu | glance image-create --is-public=True --container-format=docker --disk-format=raw --name ubuntu_container
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1248,265 +1967,6 @@ First we install the bzr for fetching back the charms:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/18/migration-of-opencontril/">Migration of OpenContril</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-18T11:38:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:38 am</span></time>
-        
-         | <a href="/blog/2015/03/18/migration-of-opencontril/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>This article is not for opencontril itself, but for migration of the existing environment to local machines.</p>
-
-<h3>Environment</h3>
-
-<p>Machine configuration is listed as:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>192.168.10.233 u12-control
-</span><span class='line'>192.168.10.234 u12-compute1
-</span><span class='line'>192.168.10.235 u12-compute2
-</span><span class='line'>
-</span><span class='line'>192.168.1.79   s179
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The control node and 2 compute nodes are running in machine s179, the tasks for me to do is for moving them from s179 to 2 physical machine.</p>
-
-<h3>Use Remote KVM Server</h3>
-
-<p>First we copy our ssh-key to the remote s179 machine, so next time we won&rsquo;t enter any passwd for accessing the remote libvirtd:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ssh-copy-id root@192.168.1.79
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In our own machine, we listed remote&rsquo;s machines via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ virsh -c qemu+ssh://root@192.168.1.79/system list --all
-</span><span class='line'> Id    Name                           State
-</span><span class='line'>----------------------------------------------------
-</span><span class='line'> 14    u14-ui                         running
-</span><span class='line'> 16    u14-compute2                   running
-</span><span class='line'> 22    u14-compute1                   running
-</span><span class='line'> 39    de1-contro                     running
-</span><span class='line'> -     centos6.4-management-01        shut off
-</span><span class='line'> -     centos6.4-management-02        shut off
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add connection via: <code>File-&gt; Add New Connection</code>, then configure like following:   <br/>
-<img src="/images/2015_03_18_11_53_11_380x432.jpg" alt="/images/2015_03_18_11_53_11_380x432.jpg" /></p>
-
-<h3>Migration(Static)</h3>
-
-<p>First scp the image file to to destination machine, this will take a while. <br/>
-Dump the xml via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ virsh dumpxml xxxxx&gt;xxxx.xml
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Scp the xml file to destination machine and move to <code>/etc/libvirt/qemu/</code>, change the priviledge of the file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo chmod 777 /home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>   <br/>
-Edit the corresponding configuration in the xml file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/libvirt/qemu/xxxx.xml
-</span><span class='line'>.....
-</span><span class='line'>&lt;source file='/home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img'/&gt;
-</span><span class='line'>.....
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Define the xml under the <code>/etc/libvirt/qemu/</code> folder:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@pc121:/etc/libvirt/qemu# virsh define ./Ubuntu1404-Newly-Installed-with-Update.xml 
-</span><span class='line'>Domain Ubuntu1404-Newly-Installed-with-Update defined from ./Ubuntu1404-Newly-Installed-with-Update.xml
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install the guest tool and use it for editing the virtual machine:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libguestfs-tools
-</span><span class='line'>$ sudo virt-edit -d Ubuntu1404-Newly-Installed-with-Update /etc/network/interfaces
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After change the network configuration, we could start the machine via <code>virsh start Ubuntu1404-Newly-Installed-with-Update</code>, it will have the newly edited ip address.</p>
-
-<p>If we use different host machine, then change the following definition in xml file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/libvirt/qemu/xxxx.xml
-</span><span class='line'>&lt;devices&gt;
-</span><span class='line'>    &lt;emulator&gt;/usr/bin/qemu-system-x86_64&lt;/emulator&gt;
-</span><span class='line'>.......
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/17/deploy-maas-9/">Deploy MAAS(9)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-17T17:44:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:44 pm</span></time>
-        
-         | <a href="/blog/2015/03/17/deploy-maas-9/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Use Local Charms</h3>
-
-<p>Retrieve the charms via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install charm-tools
-</span><span class='line'>$ cat autocharms.sh
-</span><span class='line'>juju charm get nova-cloud-controller /home/Trusty/charms/trusty
-</span><span class='line'>juju charm get keystone /home/Trusty/charms/trusty
-</span><span class='line'>juju charm get glance  /home/Trusty/charms/trusty
-</span><span class='line'>juju charm get cinder /home/Trusty/charms/trusty
-</span><span class='line'>juju charm get rabbitmq-server /home/Trusty/charms/trusty
-</span><span class='line'>juju charm get openstack-Trustyboard /home/Trusty/charms/trusty
-</span><span class='line'>juju charm get nova-compute /home/Trusty/charms/trusty
-</span><span class='line'># juju charm get nova-compute /home/Trusty/charms/trusty
-</span><span class='line'>$ du -hs /home/Trusty/charms/trusty/*
-</span><span class='line'>1.5M    /home/Trusty/charms/trusty/cinder
-</span><span class='line'>1.6M    /home/Trusty/charms/trusty/glance
-</span><span class='line'>1.7M    /home/Trusty/charms/trusty/keystone
-</span><span class='line'>824K    /home/Trusty/charms/trusty/mysql
-</span><span class='line'>1.9M    /home/Trusty/charms/trusty/nova-cloud-controller
-</span><span class='line'>1.6M    /home/Trusty/charms/trusty/nova-compute
-</span><span class='line'>1.2M    /home/Trusty/charms/trusty/openstack-Trustyboard
-</span><span class='line'>1.2M    /home/Trusty/charms/trusty/rabbitmq-server
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Deploy via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/mysql
-</span><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/keystone
-</span><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/nova-cloud-controller
-</span><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/glance
-</span><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/rabbitmq-server
-</span><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/openstack-Trustyboard
-</span><span class='line'>juju deploy --to lxc:1 --repository=/home/Trusty/charms/ local:trusty/cinder 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Backup</h3>
-
-<p>Backup the existing environment via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju backup create --filename backupOpenStack.tgz
-</span><span class='line'>$ ls -l *.tgz
-</span><span class='line'>-rw-r--r-- 1 Trusty Trusty  25595066 Mar 17 17:23 juju-backup-20150317-1723.tgz
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The store method will be covered later.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/12">&larr; Older</a>
@@ -1524,6 +1984,14 @@ Edit the corresponding configuration in the xml file:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/08/22/customize-kickstart-for-spacewalk/">Customize Kickstart for SpaceWalk</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/08/22/move-spacewalk-server-into-a-new-network/">Move SpaceWalk Server Into a New Network</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/08/21/mrepo-tips-for-syncing-centos-repositories/">Mrepo Tips for Syncing CentOS Repositories</a>
       </li>
     
@@ -1533,14 +2001,6 @@ Edit the corresponding configuration in the xml file:</p>
     
       <li class="post">
         <a href="/blog/2015/08/20/kickstarting-ubuntu-in-spacewalk/">Kickstarting Ubuntu in SpaceWalk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/17/auto-configure-spacewalk-ubuntu-agent/">Auto Configure SpaceWalk Ubuntu Agent</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/13/preseed-partition-configuration/">Preseed Partition Configuration</a>
       </li>
     
   </ul>
