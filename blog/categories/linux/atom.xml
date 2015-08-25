@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Linux | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/linux/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-08-25T09:54:28+08:00</updated>
+  <updated>2015-08-25T18:21:56+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,150 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Enable Trusty KickStart for SpaceWalk]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/08/25/enable-trusty-kickstart-for-spacewalk/"/>
+    <updated>2015-08-25T16:06:17+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/08/25/enable-trusty-kickstart-for-spacewalk</id>
+    <content type="html"><![CDATA[<h3>Import distro-tree</h3>
+
+<p>Copy iso content into the distro-tree:</p>
+
+<pre><code># mount -t  iso9660 -o loop /mnt/iso/ubuntu-14.04.3-server-amd64.iso /mnt1/
+# mkdir /var/distro-trees/ubuntu-14.04.3-amd64
+# chmod 755 /var/distro-trees/ubuntu-14.04.3-amd64/
+# cp -ar /mnt1/* /var/distro-trees/ubuntu-14.04.3-amd64/
+</code></pre>
+
+<p>We will copy the pxeboot startup file from CentOS7 into ubuntu14.04 distro tree for
+cheating the spacewalk:</p>
+
+<pre><code># mount -t iso9660 -o loop /mnt/iso/CentOS-7-x86_64-Everything-1503-01.iso /mnt2/
+# mkdir -p /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/
+# cp /mnt2/images/pxeboot/{initrd.img,vmlinuz} /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/
+# ls /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/ -l -h
+....
+</code></pre>
+
+<h3>Kickstarting</h3>
+
+<p>Now in spacewalk go to Systems->Kickstart->Distributions, with the parameters like
+following picture:</p>
+
+<p><img src="/images/2015_08_25_16_17_53_595x352.jpg" alt="/images/2015_08_25_16_17_53_595x352.jpg" />  <br/>
+We copy the CentOS Kernel and initrd, so Spacewalk use redhat parameters for this
+distribution, later we will fix this.</p>
+
+<p>Now create a profile via go to Systems->Kickstart->Profiles and &ldquo;upload a new kickstart
+file&rdquo;, just like following picture.</p>
+
+<p><img src="/images/2015_08_25_16_22_53_617x590.jpg" alt="/images/2015_08_25_16_22_53_617x590.jpg" /></p>
+
+<p>We fix the hardcoded breed from redhat to ubuntu via following steps:</p>
+
+<p>Get the list info via <code>cobbler list</code>:</p>
+
+<p><img src="/images/2015_08_25_16_27_12_515x205.jpg" alt="/images/2015_08_25_16_27_12_515x205.jpg" /></p>
+
+<p>Report the selected distro info:</p>
+
+<pre><code># cobbler distro report --name=trustyamd64:1:SpacewalkDefaultOrganization
+</code></pre>
+
+<p><img src="/images/2015_08_25_16_28_48_990x256.jpg" alt="/images/2015_08_25_16_28_48_990x256.jpg" /></p>
+
+<p>Edit it like following:</p>
+
+<pre><code># cobbler distro edit --name trustyamd64:1:SpacewalkDefaultOrganization --breed=ubuntu --os-version=jaunty --initrd=/var/distro-trees/ubuntu-14.04.3-amd64/install/netboot/ubuntu-installer/amd64/initrd.gz --kernel=/var/distro-trees/ubuntu-14.04.3-amd64/install/vmlinuz 
+</code></pre>
+
+<p>We should notice the initrd file and kernel has been modified!!!</p>
+
+<p><img src="/images/2015_08_25_16_32_24_933x261.jpg" alt="/images/2015_08_25_16_32_24_933x261.jpg" /></p>
+
+<p>Now edit the <code>/var/lib/tftpboot/pxelinux.cfg/default</code> file, find the item and modify it like following:</p>
+
+<pre><code>LABEL trustykickstart:1:SpacewalkDefaultOrganization
+        kernel /images/trustyamd64:1:SpacewalkDefaultOrganization/vmlinuz
+        MENU LABEL trustykickstart:1:SpacewalkDefaultOrganization
+        append initrd=/images/trustyamd64:1:SpacewalkDefaultOrganization/initrd.gz  ks=http://192.168.0.79/trustykickstart.cfg ksdevice=eth0 --
+        ipappend 2
+</code></pre>
+
+<p>Now you could kickstart your ubuntu trusty now.</p>
+
+<h3>Register to SpaceWalk</h3>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Add CentOS Client Into SpaceWalk]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/08/25/add-centos-client-into-spacewalk/"/>
+    <updated>2015-08-25T14:30:44+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/08/25/add-centos-client-into-spacewalk</id>
+    <content type="html"><![CDATA[<h3>Installation</h3>
+
+<p>Take i386 architecture for example, first download the rpm package then install it:</p>
+
+<pre><code>$ wget /yum.spacewalkproject.org/2.3-client/RHEL/6/i386/spacewalk-client-repo-2.3-2.el6.noarch.rpm
+$ rpm -ivh spacewalk-client-repo-2.3-2.el6.noarch.rpm 
+</code></pre>
+
+<p>If your architecture is x86_64, then select x86_64 corresponding rpm and install it.</p>
+
+<p>Enable EPEL:</p>
+
+<pre><code># BASEARCH=$(uname -i)
+# rpm -Uvh http://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
+</code></pre>
+
+<p>Now install the spacewalk client via:</p>
+
+<pre><code># yum install -y rhn-client-tools rhn-check rhn-setup rhnsd m2crypto yum-rhn-plugin
+</code></pre>
+
+<h3>Configuration</h3>
+
+<p>Install Spacewalk server&rsquo;s CA certificate on the server to enable SSL communication:</p>
+
+<pre><code># wget http://10.11.11.3/pub/rhn-org-trusted-ssl-cert-1.0-1.noarch.rpm
+# rpm -ivh rhn-org-trusted-ssl-cert-1.0-1.noarch.rpm
+</code></pre>
+
+<p>Add following item into the <code>/etc/hosts</code> and test its reachable:</p>
+
+<pre><code># vim /etc/hosts
+....
+10.11.11.3      spacewalk
+# ping spacewalk
+PING spacewalk (10.11.11.3) 56(84) bytes of data.
+64 bytes from spacewalk (10.11.11.3): icmp_seq=1 ttl=64 time=0.214 ms
+...
+</code></pre>
+
+<p>Now register your machine into the server:</p>
+
+<pre><code>#  rhnreg_ks --serverUrl=https://spacewalk/XMLRPC --sslCACert=/usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT --activationkey=1-centos6-i386
+</code></pre>
+
+<p>Verify it in SpaceWalk&rsquo;s system details view.</p>
+
+<h3>Enable osad</h3>
+
+<p>Install and configure it via:</p>
+
+<pre><code># yum install osad
+# vim /etc/sysconfig/rhn/osad.conf
+osa_ssl_cert = /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
+# yum install python-hashlib
+# service osad start
+</code></pre>
+
+<p>After osad has been installed, the installation of packages will be done almost
+instantly.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Enable Game-KeyBoard Rapoo V5 Pro in Ubuntu Trusty]]></title>
@@ -251,117 +395,6 @@ centosplus = http://mirrors.163.com/centos/$release/centosplus/$arch/Packages/
 
 <pre><code>$ mrepo -g -u -vvv centos6 &amp;&amp; mrepo -g -u -vvv centos7
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Setup Squid]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/21/setup-squid/"/>
-    <updated>2015-08-21T11:33:13+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/21/setup-squid</id>
-    <content type="html"><![CDATA[<h3>Installation And Configuration</h3>
-
-<pre><code># yum install -y squid
-# vim /etc/squid/squid.conf
-http_port 3072
-#acl localnet src 192.168.0.0/16        # RFC1918 possible internal network
-# Squid normally listens to port 3128
-http_port 3072
-cache_mem 64 MB
-maximum_object_size 4 MB
-# Cache 3GB
-cache_dir ufs /home/juju/SquidCache     3072    16      256
-access_log /var/log/squid/access.log
-auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/passwd
-auth_param basic children 5
-auth_param basic kspc-01 proxy
-auth_param basic credentialsttl 2 hours
-acl myacl proxy_auth REQUIRED
-http_access allow myacl
-http_access deny all
-visible_hostname squid.kspc-01
-</code></pre>
-
-<p>First you should setup the cache file:</p>
-
-<pre><code># squid -z
-# systemctl start suiqd
-# systemctl enable squid
-</code></pre>
-
-<p>Change username password via:</p>
-
-<pre><code>$ htpasswd -c /etc/squid/passwd user1
-$ htpasswd  /etc/squid/passwd user2
-$ htpasswd  /etc/squid/passwd user3
-</code></pre>
-
-<h3>Usage</h3>
-
-<p>In firefox: Edit->Preference->Network->Settings->, change proxy setting.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Build Nbd Kernel Module on CentOS7]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/13/build-nbd-kernel-module-on-centos7/"/>
-    <updated>2015-08-13T17:02:53+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/13/build-nbd-kernel-module-on-centos7</id>
-    <content type="html"><![CDATA[<h3>Get Source Code</h3>
-
-<p>First check your kernel version via:</p>
-
-<pre><code>$ uname -r
-3.10.0-229.7.2.el7.x86_64
-</code></pre>
-
-<p>Then find the corresponding kernel source rpm under vault.centos.org, download its rpm
-and install it.</p>
-
-<pre><code>$ wget http://vault.centos.org/7.1.1503/updates/Source/SPackages/kernel-3.10.0-229.7.2.el7.src.rpm
-# useradd builder
-# groupadd builder
-$ rpm -ivh kernel-3.10.0-229.7.2.el7.src.rpm
-</code></pre>
-
-<h3>Build Preparation</h3>
-
-<p>As a normal user, do following:</p>
-
-<pre><code>$ mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-$ echo '%_topdir %(echo $HOME)/rpmbuild' &gt; ~/.rpmmacros
-$ cd ~/rpmbuild/SPECS
-$ rpmbuild -bp --target=$(uname -m) kernel.spec
-$ cd ~/rpmbuild/BUILD/kernel-3.10.0-229.7.2.el7/linux-3.10.0-229.7.2.el7.centos.x86_64/
-$ ls
-arch     COPYING  Documentation  fs       ipc      kernel       Makefile  README          scripts   tools
-block    CREDITS  drivers        include  Kbuild   lib          mm        REPORTING-BUGS  security  usr
-configs  crypto   firmware       init     Kconfig  MAINTAINERS  net       samples         sound     virt
-</code></pre>
-
-<p>Now the source code tree is available.</p>
-
-<h3>Build</h3>
-
-<p>In the kernel source directory, type <code>make menuconfig</code> for configurating the kernel
-configuration, select :</p>
-
-<p>Device Driver -> Block devices -> Set &ldquo;M&rdquo; On &ldquo;Network block device support&rdquo;</p>
-
-<p>Save the configuration and exit, now begin to make via:</p>
-
-<pre><code>$ make prepare &amp;&amp; make modules_prepare &amp;&amp; make
-</code></pre>
-
-<p>Now makeout the kernel module and copy it to modules directory:</p>
-
-<pre><code>$ make M=drivers/block -j8
-$ modinfo drivers/block/nbd.ko
-$ sudo cp drivers/block/nbd.ko /lib/modules/3.10.0-229.7.2.el7.x86_64/extra/
-$ sudo depmod -a &amp;&amp; sudo modprobe nbd
-</code></pre>
-
-<p>Finally met some problems of nbd, don&rsquo;t know why, later will debug on.</p>
 ]]></content>
   </entry>
   
