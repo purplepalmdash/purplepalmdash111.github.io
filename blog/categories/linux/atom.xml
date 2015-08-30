@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Linux | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/linux/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-08-27T22:02:58+08:00</updated>
+  <updated>2015-08-30T18:17:37+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,189 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips for SSD Installation]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/08/30/tips-for-ssd-installation/"/>
+    <updated>2015-08-30T14:45:24+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/08/30/tips-for-ssd-installation</id>
+    <content type="html"><![CDATA[<p>Refers to:  <br/>
+<a href="https://wiki.archlinux.org/index.php/Beginners'_guide_%28%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87%29">https://wiki.archlinux.org/index.php/Beginners'<em>guide</em>%28%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87%29</a></p>
+
+<h3>Partition</h3>
+
+<p>Check if you are in efi mode:</p>
+
+<pre><code># efivar -l
+</code></pre>
+
+<p>Then format your disk using parted:</p>
+
+<pre><code># parted /dev/sda
+(parted) mkpart ESP fat32 1M 513M
+(parted) set 1 boot on
+(parted) mkpart primary ext4 513M 100%
+</code></pre>
+
+<p>Check if your partition is aligned:</p>
+
+<pre><code># blockdev --getalignoff /dev/sda
+0
+</code></pre>
+
+<p>I have 2 disks, one for ssd, the other for hdd, so I want to share the swap partition,
+and locate the /var directory in the hdd, modify it via:</p>
+
+<pre><code># mkfs.ext4 /dev/sda2
+# mkfs.vfat -F32 /dev/sda1
+# mount /dev/sda2 /mnt
+# mkdir -p /mnt/boot
+# mount /dev/sda1 /mnt/boot
+# swapon /dev/sdb1
+# mkdir /media/
+# mount /dev/sdb2 /media
+# mkdir /media/var_for_sda
+# ln -s /media/var_for_sda /mnt/var
+</code></pre>
+
+<p>Now you could do pacstrap.</p>
+
+<h3>Installation</h3>
+
+<p>Installation are the same as the guildeline show,</p>
+
+<pre><code># pacman -S dosfstools efibootmgr
+# bootctl --path=/boot install
+# vim /boot/loader/entries/arch.conf
+title          Arch Linux
+linux          /vmlinuz-linux
+initrd         /initramfs-linux.img
+options        root=/dev/sda2 rw
+# vim /boot//loader/loader.conf
+#timeout 3
+default arch
+timeout 5
+</code></pre>
+
+<p>For wireless connection:</p>
+
+<pre><code># pacman -S iw wpa_supplicant
+# pacman -S dialog
+</code></pre>
+
+<p>Modification of the /etc/fstab:</p>
+
+<pre><code># /dev/sda2
+UUID=xxxxxxxxxxxxxxxxxxxxxxxx       /               ext4 default,rw,data=ordered,noatime,discard 0 1
+
+# /dev/sda1
+UUID=xxxxxxxxxxxxxxxxx          /boot           vfat rw,noatime,discard,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro  0 2
+
+# /dev/sdb1
+UUID=xxxxxxxxxxxxxxxxxxx       none            swap defaults        0 0
+
+# /dev/sdb2
+UUID=xxxxxxxxxxxxxxxxxxx       /media          ext4  rw,relatime,data=ordered        0 2
+
+# Only for /var , use mount -o bind
+/media/var_for_sda      /var    none    bind
+</code></pre>
+
+<p>Now reboot everything will be OK.</p>
+
+<h3>Configuration For SSD</h3>
+
+<p>Profile-sync-daemon for optimization of Browser :</p>
+
+<pre><code>$ yaourt profile-sync-daemon
+$ sudo vim /etc/psd.conf
+USERS="XXXXX"
+BROWSERS="chromium firefox"
+USE_OVERLAYFS="yes"
+$ sudo systemctl enable psd.service
+$ sudo systemctl start psd.service
+</code></pre>
+
+<p>Test it via:</p>
+
+<pre><code>$ profile-sync-daemon parse
+</code></pre>
+
+<p>Use <code>firefox -P</code> for changing the profile position. I put all of the profils on HDD.</p>
+
+<p>For chromium, softlink the ~/.config/chromium to HDD disk then you play the tricks for
+avoiding HDD from too much write.   .</p>
+
+<h3>Quickly Add User</h3>
+
+<p>Use following command for quickly adding the user with specified priviledge:</p>
+
+<pre><code># useradd -m -g root -G \
+audio,video,floppy,network,rfkill,scanner,storage,optical,power,wheel,uucp -s  \
+/usr/bin/zsh xxxxx
+# passwd xxxxx
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[GPT/SSD on ArchLinux Installation]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/08/30/gpt-slash-ssd-on-archlinux-installation/"/>
+    <updated>2015-08-30T09:18:15+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/08/30/gpt-slash-ssd-on-archlinux-installation</id>
+    <content type="html"><![CDATA[<p>Since I met so many problems in archlinux installation on SSD, plus UEFI issues, I use
+following virt machine for re-produce the problem and try to find out the solution.</p>
+
+<h3>Prepare</h3>
+
+<p>Prepare two disk, one for SSD, the second is the oridinary one.</p>
+
+<pre><code>$ qemu-img create -f qcow2 -o cluster_size=4k ArchSSD.qcow2 100G
+$ qemu-img create -f qcow2 ArchHDD.qcow2 80G
+$ virt-manage
+</code></pre>
+
+<h3>UEFI Support In Virt-Manager</h3>
+
+<p>Follow the tips in
+<a href="https://fedoraproject.org/wiki/Using_UEFI_with_QEMU">https://fedoraproject.org/wiki/Using_UEFI_with_QEMU</a></p>
+
+<pre><code># wget http://www.kraxel.org/repos/firmware.repo -O /etc/yum.repos.d/firmware.repo
+# yum install edk2.git-ovmf-x64
+# vim /etc/libvirt/qemu.conf
+ nvram = [
+    "/usr/share/edk2.git/ovmf-x64/OVMF_CODE-pure-efi.fd:/usr/share/edk2.git/ovmf-x64/OVMF_VARS-pure-efi.fd",
+ ]
+</code></pre>
+
+<p>In customization of the vm, select like following:</p>
+
+<p><img src="/images/2015_08_30_10_09_31_306x202.jpg" alt="/images/2015_08_30_10_09_31_306x202.jpg" /></p>
+
+<h3>Virtual Machine Definition</h3>
+
+<p>The configuration of the vm machine is listed as in following picture:</p>
+
+<p><img src="/images/2015_08_30_09_28_46_445x204.jpg" alt="/images/2015_08_30_09_28_46_445x204.jpg" /></p>
+
+<p>So now begin to install virt-machine. Use iso for booting up the machine and you will
+see following partition configuration in the terminal:</p>
+
+<pre><code>root@archiso ~ # fdisk -l /dev/vda
+Disk /dev/vda: 100 GiB, 107374182400 bytes, 209715200 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+root@archiso ~ # fdisk -l /dev/vdb
+Disk /dev/vdb: 80 GiB, 85899345920 bytes, 167772160 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+</code></pre>
+
+<h3>Partition Preparation</h3>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Enable Trusty KickStart for SpaceWalk]]></title>
@@ -176,7 +359,13 @@ Multi-Arch: allowed
 
 <p>Install the packages, precise&rsquo;s package will also be OK for trusty.</p>
 
-<pre><code>$ sudo dpkg -i pyjabber_0.5.0-1.4ubuntu3.all.deb osad_5.11.27-1ubuntu1.all.deb
+<p>Notice, the Trusty could use saucy based deb.</p>
+
+<pre><code>$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/rhncfg_5.10.14-1ubuntu1%7Esaucy2_all.deb
+$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/osad_5.11.27-1ubuntu1%7Esaucy5_all.deb
+$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/pyjabber_0.5.0-1.4ubuntu3%7Esaucy1_all.deb
+$ sudo dpkg -i osad_5.11.27-1ubuntu1~saucy5_all.deb
+$ sudo dpkg -i pyjabber_0.5.0-1.4ubuntu3~saucy1_all.deb
 </code></pre>
 
 <p>Import the certification file and modify the osad&rsquo;s certification file:</p>
@@ -185,13 +374,39 @@ Multi-Arch: allowed
 # wget http://spacewalk.example.com/pub/RHN-ORG-TRUSTED-SSL-CERT
 # vim /etc/sysconfig/rhn/up2date
 sslCACert=/usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
+# vim /etc/sysconfig/rhn/osad.conf
+osa_ssl_cert = /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
 # service osad start
 # update-rc.d osad defaults
 # reboot
 </code></pre>
 
-<p>Replace the /etc/sysconfig/rhn/up2date file like precise, but still cannot fetch the
-updates.</p>
+<p>If you encounter problem, check the version of the osad/pyjabber, remove the precise
+version and install saucy version on Trusty via <code>dpkg -P osad &amp;&amp; dpkg -P pyjabber</code>,
+install the right version, then everything will becomes OK.</p>
+
+<h3>Enable Remote Command</h3>
+
+<p>Install and Configure it via:</p>
+
+<pre><code># dpkg -i rhncfg_5.10.14-1ubuntu1~saucy2_all.deb 
+# rhn-actions-control --enable-run
+# mkdir /var/spool/rhn
+</code></pre>
+
+<p>Also add configuration:   <br/>
+<img src="/images/2015_08_27_15_09_31_375x346.jpg" alt="/images/2015_08_27_15_09_31_375x346.jpg" /></p>
+
+<p>Now you could run command in spacewalk backend.</p>
+
+<h3>Errata</h3>
+
+<p>Following the tips on <a href="http://cefs.steve-meier.de/">http://cefs.steve-meier.de/</a>  <br/>
+Import erratas into the system.</p>
+
+<pre><code># ./errata-import.pl --server spacewalk --errata ./errata.latest.xml  --rhsa-oval \
+./com.redhat.rhsa-all.xml --channel centos6-i386 --os-version 6 --publish
+</code></pre>
 ]]></content>
   </entry>
   
@@ -338,168 +553,6 @@ the problem, Later add it into the system startup script.</p>
 
 <pre><code>$ sudo vim /etc/modules
 r8188eu
-</code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Move SpaceWalk Server Into a New Network]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/22/move-spacewalk-server-into-a-new-network/"/>
-    <updated>2015-08-22T16:49:19+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/22/move-spacewalk-server-into-a-new-network</id>
-    <content type="html"><![CDATA[<h3>Env</h3>
-
-<p>Move from one isolated network to another isolated network. Experiment is done on
-virt-manager, from 10.9.10.0/24 to 10.47.58.0/24 network. Following are the steps for
-migration.</p>
-
-<h3>Steps</h3>
-
-<p>First shutdown the machine and connect the existing network card to new network, boot
-on the computer.</p>
-
-<p>Modify the ip address(static IP Address):</p>
-
-<pre><code>$ sudo vim /etc/sysconfig/network-scripts/ifcfg-eth0
-- IPADDR=10.9.10.13
-- GATEWAY=10.9.10.1
-+ IPADDR=10.47.58.3
-+ GATEWAY=10.47.58.1
-</code></pre>
-
-<p>Modify the hostname:</p>
-
-<pre><code># vim /etc/hosts
-- 10.9.10.13      spacewalker
-+ 10.47.58.3      spacewalker
-</code></pre>
-
-<p>Modify the dhcpd configuration:</p>
-
-<pre><code>$ sudo vim /etc/dhcp/dhcpd.conf
-#  specify network address and subnet mask
--  subnet 10.9.10.0 netmask 255.255.255.0 {
--      # specify the range of lease IP address
--      range dynamic-bootp 10.9.10.200 10.9.10.254;
--      # specify broadcast address
--      option broadcast-address 10.9.10.255;
--      # specify default gateway
--      option routers 10.9.10.1;
--      # Specify default dns server
--      option domain-name-servers 10.9.10.13;
--  }
-
-+ subnet 10.47.58.0 netmask 255.255.255.0 {
-+     # specify the range of lease IP address
-+     range dynamic-bootp 10.47.58.200 10.47.58.254;
-+     # specify broadcast address
-+     option broadcast-address 10.47.58.255;
-+     # specify default gateway
-+     option routers 10.47.58.1;
-+     # Specify default dns server
-+     option domain-name-servers 10.47.58.3;
-+     filename                   "/pxelinux.0";       
-+     # default-lease-time         21600;           
-+     # max-lease-time             43200;      
-+     next-server                10.47.58.3; 
-+ 
-+ }
-</code></pre>
-
-<p>DNS Server Configuration:</p>
-
-<pre><code>$ sudo vim /etc/named.conf
-
-options {
-        - listen-on port 53 { 127.0.0.1; 10.9.10.13;};
-        + listen-on port 53 { 127.0.0.1; 10.47.58.3;};
-//.................
-
-    - allow-query     { localhost; 10.9.10.0/24;};
-        + allow-query     { localhost; 10.47.58.0/24;};
-</code></pre>
-
-<p>DNS Server DB Change:</p>
-
-<pre><code>$ sudo vim /etc/named/zones/db.spacewalker
-- spacewalker.         IN      A       10.9.10.13
-+ spacewalker.         IN      A       10.47.58.3
-</code></pre>
-
-<p>Reboot and check the result:</p>
-
-<pre><code>[root@spacewalker ~]# ps -ef | grep dhcp
-dhcpd      848     1  0 17:02 ?        00:00:00 /usr/sbin/dhcpd -f -cf
-/etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
-root      2208  2186  0 17:03 pts/0    00:00:00 grep --color=auto dhcp
-[root@spacewalker ~]# ps -ef | grep name
-named     1031     1  0 17:02 ?        00:00:00 /usr/sbin/named -u named
-root      2210  2186  0 17:03 pts/0    00:00:00 grep --color=auto name
-[root@spacewalker ~]# hostname --fqdn
-spacewalker
-[root@spacewalker tftpboot]# netstat -anp | grep 69 | grep xinetd
-udp        0      0 0.0.0.0:69              0.0.0.0:*  841/xinetd  
-</code></pre>
-
-<p>Now bootup a machine and add it to the 10.47.58.0/24 network, your machine will be boot
-into pxe menu, thus you could reinstall your machine.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Mrepo Tips for Syncing CentOS Repositories]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/21/mrepo-tips-for-syncing-centos-repositories/"/>
-    <updated>2015-08-21T14:48:30+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/21/mrepo-tips-for-syncing-centos-repositories</id>
-    <content type="html"><![CDATA[<p>Refers to the mirrorlist website, don&rsquo;t use aliyun, cause their webserver will
-forbidden lftp from fetching the infos. I switches to 163.com and ustc.edu.cn for
-different repositories, following are the configuration file.</p>
-
-<h3>CentOS6</h3>
-
-<p>An example is listed as:</p>
-
-<pre><code># cat /etc/mrepo.conf.d/centos6.conf 
-[centos6]
-name = CentOS $release ($arch)
-release = 6
-arch = x86_64
-metadata = yum repomd
-
-#iso = http://mirrors.163.com/centos/$release/isos/$arch/CentOS-6.6-x86_64-bin-DVD?.iso
-# os = http://mirrors.163.com/centos/$release/os/$arch/Packages/ 
-# updates = http://mirrors.163.com/centos/$release/updates/$arch/Packages/
-# extras = http://mirrors.163.com/centos/$release/extras/$arch/Packages/
-# fasttrack = http://mirrors.163.com/centos/$release/fasttrack/$arch/Packages/
-# contrib = http://mirrors.163.com/centos/$release/contrib/$arch/Packages/
-# centosplus = http://mirrors.163.com/centos/$release/centosplus/$arch/Packages/
-epel = http://mirrors.ustc.edu.cn/epel/$release/$arch/
-</code></pre>
-
-<h3>CentOS7</h3>
-
-<p>An example is listed as:</p>
-
-<pre><code># cat /etc/mrepo.conf.d/centos7.conf 
-[centos7]
-name = CentOS $release ($arch)
-release = 7
-arch = x86_64
-metadata = yum repomd
-
-#iso = http://mirrors.163.com/centos/$release/isos/$arch/CentOS-7.0-1406-x86_64-DVD.iso
-os = http://mirrors.163.com/centos/$release/os/$arch/Packages/ 
-updates = http://mirrors.163.com/centos/$release/updates/$arch/Packages/
-epel = http://mirrors.ustc.edu.cn/epel/$release/$arch/
-extras = http://mirrors.163.com/centos/$release/extras/$arch/Packages/
-fasttrack = http://mirrors.163.com/centos/$release/fasttrack/$arch/Packages/
-contrib = http://mirrors.163.com/centos/$release/contrib/$arch/Packages/
-centosplus = http://mirrors.163.com/centos/$release/centosplus/$arch/Packages/
-</code></pre>
-
-<p>Sync via:</p>
-
-<pre><code>$ mrepo -g -u -vvv centos6 &amp;&amp; mrepo -g -u -vvv centos7
 </code></pre>
 ]]></content>
   </entry>

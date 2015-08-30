@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="目的 最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。 硬件及网络准备 物理服务器 物理服务器: i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置， &hellip;">
+  <meta name="description" content="In order to make exsiting kvm based machine to be lxc container, following is the steps. Refers to: https://www.stgraber.org/2012/03/04/booting-an- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,1026 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM Machine</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-25T11:46:28+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:46 am</span></time>
+        
+         | <a href="/blog/2015/05/25/lxcize-the-kvm-machine/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In order to make exsiting kvm based machine to be lxc container, following is the steps.    <br/>
+Refers to:  <br/>
+<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
+
+<h3>Convert Disk Formats</h3>
+
+<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
+
+<h3>LXC the KVM</h3>
+
+<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> myvm.conf
+</span><span class='line'>lxc.network.type = veth
+</span><span class='line'>lxc.network.flags = up
+</span><span class='line'>lxc.network.link = br0
+</span><span class='line'>lxc.network.name = eth0
+</span><span class='line'>lxc.network.ipv4 = xxx.xxx.10.230/24
+</span><span class='line'>lxc.network.ipv4.gateway = xxx.xxx.0.176
+</span><span class='line'>#lxc.network.link = lxcbr0
+</span><span class='line'>lxc.utsname = myvminlxc
+</span><span class='line'>
+</span><span class='line'>lxc.tty = 4
+</span><span class='line'>lxc.pts = 1024
+</span><span class='line'>lxc.rootfs = /dev/mapper/loop0p1
+</span><span class='line'>lxc.arch = amd64
+</span><span class='line'>lxc.cap.drop = sys_module mac_admin
+</span><span class='line'>
+</span><span class='line'>lxc.cgroup.devices.deny = a
+</span><span class='line'># Allow any mknod (but not using the node)
+</span><span class='line'>lxc.cgroup.devices.allow = c *:* m
+</span><span class='line'>lxc.cgroup.devices.allow = b *:* m
+</span><span class='line'># /dev/null and zero
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:3 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:5 rwm
+</span><span class='line'># consoles
+</span><span class='line'>lxc.cgroup.devices.allow = c 5:1 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 5:0 rwm
+</span><span class='line'>#lxc.cgroup.devices.allow = c 4:0 rwm
+</span><span class='line'>#lxc.cgroup.devices.allow = c 4:1 rwm
+</span><span class='line'># /dev/{,u}random
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:9 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:8 rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 136:* rwm
+</span><span class='line'>lxc.cgroup.devices.allow = c 5:2 rwm
+</span><span class='line'># rtc
+</span><span class='line'>lxc.cgroup.devices.allow = c 254:0 rwm
+</span><span class='line'>#fuse
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:229 rwm
+</span><span class='line'>#tun
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:200 rwm
+</span><span class='line'>#full
+</span><span class='line'>lxc.cgroup.devices.allow = c 1:7 rwm
+</span><span class='line'>#hpet
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:228 rwm
+</span><span class='line'>#kvm
+</span><span class='line'>lxc.cgroup.devices.allow = c 10:232 rwm</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo kpartx -a Contrail.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now start the machine via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-start -n myvminlxc -f ./myvm.conf</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
+
+<h3>TroubleShooting</h3>
+
+<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/selinux/config
+</span><span class='line'>#SELINUX=permissive
+</span><span class='line'>SELINUX=disabled
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>kpartx -a /home/xxxxx/iso/Contrail.raw
+</span><span class='line'>lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/">三节点搭建OpenStack Juno(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-24T22:37:28+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:37 pm</span></time>
+        
+         | <a href="/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>MySQL数据库</h3>
+
+<p>绝大多数的OpenStack服务使用SQL数据库来存储信息，一般情况下数据库运行在控制节点上，这里我们使用MariaDB或者MySQL来作为SQL数据库。</p>
+
+<p>安装, 注意安装过程中需要输入密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install mariadb-server python-mysqldb</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置, 主要是更改了bind的地址，添加了一些有用选项，并支持UTF-8编码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/mysql/my.cnf
+</span><span class='line'>[mysqld]
+</span><span class='line'>...
+</span><span class='line'>bind-address = 10.55.55.2
+</span><span class='line'>...
+</span><span class='line'>default-storage-engine = innodb
+</span><span class='line'>innodb_file_per_table
+</span><span class='line'>collation-server = utf8_general_ci
+</span><span class='line'>init-connect = 'SET NAMES utf8'
+</span><span class='line'>character-set-server = utf8</span></code></pre></td></tr></table></div></figure>
+
+
+<p>完成安装，包括重启服务及加密数据库服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service mysql restart
+</span><span class='line'># mysql_secure_installation </span></code></pre></td></tr></table></div></figure>
+
+
+<h3>消息服务器</h3>
+
+<p>OpenStack使用message broker用来在各种服务器之间调度操作和协调状态信息，通常情况下消息服务器也运行在控制节点上，OpenStack支持RabbitMQ, Qpid和ZeroMQ, 这里使用RabbitMQ.</p>
+
+<p>安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install rabbitmq-server</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置，首先我们需要设定rabbitMQ使用的密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># rabbitmqctl change_password guest RABBIT_PASS
+</span><span class='line'>Changing password for user "guest" ...
+</span><span class='line'>...done.</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果是RabbitMQ 3.3.0或者更新的版本，则需要激活guest用户的远程访问权限。</p>
+
+<p>检查RabbitMQ版本:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># rabbitmqctl status | grep rabbit
+</span><span class='line'>Status of node rabbit@Controller ...
+</span><span class='line'> {running_applications,[{rabbit,"RabbitMQ","3.2.4"},</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里我们的版本是3.2.4所以不需要做任何修改，直接重启RabbitMQ服务即可。若是3.3.0以后的版本，则需要参考官方文档作更为详细的配置。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service rabbitmq-server restart</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>鉴权(Identity)服务</h3>
+
+<p>鉴权服务的作用主要有:   <br/>
+1. 跟踪用户及其权限。   <br/>
+2. 提供可用服务的服务类别及API endpoint.</p>
+
+<p>详细的关于Identity的介绍可以参见OpenStack官方文档。只有理解了其理念后才能明了OpenStack架构中各种服务的角色和地位.</p>
+
+<p>首先创建keystone所需要的数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 36
+</span><span class='line'>Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE keystone;
+</span><span class='line'>Query OK, 1 row affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' \
+</span><span class='line'>    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
+</span><span class='line'>Query OK, 0 rows affected (0.01 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' \
+</span><span class='line'>    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建一个随机值，用于管理token在初始化配置时使用:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># openssl rand -hex 10
+</span><span class='line'>760bc221f4dc966693e5</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装和配置组件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install keystone python-keystoneclient</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置, 更改<code>admin_token</code>为刚才生成的随机数:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/keystone/keystone.conf
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>admin_token = 760bc221f4dc966693e5
+</span><span class='line'>...
+</span><span class='line'>[database]
+</span><span class='line'>...
+</span><span class='line'>connection = mysql://keystone:KEYSTONE_DBPASS@Controller/keystone
+</span><span class='line'>...
+</span><span class='line'>[token]
+</span><span class='line'>...
+</span><span class='line'>provider = keystone.token.providers.uuid.Provider
+</span><span class='line'>driver = keystone.token.persistence.backends.sql.Token
+</span><span class='line'>...
+</span><span class='line'>[revoke]
+</span><span class='line'>...
+</span><span class='line'>driver = keystone.contrib.revoke.backends.sql.Revoke
+</span><span class='line'>...
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>verbose = True</span></code></pre></td></tr></table></div></figure>
+
+
+<p>修改完毕后，使用以下命令来同步Identity服务数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># su -s /bin/sh -c "keystone-manage db_sync" keystone</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启鉴权服务，删除Ubuntu使用的默认sqlite数据库, 并完成安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service keystone restart
+</span><span class='line'># rm -f /var/lib/keystone/keystone.db </span></code></pre></td></tr></table></div></figure>
+
+
+<p>使用下列命令来激活cron任务，以便每小时判断tokens的存活时间:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># (crontab -l -u keystone 2&gt;&1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush &gt;/var/log/keystone/keystone-tokenflush.log 2&gt;&1' &gt;&gt; /var/spool/cron/crontabs/keystone</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>创建tenants, users, roles</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># export OS_SERVICE_TOKEN=760bc221f4dc966693e5
+</span><span class='line'># export OS_SERVICE_ENDPOINT=http://Controller:35357/v2.0
+</span><span class='line'># keystone tenant-create --name admin --description "Admin Tenant"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |           Admin Tenant           |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 6f5f440aa9de4b2fa205f43df073ddfa |
+</span><span class='line'>|     name    |              admin               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone user-create --name admin --pass XXXXXXXXX --email xxxxxxxx@gmail.com
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |        XXXXXXXX@gmail.com        |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | 7bc9be5493e345518a384383872ab274 |
+</span><span class='line'>|   name   |              admin               |
+</span><span class='line'>| username |              admin               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'># keystone role-create --name admin
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|    id    | 65b6ccaa3b434c848ccb757be43d6b41 |
+</span><span class='line'>|   name   |              admin               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'># keystone user-role-add --user admin --tenant admin --role admin
+</span><span class='line'># keystone tenant-create --name demo --description "Demo Tenant"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |           Demo Tenant            |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 459c25933274483fb01ce66d9514add6 |
+</span><span class='line'>|     name    |               demo               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone user-create --name demo --tenant demo --pass xxxxx --email xxxxxxx@gmail.com
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |        xxxxxxx@gmail.com        |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | b2f3d8a239b34edfb50fa67c5aca8f83 |
+</span><span class='line'>|   name   |               demo               |
+</span><span class='line'>| tenantId | 459c25933274483fb01ce66d9514add6 |
+</span><span class='line'>| username |               demo               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'># keystone tenant-create --name service --description "Service Tenant"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |          Service Tenant          |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 08a675be93a04cca8a74159a3eefa288 |
+</span><span class='line'>|     name    |             service              |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone service-create --name keystone --type identity --description "OpenStack Identity"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |        OpenStack Identity        |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | bf7613d9563c47a9af80ecdb4f26f3f5 |
+</span><span class='line'>|     name    |             keystone             |
+</span><span class='line'>|     type    |             identity             |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone endpoint-create --service-id $(keystone service-list | awk '/ identity / {print $2}') --publicurl http://Controller:5000/v2.0 --internalurl http://Controller:5000/v2.0 --adminurl http://Controller:35357/v2.0 --region regionOne
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   adminurl  |   http://Controller:35357/v2.0   |
+</span><span class='line'>|      id     | c2c7a6c24b1d411b996f2e30fefc70b6 |
+</span><span class='line'>| internalurl |   http://Controller:5000/v2.0    |
+</span><span class='line'>|  publicurl  |   http://Controller:5000/v2.0    |
+</span><span class='line'>|    region   |            regionOne             |
+</span><span class='line'>|  service_id | bf7613d9563c47a9af80ecdb4f26f3f5 |
+</span><span class='line'>+-------------+----------------------------------+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证, 详细的说明参见OpenStack官方文档:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># unset OS_SERVICE_TOKEN OS_SERVICE_ENDPOINT
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 token-get
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  Property |              Value               |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  expires  |       2015-05-24T16:43:08Z       |
+</span><span class='line'>|     id    | 612b529c9c754b87a153abd39284aff6 |
+</span><span class='line'>| tenant_id | 6f5f440aa9de4b2fa205f43df073ddfa |
+</span><span class='line'>|  user_id  | 7bc9be5493e345518a384383872ab274 |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 tenant-list
+</span><span class='line'>+----------------------------------+---------+---------+
+</span><span class='line'>|                id                |   name  | enabled |
+</span><span class='line'>+----------------------------------+---------+---------+
+</span><span class='line'>| 6f5f440aa9de4b2fa205f43df073ddfa |  admin  |   True  |
+</span><span class='line'>| 459c25933274483fb01ce66d9514add6 |   demo  |   True  |
+</span><span class='line'>| 08a675be93a04cca8a74159a3eefa288 | service |   True  |
+</span><span class='line'>+----------------------------------+---------+---------+
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 user-list
+</span><span class='line'>+----------------------------------+-------+---------+--------------------+
+</span><span class='line'>|                id                |  name | enabled |       email        |
+</span><span class='line'>+----------------------------------+-------+---------+--------------------+
+</span><span class='line'>| 7bc9be5493e345518a384383872ab274 | admin |   True  | xxxxxxx@gmail.com |
+</span><span class='line'>| b2f3d8a239b34edfb50fa67c5aca8f83 |  demo |   True  | xxxxxxx@gmail.com |
+</span><span class='line'>+----------------------------------+-------+---------+--------------------+
+</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 role-list
+</span><span class='line'>+----------------------------------+----------+
+</span><span class='line'>|                id                |   name   |
+</span><span class='line'>+----------------------------------+----------+
+</span><span class='line'>| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
+</span><span class='line'>| 65b6ccaa3b434c848ccb757be43d6b41 |  admin   |
+</span><span class='line'>+----------------------------------+----------+
+</span><span class='line'># keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 token-get
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  Property |              Value               |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'>|  expires  |       2015-05-24T16:46:34Z       |
+</span><span class='line'>|     id    | 0d8a9472b0f547dfabc62594b4fb146f |
+</span><span class='line'>| tenant_id | 459c25933274483fb01ce66d9514add6 |
+</span><span class='line'>|  user_id  | b2f3d8a239b34edfb50fa67c5aca8f83 |
+</span><span class='line'>+-----------+----------------------------------+
+</span><span class='line'># keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 user-list
+</span><span class='line'>You are not authorized to perform the requested action: admin_required (HTTP 403)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>创建脚本</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat admin-openrc.sh 
+</span><span class='line'>export OS_TENANT_NAME=admin
+</span><span class='line'>export OS_USERNAME=admin
+</span><span class='line'>export OS_PASSWORD=xxxxx
+</span><span class='line'>export OS_AUTH_URL=http://Controller:35357/v2.0
+</span><span class='line'># cat demo-openrc.sh
+</span><span class='line'>export OS_TENANT_NAME=demo
+</span><span class='line'>export OS_USERNAME=demo
+</span><span class='line'>export OS_PASSWORD=xxxxx
+</span><span class='line'>export OS_AUTH_URL=http://Controller:5000/v2.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>下次使用时直接用<code>source admin-openrc.sh</code>或者<code>source demo-openrc.sh</code>即可。</p>
+
+<h3>镜像服务</h3>
+
+<p>添加镜像服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 40
+</span><span class='line'>Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE glance;
+</span><span class='line'>Query OK, 1 row affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建glance用户:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># source  /home/dash/admin-openrc.sh
+</span><span class='line'># keystone user-create --name glance --pass xxxxx
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |                                  |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | a3108e4267154acd809f3978d360e6cd |
+</span><span class='line'>|   name   |              glance              |
+</span><span class='line'>| username |              glance              |
+</span><span class='line'>+----------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>赋予glance用户admin权限:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># keystone user-role-add --user glance --tenant service --role admin</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建service entity和service end-point:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> keystone service-create --name glance --type image --description "OpenStack Image Service"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |     OpenStack Image Service      |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 8736ca50fdf741afb5fcc2d078b1cd9b |
+</span><span class='line'>|     name    |              glance              |
+</span><span class='line'>|     type    |              image               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'># keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://Controller:9292 --internalurl http://Controller:9292 --adminurl http://Controller:9292 --region regionOne
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   adminurl  |      http://Controller:9292      |
+</span><span class='line'>|      id     | 340f40f0558c4a5b8fa88089aee69767 |
+</span><span class='line'>| internalurl |      http://Controller:9292      |
+</span><span class='line'>|  publicurl  |      http://Controller:9292      |
+</span><span class='line'>|    region   |            regionOne             |
+</span><span class='line'>|  service_id | 8736ca50fdf741afb5fcc2d078b1cd9b |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装服务组件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install glance python-glanceclient</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/glance/glance-api.conf
+</span><span class='line'>[database]
+</span><span class='line'>...
+</span><span class='line'>connection = mysql://glance:GLANCE_DBPASS@controller/glance
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>...
+</span><span class='line'>auth_uri = http://controller:5000/v2.0
+</span><span class='line'>identity_uri = http://controller:35357
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = GLANCE_PASS
+</span><span class='line'>[paste_deploy]
+</span><span class='line'>...
+</span><span class='line'>flavor = keystone
+</span><span class='line'>[glance_store]
+</span><span class='line'>...
+</span><span class='line'>default_store = file
+</span><span class='line'>filesystem_store_datadir = /var/lib/glance/images/
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>notification_driver = noop
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>verbose = True</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置<code>/etc/glance/glance-registry.conf</code>文件，完成以下配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[database]
+</span><span class='line'>...
+</span><span class='line'>connection = mysql://glance:GLANCE_DBPASS@controller/glance
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>...
+</span><span class='line'>auth_uri = http://controller:5000/v2.0
+</span><span class='line'>identity_uri = http://controller:35357
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = GLANCE_PASS
+</span><span class='line'>[paste_deploy]
+</span><span class='line'>...
+</span><span class='line'>flavor = keystone
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>notification_driver = noop
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>...
+</span><span class='line'>notification_driver = noop</span></code></pre></td></tr></table></div></figure>
+
+
+<p>同步数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># su -s /bin/sh -c "glance-manage db_sync" glance</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启服务，删除默认的sqlite数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># service glance-registry restart
+</span><span class='line'># service glance-api restart
+</span><span class='line'># rm -f /var/lib/glance/glance.sqlite
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+</span><span class='line'># source ~/admin-openrc.sh
+</span><span class='line'># glance image-create --name "cirros-0.3.3-x86_64" --file ~/cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
+</span><span class='line'>[=============================&gt;] 100%
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| Property         | Value                                |
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
+</span><span class='line'>| container_format | bare                                 |
+</span><span class='line'>| created_at       | 2015-05-24T16:25:32                  |
+</span><span class='line'>| deleted          | False                                |
+</span><span class='line'>| deleted_at       | None                                 |
+</span><span class='line'>| disk_format      | qcow2                                |
+</span><span class='line'>| id               | 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 |
+</span><span class='line'>| is_public        | True                                 |
+</span><span class='line'>| min_disk         | 0                                    |
+</span><span class='line'>| min_ram          | 0                                    |
+</span><span class='line'>| name             | cirros-0.3.3-x86_64                  |
+</span><span class='line'>| owner            | 6f5f440aa9de4b2fa205f43df073ddfa     |
+</span><span class='line'>| protected        | False                                |
+</span><span class='line'>| size             | 13200896                             |
+</span><span class='line'>| status           | active                               |
+</span><span class='line'>| updated_at       | 2015-05-24T16:25:32                  |
+</span><span class='line'>| virtual_size     | None                                 |
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'># glance image-list
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>控制节点基本上配置成功，明天继续。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1153,7 +2173,7 @@ The steps are followed by following URL:  <br/>
 
 <h3>Github Account</h3>
 
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#97;&#x69;&#108;&#116;&#x6f;&#58;&#x67;&#105;&#x74;&#64;&#103;&#x69;&#116;&#104;&#117;&#98;&#46;&#x63;&#111;&#x6d;">&#103;&#x69;&#x74;&#x40;&#x67;&#105;&#116;&#104;&#117;&#x62;&#46;&#99;&#111;&#109;</a></p>
+<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#x69;&#108;&#116;&#x6f;&#58;&#x67;&#x69;&#x74;&#64;&#x67;&#x69;&#116;&#x68;&#x75;&#98;&#46;&#99;&#x6f;&#x6d;">&#x67;&#x69;&#x74;&#64;&#x67;&#105;&#116;&#x68;&#117;&#98;&#x2e;&#x63;&#x6f;&#109;</a></p>
 
 <h3>Repository</h3>
 
@@ -1290,624 +2310,6 @@ DNS Server is for automatically analyze the dns in server, install it via:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-14T09:38:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:38 am</span></time>
-        
-         | <a href="/blog/2015/05/14/setup-the-cobbler-server/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>The reference material is mainly from:  <br/>
-<a href="http://www.cobblerd.org/manuals/quickstart/">http://www.cobblerd.org/manuals/quickstart/</a></p>
-
-<h3>Prepartion</h3>
-
-<p>First install the CentOS6.6, choose the basic server. <br/>
-After installation, update to the latest system via <code>yum -y update</code>. <br/>
-Disable the SELinux via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/selinux/config
-</span><span class='line'>#SELINUX=enforcing                                                                                                                       │
-</span><span class='line'>SELINUX=disabled 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then restart the compute.  <br/>
-Add epel repository:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
-</span><span class='line'># yum update
-</span><span class='line'># yum install -y cobbler cobbler-web
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configuration</h3>
-
-<p>Change the default password:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># openssl passwd -1                                                                                                     │
-</span><span class='line'>Password:                                                                                                                                 │
-</span><span class='line'>Verifying - Password:                                                                                                                     │
-</span><span class='line'>igaowugoauwgoueougo
-</span><span class='line'>[root@CobblerServer ~]# vim /etc/cobbler/settings          
-</span><span class='line'>default_password_crypted: "agowuoguwoawoguwoe"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Set the Server and Next_Server to the specified IP Address, DO NOT use 0.0.0.0:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># default, localhost
-</span><span class='line'>server: 10.3.3.3.
-</span><span class='line'>
-</span><span class='line'># default, localhost
-</span><span class='line'>next_server: 10.3.3.3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the dhcp managed:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>manage_dhcp: 0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the dhcp template via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>vi /etc/cobbler/dhcp.template
-</span><span class='line'>subnet 10.3.3.0 netmask 255.255.255.0 {
-</span><span class='line'>     option routers             10.3.3.1;                                                                                                  
-</span><span class='line'>     range dynamic-bootp        10.3.3.4 10.3.3.254;
-</span><span class='line'>     option domain-name-servers 114.114.114.114, 8.8.8.8;     
-</span><span class='line'>     option subnet-mask         255.255.255.0;         
-</span><span class='line'>     filename                   "/pxelinux.0";       
-</span><span class='line'>     default-lease-time         21600;           
-</span><span class='line'>     max-lease-time             43200;      
-</span><span class='line'>     next-server                $next_server; 
-</span><span class='line'>}          
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start and check the service status:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# service cobblerd start                                                                                           
-</span><span class='line'>Starting cobbler daemon:                                   [  OK  ]
-</span><span class='line'>[root@CobblerServer ~]# chkconfig cobblerd on                     
-</span><span class='line'>[root@CobblerServer ~]# chkconfig httpd on                     
-</span><span class='line'>[root@CobblerServer ~]# service cobblerd status                  
-</span><span class='line'>cobblerd (pid 1564) is running...     
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Better you restart the machine and verify your installation via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler check
-</span><span class='line'>The following are potential configuration items that you may want to fix:
-</span><span class='line'>
-</span><span class='line'>1 : dhcpd is not installed
-</span><span class='line'>2 : some network boot-loaders are missing from /var/lib/cobbler/loaders, you may run 'cobbler get-loaders' to download them, or, if you only want to handle x86/x86_64 netbooting, you may ensure that you have installed a *recent* version of the syslinux package installed and can ignore this message entirely.  Files in this directory, should you want to support all architectures, should include pxelinux.0, menu.c32, elilo.efi, and yaboot. The 'cobbler get-loaders' command is the easiest way to resolve these requirements.
-</span><span class='line'>3 : change 'disable' to 'no' in /etc/xinetd.d/rsync
-</span><span class='line'>4 : since iptables may be running, ensure 69, 80/443, and 25151 are unblocked
-</span><span class='line'>5 : debmirror package is not installed, it will be required to manage debian deployments and repositories
-</span><span class='line'>6 : ksvalidator was not found, install pykickstart
-</span><span class='line'>7 : fencing tools were not found, and are required to use the (optional) power management features. install cman or fence-agents to use them
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>OOOOPs, so many errors, so first install dhcpd:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y dhcpd
-</span><span class='line'># chkconfig dhcpd on
-</span><span class='line'># chkconfig xinetd on
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Manullly edit the dhcpd configuration file as in following files:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cat /etc/dhcp/dhcpd.conf 
-</span><span class='line'>#
-</span><span class='line'># DHCP Server Configuration file.
-</span><span class='line'>#   see /usr/share/doc/dhcp*/dhcpd.conf.sample
-</span><span class='line'>#   see 'man 5 dhcpd.conf'
-</span><span class='line'>#
-</span><span class='line'># create new
-</span><span class='line'># specify domain name
-</span><span class='line'>option domain-name "server.world";
-</span><span class='line'># specify name server's hostname or IP address
-</span><span class='line'>option domain-name-servers 114.114.114.114;
-</span><span class='line'># default lease time
-</span><span class='line'>default-lease-time 600;
-</span><span class='line'># max lease time
-</span><span class='line'>max-lease-time 7200;
-</span><span class='line'># this DHCP server to be declared valid
-</span><span class='line'>authoritative;
-</span><span class='line'># specify network address and subnet mask
-</span><span class='line'>subnet 10.3.3.0 netmask 255.255.255.0 {
-</span><span class='line'>    # specify the range of lease IP address
-</span><span class='line'>    range dynamic-bootp 10.3.3.4 10.3.3.254;
-</span><span class='line'>    # specify broadcast address
-</span><span class='line'>    option broadcast-address 10.3.3.255;
-</span><span class='line'>    # specify default gateway
-</span><span class='line'>    option routers 10.3.3.1;
-</span><span class='line'>}
-</span><span class='line'># service dhcpd restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>One trouble after another, solve them:  <br/>
-Get Loaders:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler get-loaders
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the rsync configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>  # vim /etc/xinetd.d/rsync 
-</span><span class='line'>        disable = no
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the following lines into the /etc/sysconfig/iptables:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>:OUTPUT ACCEPT [0:0]
-</span><span class='line'>-A INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT 
-</span><span class='line'>-A INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT 
-</span><span class='line'>-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Or:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -I INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT
-</span><span class='line'># iptables -I INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The difference is the latter won&rsquo;t last for long once the machine got restarted.</p>
-
-<p>Install following packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# yum install -y debmirror pykickstart cman
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now check again:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cobbler check
-</span><span class='line'>$ cobbler sync
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Import ISO</h3>
-
-<p>I use the CentOS7 iso(CentOS-7-x86_64-Everything-1503-01.iso).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# mount -o loop -t iso9660 ./CentOS-7-x86_64-Everything-1503-01.iso  /mnt
-</span><span class='line'>[root@CobblerServer ~]# cobbler import --name=CentOS-7 --arch=x86_64 --path=/mnt
-</span><span class='line'>path=/mnt
-</span><span class='line'>task started: 2015-05-14_035209_import
-</span><span class='line'>task started (id=Media import, time=Thu May 14 03:52:09 2015)
-</span><span class='line'>Found a candidate signature: breed=redhat, version=rhel6
-</span><span class='line'>Found a candidate signature: breed=redhat, version=rhel7
-</span><span class='line'>Found a matching signature: breed=redhat, version=rhel7
-</span><span class='line'>Adding distros from path /var/www/cobbler/ks_mirror/CentOS-7-x86_64:
-</span><span class='line'>creating new distro: CentOS-7-x86_64
-</span><span class='line'>trying symlink: /var/www/cobbler/ks_mirror/CentOS-7-x86_64 -&gt; /var/www/cobbler/links/CentOS-7-x86_64
-</span><span class='line'>creating new profile: CentOS-7-x86_64
-</span><span class='line'>associating repos
-</span><span class='line'>checking for rsync repo(s)
-</span><span class='line'>checking for rhn repo(s)
-</span><span class='line'>checking for yum repo(s)
-</span><span class='line'>starting descent into /var/www/cobbler/ks_mirror/CentOS-7-x86_64 for CentOS-7-x86_64
-</span><span class='line'>processing repo at : /var/www/cobbler/ks_mirror/CentOS-7-x86_64
-</span><span class='line'>need to process repo/comps: /var/www/cobbler/ks_mirror/CentOS-7-x86_64
-</span><span class='line'>looking for /var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata/*comps*.xml
-</span><span class='line'>Keeping repodata as-is :/var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata
-</span><span class='line'>*** TASK COMPLETE ***
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler distro list
-</span><span class='line'>   CentOS-7-x86_64
-</span><span class='line'>[root@CobblerServer ~]# cobbler profile list
-</span><span class='line'>   CentOS-7-x86_64
-</span><span class='line'>[root@CobblerServer ~]# cobbler distro report --name=CentOS-7-x86_64
-</span><span class='line'>Name                           : CentOS-7-x86_64
-</span><span class='line'>Architecture                   : x86_64
-</span><span class='line'>TFTP Boot Files                : {}
-</span><span class='line'>Breed                          : redhat
-</span><span class='line'>Comment                        : 
-</span><span class='line'>Fetchable Files                : {}
-</span><span class='line'>Initrd                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/initrd.img
-</span><span class='line'>Kernel                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/vmlinuz
-</span><span class='line'>Kernel Options                 : {}
-</span><span class='line'>Kernel Options (Post Install)  : {}
-</span><span class='line'>Kickstart Metadata             : {'tree': 'http://@@http_server@@/cblr/links/CentOS-7-x86_64'}
-</span><span class='line'>Management Classes             : []
-</span><span class='line'>OS Version                     : rhel7
-</span><span class='line'>Owners                         : ['admin']
-</span><span class='line'>Red Hat Management Key         : &lt;&lt;inherit&gt;&gt;
-</span><span class='line'>Red Hat Management Server      : &lt;&lt;inherit&gt;&gt;
-</span><span class='line'>Template Files                 : {}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Installation</h3>
-
-<p>Install the system, via setup a machine which boot from PXE in the same subnet, then this machine will hint you with installing the corresponding system. <br/>
-The new system&rsquo;s username/password is the same as we set in the cobbler configuration file.</p>
-
-<h3>Enable Web Interface</h3>
-
-<p>Change the default password via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cp /etc/cobbler/users.digest /etc/cobbler/users.digest.back
-</span><span class='line'>$ htdigest /etc/cobbler/users.digest "Cobbler" cobbler
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now restart the cobblerd, you could visit following URL for visiting the Web Inteface:  <br/>
-<a href="http://10.3.3.3/cobbler_web">http://10.3.3.3/cobbler_web</a></p>
-
-<h3>Import Multiple ISOs</h3>
-
-<p>Import the first iso as usual.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mount -o loop -t iso9660 ./CentOS-6.6-x86_64-bin-DVD1.iso  /mnt
-</span><span class='line'># cobbler import --name=CentOS-6.6 --arch=x86_64 --path=/mnt
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The Second iso first mount to /mnt1/ directory, then import with following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  rsync -a '/mnt1/' /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/ --exclude-from=/etc/cobbler/rsync.exclude --progress
-</span><span class='line'>#  COMPSXML=$(ls /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/repodata/*comps*.xml)
-</span><span class='line'>#  createrepo -c cache -s sha --update --groupfile ${COMPSXML} /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cobbler distro list
-</span><span class='line'># cobbler profile list
-</span><span class='line'># cobbler distro report --name=CentOS-6.6-x86_64
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via installing a new machine running CentOS6.6.</p>
-
-<h3>Trouble-Shooting on fence</h3>
-
-<p>Lacking of fence equipment.</p>
-
-<p>Trouble shooting for controlling the Systems(which is the node information which added into cobbler system).   <br/>
-For Power Management:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CobblerServer ~]# cobbler system poweroff --name Node1
-</span><span class='line'>task started: 2015-05-14_064600_power
-</span><span class='line'>task started (id=Power management (off), time=Thu May 14 06:46:00 2015)
-</span><span class='line'>cobbler power configuration is:
-</span><span class='line'>      type   : virsh
-</span><span class='line'>      address: qemu+ssh://root@10.3.3.1/system
-</span><span class='line'>      user   : root
-</span><span class='line'>      id     : CobblerTest
-</span><span class='line'>running: /usr/sbin/fence_virsh
-</span><span class='line'>received on stdout: 
-</span><span class='line'>received on stderr: Unable to connect/login to fencing device
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips for Setting Up CentOS Local Repository</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-11T20:48:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:48 pm</span></time>
-        
-         | <a href="/blog/2015/05/11/tips-for-setting-up-centos-local-repository/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>The material is learned from:   <br/>
-<a href="http://paulcodr.co/blog/2015/yumrepo-server-local/">http://paulcodr.co/blog/2015/yumrepo-server-local/</a></p>
-
-<h3>Steps</h3>
-
-<p>Local ISO Preparation:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@localhost ~]# mkdir isos bin
-</span><span class='line'>[root@localhost ~]# ls isos
-</span><span class='line'>CentOS-6.6-x86_64-bin-DVD1.iso  CentOS-6.6-x86_64-bin-DVD2.iso
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Download the scripts:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd bin
-</span><span class='line'># wget http://paulcodr.co/download/yum-scripts.zip
-</span><span class='line'># unzip yum-scripts.zip 
-</span><span class='line'>Archive:  yum-scripts.zip
-</span><span class='line'>   creating: yum-scripts/
-</span><span class='line'>  inflating: yum-scripts/yum-create-server-centos6.6.sh  
-</span><span class='line'>  inflating: yum-scripts/yum-rsync-minimal-centos6.6.sh  
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the priviledges:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@localhost bin]# chown -R root:root /root/isos
-</span><span class='line'>[root@localhost bin]# chmod 750 -R /root/bin
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Execute the script:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@localhost bin]# mv yum-scripts/* ./
-</span><span class='line'>[root@localhost bin]# ls
-</span><span class='line'>yum-create-server-centos6.6.sh  yum-rsync-minimal-centos6.6.sh  yum-scripts  yum-scripts.zip
-</span><span class='line'>[root@localhost bin]# ./yum-create-server-centos6.6.sh 2&gt;&1 | tee createserver.log
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@localhost bin]#  du -hs /data/www/yumrpms/centos6.6/6.6/os/x86_64
-</span><span class='line'>5.6G    /data/www/yumrpms/centos6.6/6.6/os/x86_64
-</span><span class='line'>[root@localhost bin]#  ls -lh /data/www/yumrpms/centos6.6/
-</span><span class='line'>total 4.0K
-</span><span class='line'>lrwxrwxrwx 1 apache apache    3 May 11 12:49 6 -&gt; 6.6
-</span><span class='line'>drwxr-xr-x 3 apache apache 4.0K May 11 12:47 6.6
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Verify it on another PC:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:/home/juju/iso]# curl http://10.7.7.124/yumrpms/centos6.6/6/os/x86_64/
-</span><span class='line'>.....
-</span><span class='line'>&lt;/table&gt;
-</span><span class='line'>&lt;address&gt;Apache/2.2.15 (CentOS) Server at 10.7.7.124 Port 80&lt;/address&gt;
-</span><span class='line'>&lt;/body&gt;&lt;/html&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the rsync repository in yum-rsync-minimal-cent6.6.sh:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>rsync://mirrors.yun-idc.com/centos/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@localhost bin]# ./yum-rsync-minimal-centos6.6.sh 2&gt;&1 | tee syncserver.log
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Wait for rsync&hellip;&hellip;</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/9">&larr; Older</a>
@@ -1925,6 +2327,14 @@ For Power Management:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/08/30/tips-for-ssd-installation/">Tips for SSD Installation</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/08/30/gpt-slash-ssd-on-archlinux-installation/">GPT/SSD on ArchLinux Installation</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/08/26/use-jenkins-for-building-packer-images/">Use Jenkins for Building Packer Images</a>
       </li>
     
@@ -1934,14 +2344,6 @@ For Power Management:</p>
     
       <li class="post">
         <a href="/blog/2015/08/25/add-centos-client-into-spacewalk/">Add CentOS Client Into SpaceWalk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/24/enable-game-keyboard-rapoo-v5-pro-in-ubuntu-trusty/">Enable Game-KeyBoard Rapoo V5 Pro in Ubuntu Trusty</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/22/customize-kickstart-for-spacewalk/">Customize Kickstart for SpaceWalk</a>
       </li>
     
   </ul>
