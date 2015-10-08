@@ -9,8 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="For searching all of the alive machine in the LAN, we could use nmap for searching. Install the nmap via: 1
-sudo pacman -S nmap Scan the lan for &hellip;">
+  <meta name="description" content="I found lots of ssh connection attack info under the folder of /var/log/btmp, So I decide to change the sshd default listening port, from 22 to xxxx &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -66,6 +65,125 @@ sudo pacman -S nmap Scan the lan for &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/12/30/trouble-shooting-on-lost-ssh-connection/">Trouble Shooting on Lost SSH Connection</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-12-30T11:42:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:42 am</span></time>
+        
+         | <a href="/blog/2014/12/30/trouble-shooting-on-lost-ssh-connection/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>I found lots of ssh connection attack info under the folder of /var/log/btmp, So I decide to change the sshd default listening port, from 22 to xxxx. Following is the steps for doing this:</p>
+
+<h3>Change SSHD Listening Port</h3>
+
+<p>Change the default port from 22 to xxxx</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/ssh/sshd_config
+</span><span class='line'>Change the port from 22 to xxxx
+</span><span class='line'># service ssh restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now, congratulations, you lost all of your connections, since you have enable the iptables and banned all of the other ports.</p>
+
+<h3>Solution</h3>
+
+<p>Don&rsquo;t worry, we have digitalOcean&rsquo;s terminal service, from it we could reached the console.   <br/>
+But the problem is: it&rsquo;s pretty slow for us to visit this webpage from China to US!  <br/>
+Then we should use another machine which runs coreos.   <br/>
+Create a new lxde based vnc machine simply via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>core@Trustycore ~ $ docker pull dorowu/ubuntu-desktop-lxde-vnc
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run the machine</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>docker run -i -t -p 6080:6080 dorowu/ubuntu-desktop-lxde-vnc
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then open your browser and visit:   <br/>
+<code>http://Your_ip_address:6080/vnc.html</code> you could reached the vnc machine.</p>
+
+<h3>Memory Problem</h3>
+
+<p>Since the default memory is only 512MB, we have to enable the swapfile, thus we could use firefox for accessing the DigitalOcean terminal.  <br/>
+Following is the steps:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dd if=/dev/zero of=/swapfile bs=1M count=1024
+</span><span class='line'>$ sudo chmod 600 /swapfile 
+</span><span class='line'>$ sudo mkswap /swapfile
+</span><span class='line'>$ sudo vim /etc/systemd/system/swap.service
+</span><span class='line'> [Unit]  
+</span><span class='line'> Description=Turn on swap  
+</span><span class='line'> [Service]  
+</span><span class='line'> Type=oneshot  
+</span><span class='line'> Environment="SWAPFILE=/swapfile"
+</span><span class='line'> RemainAfterExit=true  
+</span><span class='line'> ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
+</span><span class='line'> ExecStart=/usr/bin/sh -c "/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> ExecStop=/usr/bin/sh -c "/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> ExecStopPost=/usr/bin/sh -c "/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> [Install]  
+</span><span class='line'> WantedBy=multi-user.target 
+</span><span class='line'>$ sudo  systemctl enable /etc/systemd/system/swap.service  
+</span><span class='line'>$ sudo systemctl start swap  
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you could happily use firefox in your vnc window. <br/>
+Simply login to the terminal window, and modify the configuration file, restart the ssh service, now you could also change the iptables rules, to open xxxx port.</p>
+
+<p>Another way is to disable root login, in <code>/etc/ssh/sshd_config</code>, set<code>#PermitRootLogin yes</code> to <code>PermitRootLoginno</code>.</p>
+
+<p>You will be safe.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1636,93 +1754,6 @@ In vps:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/12/06/use-vccw-for-deploying-wp/">Use VCCW for Deploying WP</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-12-06T12:13:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>12:13 pm</span></time>
-        
-         | <a href="/blog/2014/12/06/use-vccw-for-deploying-wp/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>For deploying differenet versions of Wordpress, I searched various kinds of solutions, includeing docker and vagrant, finally I found VCCW(A Wordpress development environment) is what I want, because I could freely changes the WP versions, so following is the guideline for installing and configurating the whole virtualmachine.</p>
-
-<h3>Install</h3>
-
-<p>The installation steps are listed as:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant plugin install vagrant-hostsupdater
-</span><span class='line'>$ wget https://github.com/miya0001/vccw/archive/1.9.1.tar.gz
-</span><span class='line'>$ tar xzvf 1.9.1.tar.gz
-</span><span class='line'>$ cd vccw-1.9.1
-</span><span class='line'>$ vagrant up
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This will start downloading and configrating the VM, it will cost sometimes. So just drink a coffee and get back.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant plugin install vagrant-omnibus && vagrant plugin install vagrant-hostsupdater &&  vagrant plugin install vagrant-proxyconf
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure proxy and chef?</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim Vagrantfile
-</span><span class='line'>Vagrant.configure(2) do |config|
-</span><span class='line'>  config.proxy.http     = "http://1xx.xx.xx:xxx:2xxx"
-</span><span class='line'>  config.proxy.https    = "http://1xx.xx.xx:xxx:2xxx"
-</span><span class='line'>  config.proxy.no_proxy = "localhost,127.0.0.1,.example.com"
-</span><span class='line'>
-</span><span class='line'>config.omnibus.chef_version = :latest
-</span><span class='line'>$ VAGRANT_APT_HTTP_PROXY="http://1xx.xx.xx.xxx:2xxxx vagrant up
-</span><span class='line'>$ VAGRANT_APT_HTTP_PROXY="http://1xx.xx.xx.xxx:2xxxx vagrant provision
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>vagrant halt
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/19">&larr; Older</a>
@@ -1740,6 +1771,10 @@ In vps:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/10/08/20151008bei-zhu/">20151008备注</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/10/08/dockerize-markdown-written-cv/">Dockerize Markdown Written CV</a>
       </li>
     
@@ -1753,10 +1788,6 @@ In vps:</p>
     
       <li class="post">
         <a href="/blog/2015/08/31/tips-on-remove-maas-dhcp/">Tips on Remove Maas-dhcp</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/08/30/tips-for-ssd-installation/">Tips for SSD Installation</a>
       </li>
     
   </ul>
