@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-10-12T20:39:31+08:00</updated>
+  <updated>2015-10-14T07:18:10+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,152 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Cloud-Init and CloudStack]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/10/13/tips-on-cloud-init-and-cloudstack/"/>
+    <updated>2015-10-13T16:22:16+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/10/13/tips-on-cloud-init-and-cloudstack</id>
+    <content type="html"><![CDATA[<h3>CloudStack VR VM</h3>
+
+<p>For accessing the VR VM and view the user-data and meta-data, like following, on the
+instance ssh, you could get the user-data and meta-data:</p>
+
+<pre><code>[root@testfuck ~]# curl http://10.1.1.1/latest/user-data
+[root@testfuck ~]# curl http://10.1.1.1/latest/meta-data
+service-offering
+availability-zone
+local-ipv4
+local-hostname
+public-ipv4
+public-hostname
+instance-id
+vm-id
+public-keys
+cloud-identifier
+# curl http://10.1.1.1/latest/meta-data/vm-id
+c6e1165e-f19a-4c77-9d96-dfd48f8ce944
+</code></pre>
+
+<p>user-data could not be fetched directly, you could only manage it via cloud-monkey when
+deploying the VMs.</p>
+
+<h3>user-data Simple Example</h3>
+
+<p>Before user-data injected:</p>
+
+<pre><code>Login Using password:   
+
+root@r-9-VM:~# ssh root@10.1.1.162
+root@10.1.1.162's password: 
+
+[root@testfuck etc]# date +%Z
+BST
+[root@testfuck etc]# cat /etc/sysconfig/clock 
+ZONE="Europe/London"
+</code></pre>
+
+<p>But We want to change! First let VR VM could directly login to the instance, second, we
+change the timezone into Asia/Chongqing.</p>
+
+<p>Generate the user-data:</p>
+
+<pre><code>$ cat hello_world.sh
+#!/bin/bash
+echo "hello world!" &gt;&gt; /root/test
+$ cat my-user-data
+#cloud-config
+growpart:
+  mode: auto
+chpasswd: { expire: False }
+ssh_pwauth: True
+
+ssh_authorized_keys:
+ - ssh-rsa xxxxxxxxxxxxxxxxxxxxxxxx
+
+timezone: Asia/Chongqing
+$ $ write-mime-multipart --output=combined-userdata.txt \ 
+hello_world.sh:text/x-shellscript my-user-data
+$ ls -l -h combined-userdata.txt 
+-rw-rw-r-- 1 dash dash 1.1K Oct 13 17:14 combined-userdata.txt
+$ cat combined-userdata.txt | base64
+</code></pre>
+
+<p>Deploy via:</p>
+
+<pre><code>cloudmonkey deploy virtualmachine
+serviceofferingid=683f31f8-a939-468e-b4de-4512a8ccff8e
+templateid=13fb2961-533e-4a7d-80f9-21d860269aad
+zoneid=78509dc3-c828-429c-8154-9fffbc09384c
+networkids=7c6e7e6b-6aa2-4f95-a835-8d18bf930061 name=testuserdata
+userdata='Q29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0iCk1JTUUtVmVyc2lvbjogMS4wCgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQveC1zaGVsbHNjcmlwdDsgY2hhcnNldD0idXMtYXNjaWkiCk1JTUUtVmVyc2lvbjogMS4wCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQKQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9ImhlbGxvX3dvcmxkLnNoIgoKIyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQhIiA+PiAvcm9vdC90ZXN0CgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQvY2xvdWQtY29uZmlnOyBjaGFyc2V0PSJ1cy1hc2NpaSIKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibXktdXNlci1kYXRhIgoKI2Nsb3VkLWNvbmZpZwpncm93cGFydDoKICBtb2RlOiBhdXRvCmNocGFzc3dkOiB7IGV4cGlyZTogRmFsc2UgfQpzc2hfcHdhdXRoOiBUcnVlCgpzc2hfYXV0aG9yaXplZF9rZXlzOgogLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUUNzMFA4aFNCM05qN2tmd2lRT01PQ0Z2RXVqd3JLZjVuUFdmdzdzbmplVzd3TnhCYi9pTHhqbGxIK0tJdjdpS0dRaGI5WGtpZ3dXelhjdktSRk9OQTF0UU5CUHBsUE9RQXhHYUpoYzcxYlhZTVRabWsxcmZ5L0U4bUZIQmJ3U0trdm04Z3oxaFVqQWFITHdiZ21iaUE3eUNDUkVXbVR1SWpudm1FZnJXYU92WERRZFFPb2RkSzFhZThKM3BnRUNtQ21mRldrQmR3Y1JaN05jTUxBSkVkYTNpYWtJbWdaR2NqTWNCc1hjUUNOcjN1RGlKbERvc1V6Mjg4L3grTnZteTlzcHZnc2x4RXVUV0VQWFRGY1l5eVBrUHdkTnlpQm5TaWFoZTExcUdUZkk0Z2IyWllEb3JDZU5Ca1QxdkVaY0psL1JqT3NKRUFXT04rbno3Nm16MmdhZCByb290QHItOS1WTSAKCnRpbWV6b25lOiBBc2lhL0Nob25ncWluZwoKLS09PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0tLQo='
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Cloud-Init Grow Partition]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/10/13/cloud-init-grow-partition/"/>
+    <updated>2015-10-13T14:37:57+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/10/13/cloud-init-grow-partition</id>
+    <content type="html"><![CDATA[<h3>Resize QCOW2</h3>
+
+<p>Resize qcow2 file via:</p>
+
+<pre><code>$ qemu-img info my_vm.img
+image: my_vm.img
+file format: qcow2
+virtual size: 2.2G (2361393152 bytes)
+disk size: 904M
+cluster_size: 65536
+Format specific information:
+    compat: 1.1
+    lazy refcounts: false
+$ qemu-img resize my_vm.img +100G
+Image resized.
+$ qemu-img info my_vm.img
+image: my_vm.img
+file format: qcow2
+virtual size: 102G (109735575552 bytes)
+disk size: 904M
+cluster_size: 65536
+Format specific information:
+    compat: 1.1
+    lazy refcounts: false
+</code></pre>
+
+<h3>Enlarge Partition</h3>
+
+<p>Modify the meta-data, and enable the partition grow options in user-data:</p>
+
+<pre><code>$ vim my-user-data
+#cloud-config
++ growpart:
++   mode: auto
+password: xxxxxxxx
+chpasswd: { expire: False }
+ssh_pwauth: True
+
+ssh_authorized_keys:
+ - ssh-rsa xxxxxxxxxxx
+timezone: Asia/Chongqing
+
+$ cat my-meta-data 
+instance-id: d59656d7-b365-4940-ae95-9168c32c68b7
+$ echo "instance-id: $(uuidgen || echo i-abcdefg)" &gt; my-meta-data
+$ cat my-meta-data 
+instance-id: 5cad0dc4-facb-4079-b045-fbbc05caaf4a
+</code></pre>
+
+<p>Regenerate the image:</p>
+
+<pre><code>$ rm -f my-seed.img
+$ cloud-localds my-seed.img my-user-data my-meta-data
+</code></pre>
+
+<p>Restart the vm then you could get the disk resized.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on OZ]]></title>
@@ -209,6 +355,7 @@ timezone: Asia/Chongqing
 <p>启动虚拟机:</p>
 
 <pre><code>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512
+$ kvm -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512
 </code></pre>
 
 <h3>其他初始化行为</h3>
@@ -465,214 +612,6 @@ total 31788
 -r--r--r-- 3 root root  8188836 Aug  7  2014 initrd.gz.back
 -r--r--r-- 3 root root  5919280 Jul 29  2014 vmlinuz
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Automatically Create Virtual Machine]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/13/automatically-create-virtual-machine/"/>
-    <updated>2015-08-13T16:21:23+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/13/automatically-create-virtual-machine</id>
-    <content type="html"><![CDATA[<p>Just record the whole scripts for create/define/start the vm machine.</p>
-
-<pre><code>#!/bin/sh
-# $1: The name of the virtual machine. 
-
-### 1. Check Input Parameters. 
-if [ $# != 1 ]
-then
-  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-  echo "!!         Parameters error       !!"
-  echo "!! Example: ./createvm.sh name    !!"
-  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-  exit 1
-fi
-
-### 2. Create the qcow2 file in local directory. 
-echo $1
-qemu-img create -f qcow2 -b /home/juju/img/WolfHunter/SpaceWalk/Base/packer-ubuntu-1204-server-i386 $1.qcow2
-
-### 3. Generate Random MAC Address.
-printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff )) $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff ))
-# echo $macaddr
-### 3.1 Check whether this MAC Address is in the host's existing items. 
-declare maclist
-
-### 3.2 Get the MAC Address List
-for vm in $(virsh list --all | tail -n +3 |  awk '{print $2}')
-do
-        # Multiple NIC need this. 
-    for mac_item in $(virsh dumpxml $vm | grep "mac address" | awk -F "'" '{print $2}')
-                do
-                        # echo $mac_item
-                        maclist+=($mac_item)
-                done
-done
-
-# echo ${maclist[*]} 
-# echo ${#maclist[@]}
-
-### 3.3 Processing possible duplicated problem. 
-### We don't hope the generate random mac address to be duplicated, so write whatever you want to see under the while loop for debugging
-### Judge if the generated random mac address duplicated. 
-while [[ ${maclist[*]} =~ ${macaddr} ]]
-do
-        echo "yes, you entered while for changing the mac address!"
-        printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff )) $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff ))
-        echo $macaddr
-done
-
-### 3.4 Only for debugging purpose, view result
-### For debugging purpose
-### if [[ ${maclist[*]} =~ ${macaddr} ]]
-### then
-###     echo "Yes, it's in the existing mac list"
-### else
-###     echo "Congratulations, it's safe to use this mac!"
-### fi
-### echo $macaddr
-
-### 4. Create new xml file and modify the xml file.
-### 4.1 Create the file
-mkdir -p xml
-cp ./Template.xml ./xml/$1.xml
-### 4.2 Remove the uuid(Virt-manager will automatically generate it)
-sed -i '/uuid/d' ./xml/$1.xml
-### 4.3 Replace the MAC Address
-sed -i -r "s/(.*)([a-zA-Z0-9]{2}:[a-zA-Z0-9]{2}:[a-zA-Z0-9]{2}:[a-zA-Z0-9]{2}:[a-zA-Z0-9]{2}:[a-zA-Z0-9]{2})(.*)/\1$macaddr\3/g" ./xml/$1.xml 
-### 4.4 Replace the virt disk file
-imagepath=($PWD/$1.qcow2)
-echo $imagepath
-sed -i "s#&lt;source file.*#&lt;source file='$imagepath'/&gt;#g"  ./xml/$1.xml
-
-### 5. Change the VM Name
-sed -i "s#&lt;name.*#&lt;name&gt;$1&lt;/name&gt;#g" ./xml/$1.xml
-
-### 6. Define and Start VM Machine
-virsh define $PWD/xml/$1.xml
-virsh start $1
-</code></pre>
-
-<p>Steps for create the machine:</p>
-
-<pre><code># ./createvm.sh zz_bee1
-</code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Trouble Shooting on SpaceWalk OSAD on Ubuntu Clients]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/12/trouble-shooting-on-spacewalk-osad-on-ubuntu-clients/"/>
-    <updated>2015-08-12T11:25:34+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/12/trouble-shooting-on-spacewalk-osad-on-ubuntu-clients</id>
-    <content type="html"><![CDATA[<h3>Problem</h3>
-
-<p>On Clients(Ubuntu nodes), you will see lots of the following message in
-<code>/var/log/osad</code>:</p>
-
-<pre><code>$ tail /var/log/osad
-2015-08-11 19:31:14 jabber_lib.main: Unable to connect to jabber servers, sleeping 78 seconds
-2015-08-11 19:32:32 jabber_lib.main: Unable to connect to jabber servers, sleeping 117 seconds
-</code></pre>
-
-<p>When restart the osda service you will see following error message:</p>
-
-<pre><code># service osad restart
-OSAD SpaceWalk Deamon osad                                                     Traceback (most recent call last):
-  File "/usr/share/rhn/osad/jabber_lib.py", line 252, in setup_connection
-    c = self._get_jabber_client(js)
-  File "/usr/share/rhn/osad/jabber_lib.py", line 309, in _get_jabber_client
-    c.connect()
-  File "/usr/share/rhn/osad/jabber_lib.py", line 583, in connect
-    self.disconnect()
-  File "/usr/share/rhn/osad/jabber_lib.py", line 653, in disconnect
-    jabber.Client.disconnect(self)
-  File "/usr/lib/python2.7/dist-packages/jabber/jabber.py", line 432, in disconnect
-    xmlstream.Client.disconnect(self)
-  File "/usr/lib/python2.7/dist-packages/jabber/xmlstream.py", line 388, in disconnect
-    while self.process(): pass
-  File "/usr/share/rhn/osad/jabber_lib.py", line 1059, in process
-    raise JabberError("Premature EOF")
-JabberError: Premature EOF
-</code></pre>
-
-<p>Though seeing this error, your osad will start and running, but with errors.</p>
-
-<h3>Trouble Shooting</h3>
-
-<p>Make sure the port 5222 and 5269 of spacewalk server are telnet-able from client machine:</p>
-
-<pre><code>adminubuntu@spacewalknode1:~$ telnet spacewalk 5222
-Trying 10.11.11.3...
-Connected to spacewalk.
-Escape character is '^]'.
-^]
-telnet&gt; quit
-Connection closed.
-adminubuntu@spacewalknode1:~$ telnet spacewalk 5269
-Trying 10.11.11.3...
-Connected to spacewalk.
-Escape character is '^]'.
-^]
-telnet&gt; 
-</code></pre>
-
-<p>Make sure you register yourself on client using FQDN but not the IP Address:</p>
-
-<pre><code># rhnreg_ks --activationkey=1-precise --serverUrl=http://spacewalk/XMLRPC --force
-# service osad restart
-</code></pre>
-
-<p>If by this you won&rsquo;t pass the osad check, you should setup the local dns server, which
-enable name resolve of <code>spacewalk</code>, you could take following article for reference:  <br/>
-<a href="http://purplepalmdash.github.io/blog/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/">http://purplepalmdash.github.io/blog/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/</a></p>
-
-<p>For checking the dns resole, run following command on client:</p>
-
-<pre><code>adminubuntu@spacewalknode1:~$ dig spacewalk
-
-; &lt;&lt;&gt;&gt; DiG 9.8.1-P1 &lt;&lt;&gt;&gt; spacewalk
-;; global options: +cmd
-;; Got answer:
-;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 16045
-;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 1, ADDITIONAL: 0
-
-;; QUESTION SECTION:
-;spacewalk.                     IN      A
-
-;; ANSWER SECTION:
-spacewalk.              604800  IN      A       10.11.11.3
-
-;; AUTHORITY SECTION:
-spacewalk.              604800  IN      NS      spacewalk.
-
-;; Query time: 2 msec
-;; SERVER: 10.11.11.3#53(10.11.11.3)
-;; WHEN: Wed Aug 12 03:34:18 2015
-;; MSG SIZE  rcvd: 57
-</code></pre>
-
-<h3>Result</h3>
-
-<p>After resolving this problem, your log should like this:</p>
-
-<p>On Server:</p>
-
-<pre><code>$ tail /var/log/message
-Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] [::ffff:10.11.11.100, port=45486] connect
-Aug 12 10:34:50 spacewalk named[993]: error (network unreachable) resolving 'ns4.p27.dynect.net/A/IN': 2001:500:94::100#53
-Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] created user: user=osad-c942811c1c; realm=
-Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] registration succeeded, requesting user creation: jid=osad-c942811c1c@spacewalk
-Aug 12 10:34:50 spacewalk jabberd/sm[1371]: created user: jid=osad-c942811c1c@spacewalk
-Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] legacy authentication succeeded: host=, username=osad-c942811c1c, resource=osad, TLS negotiated
-Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] requesting session: jid=osad-c942811c1c@spacewalk/osad
-Aug 12 10:34:50 spacewalk jabberd/sm[1371]: session started: jid=osad-c942811c1c@spacewalk/osad
-</code></pre>
-
-<p>In SpaceWalk backend you will see:</p>
-
-<p><img src="/images/2015_08_12_11_37_48_538x222.jpg" alt="/images/2015_08_12_11_37_48_538x222.jpg" /> <br/>
-Now you could direct <code>push</code> your modification to clients in SpaceWalk backend.</p>
 ]]></content>
   </entry>
   

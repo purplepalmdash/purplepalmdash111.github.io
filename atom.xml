@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-10-12T20:39:31+08:00</updated>
+  <updated>2015-10-14T07:18:10+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,270 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Cloud-Init and CloudStack]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/10/13/tips-on-cloud-init-and-cloudstack/"/>
+    <updated>2015-10-13T16:22:16+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/10/13/tips-on-cloud-init-and-cloudstack</id>
+    <content type="html"><![CDATA[<h3>CloudStack VR VM</h3>
+
+<p>For accessing the VR VM and view the user-data and meta-data, like following, on the
+instance ssh, you could get the user-data and meta-data:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@testfuck ~]# curl http://10.1.1.1/latest/user-data
+</span><span class='line'>[root@testfuck ~]# curl http://10.1.1.1/latest/meta-data
+</span><span class='line'>service-offering
+</span><span class='line'>availability-zone
+</span><span class='line'>local-ipv4
+</span><span class='line'>local-hostname
+</span><span class='line'>public-ipv4
+</span><span class='line'>public-hostname
+</span><span class='line'>instance-id
+</span><span class='line'>vm-id
+</span><span class='line'>public-keys
+</span><span class='line'>cloud-identifier
+</span><span class='line'># curl http://10.1.1.1/latest/meta-data/vm-id
+</span><span class='line'>c6e1165e-f19a-4c77-9d96-dfd48f8ce944</span></code></pre></td></tr></table></div></figure>
+
+
+<p>user-data could not be fetched directly, you could only manage it via cloud-monkey when
+deploying the VMs.</p>
+
+<h3>user-data Simple Example</h3>
+
+<p>Before user-data injected:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Login Using password:   
+</span><span class='line'>
+</span><span class='line'>root@r-9-VM:~# ssh root@10.1.1.162
+</span><span class='line'>root@10.1.1.162's password: 
+</span><span class='line'>
+</span><span class='line'>[root@testfuck etc]# date +%Z
+</span><span class='line'>BST
+</span><span class='line'>[root@testfuck etc]# cat /etc/sysconfig/clock 
+</span><span class='line'>ZONE="Europe/London"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>But We want to change! First let VR VM could directly login to the instance, second, we
+change the timezone into Asia/Chongqing.</p>
+
+<p>Generate the user-data:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat hello_world.sh
+</span><span class='line'>#!/bin/bash
+</span><span class='line'>echo "hello world!" &gt;&gt; /root/test
+</span><span class='line'>$ cat my-user-data
+</span><span class='line'>#cloud-config
+</span><span class='line'>growpart:
+</span><span class='line'>  mode: auto
+</span><span class='line'>chpasswd: { expire: False }
+</span><span class='line'>ssh_pwauth: True
+</span><span class='line'>
+</span><span class='line'>ssh_authorized_keys:
+</span><span class='line'> - ssh-rsa xxxxxxxxxxxxxxxxxxxxxxxx
+</span><span class='line'>
+</span><span class='line'>timezone: Asia/Chongqing
+</span><span class='line'>$ $ write-mime-multipart --output=combined-userdata.txt \ 
+</span><span class='line'>hello_world.sh:text/x-shellscript my-user-data
+</span><span class='line'>$ ls -l -h combined-userdata.txt 
+</span><span class='line'>-rw-rw-r-- 1 dash dash 1.1K Oct 13 17:14 combined-userdata.txt
+</span><span class='line'>$ cat combined-userdata.txt | base64</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Deploy via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cloudmonkey deploy virtualmachine
+</span><span class='line'>serviceofferingid=683f31f8-a939-468e-b4de-4512a8ccff8e
+</span><span class='line'>templateid=13fb2961-533e-4a7d-80f9-21d860269aad
+</span><span class='line'>zoneid=78509dc3-c828-429c-8154-9fffbc09384c
+</span><span class='line'>networkids=7c6e7e6b-6aa2-4f95-a835-8d18bf930061 name=testuserdata
+</span><span class='line'>userdata='Q29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0iCk1JTUUtVmVyc2lvbjogMS4wCgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQveC1zaGVsbHNjcmlwdDsgY2hhcnNldD0idXMtYXNjaWkiCk1JTUUtVmVyc2lvbjogMS4wCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQKQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9ImhlbGxvX3dvcmxkLnNoIgoKIyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQhIiA+PiAvcm9vdC90ZXN0CgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQvY2xvdWQtY29uZmlnOyBjaGFyc2V0PSJ1cy1hc2NpaSIKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibXktdXNlci1kYXRhIgoKI2Nsb3VkLWNvbmZpZwpncm93cGFydDoKICBtb2RlOiBhdXRvCmNocGFzc3dkOiB7IGV4cGlyZTogRmFsc2UgfQpzc2hfcHdhdXRoOiBUcnVlCgpzc2hfYXV0aG9yaXplZF9rZXlzOgogLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUUNzMFA4aFNCM05qN2tmd2lRT01PQ0Z2RXVqd3JLZjVuUFdmdzdzbmplVzd3TnhCYi9pTHhqbGxIK0tJdjdpS0dRaGI5WGtpZ3dXelhjdktSRk9OQTF0UU5CUHBsUE9RQXhHYUpoYzcxYlhZTVRabWsxcmZ5L0U4bUZIQmJ3U0trdm04Z3oxaFVqQWFITHdiZ21iaUE3eUNDUkVXbVR1SWpudm1FZnJXYU92WERRZFFPb2RkSzFhZThKM3BnRUNtQ21mRldrQmR3Y1JaN05jTUxBSkVkYTNpYWtJbWdaR2NqTWNCc1hjUUNOcjN1RGlKbERvc1V6Mjg4L3grTnZteTlzcHZnc2x4RXVUV0VQWFRGY1l5eVBrUHdkTnlpQm5TaWFoZTExcUdUZkk0Z2IyWllEb3JDZU5Ca1QxdkVaY0psL1JqT3NKRUFXT04rbno3Nm16MmdhZCByb290QHItOS1WTSAKCnRpbWV6b25lOiBBc2lhL0Nob25ncWluZwoKLS09PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0tLQo='</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Cloud-Init Grow Partition]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/10/13/cloud-init-grow-partition/"/>
+    <updated>2015-10-13T14:37:57+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/10/13/cloud-init-grow-partition</id>
+    <content type="html"><![CDATA[<h3>Resize QCOW2</h3>
+
+<p>Resize qcow2 file via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img info my_vm.img
+</span><span class='line'>image: my_vm.img
+</span><span class='line'>file format: qcow2
+</span><span class='line'>virtual size: 2.2G (2361393152 bytes)
+</span><span class='line'>disk size: 904M
+</span><span class='line'>cluster_size: 65536
+</span><span class='line'>Format specific information:
+</span><span class='line'>    compat: 1.1
+</span><span class='line'>    lazy refcounts: false
+</span><span class='line'>$ qemu-img resize my_vm.img +100G
+</span><span class='line'>Image resized.
+</span><span class='line'>$ qemu-img info my_vm.img
+</span><span class='line'>image: my_vm.img
+</span><span class='line'>file format: qcow2
+</span><span class='line'>virtual size: 102G (109735575552 bytes)
+</span><span class='line'>disk size: 904M
+</span><span class='line'>cluster_size: 65536
+</span><span class='line'>Format specific information:
+</span><span class='line'>    compat: 1.1
+</span><span class='line'>    lazy refcounts: false</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Enlarge Partition</h3>
+
+<p>Modify the meta-data, and enable the partition grow options in user-data:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim my-user-data
+</span><span class='line'>#cloud-config
+</span><span class='line'>+ growpart:
+</span><span class='line'>+   mode: auto
+</span><span class='line'>password: xxxxxxxx
+</span><span class='line'>chpasswd: { expire: False }
+</span><span class='line'>ssh_pwauth: True
+</span><span class='line'>
+</span><span class='line'>ssh_authorized_keys:
+</span><span class='line'> - ssh-rsa xxxxxxxxxxx
+</span><span class='line'>timezone: Asia/Chongqing
+</span><span class='line'>
+</span><span class='line'>$ cat my-meta-data 
+</span><span class='line'>instance-id: d59656d7-b365-4940-ae95-9168c32c68b7
+</span><span class='line'>$ echo "instance-id: $(uuidgen || echo i-abcdefg)" &gt; my-meta-data
+</span><span class='line'>$ cat my-meta-data 
+</span><span class='line'>instance-id: 5cad0dc4-facb-4079-b045-fbbc05caaf4a</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Regenerate the image:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ rm -f my-seed.img
+</span><span class='line'>$ cloud-localds my-seed.img my-user-data my-meta-data</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Restart the vm then you could get the disk resized.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Linux Tips 3]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/10/13/linux-tips-3/"/>
+    <updated>2015-10-13T10:43:51+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/10/13/linux-tips-3</id>
+    <content type="html"><![CDATA[<h3>1. Tips on Cloud-Init</h3>
+
+<p><a href="http://www.cnblogs.com/smallcoderhujin/p/4238609.html">http://www.cnblogs.com/smallcoderhujin/p/4238609.html</a></p>
+
+<h3>2. Access CloudStack VR</h3>
+
+<p>Get the VR IP address from the CloudStack Web Interface:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2015_10_13_15_46_59_464x499.jpg" alt="/images/2015_10_13_15_46_59_464x499.jpg" /></p>
+
+<p>Then get the ssh connection via(On Agent Node):</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@csmgmt ~]# ssh -i .ssh/id_rsa.cloud -p3922 169.254.1.177  
+</span><span class='line'>Linux r-9-VM 3.2.0-4-amd64 #1 SMP Debian 3.2.65-1+deb7u2 x86_64
+</span><span class='line'>.......
+</span><span class='line'>root@r-9-VM:~#</span></code></pre></td></tr></table></div></figure>
+
+
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on OZ]]></title>
@@ -291,7 +555,9 @@
 <p>启动虚拟机:</p>
 
 <figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512</span></code></pre></td></tr></table></div></figure>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512
+</span><span class='line'>$ kvm -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512</span></code></pre></td></tr></table></div></figure>
 
 
 <h3>其他初始化行为</h3>
@@ -2016,696 +2282,6 @@ different repositories, following are the configuration file.</p>
 <figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
 </pre></td><td class='code'><pre><code class=''><span class='line'>$ mrepo -g -u -vvv centos6 && mrepo -g -u -vvv centos7</span></code></pre></td></tr></table></div></figure>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Setup Squid]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/21/setup-squid/"/>
-    <updated>2015-08-21T11:33:13+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/21/setup-squid</id>
-    <content type="html"><![CDATA[<h3>Installation And Configuration</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y squid
-</span><span class='line'># vim /etc/squid/squid.conf
-</span><span class='line'>http_port 3072
-</span><span class='line'>#acl localnet src 192.168.0.0/16        # RFC1918 possible internal network
-</span><span class='line'># Squid normally listens to port 3128
-</span><span class='line'>http_port 3072
-</span><span class='line'>cache_mem 64 MB
-</span><span class='line'>maximum_object_size 4 MB
-</span><span class='line'># Cache 3GB
-</span><span class='line'>cache_dir ufs /home/juju/SquidCache     3072    16      256
-</span><span class='line'>access_log /var/log/squid/access.log
-</span><span class='line'>auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/passwd
-</span><span class='line'>auth_param basic children 5
-</span><span class='line'>auth_param basic kspc-01 proxy
-</span><span class='line'>auth_param basic credentialsttl 2 hours
-</span><span class='line'>acl myacl proxy_auth REQUIRED
-</span><span class='line'>http_access allow myacl
-</span><span class='line'>http_access deny all
-</span><span class='line'>visible_hostname squid.kspc-01</span></code></pre></td></tr></table></div></figure>
-
-
-<p>First you should setup the cache file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># squid -z
-</span><span class='line'># systemctl start suiqd
-</span><span class='line'># systemctl enable squid</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change username password via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ htpasswd -c /etc/squid/passwd user1
-</span><span class='line'>$ htpasswd  /etc/squid/passwd user2
-</span><span class='line'>$ htpasswd  /etc/squid/passwd user3</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Usage</h3>
-
-<p>In firefox: Edit->Preference->Network->Settings->, change proxy setting.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Kickstarting Ubuntu in SpaceWalk]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/20/kickstarting-ubuntu-in-spacewalk/"/>
-    <updated>2015-08-20T11:58:14+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/20/kickstarting-ubuntu-in-spacewalk</id>
-    <content type="html"><![CDATA[<h3>Preparation</h3>
-
-<p>You have to use apt-mirror for getting the packages to local repository, so that you
-could directly install the system via http method. The configuration file for
-apt-mirror is listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/apt/mirror.list
-</span><span class='line'>set base_path /mnt/myrepo
-</span><span class='line'>set nthreads     20
-</span><span class='line'>set _tilde 0
-</span><span class='line'>#################Trusty Repository Starts ########################
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse main/debian-installer restricted/debian-installer multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse main/debian-installer restricted/debian-installer multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>#################Trusty Repository ends ########################
-</span><span class='line'>
-</span><span class='line'>#################Precise Repository starts ########################
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise main main/debian-installer restricted restricted/debian-installer universe multiverse multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise main main/debian-installer restricted restricted/debian-installer universe multiverse multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
-</span><span class='line'>#################Precise Repository ends ########################</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Sync your local repository via <code>apt-mirror</code>, the sync procedure could takes many days,
-depends on your bandwidth.</p>
-
-<h3>Make Your Own KickStart File</h3>
-
-<p>You have to install <code>system-config-kickstart</code> for generating the kickstart file. But
-the official program conflicts with hwdata, we manually downgrade it and install
-specified version, then sytem-config-kickstart could be installed.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get remove hwda
-</span><span class='line'># wget ftp://mirror.ovh.net/mirrors/ftp.debian.org/debian/pool/main/h/hwdata/hwdata_0.234-1_all.deb
-</span><span class='line'># dpkg -i hwdata_0.267-1_all.deb
-</span><span class='line'># sudo apt-get install system-config-kickstart</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run it and its effects is like following:</p>
-
-<p><img src="http://purplepalmdash.github.io/images/2015_08_20_12_07_59_637x562.jpg" alt="/images/2015_08_20_12_07_59_637x562.jpg" /></p>
-
-<p>Select the installation method via:</p>
-
-<p><img src="http://purplepalmdash.github.io/images/2015_08_20_12_09_02_541x361.jpg" alt="/images/2015_08_20_12_09_02_541x361.jpg" /></p>
-
-<p>Save your kickstart file, and save it into some webserver&rsquo;s directory, since PXE always
-have the network connection, we could put it the reachable webserver.</p>
-
-<h3>PXE Menu Configuration</h3>
-
-<p>Just give out an example of the PXE Menu on SpaceWalk:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /var/lib/tftpboot/pxelinux.cfg/default 
-</span><span class='line'>DEFAULT menu
-</span><span class='line'>PROMPT 0
-</span><span class='line'>MENU TITLE Cobbler | http://fedorahosted.org/cobbler
-</span><span class='line'>TIMEOUT 200
-</span><span class='line'>TOTALTIMEOUT 6000
-</span><span class='line'>ONTIMEOUT local
-</span><span class='line'>
-</span><span class='line'>LABEL local
-</span><span class='line'>        MENU LABEL (local)
-</span><span class='line'>        MENU DEFAULT
-</span><span class='line'>        LOCALBOOT 0
-</span><span class='line'>
-</span><span class='line'>LABEL precise-ia32:1:SpacewalkDefaultOrganization
-</span><span class='line'>        kernel /images/precise-ia32:1:SpacewalkDefaultOrganization/vmlinuz
-</span><span class='line'>        MENU LABEL precise-ia32:1:SpacewalkDefaultOrganization
-</span><span class='line'>        append ks=http://192.168.0.79/ubuntu1204kickstart1.cfg initrd=/images/precise-ia32:1:SpacewalkDefaultOrganization/initrd.gz ksdevice=eth0 --
-</span><span class='line'>        ipappend 2
-</span><span class='line'>MENU end</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We use the kickstart file located in a webserver, using this we could install the
-system unattendly.</p>
-
-<p>An example of the this kickstart file is listed:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-<span class='line-number'>85</span>
-<span class='line-number'>86</span>
-<span class='line-number'>87</span>
-<span class='line-number'>88</span>
-<span class='line-number'>89</span>
-<span class='line-number'>90</span>
-<span class='line-number'>91</span>
-<span class='line-number'>92</span>
-<span class='line-number'>93</span>
-<span class='line-number'>94</span>
-<span class='line-number'>95</span>
-<span class='line-number'>96</span>
-<span class='line-number'>97</span>
-<span class='line-number'>98</span>
-<span class='line-number'>99</span>
-<span class='line-number'>100</span>
-<span class='line-number'>101</span>
-<span class='line-number'>102</span>
-<span class='line-number'>103</span>
-<span class='line-number'>104</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat ubuntu1204kickstart1.cfg  | more
-</span><span class='line'>#Generated by Kickstart Configurator
-</span><span class='line'>#platform=x86
-</span><span class='line'>
-</span><span class='line'>#System language
-</span><span class='line'>lang en_US
-</span><span class='line'>#Language modules to install
-</span><span class='line'>langsupport en_US
-</span><span class='line'>#System keyboard
-</span><span class='line'>keyboard us
-</span><span class='line'>#System mouse
-</span><span class='line'>mouse
-</span><span class='line'>#System timezone
-</span><span class='line'>timezone Asia/Shanghai
-</span><span class='line'>#Root password
-</span><span class='line'>rootpw --iscrypted xxxxxxxxxxxxxxxxxxxxxxxxxxx
-</span><span class='line'>#Initial user
-</span><span class='line'>user xxxx --fullname "xxxx" --iscrypted --password xxxxxxxxxxxxxxxxxxxxxx
-</span><span class='line'>#Reboot after installation
-</span><span class='line'>reboot
-</span><span class='line'>#Use text mode install
-</span><span class='line'>text
-</span><span class='line'>#Install OS instead of upgrade
-</span><span class='line'>install
-</span><span class='line'>#Use Web installation
-</span><span class='line'>url --url http://192.168.0.79/ubuntu/
-</span><span class='line'>#System bootloader configuration
-</span><span class='line'>bootloader --location=mbr 
-</span><span class='line'>#Clear the Master Boot Record
-</span><span class='line'>zerombr yes
-</span><span class='line'>#Partition clearing information
-</span><span class='line'>clearpart --all --initlabel 
-</span><span class='line'>#Disk partitioning information
-</span><span class='line'>part swap --size 1024 
-</span><span class='line'>part / --fstype ext4 --size 1 --grow 
-</span><span class='line'>#System authorization infomation
-</span><span class='line'>auth  --useshadow  --enablemd5 
-</span><span class='line'>#Network information
-</span><span class='line'>network --bootproto=dhcp --device=eth0
-</span><span class='line'>#Firewall configuration
-</span><span class='line'>firewall --disabled 
-</span><span class='line'>#Do not configure the X Window System
-</span><span class='line'>skipx
-</span><span class='line'>
-</span><span class='line'>%packages
-</span><span class='line'>ubuntu-minimal
-</span><span class='line'>openssh-server
-</span><span class='line'>screen
-</span><span class='line'>curl
-</span><span class='line'>wget
-</span><span class='line'>
-</span><span class='line'>%post
-</span><span class='line'>
-</span><span class='line'># update fstab for the root partition
-</span><span class='line'>perl -pi -e 's/(errors=remount-ro)/noatime,nodiratime,$1,barrier=0/' /etc/fstab
-</span><span class='line'>
-</span><span class='line'># point sh to bash instead of dash
-</span><span class='line'>rm /bin/sh
-</span><span class='line'>ln -s /bin/bash /bin/sh
-</span><span class='line'>
-</span><span class='line'># add normal apt source list
-</span><span class='line'>(
-</span><span class='line'>cat &lt;&lt;'EOP'
-</span><span class='line'>deb http://192.168.0.79/ubuntu/ precise main restricted universe
-</span><span class='line'>deb http://192.168.0.79/ubuntu/ precise-security main restricted universe
-</span><span class='line'>deb http://192.168.0.79/ubuntu/ precise-updates main restricted universe
-</span><span class='line'>EOP
-</span><span class='line'>) &gt; /etc/apt/sources.list
-</span><span class='line'>apt-get update
-</span><span class='line'>apt-get upgrade -y
-</span><span class='line'>
-</span><span class='line'># install some additional packages
-</span><span class='line'># apt-get install -y xenstore-utils
-</span><span class='line'>
-</span><span class='line'># set up xenserver automation scripts
-</span><span class='line'># AUTOMATER_REPO=https://raw.github.com/krobertson/xenserver-automater
-</span><span class='line'># curl $AUTOMATER_REPO/master/usr/sbin/xe-set-hostname &gt; /usr/sbin/xe-set-hostname
-</span><span class='line'># curl $AUTOMATER_REPO/master/usr/sbin/xe-set-network &gt; /usr/sbin/xe-set-network
-</span><span class='line'># curl $AUTOMATER_REPO/master/usr/sbin/generate-sshd-keys &gt; /usr/sbin/generate-sshd-keys
-</span><span class='line'># curl $AUTOMATER_REPO/master/etc/init/xe-automator.conf &gt; /etc/init/xe-automator.conf
-</span><span class='line'># chmod a+x /usr/sbin/xe-set-hostname
-</span><span class='line'># chmod a+x /usr/sbin/xe-set-network
-</span><span class='line'># chmod a+x /usr/sbin/generate-sshd-keys
-</span><span class='line'>
-</span><span class='line'># setup locales
-</span><span class='line'>locale-gen en_US.UTF-8
-</span><span class='line'>update-locale LANG="en_US.UTF-8"
-</span><span class='line'>echo 'LANG=en_US.UTF-8' &gt;&gt; /etc/environment
-</span><span class='line'>echo 'LC_ALL=en_US.UTF-8' &gt;&gt; /etc/environment
-</span><span class='line'>
-</span><span class='line'># install xe tools
-</span><span class='line'># cd /tmp
-</span><span class='line'># wget http://some/url/to/xe-guest-utilities_6.0.0-743_amd64.deb
-</span><span class='line'># dpkg -i xe-guest-utilities_6.0.0-743_amd64.deb
-</span><span class='line'>
-</span><span class='line'># install paravirt kernel image
-</span><span class='line'>apt-get install -f -y linux-virtual
-</span><span class='line'>dpkg -l | grep generic | grep linux | awk '{print $2}' | xargs apt-get remove -y
-</span><span class='line'>
-</span><span class='line'># clean up some stuff
-</span><span class='line'>rm -f /etc/ssh/ssh_host_*
-</span><span class='line'>rm -f /var/cache/apt/archives/*.deb
-</span><span class='line'>rm -f /var/cache/apt/*cache.bin
-</span><span class='line'>rm -f /var/lib/apt/lists/*_Packages</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<h3>A Known Bug</h3>
-
-<p>The initrd.gz file and vmlinuz file should be picked from the installation iso. While
-the spacewalk uses a CentOS based initrd.gz file for starting the system. thus you will
-met &ldquo;cdrom&rdquo; error.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls -l /var/lib/tftpboot/images/precise-ia32:1:SpacewalkDefaultOrganization/
-</span><span class='line'>total 31788
-</span><span class='line'>-r--r--r-- 1 root root 18434355 Aug 20 11:36 initrd.gz
-</span><span class='line'>-r--r--r-- 3 root root  8188836 Aug  7  2014 initrd.gz.back
-</span><span class='line'>-r--r--r-- 3 root root  5919280 Jul 29  2014 vmlinuz</span></code></pre></td></tr></table></div></figure>
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Auto Configure SpaceWalk Ubuntu Agent]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/08/17/auto-configure-spacewalk-ubuntu-agent/"/>
-    <updated>2015-08-17T17:21:31+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/08/17/auto-configure-spacewalk-ubuntu-agent</id>
-    <content type="html"><![CDATA[<h3>Create the Auto-Deployment Material</h3>
-
-<p>Directory structure is listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>adminubuntu@bee3:~/Code$ ls -F
-</span><span class='line'>deb/  deb_osad/  deb_remote/  first.sh*  second.sh*  sources.list  xmlrpclib.py
-</span><span class='line'>adminubuntu@bee3:~/Code$ ls *
-</span><span class='line'>autoChange.sh  autoChange.sh~  hostname  sources.list  xmlrpclib.py
-</span><span class='line'>
-</span><span class='line'>deb:
-</span><span class='line'>apt-transport-spacewalk_1.0.6-4.1_all.deb  python-rhn_2.5.55-2_all.deb         rhnsd_5.0.4-3_i386.deb
-</span><span class='line'>python-ethtool_0.11-2_i386.deb             rhn-client-tools_1.8.26-4_i386.deb
-</span><span class='line'>
-</span><span class='line'>deb_osad:
-</span><span class='line'>osad_5.11.27-1ubuntu1~precise5_all.deb  pyjabber_0.5.0-1.4ubuntu3~precise1_all.deb
-</span><span class='line'>
-</span><span class='line'>deb_remote:
-</span><span class='line'>rhncfg_5.10.14-1ubuntu1~precise2_all.deb</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The deb files in deb should be compiled manually:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get install debhelper build-essential gcc devscripts git intltool quilt automake python-all-dev libnl-route-3-dev asciidoc pkg-config libxml2-utils docbook-xml xsltproc sgml-data docbook-xsl
-</span><span class='line'>apt-get -f install
-</span><span class='line'>
-</span><span class='line'>git clone git://anonscm.debian.org/collab-maint/spacewalk/rhnlib.git
-</span><span class='line'>git clone git://anonscm.debian.org/collab-maint/spacewalk/rhn-client-tools.git rhn-client-tools
-</span><span class='line'>git clone git://anonscm.debian.org/collab-maint/spacewalk/python-ethtool.git python-ethtool
-</span><span class='line'>git clone git://anonscm.debian.org/collab-maint/spacewalk/rhnsd.git rhnsd
-</span><span class='line'>git clone git://anonscm.debian.org/collab-maint/spacewalk/apt-spacewalk.git
-</span><span class='line'>
-</span><span class='line'># now in every of these directories do:
-</span><span class='line'>debuild -i -us -uc -b</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Automatically Registration</h3>
-
-<p>The first.sh listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#!/bin/sh
-</span><span class='line'>### 1. TODO.
-</span><span class='line'># You must be root, so input the root priviledge check here. 
-</span><span class='line'>
-</span><span class='line'>### 2. Check Parameter to make sure you have inputs. 
-</span><span class='line'>if [ $# != 1 ]
-</span><span class='line'>then
-</span><span class='line'>  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-</span><span class='line'>  echo "!!         Parameters error       !!"
-</span><span class='line'>  echo "!! Example: ./createvm.sh name    !!"
-</span><span class='line'>  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-</span><span class='line'>  exit 1
-</span><span class='line'>fi
-</span><span class='line'>
-</span><span class='line'>### 3. Change the hostname of the system
-</span><span class='line'>#echo $1
-</span><span class='line'>echo $1&gt;/etc/hostname
-</span><span class='line'>
-</span><span class='line'>### 4. Modify the hostname listed in /etc/hosts.
-</span><span class='line'># The default name is always "packer-ubuntu-1204-server-i386", use sed for replacing it.
-</span><span class='line'>sed -i "s/packer-ubuntu-1204-server-i386/$1/g" /etc/hosts
-</span><span class='line'>echo "10.11.11.3 spacewalk"&gt;&gt;/etc/hosts
-</span><span class='line'>reboot</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The second.sh listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>### 5. Change the Repository, and install the packages. 
-</span><span class='line'>cp ./sources.list /etc/apt/
-</span><span class='line'>apt-get update
-</span><span class='line'>cd deb/
-</span><span class='line'>dpkg -i *.deb
-</span><span class='line'>apt-get -f install
-</span><span class='line'>cd ../
-</span><span class='line'>
-</span><span class='line'>### 6. Apply the bug-fix for osad. 
-</span><span class='line'>cp ./xmlrpclib.py /usr/lib/python2.7/xmlrpclib.py
-</span><span class='line'>
-</span><span class='line'>### 7. Registration of the system. 
-</span><span class='line'>mkdir /var/lock/subsys
-</span><span class='line'>apt-get install python-libxml2
-</span><span class='line'>rhnreg_ks --activationkey=1-precise-ia32 --serverUrl=http://spacewalk/XMLRPC
-</span><span class='line'>
-</span><span class='line'>### 8. Update Repository for using SpaceWalk. 
-</span><span class='line'>echo 'deb spacewalk://spacewalk/XMLRPC channels: precise-main precise-updates' &gt; /etc/apt/sources.list.d/spacewalk.list
-</span><span class='line'>mv /etc/apt/sources.list /etc/apt/sources.list.back
-</span><span class='line'>apt-get update && apt-get update
-</span><span class='line'>
-</span><span class='line'>### 9. Enable "push" to registed client. 
-</span><span class='line'># wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/pyjabber_0.5.0-1.4ubuntu3~precise1_all.deb
-</span><span class='line'># wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/osad_5.11.27-1ubuntu1~precise5_all.deb
-</span><span class='line'>cd deb_osad/
-</span><span class='line'>dpkg -i *.deb
-</span><span class='line'>cd /usr/share/rhn
-</span><span class='line'>wget http://spacewalk/pub/RHN-ORG-TRUSTED-SSL-CERT
-</span><span class='line'>service osad start
-</span><span class='line'>update-rc.d osad defaults
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>### 10. Enable Remote Command
-</span><span class='line'>cd /home/adminubuntu/Code/deb_remote/
-</span><span class='line'>dpkg -i *.deb
-</span><span class='line'># this is important and touches the file /etc/sysconfig/rhn/allowed-actions/script/run
-</span><span class='line'>rhn-actions-control --enable-all
-</span><span class='line'># Now create the missing directory, the command script gets placed there temporarily
-</span><span class='line'>mkdir /var/spool/rhn/
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>### 99. Finally , reboot the system.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run the scripts then you could easily got system registed into the spacewalk server.</p>
 ]]></content>
   </entry>
   
