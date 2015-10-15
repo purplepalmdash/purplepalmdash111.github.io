@@ -9,28 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Use Local Charms Retrieve the charms via: 1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-$ sudo apt-get install charm-tools
-$ cat autocharms.sh
-juju &hellip;">
+  <meta name="description" content="This article is not for opencontril itself, but for migration of the existing environment to local machines. Environment Machine configuration is &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -86,6 +65,157 @@ juju &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/18/migration-of-opencontril/">Migration of OpenContril</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-18T11:38:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:38 am</span></time>
+        
+         | <a href="/blog/2015/03/18/migration-of-opencontril/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This article is not for opencontril itself, but for migration of the existing environment to local machines.</p>
+
+<h3>Environment</h3>
+
+<p>Machine configuration is listed as:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>192.168.10.233 u12-control
+</span><span class='line'>192.168.10.234 u12-compute1
+</span><span class='line'>192.168.10.235 u12-compute2
+</span><span class='line'>
+</span><span class='line'>192.168.1.79   s179
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The control node and 2 compute nodes are running in machine s179, the tasks for me to do is for moving them from s179 to 2 physical machine.</p>
+
+<h3>Use Remote KVM Server</h3>
+
+<p>First we copy our ssh-key to the remote s179 machine, so next time we won&rsquo;t enter any passwd for accessing the remote libvirtd:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ssh-copy-id root@192.168.1.79
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In our own machine, we listed remote&rsquo;s machines via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ virsh -c qemu+ssh://root@192.168.1.79/system list --all
+</span><span class='line'> Id    Name                           State
+</span><span class='line'>----------------------------------------------------
+</span><span class='line'> 14    u14-ui                         running
+</span><span class='line'> 16    u14-compute2                   running
+</span><span class='line'> 22    u14-compute1                   running
+</span><span class='line'> 39    de1-contro                     running
+</span><span class='line'> -     centos6.4-management-01        shut off
+</span><span class='line'> -     centos6.4-management-02        shut off
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add connection via: <code>File-&gt; Add New Connection</code>, then configure like following:   <br/>
+<img src="/images/2015_03_18_11_53_11_380x432.jpg" alt="/images/2015_03_18_11_53_11_380x432.jpg" /></p>
+
+<h3>Migration(Static)</h3>
+
+<p>First scp the image file to to destination machine, this will take a while. <br/>
+Dump the xml via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ virsh dumpxml xxxxx&gt;xxxx.xml
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Scp the xml file to destination machine and move to <code>/etc/libvirt/qemu/</code>, change the priviledge of the file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo chmod 777 /home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>   <br/>
+Edit the corresponding configuration in the xml file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/libvirt/qemu/xxxx.xml
+</span><span class='line'>.....
+</span><span class='line'>&lt;source file='/home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img'/&gt;
+</span><span class='line'>.....
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Define the xml under the <code>/etc/libvirt/qemu/</code> folder:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@pc121:/etc/libvirt/qemu# virsh define ./Ubuntu1404-Newly-Installed-with-Update.xml 
+</span><span class='line'>Domain Ubuntu1404-Newly-Installed-with-Update defined from ./Ubuntu1404-Newly-Installed-with-Update.xml
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install the guest tool and use it for editing the virtual machine:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libguestfs-tools
+</span><span class='line'>$ sudo virt-edit -d Ubuntu1404-Newly-Installed-with-Update /etc/network/interfaces
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After change the network configuration, we could start the machine via <code>virsh start Ubuntu1404-Newly-Installed-with-Update</code>, it will have the newly edited ip address.</p>
+
+<p>If we use different host machine, then change the following definition in xml file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/libvirt/qemu/xxxx.xml
+</span><span class='line'>&lt;devices&gt;
+</span><span class='line'>    &lt;emulator&gt;/usr/bin/qemu-system-x86_64&lt;/emulator&gt;
+</span><span class='line'>.......
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1292,59 +1422,6 @@ The maas-test is located at:  <br/>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/08/enable-bluetooth-playing/">Enable Bluetooth Playing</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-08T21:36:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:36 pm</span></time>
-        
-         | <a href="/blog/2015/03/08/enable-bluetooth-playing/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>First scan the bluetooth adapter via <code>lsusb</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ lsusb
-</span><span class='line'>Bus 005 Device 002: ID 0a12:0001 Cambridge Silicon Radio, Ltd Bluetooth Dongle (HCI mode)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install packages and configure bluetooth:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install bluetooth
-</span><span class='line'>$ sudo apt-get install bluez-utils
-</span><span class='line'>$ sudo apt-get install blueman
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then setup the bluetooth headset in blueman&rsquo;s graphical interface.  <br/>
-The more detailed steps are available at:  <br/>
-<a href="http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/">http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/</a></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/15">&larr; Older</a>
@@ -1362,6 +1439,10 @@ The more detailed steps are available at:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/10/15/use-openwrt-router-for-lan-forwarding/">Use OpenWRT Router for Lan Forwarding</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/10/14/tips-for-20151014/">Tips for 20151014</a>
       </li>
     
@@ -1375,10 +1456,6 @@ The more detailed steps are available at:  <br/>
     
       <li class="post">
         <a href="/blog/2015/10/13/cloud-init-grow-partition/">Cloud-Init Grow Partition</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/10/13/linux-tips-3/">Linux Tips 3</a>
       </li>
     
   </ul>

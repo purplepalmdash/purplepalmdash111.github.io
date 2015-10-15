@@ -9,9 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="有关电路 上一章讲的是12864的基础知识。这一章里来看12864和stm32板的连接和驱动的问题。 有关12864小LCD的连接，在PDF中我们可以找到如下的表项: 功能模块 占用模块 备注 12864小LCD
-PC4,PB2,PB11,PB13,PB15
-PC4:A0,同时也是 CH375 和 &hellip;">
+  <meta name="description" content="如何控制液晶屏幕 ASCII码的可打印字符的范围在0x20 ~ 0x7f之间， 0x20 是空格字符，0x7f是delete字符。 最开始我们需要在内存中建立一张关于可打印字符的表。用于表示在液晶屏幕上如何显示出该字符，即该字符的点阵排列。 下图是可以打印的ASCII/Unicode 0- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +65,248 @@ PC4:A0,同时也是 CH375 和 &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-3/">关于STM32板上的12864液晶(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-11-28T16:01:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>4:01 pm</span></time>
+        
+         | <a href="/blog/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>如何控制液晶屏幕</h3>
+
+<p>ASCII码的可打印字符的范围在0x20 ~ 0x7f之间， 0x20 是空格字符，0x7f是delete字符。 最开始我们需要在内存中建立一张关于可打印字符的表。用于表示在液晶屏幕上如何显示出该字符，即该字符的点阵排列。  <br/>
+下图是可以打印的ASCII/Unicode 0-127的值：</p>
+
+<p><img src="/images/ascii.jpg" alt="ascii.jpg" /></p>
+
+<p>点阵数组：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>const u8 Asii8[] = {
+</span><span class='line'>  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+</span><span class='line'>  0x06,0x5F,0x06,0x00,0x00,0x07,0x03,0x00,
+</span><span class='line'>  0x07,0x03,0x00,0x24,0x7E,0x24,0x7E,0x24,
+</span><span class='line'>  0x00,0x24,0x2B,0x6A,0x12,0x00,0x00,0x63,
+</span><span class='line'>  0x13,0x08,0x64,0x63,0x00,0x36,0x49,0x56,
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>来个例子：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#: 0x00, 0x24, 0x7e, 0x24, 0x7e, 0x24
+</span><span class='line'>00000000
+</span><span class='line'>00100100
+</span><span class='line'>01111110
+</span><span class='line'>00100100
+</span><span class='line'>01111110
+</span><span class='line'>00100100
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>对应的1代表将该点的液晶点点上。    <br/>
+要注意，实际的显示应该是倒过来的，即： 把你的脖子顺时针转90度看上面的二进制表达式。</p>
+
+<p>在LCD上设置需要写入的坐标，</p>
+
+<figure class='code'><figcaption><span>LCDs.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/**************************************************************</span>
+</span><span class='line'><span class="cm">**函数名 :LcdSetXP</span>
+</span><span class='line'><span class="cm">**功能:设置坐标**</span>
+</span><span class='line'><span class="cm">**注意事项:这里设置的坐标不是X,Y,而是X,PAGE.因为黑白屏一次写入的数据为8个点,而且为竖</span>
+</span><span class='line'><span class="cm">**           式写入,故纵坐标是以页为单位,64个点共8页</span>
+</span><span class='line'><span class="cm">***************************************************************/</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">LcdSetXP</span><span class="p">(</span><span class="n">u8</span> <span class="n">x</span><span class="p">,</span><span class="n">u8</span> <span class="n">page</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">LcdCmd</span><span class="p">((</span><span class="n">page</span><span class="o">&amp;</span><span class="mh">0x07</span><span class="p">)</span><span class="o">+</span><span class="mh">0xb0</span><span class="p">);</span>  <span class="c1">//设置页指针</span>
+</span><span class='line'>    <span class="n">LcdCmd</span><span class="p">((</span><span class="n">x</span><span class="o">&gt;&gt;</span><span class="mi">4</span><span class="p">)</span><span class="o">|</span><span class="mh">0x10</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">LcdCmd</span><span class="p">(</span><span class="n">x</span><span class="o">&amp;</span><span class="mh">0x0f</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>128X64的屏幕一共有8192个点， 每一个字符用48个点来表示，即8X6。所以每一个字的X坐标长度应该是6, 而Y坐标应该是8. 一个page代表8个点。  <br/>
+考虑下面代码:</p>
+
+<figure class='code'><figcaption><span>main.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">LcdSetXP</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;T&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;E&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;S&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;T&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39; &#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;O&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;K&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;!&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">LcdSetXP</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;T&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdSetXP</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">2</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;E&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdSetXP</span><span class="p">(</span><span class="mi">24</span><span class="p">,</span><span class="mi">2</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;S&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;T&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39; &#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;O&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;K&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="n">LcdChar8</span><span class="p">(</span><span class="sc">&#39;!&#39;</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>得到的结果应该是：  <br/>
+TEST OK!   <br/>
+TE  ST OK!   <br/>
+对应上面的解释不难明白在屏幕上填写字符的原理。</p>
+
+<p>有关在屏幕上写字符的函数是：</p>
+
+<figure class='code'><figcaption><span>LCDs.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/**************************************************************</span>
+</span><span class='line'><span class="cm">**函数名 :LcdChar8</span>
+</span><span class='line'><span class="cm">**功能:写一个宽6高8的ASCII</span>
+</span><span class='line'><span class="cm">**注意事项:这里忽略了坐标的设置,此函数作为子函数被其他函数调用,使用前需要设置坐标</span>
+</span><span class='line'><span class="cm">         使用内部的点阵表</span>
+</span><span class='line'><span class="cm">***************************************************************/</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">LcdChar8</span><span class="p">(</span><span class="kt">char</span> <span class="n">chr</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">u8</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">u8</span><span class="o">*</span> <span class="n">p_data</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/* 0x20 is the space character</span>
+</span><span class='line'><span class="cm">  * 0x7f is the delete character</span>
+</span><span class='line'><span class="cm">  * Seems all of the printable character are listed in the global array</span>
+</span><span class='line'><span class="cm">  */</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">((</span><span class="n">chr</span><span class="o">&lt;</span><span class="mh">0x20</span><span class="p">)</span><span class="o">||</span><span class="p">(</span><span class="n">chr</span><span class="o">&gt;</span><span class="mh">0x7f</span><span class="p">))</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/* Asii8 is the global variable(Glbal Array), So now we retrieve the</span>
+</span><span class='line'><span class="cm">  * character&#39;s address via first address plus the (asii code number)*6</span>
+</span><span class='line'><span class="cm">  * Because, each entry size if 6, all of the entry start from 0x20</span>
+</span><span class='line'><span class="cm">  */</span>
+</span><span class='line'>  <span class="n">p_data</span> <span class="o">=</span> <span class="p">(</span><span class="n">u8</span><span class="o">*</span><span class="p">)</span><span class="n">Asii8</span> <span class="o">+</span> <span class="p">(</span><span class="n">chr</span><span class="o">-</span><span class="mh">0x20</span><span class="p">)</span><span class="o">*</span><span class="mi">6</span><span class="p">;</span>   <span class="c1">//要写字符的首地址</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">for</span><span class="p">(</span><span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span><span class="n">i</span><span class="o">&lt;</span><span class="mi">6</span><span class="p">;</span><span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">LcdDat</span><span class="p">(</span><span class="o">*</span><span class="n">p_data</span><span class="o">++</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>举例说明， !的字符表示为
+00000000  <br/>
+00000000   <br/>
+00000110   <br/>
+01011111    <br/>
+00000110    <br/>
+00000000   <br/>
+则看起来应该像：
+000100   <br/>
+001110   <br/>
+000100   <br/>
+000000   <br/>
+000100   <br/>
+000000   <br/>
+把1想象为点，就能对应想象出!在屏幕上的样子。</p>
+
+<p>原有的代码中关于GPIO初始化的时候，多初始化了一个PB14口，删除后一切正常。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1906,69 +2146,6 @@ Get the interface definition via:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/11/21/two-tips-for-setting/">Two Tips for Setting</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-11-21T18:49:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>21</span><span class='date-suffix'>st</span>, <span class='date-year'>2013</span></span> <span class='time'>6:49 pm</span></time>
-        
-         | <a href="/blog/2013/11/21/two-tips-for-setting/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Disable the vim wraping</h3>
-
-<p>There is a line in ~/.vimrc:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>autocmd FileType text setlocal textwidth=78
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>comment this line then everything goes OK.</p>
-
-<h3>Change Awesome theme and change the titlebar width</h3>
-
-<p>Download the 3rd party themes from <a href="https://github.com/Morley93/awesome-themes-3.5">https://github.com/Morley93/awesome-themes-3.5</a>, then copy them to your own theme location, normally under the &ldquo;/usr/share/awesome/themes/&rdquo;, Choose whatever you want, and edit the ~/.config/awesome/default.rc.lua:</p>
-
-<figure class='code'><figcaption><span>rc.lua</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='lua'><span class='line'><span class="n">beautiful</span><span class="p">.</span><span class="n">init</span><span class="p">(</span><span class="s2">&quot;</span><span class="s">/usr/share/awesome/themes/wabbit/theme.lua&quot;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Save and exit then you got the new theme.  <br/>
-How to change the title bar? <br/>
-In /usr/share/awesome/themes/wabbit/theme.lua, edit the following lines:</p>
-
-<figure class='code'><figcaption><span>theme.lua</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='lua'><span class='line'><span class="c1">--theme.font          = &quot;MonteCarlo medium 11&quot;</span>
-</span><span class='line'><span class="n">theme</span><span class="p">.</span><span class="n">font</span>          <span class="o">=</span> <span class="s2">&quot;</span><span class="s">MonteCarlo medium 9&quot;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>I think 9 is good for me, but change this to 11 or bigger will make old men happy.   <br/>
-You can change this number into a very big or very small number, then some funny things will happen :)</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/46">&larr; Older</a>
@@ -1986,6 +2163,10 @@ You can change this number into a very big or very small number, then some funny
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/10/15/use-openwrt-router-for-lan-forwarding/">Use OpenWRT Router for Lan Forwarding</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/10/14/tips-for-20151014/">Tips for 20151014</a>
       </li>
     
@@ -1999,10 +2180,6 @@ You can change this number into a very big or very small number, then some funny
     
       <li class="post">
         <a href="/blog/2015/10/13/cloud-init-grow-partition/">Cloud-Init Grow Partition</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/10/13/linux-tips-3/">Linux Tips 3</a>
       </li>
     
   </ul>
