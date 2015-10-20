@@ -9,13 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Mainly for installing the OpenWRT system on the BBB, following is the steps: 1
-2
-3
-4
-5
-# zImage
-cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt &hellip;">
+  <meta name="description" content="因为原文是英文的缘故，所以这里就直接用中文翻译，并把编译时的步骤和注意事项记载下来。 主要参考了: https://eewiki.net/display/linuxonarm/BeagleBone+Black All of the files and folder are located &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -71,6 +65,366 @@ cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/09/wei-bbbbian-yi-nei-he-he-linux/">为BBB编译内核和Linux</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-09T10:13:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:13 am</span></time>
+        
+         | <a href="/blog/2014/11/09/wei-bbbbian-yi-nei-he-he-linux/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>因为原文是英文的缘故，所以这里就直接用中文翻译，并把编译时的步骤和注意事项记载下来。    <br/>
+主要参考了:   <br/>
+<a href="https://eewiki.net/display/linuxonarm/BeagleBone+Black">https://eewiki.net/display/linuxonarm/BeagleBone+Black</a>    <br/>
+All of the files and folder are located under <code>$BBB/201411</code> folder.</p>
+
+<h3>交叉编译链准备</h3>
+
+<p>下载、设置交叉编译链:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wget -c https://releases.linaro.org/14.09/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux.tar.xz
+</span><span class='line'>tar xf gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux.tar.xz
+</span><span class='line'>export CC=`pwd`/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/bin/arm-linux-gnueabihf-
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>测试交叉编译链:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># ${CC}gcc --version
+</span><span class='line'>arm-linux-gnueabihf-gcc (crosstool-NG linaro-1.13.1-4.9-2014.09 - Linaro GCC 4.9-2014.09) 4.9.2 20140904 (prerelease)
+</span><span class='line'>Copyright (C) 2014 Free Software Foundation, Inc.
+</span><span class='line'>This is free software; see the source for copying conditions.  There is NO
+</span><span class='line'>warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>编译U-Boot</h3>
+
+<p>下载U-Boot:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone git://git.denx.de/u-boot.git
+</span><span class='line'>cd u-boot/
+</span><span class='line'>git checkout v2014.10 -b tmp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>下载、加载补丁:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wget -c https://raw.githubusercontent.com/eewiki/u-boot-patches/master/v2014.10/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+</span><span class='line'>patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>编译U-Boot:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># make ARCH=arm CROSS_COMPILE=${CC} distclean && make ARCH=arm CROSS_COMPILE=${CC} am335x_evm_defconfig && make ARCH=arm CROSS_COMPILE=${CC}
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>编译内核</h3>
+
+<p>下面的步骤将编译出内核和内核模块，编译完成后全部被拷贝到deploy文件夹中。</p>
+
+<h4>主线内核</h4>
+
+<p>编译前准备， 在Ubuntu 12.04，安装下列包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install bc build-essential device-tree-compiler fakeroot lzma lzop man-db u-boot-tools libncurses5-dev ia32-libs wget
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>下载:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/RobertCNelson/bb-kernel.git
+</span><span class='line'>$ cd bb-kernel/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>切换到v3.8.x分支(支持全面):</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git checkout origin/am33x-v3.8 -b tmp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>切换到v3.17.x分支(SGX， 更好的usb和Ethernet支持), SGX，硬件加速。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git checkout origin/am33x-v3.17 -b tmp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>编译：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./build_kernel.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>TI内核</h4>
+
+<p>完整编译步骤如下：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/RobertCNelson/ti-linux-kernel-dev/
+</span><span class='line'>cd ti-linux-kernel-dev/
+</span><span class='line'>git checkout origin/ti-linux-3.14.y -b tmp
+</span><span class='line'>./build_kernel.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>准备文件系统</h3>
+
+<h4>Ubuntu</h4>
+
+<p>下载并解压Ubuntu文件系统:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wget -c https://rcn-ee.net/deb/minfs/trusty/ubuntu-14.04-minimal-armhf-2014-07-07.tar.xz
+</span><span class='line'>tar xf ubuntu-14.04-minimal-armhf-2014-07-07.tar.xz
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>写入存储卡</h3>
+
+<h4>分区准备</h4>
+
+<p>准备的TF卡容量为8G， 使用lsblk可以用于查看device id。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ lsblk
+</span><span class='line'>NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+</span><span class='line'>mmcblk0     179:0    0   7.4G  0 disk 
+</span><span class='line'>├─mmcblk0p1 179:1    0    48M  0 part 
+</span><span class='line'>└─mmcblk0p2 179:2    0   7.4G  0 part 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>备份好TF卡上文件内容后，对其重新进行分区，这里使用fdisk移除掉所有分区后重新分成一个区，而后格式化为ext4分区。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># export DISK=/dev/mmcblk0
+</span><span class='line'># sudo dd if=/dev/zero of=${DISK} bs=1M count=10
+</span><span class='line'># sudo dd if=./u-boot/MLO of=${DISK} count=1 seek=1 conv=notrunc bs=128k
+</span><span class='line'># sudo dd if=./u-boot/u-boot.img of=${DISK} count=2 seek=1 conv=notrunc bs=384k
+</span><span class='line'># sudo sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
+</span><span class='line'>1,,0x83,*
+</span><span class='line'>__EOF__
+</span><span class='line'># sudo mkfs.ext4 /dev/mmcblk0p1 -L rootfs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>现在查看lsblk的结果应该是这样:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mmcblk0     179:0    0   7.4G  0 disk 
+</span><span class='line'>└─mmcblk0p1 179:1    0   7.4G  0 part 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>写入</h4>
+
+<p>我们将使用eMMC自有的BootLoader, 所以在/media/rootfs中使用下列内容到uEnv.txtt：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>##This will work with: Angstrom's 2013.06.20 u-boot.
+</span><span class='line'> 
+</span><span class='line'>loadaddr=0x82000000
+</span><span class='line'>fdtaddr=0x88000000
+</span><span class='line'>rdaddr=0x88080000
+</span><span class='line'> 
+</span><span class='line'>initrd_high=0xffffffff
+</span><span class='line'>fdt_high=0xffffffff
+</span><span class='line'> 
+</span><span class='line'>loadximage=load mmc 0:1 ${loadaddr} /boot/vmlinuz-${uname_r}
+</span><span class='line'>loadxfdt=load mmc 0:1 ${fdtaddr} /boot/dtbs/${uname_r}/${fdtfile}
+</span><span class='line'>loadxrd=load mmc 0:1 ${rdaddr} /boot/initrd.img-${uname_r}; setenv rdsize ${filesize}
+</span><span class='line'>loaduEnvtxt=load mmc 0:1 ${loadaddr} /boot/uEnv.txt ; env import -t ${loadaddr} ${filesize};
+</span><span class='line'>loadall=run loaduEnvtxt; run loadximage; run loadxfdt;
+</span><span class='line'> 
+</span><span class='line'>mmcargs=setenv bootargs console=tty0 console=${console} ${optargs} ${cape_disable} ${cape_enable} root=${mmcroot} rootfstype=${mmcrootfstype} ${cmdline}
+</span><span class='line'> 
+</span><span class='line'>uenvcmd=run loadall; run mmcargs; bootz ${loadaddr} - ${fdtaddr};
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>解压缩下载好的rootfs文件到SD卡分区：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ tar xvf armhf-rootfs-ubuntu-trusty.tar -C /media/rootfs/
+</span><span class='line'>$ sync
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>拷贝kernel到SD卡分区:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cp /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32.zImage ./vmlinuz-3.14.23-ti-r32
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>拷贝Kernel Device Tree二进制文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>tar xvf /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32-dtbs.tar.gz -C /media/rootfs/boot/dtbs/${kernel_version}/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>拷贝内核模块:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># tar xfv /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32-modules.tar.gz -C /media/rootfs/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置fstab文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>sudo sh -c "echo '/dev/mmcblk0p1  /  auto  errors=remount-ro  0  1' &gt;&gt; /media/rootfs/etc/fstab"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置网络：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /media/rootfs/etc/network/interfaces
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'> 
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet dhcp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置串口登录：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /media/rootfs/etc/init/serial.conf
+</span><span class='line'>start on stopped rc RUNLEVEL=[2345]
+</span><span class='line'>stop on runlevel [!2345]
+</span><span class='line'> 
+</span><span class='line'>respawn
+</span><span class='line'>exec /sbin/getty 115200 ttyO0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>进入U-boot后更改一下配置：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>U-Boot# setenv mmcroot /dev/mmcblk0p1 ro
+</span><span class='line'>U-Boot# boot
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>默认用户名，密码分别是: root/temppwd   <br/>
+进入系统以后查看系统信息：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ubuntu@arm:~$ uname -a 
+</span><span class='line'>Linux arm 3.14.23-ti-r32 #1 SMP PREEMPT Sun Nov 9 04:19:25 UTC 2014 armv7l armv7l armv7l GNU/Linux
+</span><span class='line'>ubuntu@arm:~$ cat /etc/issue
+</span><span class='line'>Ubuntu 14.04 LTS \n \l
+</span><span class='line'>
+</span><span class='line'>default username:password is [ubuntu:temppwd]
+</span><span class='line'>ubuntu@arm:~$ ifconfig
+</span><span class='line'>eth0      Link encap:Ethernet  HWaddr 90:59:af:65:d9:8c  
+</span><span class='line'>          inet addr:10.0.0.122  Bcast:10.0.0.255  Mask:255.255.255.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1189,240 +1543,6 @@ Also add a new file named 50_choose_console, with the setted M0 and M1, you coul
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/">Use TFTP/NFS Testing BBB Kernel</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-11-02T20:25:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>2</span><span class='date-suffix'>nd</span>, <span class='date-year'>2014</span></span> <span class='time'>8:25 pm</span></time>
-        
-         | <a href="/blog/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Prerequisite</h3>
-
-<p>You have a tftp server and NFS server configured, in my environment these 2 server runs on ArchLinux, ip address is 10.0.0.221, while BBB takes another ip address, for example, 10.0.0.16.</p>
-
-<h3>NFS Server Preparation</h3>
-
-<p>Create the nfs server&rsquo;s rootfs for BBB Black ,and open all of the priviledges :</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
-</span><span class='line'>/media/y/embedded/BBB/svnco/trunk/bin/omap
-</span><span class='line'># mkdir /srv/nfs4/BBBrootfs
-</span><span class='line'># tar xzvf openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
-</span><span class='line'># chmod 777 -R /srv/nfs4/BBBrootfs/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you have the NFS Server available.</p>
-
-<h3>TFTP Server Preparation</h3>
-
-<p>Since we are using u-boot for booting, we need create uImage, but in OpenWRT, its default generated file is zImage, so we need use following command for generate our own uImage:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux" -d ./zImage ./uImage
-</span><span class='line'>Image Name:   Linux
-</span><span class='line'>Created:      Sun Nov  2 20:39:08 2014
-</span><span class='line'>Image Type:   ARM Linux Kernel Image (uncompressed)
-</span><span class='line'>Data Size:    1710568 Bytes = 1670.48 kB = 1.63 MB
-</span><span class='line'>Load Address: 80008000
-</span><span class='line'>Entry Point:  80008000
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Also we have to copy the dtd file into our tftp folder:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@TrustyArch omap]# pwd
-</span><span class='line'>/media/y/embedded/BBB/svnco/trunk/bin/omap
-</span><span class='line'>[root@TrustyArch omap]# cp dtbs/am335x-boneblack.dtb /srv/tftp/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Easy Making Script</h3>
-
-<p>Following script will easy your life:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat ~/autobuildnfs.sh
-</span><span class='line'># First copy the kernel and dtd files into the tftp server
-</span><span class='line'>echo "##### Start copy to /srv/tftp####"
-</span><span class='line'>cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage /srv/tftp/
-</span><span class='line'>cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb /srv/tftp/
-</span><span class='line'>echo "###############Finished Copy!!!###############"
-</span><span class='line'># Generate the uImage in /srv/tftp folder
-</span><span class='line'>mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux" -d /srv/tftp/openwrt-omap-zImage /srv/tftp/uImage
-</span><span class='line'># Remove the BBBrootfs content, all of them should be deleted. 
-</span><span class='line'>rm -rf /srv/nfs4/BBBrootfs/
-</span><span class='line'>mkdir -p /srv/nfs4/BBBrootfs
-</span><span class='line'># Now extract the newly generatd rootfs into the /srv/nfs4/BBBrootfs
-</span><span class='line'>tar xzvf /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>U-boot Configuration</h3>
-
-<h4>CheetSheet</h4>
-
-<p>When system startup, click &lsquo;enter&rsquo; for getting the u-boot prompt interface, then set following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>setenv ipaddr 10.0.0.16
-</span><span class='line'>setenv serverip 10.0.0.221
-</span><span class='line'>tftpboot ${fdtaddr} am335x-boneblack.dtb
-</span><span class='line'>tftpboot ${kloadaddr} uImage
-</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
-</span><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>CheetSheet2</h4>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>setenv ipaddr 192.168.1.16
-</span><span class='line'>setenv serverip 192.168.1.221
-</span><span class='line'>tftpboot ${fdtaddr} am335x-boneblack.dtb
-</span><span class='line'>tftpboot ${kloadaddr} uImage
-</span><span class='line'># For NFS
-</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.16:::::eth0 rootpath=/etc/preinit
-</span><span class='line'># NFS with 192.168.1.1
-</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.1:::::eth0 rootpath=/etc/preinit
-</span><span class='line'># For SD-Card
-</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/mmcblk0p2 ro rootfstype=ext4 rootwait
-</span><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>setting and testing the network</h4>
-
-<p>Set the ipaddr, and save it into the u-boot, next time you won&rsquo;t set it again.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>U-Boot# setenv ipaddr 10.0.0.16
-</span><span class='line'>U-Boot# printenv ipaddr
-</span><span class='line'>ipaddr=10.0.0.16
-</span><span class='line'>U-Boot# setenv serverip 10.0.0.221
-</span><span class='line'>U-Boot# ping 10.0.0.221
-</span><span class='line'>link up on port 0, speed 100, full duplex
-</span><span class='line'>Using cpsw device
-</span><span class='line'>host 10.0.0.221 is alive
-</span><span class='line'>U-Boot# saveenv
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Load Files From TFTP</h4>
-
-<p>Use following commands for loading uImage and dtb files from 10.0.0.221:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>U-Boot# tftpboot ${fdtaddr} am335x-boneblack.dtb
-</span><span class='line'>U-Boot# tftpboot ${kloadaddr} uImage
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Set NFS Startup Parameter</h4>
-
-<p>Following will let the kernel startup from the nfs server.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now startup:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Start Debugging Under NFS</h3>
-
-<p>First we met following error:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[    1.015532] List of all partitions:
-</span><span class='line'>[    1.019292] No filesystem could mount root, tried: 
-</span><span class='line'>[    1.024439] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,255)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This is because we don&rsquo;t enable NFS and ROOT on NFS in kernel configuration. <br/>
-File System ->  Network File System -> NFS Client Support, etc, see following picture:  <br/>
-<img src="/images/nfskernelconfigure.jpg" alt="/images/nfskernelconfigure.jpg" /></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/25">&larr; Older</a>
@@ -1440,6 +1560,10 @@ File System ->  Network File System -> NFS Client Support, etc, see following pi
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/10/19/todothings-1/">ToDoThings(1)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/10/19/on-vm-performance-test/">On VM Performance Test</a>
       </li>
     
@@ -1453,10 +1577,6 @@ File System ->  Network File System -> NFS Client Support, etc, see following pi
     
       <li class="post">
         <a href="/blog/2015/10/15/use-openwrt-router-for-lan-forwarding/">Use OpenWRT Router for Lan Forwarding</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/10/14/tips-for-20151014/">Tips for 20151014</a>
       </li>
     
   </ul>
