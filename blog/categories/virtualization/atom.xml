@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2015-10-21T21:42:59+08:00</updated>
+  <updated>2015-10-23T22:49:00+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,144 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Ceph on Docker]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/10/23/tips-on-ceph-on-docker/"/>
+    <updated>2015-10-23T22:32:17+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/10/23/tips-on-ceph-on-docker</id>
+    <content type="html"><![CDATA[<h3>Installation</h3>
+
+<p>Pull the docker image via:</p>
+
+<pre><code>$ sudo docker pull ceph/demo
+</code></pre>
+
+<h3>Run Ceph</h3>
+
+<p>Run the container via:</p>
+
+<pre><code># sudo docker run -d --net=host -e MON_IP=192.168.10.190 -e CEPH_NETWORK=192.168.10.0/24
+ceph/demo
+</code></pre>
+
+<p>View the docker instance via:</p>
+
+<pre><code># docker ps
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+cbe567594adb        ceph/demo           "/entrypoint.sh"    About an hour ago   Up About an hour                        furious_hopper 
+# docker exec -it cbe567594adb
+</code></pre>
+
+<h3>Ceph Operation</h3>
+
+<p>View the ceph processes:</p>
+
+<pre><code>root@monitor:/# ps -ef | grep "ceph"                                                                                                                                 
+root         1     0  0 13:16 ?        00:00:00 /usr/bin/python /usr/bin/ceph -w
+root        32     1  0 13:16 ?        00:00:01 ceph-mon -i monitor --public-addr 192.168.10.190:6789
+root       201     1  0 13:16 ?        00:00:06 ceph-osd -i 0 -k /var/lib/ceph/osd/ceph-0/keyring
+root       412     1  0 13:16 ?        00:00:01 ceph-mds --cluster=ceph -i 0
+root       470     1  0 13:16 ?        00:00:03 radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway -k /var/lib/ceph/radosgw/monitor/keyring --rgw-socket-path= --rgw-frontends=civetweb port=80
+root       473     1  0 13:16 ?        00:00:01 /usr/bin/python /usr/bin/ceph-rest-api -n client.admin
+root      1703  1557  0 14:37 ?        00:00:00 grep --color=auto ceph
+</code></pre>
+
+<p>View Ceph Status:</p>
+
+<pre><code>root@monitor:/# ceph -s
+    cluster c3470b36-8d03-4dbb-8af4-d4353ea54973
+     health HEALTH_OK
+     monmap e1: 1 mons at {monitor=192.168.10.190:6789/0}
+            election epoch 2, quorum 0 monitor
+     mdsmap e5: 1/1/1 up {0=0=up:active}
+     osdmap e22: 1 osds: 1 up, 1 in
+      pgmap v75: 144 pgs, 11 pools, 6796 bytes data, 70 objects
+            3789 MB used, 287 GB / 291 GB avail
+                 144 active+clean
+</code></pre>
+
+<p>Create a new user:</p>
+
+<pre><code># radosgw-admin user create --uid="xxxx" --display-name="XXXX YYYY" --email=xxxyyy@gmail.com
+</code></pre>
+
+<p>Remember the output of the <code>access_key</code> and <code>secret_key</code>.</p>
+
+<h3>Configure Ceph</h3>
+
+<p>Install softwares:</p>
+
+<pre><code># apt-get update -y
+# apt-get install -y python
+# apt-get install -y python-pip
+# pip install boto
+# pip install ipython
+# pip install s3cmd
+# apt-get install -y vim
+</code></pre>
+
+<p>Use the <code>list_buckets.py</code> file:</p>
+
+<pre><code># cat list_buckets.py
+import boto
+import boto.s3.connection
+
+access_key =  '5S5YPYC46EVYG9MF0RSR'
+secret_key = 'hEcgOMoNOp6jmYnt3G6qqJiT7mV5A8zBR9g6o38Z'
+
+conn = boto.connect_s3(
+        aws_access_key_id = access_key,
+        aws_secret_access_key = secret_key,
+        host = 'localhost',
+        is_secure=False,
+        calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+        )
+</code></pre>
+
+<p>In ipython, use following commands for create a new bucket:</p>
+
+<pre><code>In [8]: conn.create_bucket("fuck")                                        
+Out[8]: &lt;Bucket: fuck&gt;
+
+In [9]: conn.get_all_buckets()                                                 
+Out[9]: [&lt;Bucket: fuck&gt;]
+</code></pre>
+
+<p>Download the s3cfg file from :</p>
+
+<p><a href="https://github.com/tobegit3hub/.s3cfg/blob/master/.s3cfg">https://github.com/tobegit3hub/.s3cfg/blob/master/.s3cfg</a></p>
+
+<p>Also configure its <code>access_key</code> and <code>secret_key</code>, save it in your root
+directory, run following commands, you will see the buckets:</p>
+
+<pre><code># s3cmd ls                                                                                                                                             
+2015-10-23 13:25  s3://fuck
+</code></pre>
+
+<h3>Mount Ceph In Linux</h3>
+
+<p>In Ubuntu machine, install ceph:</p>
+
+<pre><code>$ sudo apt-get install ceph
+</code></pre>
+
+<p>Get the admin&rsquo;s password(In Ceph Container):</p>
+
+<pre><code># ceph-authtool --print-key /etc/ceph/ceph.client.admin.keyring 
+AQAmMypWs06BGxAAQ1rQyFqFJ25xaDye4c9kyQ==
+</code></pre>
+
+<p>Now mount it via:</p>
+
+<pre><code>$ sudo mount -t ceph 192.168.10.190:/ /mnt -o name=admin,secret=AQAmMypWs06BGxAAQ1rQyFqFJ25xaDye4c9kyQ==
+$ sudo touch /mnt/abc
+</code></pre>
+
+<p>Via <code>ceph -s</code> we could see the <code>pgmap v86</code> changes, which indicates the data
+has been written into the ceph.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[On VM Performance Test]]></title>
@@ -714,125 +852,6 @@ templateid=67ca66ea-b021-4f91-ac8c-ff95f2576c9d
 zoneid=1a258852-831c-4612-94f4-2551a98667bb name=testuserdata
 userdata='Q29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0iCk1JTUUtVmVyc2lvbjogMS4wCgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQveC1zaGVsbHNjcmlwdDsgY2hhcnNldD0idXMtYXNjaWkiCk1JTUUtVmVyc2lvbjogMS4wCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQKQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9ImhlbGxvX3dvcmxkLnNoIgoKIyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQhIiA+PiAvcm9vdC90ZXN0CgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQvY2xvdWQtY29uZmlnOyBjaGFyc2V0PSJ1cy1hc2NpaSIKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibXktdXNlci1kYXRhIgoKI2Nsb3VkLWNvbmZpZwpncm93cGFydDoKICBtb2RlOiBhdXRvCmNocGFzc3dkOiB7IGV4cGlyZTogRmFsc2UgfQpzc2hfcHdhdXRoOiBUcnVlCgpzc2hfYXV0aG9yaXplZF9rZXlzOgogLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUUNzMFA4aFNCM05qN2tmd2lRT01PQ0Z2RXVqd3JLZjVuUFdmdzdzbmplVzd3TnhCYi9pTHhqbGxIK0tJdjdpS0dRaGI5WGtpZ3dXelhjdktSRk9OQTF0UU5CUHBsUE9RQXhHYUpoYzcxYlhZTVRabWsxcmZ5L0U4bUZIQmJ3U0trdm04Z3oxaFVqQWFITHdiZ21iaUE3eUNDUkVXbVR1SWpudm1FZnJXYU92WERRZFFPb2RkSzFhZThKM3BnRUNtQ21mRldrQmR3Y1JaN05jTUxBSkVkYTNpYWtJbWdaR2NqTWNCc1hjUUNOcjN1RGlKbERvc1V6Mjg4L3grTnZteTlzcHZnc2x4RXVUV0VQWFRGY1l5eVBrUHdkTnlpQm5TaWFoZTExcUdUZkk0Z2IyWllEb3JDZU5Ca1QxdkVaY0psL1JqT3NKRUFXT04rbno3Nm16MmdhZCByb290QHItOS1WTSAKCnRpbWV6b25lOiBBc2lhL0Nob25ncWluZwoKLS09PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0tLQo='
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on Cloud-Init and CloudStack]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/10/13/tips-on-cloud-init-and-cloudstack/"/>
-    <updated>2015-10-13T16:22:16+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/10/13/tips-on-cloud-init-and-cloudstack</id>
-    <content type="html"><![CDATA[<h3>CloudStack VR VM</h3>
-
-<p>For accessing the VR VM and view the user-data and meta-data, like following, on the
-instance ssh, you could get the user-data and meta-data:</p>
-
-<pre><code>[root@testfuck ~]# curl http://10.1.1.1/latest/user-data
-[root@testfuck ~]# curl http://10.1.1.1/latest/meta-data
-service-offering
-availability-zone
-local-ipv4
-local-hostname
-public-ipv4
-public-hostname
-instance-id
-vm-id
-public-keys
-cloud-identifier
-# curl http://10.1.1.1/latest/meta-data/vm-id
-c6e1165e-f19a-4c77-9d96-dfd48f8ce944
-</code></pre>
-
-<p>user-data could not be fetched directly, you could only manage it via cloud-monkey when
-deploying the VMs.</p>
-
-<h3>user-data Simple Example</h3>
-
-<p>Before user-data injected:</p>
-
-<pre><code>Login Using password:   
-
-root@r-9-VM:~# ssh root@10.1.1.162
-root@10.1.1.162's password: 
-
-[root@testfuck etc]# date +%Z
-BST
-[root@testfuck etc]# cat /etc/sysconfig/clock 
-ZONE="Europe/London"
-</code></pre>
-
-<p>But We want to change! First let VR VM could directly login to the instance, second, we
-change the timezone into Asia/Chongqing.</p>
-
-<p>Generate the user-data:</p>
-
-<pre><code>$ cat hello_world.sh
-#!/bin/bash
-echo "hello world!" &gt;&gt; /root/test
-$ cat my-user-data
-#cloud-config
-growpart:
-  mode: auto
-chpasswd: { expire: False }
-ssh_pwauth: True
-
-ssh_authorized_keys:
- - ssh-rsa xxxxxxxxxxxxxxxxxxxxxxxx
-
-timezone: Asia/Chongqing
-$ $ write-mime-multipart --output=combined-userdata.txt \ 
-hello_world.sh:text/x-shellscript my-user-data
-$ ls -l -h combined-userdata.txt 
--rw-rw-r-- 1 dash dash 1.1K Oct 13 17:14 combined-userdata.txt
-$ cat combined-userdata.txt | base64
-</code></pre>
-
-<p>Deploy via:</p>
-
-<pre><code>cloudmonkey deploy virtualmachine
-serviceofferingid=683f31f8-a939-468e-b4de-4512a8ccff8e
-templateid=13fb2961-533e-4a7d-80f9-21d860269aad
-zoneid=78509dc3-c828-429c-8154-9fffbc09384c
-networkids=7c6e7e6b-6aa2-4f95-a835-8d18bf930061 name=testuserdata
-userdata='Q29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0iCk1JTUUtVmVyc2lvbjogMS4wCgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQveC1zaGVsbHNjcmlwdDsgY2hhcnNldD0idXMtYXNjaWkiCk1JTUUtVmVyc2lvbjogMS4wCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQKQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9ImhlbGxvX3dvcmxkLnNoIgoKIyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQhIiA+PiAvcm9vdC90ZXN0CgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQvY2xvdWQtY29uZmlnOyBjaGFyc2V0PSJ1cy1hc2NpaSIKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibXktdXNlci1kYXRhIgoKI2Nsb3VkLWNvbmZpZwpncm93cGFydDoKICBtb2RlOiBhdXRvCmNocGFzc3dkOiB7IGV4cGlyZTogRmFsc2UgfQpzc2hfcHdhdXRoOiBUcnVlCgpzc2hfYXV0aG9yaXplZF9rZXlzOgogLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUUNzMFA4aFNCM05qN2tmd2lRT01PQ0Z2RXVqd3JLZjVuUFdmdzdzbmplVzd3TnhCYi9pTHhqbGxIK0tJdjdpS0dRaGI5WGtpZ3dXelhjdktSRk9OQTF0UU5CUHBsUE9RQXhHYUpoYzcxYlhZTVRabWsxcmZ5L0U4bUZIQmJ3U0trdm04Z3oxaFVqQWFITHdiZ21iaUE3eUNDUkVXbVR1SWpudm1FZnJXYU92WERRZFFPb2RkSzFhZThKM3BnRUNtQ21mRldrQmR3Y1JaN05jTUxBSkVkYTNpYWtJbWdaR2NqTWNCc1hjUUNOcjN1RGlKbERvc1V6Mjg4L3grTnZteTlzcHZnc2x4RXVUV0VQWFRGY1l5eVBrUHdkTnlpQm5TaWFoZTExcUdUZkk0Z2IyWllEb3JDZU5Ca1QxdkVaY0psL1JqT3NKRUFXT04rbno3Nm16MmdhZCByb290QHItOS1WTSAKCnRpbWV6b25lOiBBc2lhL0Nob25ncWluZwoKLS09PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0tLQo='
-</code></pre>
-
-<h3>Cloudmonkey</h3>
-
-<p>Get the Key Steps:</p>
-
-<p><img src="/images/2015_10_14_09_54_16_704x205.jpg" alt="/images/2015_10_14_09_54_16_704x205.jpg" /></p>
-
-<p>Click &ldquo;Admin&rdquo;, and Click &ldquo;View User&rdquo;:</p>
-
-<p><img src="/images/2015_10_14_10_02_28_706x328.jpg" alt="/images/2015_10_14_10_02_28_706x328.jpg" /></p>
-
-<p>Generate the keys:</p>
-
-<p><img src="/images/2015_10_14_10_05_07_676x341.jpg" alt="/images/2015_10_14_10_05_07_676x341.jpg" /></p>
-
-<p>View the generated keys:</p>
-
-<p><img src="/images/2015_10_14_10_08_43_408x419.jpg" alt="/images/2015_10_14_10_08_43_408x419.jpg" /></p>
-
-<p>Configure the Cloudmonkey:</p>
-
-<pre><code>(local) mycloudmonkey&gt; set history_file /usr/share/cloudmonkey_history
-(local) mycloudmonkey&gt; set log_file /var/log/cloudmonkey               
-(local) mycloudmonkey&gt; set host 10.100.168.2                           
-This option has been deprecated, please set 'url' instead              
-This server url will be used: http://10.100.168.2:8080/client/api      
-(local) mycloudmonkey&gt; set url http://localhost:8080/client/api     
-(local) mycloudmonkey&gt; set apikey
-fIcD-UNUmfJG_B0oFOiVLNitFJxC7UM3ZyjlOdDUijJ4mJEgjjNQjULMQHhm69QP9IKUOiIX41-B2p1ebxhHdA                      
-(local) mycloudmonkey&gt; set secretkey
-s4rubpT6rR3sjMDs9LALe21puxO0GxG5-KKsLoHLy3sn7uQDiUs01BGbS4cT6BZ3FtKVPRey5ersJ4iXH7saag                   
-(local) mycloudmonkey&gt; set prompt mycloudmonkey
-(local) mycloudmonkey&gt; sync
-</code></pre>
-
-<p>Now run the deploy command, you could get the VM runs as the cloud-init will enlarge
-the partition into the largest amount.</p>
 ]]></content>
   </entry>
   
