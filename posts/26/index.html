@@ -9,10 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="This article will try to build and run OpenWRT on BBB(BeagleBone Black) Checkout Code Checkout the code from openwrt.org: 1
-2
-3
-[Trusty@/media/y/ &hellip;">
+  <meta name="description" content="Prerequisite You have a tftp server and NFS server configured, in my environment these 2 server runs on ArchLinux, ip address is 10.0.0.221, while &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -68,6 +65,304 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/">Use TFTP/NFS Testing BBB Kernel</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-02T20:25:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>2</span><span class='date-suffix'>nd</span>, <span class='date-year'>2014</span></span> <span class='time'>8:25 pm</span></time>
+        
+         | <a href="/blog/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Prerequisite</h3>
+
+<p>You have a tftp server and NFS server configured, in my environment these 2 server runs on ArchLinux, ip address is 10.0.0.221, while BBB takes another ip address, for example, 10.0.0.16.</p>
+
+<h3>NFS Server Preparation</h3>
+
+<p>Create the nfs server&rsquo;s rootfs for BBB Black ,and open all of the priviledges :</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
+</span><span class='line'>/media/y/embedded/BBB/svnco/trunk/bin/omap
+</span><span class='line'># mkdir /srv/nfs4/BBBrootfs
+</span><span class='line'># tar xzvf openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
+</span><span class='line'># chmod 777 -R /srv/nfs4/BBBrootfs/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you have the NFS Server available.</p>
+
+<h3>TFTP Server Preparation</h3>
+
+<p>Since we are using u-boot for booting, we need create uImage, but in OpenWRT, its default generated file is zImage, so we need use following command for generate our own uImage:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux" -d ./zImage ./uImage
+</span><span class='line'>Image Name:   Linux
+</span><span class='line'>Created:      Sun Nov  2 20:39:08 2014
+</span><span class='line'>Image Type:   ARM Linux Kernel Image (uncompressed)
+</span><span class='line'>Data Size:    1710568 Bytes = 1670.48 kB = 1.63 MB
+</span><span class='line'>Load Address: 80008000
+</span><span class='line'>Entry Point:  80008000
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also we have to copy the dtd file into our tftp folder:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@TrustyArch omap]# pwd
+</span><span class='line'>/media/y/embedded/BBB/svnco/trunk/bin/omap
+</span><span class='line'>[root@TrustyArch omap]# cp dtbs/am335x-boneblack.dtb /srv/tftp/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Easy Making Script</h3>
+
+<p>Following script will easy your life:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat ~/autobuildnfs.sh
+</span><span class='line'># First copy the kernel and dtd files into the tftp server
+</span><span class='line'>echo "##### Start copy to /srv/tftp####"
+</span><span class='line'>cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage /srv/tftp/
+</span><span class='line'>cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb /srv/tftp/
+</span><span class='line'>echo "###############Finished Copy!!!###############"
+</span><span class='line'># Generate the uImage in /srv/tftp folder
+</span><span class='line'>mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux" -d /srv/tftp/openwrt-omap-zImage /srv/tftp/uImage
+</span><span class='line'># Remove the BBBrootfs content, all of them should be deleted. 
+</span><span class='line'>rm -rf /srv/nfs4/BBBrootfs/
+</span><span class='line'>mkdir -p /srv/nfs4/BBBrootfs
+</span><span class='line'># Now extract the newly generatd rootfs into the /srv/nfs4/BBBrootfs
+</span><span class='line'>tar xzvf /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>U-boot Configuration</h3>
+
+<h4>CheetSheet</h4>
+
+<p>When system startup, click &lsquo;enter&rsquo; for getting the u-boot prompt interface, then set following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>setenv ipaddr 10.0.0.16
+</span><span class='line'>setenv serverip 10.0.0.221
+</span><span class='line'>tftpboot ${fdtaddr} am335x-boneblack.dtb
+</span><span class='line'>tftpboot ${kloadaddr} uImage
+</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
+</span><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>CheetSheet2</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>setenv ipaddr 192.168.1.16
+</span><span class='line'>setenv serverip 192.168.1.221
+</span><span class='line'>tftpboot ${fdtaddr} am335x-boneblack.dtb
+</span><span class='line'>tftpboot ${kloadaddr} uImage
+</span><span class='line'># For NFS
+</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.16:::::eth0 rootpath=/etc/preinit
+</span><span class='line'># NFS with 192.168.1.1
+</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.1:::::eth0 rootpath=/etc/preinit
+</span><span class='line'># For SD-Card
+</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/mmcblk0p2 ro rootfstype=ext4 rootwait
+</span><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>setting and testing the network</h4>
+
+<p>Set the ipaddr, and save it into the u-boot, next time you won&rsquo;t set it again.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>U-Boot# setenv ipaddr 10.0.0.16
+</span><span class='line'>U-Boot# printenv ipaddr
+</span><span class='line'>ipaddr=10.0.0.16
+</span><span class='line'>U-Boot# setenv serverip 10.0.0.221
+</span><span class='line'>U-Boot# ping 10.0.0.221
+</span><span class='line'>link up on port 0, speed 100, full duplex
+</span><span class='line'>Using cpsw device
+</span><span class='line'>host 10.0.0.221 is alive
+</span><span class='line'>U-Boot# saveenv
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Load Files From TFTP</h4>
+
+<p>Use following commands for loading uImage and dtb files from 10.0.0.221:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>U-Boot# tftpboot ${fdtaddr} am335x-boneblack.dtb
+</span><span class='line'>U-Boot# tftpboot ${kloadaddr} uImage
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Set NFS Startup Parameter</h4>
+
+<p>Following will let the kernel startup from the nfs server.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now startup:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Start Debugging Under NFS</h3>
+
+<p>First we met following error:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[    1.015532] List of all partitions:
+</span><span class='line'>[    1.019292] No filesystem could mount root, tried: 
+</span><span class='line'>[    1.024439] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,255)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This is because we don&rsquo;t enable NFS and ROOT on NFS in kernel configuration. <br/>
+File System ->  Network File System -> NFS Client Support, etc, see following picture:  <br/>
+<img src="/images/nfskernelconfigure.jpg" alt="/images/nfskernelconfigure.jpg" /></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/02/git-under-proxy/">Git Under Proxy</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-02T10:42:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>2</span><span class='date-suffix'>nd</span>, <span class='date-year'>2014</span></span> <span class='time'>10:42 am</span></time>
+        
+         | <a href="/blog/2014/11/02/git-under-proxy/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This changes use the socks proxy for git.  <br/>
+Install connect-proxy in aur:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>yaourt -S connect-proxy
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the proxy definition file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$ cat socks5.sh 
+</span><span class='line'>#!/bin/sh
+</span><span class='line'>connect -S 127.0.0.1:1394 "$@"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now directly set the</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>export GIT_PROXY_COMMAND=/home/Trusty/socks5.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or change the proxy definition via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[core]
+</span><span class='line'>        gitproxy = /home/Trusty/socks5.sh
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3447,1164 +3742,6 @@ Beware, the kernel we should choose is <code>uImage_T1_F0E_320x240_ts</code>, be
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-4/">Linux2.6.39 for Utu2440(4)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-25T13:39:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:39 pm</span></time>
-        
-         | <a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-4/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>RTC</h3>
-
-<h4>Activate</h4>
-
-<p>RealTime Clock functionality could be easily activated via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim arch/arm/mach-s3c2440/mach-smdk2440.c
-</span><span class='line'>static struct platform_device *smdk2440_devices[] __initdata = {
-</span><span class='line'>  &s3c_device_ohci,
-</span><span class='line'>+  &s3c_device_rtc,
-</span><span class='line'>  &s3c_device_lcd,
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the Kernel:  <br/>
-Device Drivers&mdash;-> RealTime Clock &mdash;-> Samsung S3C series Soc RTC  <br/>
-Save and exit, then make Image.</p>
-
-<h4>Test RTC</h4>
-
-<p>Before we have following configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@www ~]# date
-</span><span class='line'>Thu Jan  1 01:07:51 UTC 1970
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we switch to new kernel which contains RTC support:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@www ~]# ls -l /dev/rtc*
-</span><span class='line'>crw-rw----    1 root     root      254,   0 Jan  1 00:00 /dev/rtc0
-</span><span class='line'>[root@www ~]# date -s 201410251348
-</span><span class='line'>Sat Oct 25 13:48:00 UTC 2014
-</span><span class='line'>[root@www ~]# hwclock -w
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add following lines into /etc/init.d/rcS for automatically update systemtime from RTC:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@www ~]# cat /etc/init.d/rcS
-</span><span class='line'>echo "update time from RTC"
-</span><span class='line'>hwclock -s
-</span><span class='line'>date
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Reboot to see whether RTC works or not:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># date
-</span><span class='line'>Sat Oct 25 13:51:34 UTC 2014
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If we enable the NTPD, then this board could serve as the Network Time Protocol Server in Ethernet.</p>
-
-<h3>LCD</h3>
-
-<h4>Coding</h4>
-
-<p>First we attached the LCD touch screen to our development board, it will displayed a blank screen, while this blank screen will turn into graphic windows after we enabled the LCD Driver.</p>
-
-<p>We should carefully view yc2440-core.pdf, to find the LCD controller pin.  <br/>
-<img src="/images/lcdconnection.jpg" alt="/images/lcdconnection.jpg" /></p>
-
-<p>From the picture we could see the LCD&rsquo;s backlight is controlled via CPU&rsquo;s <code>LCD_PWREN/EINT12/GPG4</code>.</p>
-
-<p>Add the backlight.c in kernel source tree:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pwd
-</span><span class='line'>/media/y/embedded/utu2440/Kernel/linux-2.6.39/drivers/video/backlight
-</span><span class='line'>[Trusty@/media/y/embedded/utu2440/Kernel/linux-2.6.39/drivers/video/backlight]$ cat SMDK2440_backlight.c
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now the content should be:</p>
-
-<figure class='code'><figcaption><span>SMDK2440_backlight.c - SMDK2440_backlight.c </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-<span class='line-number'>85</span>
-<span class='line-number'>86</span>
-<span class='line-number'>87</span>
-<span class='line-number'>88</span>
-<span class='line-number'>89</span>
-<span class='line-number'>90</span>
-<span class='line-number'>91</span>
-<span class='line-number'>92</span>
-<span class='line-number'>93</span>
-<span class='line-number'>94</span>
-<span class='line-number'>95</span>
-<span class='line-number'>96</span>
-<span class='line-number'>97</span>
-<span class='line-number'>98</span>
-<span class='line-number'>99</span>
-<span class='line-number'>100</span>
-<span class='line-number'>101</span>
-<span class='line-number'>102</span>
-<span class='line-number'>103</span>
-<span class='line-number'>104</span>
-<span class='line-number'>105</span>
-<span class='line-number'>106</span>
-<span class='line-number'>107</span>
-<span class='line-number'>108</span>
-<span class='line-number'>109</span>
-<span class='line-number'>110</span>
-<span class='line-number'>111</span>
-<span class='line-number'>112</span>
-<span class='line-number'>113</span>
-<span class='line-number'>114</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;linux/errno.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/kernel.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/module.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/slab.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/input.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/init.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/serio.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/delay.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/clk.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/miscdevice.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/gpio.h&gt;</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#include &lt;asm/io.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;asm/irq.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;asm/uaccess.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;mach/regs-clock.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;plat/regs-timer.h&gt;</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#include &lt;mach/regs-gpio.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/cdev.h&gt;</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#undef DEBUG</span>
-</span><span class='line'><span class="c1">//#define DEBUG</span>
-</span><span class='line'><span class="cp">#ifdef DEBUG</span>
-</span><span class='line'><span class="cp">#define DPRINTK(x...) {printk(__FUNCTION__&quot;(%d): &quot;,__LINE__);printk(##x);}</span>
-</span><span class='line'><span class="cp">#else</span>
-</span><span class='line'><span class="cp">#define DPRINTK(x...) (void)(0)</span>
-</span><span class='line'><span class="cp">#endif</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#define DEVICE_NAME     &quot;backlight&quot;</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">bl_state</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="nf">set_bl</span><span class="p">(</span><span class="kt">int</span> <span class="n">state</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>        <span class="n">bl_state</span> <span class="o">=</span> <span class="o">!!</span><span class="n">state</span><span class="p">;</span>
-</span><span class='line'>        <span class="n">s3c2410_gpio_setpin</span><span class="p">(</span><span class="n">S3C2410_GPG</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">bl_state</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kr">inline</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">get_bl</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>        <span class="k">return</span> <span class="n">bl_state</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">ssize_t</span> <span class="nf">dev_write</span><span class="p">(</span><span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buffer</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="kt">loff_t</span> <span class="o">*</span> <span class="n">ppos</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>        <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">ch</span><span class="p">;</span>
-</span><span class='line'>        <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="k">return</span> <span class="n">count</span><span class="p">;</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>        <span class="n">ret</span> <span class="o">=</span> <span class="n">copy_from_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ch</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span> <span class="n">ch</span><span class="p">)</span> <span class="o">?</span> <span class="o">-</span><span class="nl">EFAULT</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="n">ch</span> <span class="o">&amp;=</span> <span class="mh">0x01</span><span class="p">;</span>
-</span><span class='line'>        <span class="n">set_bl</span><span class="p">(</span><span class="n">ch</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="k">return</span> <span class="n">count</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">ssize_t</span> <span class="nf">dev_read</span><span class="p">(</span><span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">filp</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buffer</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="kt">loff_t</span> <span class="o">*</span><span class="n">ppos</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>        <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>        <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">str</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span><span class="sc">&#39;0&#39;</span><span class="p">,</span> <span class="sc">&#39;1&#39;</span> <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="n">ret</span> <span class="o">=</span> <span class="n">copy_to_user</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">str</span> <span class="o">+</span> <span class="n">get_bl</span><span class="p">(),</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="p">)</span> <span class="p">)</span> <span class="o">?</span> <span class="o">-</span><span class="nl">EFAULT</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>        <span class="k">return</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="k">struct</span> <span class="n">file_operations</span> <span class="n">dev_fops</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nl">owner</span><span class="p">:</span>  <span class="n">THIS_MODULE</span><span class="p">,</span>
-</span><span class='line'>        <span class="nl">read</span><span class="p">:</span>   <span class="n">dev_read</span><span class="p">,</span>
-</span><span class='line'>        <span class="nl">write</span><span class="p">:</span>  <span class="n">dev_write</span><span class="p">,</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="k">struct</span> <span class="n">miscdevice</span> <span class="n">misc</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>        <span class="p">.</span><span class="n">minor</span> <span class="o">=</span> <span class="n">MISC_DYNAMIC_MINOR</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">DEVICE_NAME</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">.</span><span class="n">fops</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">dev_fops</span><span class="p">,</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">dev_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>        <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="n">ret</span> <span class="o">=</span> <span class="n">misc_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">misc</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="n">printk</span> <span class="p">(</span><span class="n">DEVICE_NAME</span><span class="s">&quot;</span><span class="se">\t</span><span class="s">initialized</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="n">s3c2410_gpio_cfgpin</span><span class="p">(</span><span class="n">S3C2410_GPG</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">S3C2410_GPIO_OUTPUT</span><span class="p">);</span>
-</span><span class='line'>        <span class="n">set_bl</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
-</span><span class='line'>        <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="n">__exit</span> <span class="nf">dev_exit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>        <span class="n">misc_deregister</span><span class="p">(</span><span class="o">&amp;</span><span class="n">misc</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">module_init</span><span class="p">(</span><span class="n">dev_init</span><span class="p">);</span>
-</span><span class='line'><span class="n">module_exit</span><span class="p">(</span><span class="n">dev_exit</span><span class="p">);</span>
-</span><span class='line'><span class="n">MODULE_LICENSE</span><span class="p">(</span><span class="s">&quot;GPL&quot;</span><span class="p">);</span>
-</span><span class='line'><span class="n">MODULE_AUTHOR</span><span class="p">(</span><span class="s">&quot;Utu2440 Inc.&quot;</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the Kconfig items for our newly added SMDK2440_backlight:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /media/y/embedded/utu2440/Kernel/linux-2.6.39/drivers/video/backlight/Kconfig
-</span><span class='line'>config BACKLIGHT_SMDK2440
-</span><span class='line'>  tristate "Backlight Driver for utu2440"
-</span><span class='line'>  depends on BACKLIGHT_LCD_SUPPORT && FB_S3C2410
-</span><span class='line'>  help
-</span><span class='line'>    Backlight driver for utu2440
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the Makefile Item:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /media/y/embedded/utu2440/Kernel/linux-2.6.39/drivers/video/backlight/Makefile
-</span><span class='line'>obj-$(CONFIG_BACKLIGHT_SMDK2440)  += SMDK2440_backlight.o
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now configure the Kernel like following image:  <br/>
-<img src="/images/backlight.jpg" alt="/images/backlight.jpg" /></p>
-
-<p>Compile and generate the uImage:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ make 
-</span><span class='line'>$ cp arch/arm/boot/zImage ./ && mkimage -A arm -O linux -n $(date --iso-8601=seconds) -C NONE -a 0x30008000 -e 0x30008000 -d zImage uImage
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Verification</h4>
-
-<p>Replace the newly built kernel on utu2440, first your screen remains turned on.  <br/>
-Change the backlight on utu2440:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@www ~]# echo 0&gt;/dev/backlight
-</span><span class='line'>[root@www ~]# echo 1&gt;/dev/backlight
-</span><span class='line'>[root@www ~]# ls /dev/backlight
-</span><span class='line'>/dev/backlight
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>But this command is not stable, we could only turn off the backlight, then won&rsquo;t call it alive again.</p>
-
-<h4>Change back to 2.6.32</h4>
-
-<p>The ioctl function changes in 2.6.39, thus we have to use .unlocked_ioctl, so we won&rsquo;t actually control the backlight, switch the kernel version to 2.6.32, do following changes:</p>
-
-<p>Change again the code:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-<span class='line-number'>85</span>
-<span class='line-number'>86</span>
-<span class='line-number'>87</span>
-<span class='line-number'>88</span>
-<span class='line-number'>89</span>
-<span class='line-number'>90</span>
-<span class='line-number'>91</span>
-<span class='line-number'>92</span>
-<span class='line-number'>93</span>
-<span class='line-number'>94</span>
-<span class='line-number'>95</span>
-<span class='line-number'>96</span>
-<span class='line-number'>97</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">vim</span> <span class="n">SMDK2440_backlight</span><span class="p">.</span><span class="n">c</span>
-</span><span class='line'><span class="cp">#include &lt;linux/errno.h&gt;</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#include &lt;linux/kernel.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/module.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/slab.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/input.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/init.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/serio.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/delay.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/clk.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/miscdevice.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;asm/io.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;asm/irq.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;asm/uaccess.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;mach/regs-clock.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;plat/regs-timer.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;mach/regs-gpio.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/cdev.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;linux/gpio.h&gt;</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//定义背光驱动的名称为 backligh，将会出现在/dev/backlight</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#define DEVICE_NAME &quot;backlight&quot; </span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#define DEVICE_MINOR 5 </span><span class="c1">//次设备号，这里我们将设备注册为misc设备，这种设备的主设备号都为10</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">extern</span> <span class="kt">void</span> <span class="n">s3c2410_gpio_setpin</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">pin</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">to</span><span class="p">);</span>
-</span><span class='line'><span class="k">extern</span> <span class="kt">void</span> <span class="nf">s3c2410_gpio_cfgpin</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">pin</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">function</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="nf">smdk2440_backlight_ioctl</span><span class="p">(</span><span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">,</span>
-</span><span class='line'>                                    <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span>
-</span><span class='line'>                                    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span>
-</span><span class='line'>                                    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">arg</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">printk</span><span class="p">(</span><span class="s">&quot;We received cmd %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">cmd</span><span class="p">);</span>
-</span><span class='line'><span class="k">switch</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>   <span class="k">case</span> <span class="mi">0</span><span class="o">:</span>
-</span><span class='line'>       <span class="c1">//当接收的命令为0时，就将GPG4引脚设为低电平，关闭背光</span>
-</span><span class='line'>       <span class="n">s3c2410_gpio_setpin</span><span class="p">(</span><span class="n">S3C2410_GPG</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
-</span><span class='line'>       <span class="n">printk</span><span class="p">(</span><span class="n">DEVICE_NAME</span> <span class="s">&quot; turn off!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>       <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>   <span class="k">case</span> <span class="mi">1</span><span class="o">:</span>
-</span><span class='line'>       <span class="c1">//当接收的命令为1时，就将GPG4引脚设为高电平，开启背光</span>
-</span><span class='line'>       <span class="n">s3c2410_gpio_setpin</span><span class="p">(</span><span class="n">S3C2410_GPG</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>
-</span><span class='line'>       <span class="n">printk</span><span class="p">(</span><span class="n">DEVICE_NAME</span> <span class="s">&quot; turn on!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>   <span class="k">default</span><span class="o">:</span>
-</span><span class='line'>          <span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//设备操作集</span>
-</span><span class='line'><span class="k">static</span> <span class="k">struct</span> <span class="n">file_operations</span> <span class="n">dev_fops</span> <span class="o">=</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'><span class="p">.</span><span class="n">owner</span> <span class="o">=</span> <span class="n">THIS_MODULE</span><span class="p">,</span>
-</span><span class='line'><span class="c1">//.unlocked_ioctl = smdk2440_backlight_ioctl, </span>
-</span><span class='line'><span class="p">.</span><span class="n">ioctl</span> <span class="o">=</span> <span class="n">smdk2440_backlight_ioctl</span><span class="p">,</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="k">struct</span> <span class="n">miscdevice</span> <span class="n">misc</span> <span class="o">=</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'><span class="p">.</span><span class="n">minor</span> <span class="o">=</span> <span class="n">DEVICE_MINOR</span><span class="p">,</span>
-</span><span class='line'><span class="p">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">DEVICE_NAME</span><span class="p">,</span>
-</span><span class='line'><span class="p">.</span><span class="n">fops</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">dev_fops</span><span class="p">,</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">dev_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>   <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>    <span class="n">ret</span> <span class="o">=</span> <span class="n">misc_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">misc</span><span class="p">);</span> <span class="c1">//注册成misc设备</span>
-</span><span class='line'>   <span class="k">if</span><span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">{</span>
-</span><span class='line'>      <span class="n">printk</span><span class="p">(</span><span class="s">&quot;Register misc device fiald!&quot;</span><span class="p">);</span>
-</span><span class='line'>     <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>   <span class="c1">//将GPG4口配置成输出口</span>
-</span><span class='line'>
-</span><span class='line'>   <span class="n">s3c2410_gpio_cfgpin</span><span class="p">(</span><span class="n">S3C2410_GPG</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">S3C2410_GPIO_OUTPUT</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>   <span class="n">s3c2410_gpio_setpin</span><span class="p">(</span><span class="n">S3C2410_GPG</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="mi">1</span><span class="p">);</span>         <span class="c1">//启动内核时打开背光</span>
-</span><span class='line'>
-</span><span class='line'>   <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="n">__exit</span> <span class="nf">dev_exit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>   <span class="n">misc_deregister</span><span class="p">(</span><span class="o">&amp;</span><span class="n">misc</span><span class="p">);</span> <span class="c1">//注销该misc设备</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">module_init</span><span class="p">(</span><span class="n">dev_init</span><span class="p">);</span>
-</span><span class='line'><span class="n">module_exit</span><span class="p">(</span><span class="n">dev_exit</span><span class="p">);</span>
-</span><span class='line'><span class="n">MODULE_LICENSE</span><span class="p">(</span><span class="s">&quot;GPL&quot;</span><span class="p">);</span>
-</span><span class='line'><span class="n">MODULE_AUTHOR</span><span class="p">(</span><span class="s">&quot;DreamCatcher&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">MODULE_DESCRIPTION</span><span class="p">(</span><span class="s">&quot;Backlight control for mini2440&quot;</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then define a test_lcd.c like:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;stdio.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;stdlib.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;fcntl.h&gt;</span>
-</span><span class='line'><span class="cp">#include &lt;sys/ioctl.h&gt;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">turn</span><span class="p">;</span>
-</span><span class='line'>    <span class="kt">int</span> <span class="n">fd</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//检测命令后面带的参数</span>
-</span><span class='line'><span class="k">if</span><span class="p">(</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">1</span> <span class="o">||</span> <span class="n">argc</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Usage: backlight_test on|off!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//打开背光设备</span>
-</span><span class='line'><span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="s">&quot;/dev/backlight&quot;</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">if</span><span class="p">(</span><span class="n">fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Open Backlight Device Faild!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//判断输入的参数</span>
-</span><span class='line'><span class="k">if</span><span class="p">(</span><span class="n">strcmp</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;on&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Yes, you input on!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">turn</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
-</span><span class='line'>    <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'><span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">strcmp</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;off&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Yes, you input off!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">turn</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>    <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'><span class="k">else</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Usage: backlight_test on|off!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">printf</span><span class="p">(</span><span class="s">&quot;turn is %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">turn</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//进行IO控制</span>
-</span><span class='line'><span class="c1">//long ret=ioctl(fd, turn);</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">//关闭背光设备</span>
-</span><span class='line'><span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
-</span><span class='line'><span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Compile the lcd_test via:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">arm</span><span class="o">-</span><span class="n">linux</span><span class="o">-</span><span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">lcd_test</span> <span class="n">lcd_test</span><span class="p">.</span><span class="n">c</span>
-</span><span class='line'><span class="err">$</span> <span class="n">cp</span> <span class="n">lcd_test</span><span class="p">.</span><span class="n">c</span> <span class="o">/</span><span class="n">media</span><span class="o">/</span><span class="n">nfs</span><span class="o">/</span><span class="n">rootfs</span><span class="o">/</span><span class="n">root</span><span class="o">/</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Test the lcd backlight setting functionality via:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">[</span><span class="n">root</span><span class="err">@</span><span class="n">www</span> <span class="n">root</span><span class="p">]</span><span class="err">#</span> <span class="p">.</span><span class="o">/</span><span class="n">lcd_test</span> <span class="n">on</span>
-</span><span class='line'><span class="n">Yes</span><span class="p">,</span> <span class="n">you</span> <span class="n">input</span> <span class="n">on</span><span class="o">!</span>
-</span><span class='line'><span class="n">turn</span> <span class="n">is</span> <span class="mi">1</span>
-</span><span class='line'><span class="p">[</span><span class="n">root</span><span class="err">@</span><span class="n">www</span> <span class="n">root</span><span class="p">]</span><span class="err">#</span> <span class="p">.</span><span class="o">/</span><span class="n">lcd_test</span> <span class="n">off</span>
-</span><span class='line'><span class="n">Yes</span><span class="p">,</span> <span class="n">you</span> <span class="n">input</span> <span class="n">off</span><span class="o">!</span>
-</span><span class='line'><span class="n">turn</span> <span class="n">is</span> <span class="mi">0</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So until now, you have mastered the LCD backlight, you could freely turn on/off it.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-3/">Linux2.6.39 for Utu2440(3)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-25T11:30:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:30 am</span></time>
-        
-         | <a href="/blog/2014/10/25/linux2-dot-6-39-for-utu2440-3/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Building Filesystems</h3>
-
-<p>Use following script for building the basic filesystem:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat mkrootfs 
-</span><span class='line'>#!/bin/sh
-</span><span class='line'>echo "------Create rootfs directons start...--------"
-</span><span class='line'>mkdir rootfs
-</span><span class='line'>cd rootfs
-</span><span class='line'>echo "--------Create root,dev....----------"
-</span><span class='line'>mkdir bin boot dev etc home lib mnt proc root sbin sys tmp usr var  www
-</span><span class='line'>mkdir etc/init.d etc/rc.d etc/sysconfig
-</span><span class='line'>mkdir usr/sbin usr/bin usr/lib usr/modules
-</span><span class='line'>echo "make node in dev/console dev/null"
-</span><span class='line'>mknod -m 666 dev/console c 5 1
-</span><span class='line'>mknod -m 666 dev/null c 1 3
-</span><span class='line'>mkdir mnt/etc mnt/jffs2 mnt/yaffs mnt/data mnt/temp
-</span><span class='line'>mkdir var/lib var/lock var/run var/tmp
-</span><span class='line'>chmod 1777 tmp
-</span><span class='line'>chmod 1777 var/tmp
-</span><span class='line'>echo "-------make direction done---------"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run it and you will get an folder which contains the newly created directory structure.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo ./mkrootfs 
-</span><span class='line'>------Create rootfs directons start...--------
-</span><span class='line'>--------Create root,dev....----------
-</span><span class='line'>make node in dev/console dev/null
-</span><span class='line'>-------make direction done---------
-</span><span class='line'>$ ls rootfs 
-</span><span class='line'>bin  boot  dev  etc  home  lib  mnt  proc  root  sbin  sys  tmp  usr  var  www
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After making the filesystem, you should install all of the kernel modules into your fs:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ make modules_install ARCH=arm INSTALL_MOD_PATH=The_PATH_TO_YOUR_ROOTFS
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>BusyBox</h3>
-
-<p>Busybox provides almost all of the tools used in system, first we should download and cross-compile it.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://www.busybox.net/downloads/busybox-1.22.1.tar.bz2
-</span><span class='line'>$ tar xjvf busybox-1.22.1.tar.bz2
-</span><span class='line'>$ cd busybox-1.22.1
-</span><span class='line'>$ vim Makefile
-</span><span class='line'>+ CROSS_COMPILE ?= arm-linux-
-</span><span class='line'># bbox: we may have CONFIG_CROSS_COMPILER_PREFIX in .config,
-</span><span class='line'>$ make menuconfig
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Parameters:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Build Options---&gt; Build BusyBox as a static binary(no shared libs)
-</span><span class='line'>Installation Options--&gt; Busybox installation prefix(See following pictures)
-</span><span class='line'>Linux Module Utilities--&gt;  Default directory containing modules(/lib/modules)
-</span><span class='line'>Linux System Utilities ---&gt;
-</span><span class='line'>[*]Support /etc/mdev.conf
-</span><span class='line'>[*]Support command execution at device addition/removal
-</span><span class='line'>Init Utilities ---&gt;
-</span><span class='line'>"Support reading an inittab file"
-</span><span class='line'>"Support running commands with a controlling-tty"
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><img src="/images/busyboxinstall.jpg" alt="/images/busyboxinstall.jpg" />  <br/>
-Then Make and make install:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ make && make install
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now list the rootfs you have created you could see a new file named linuxrc is located under the / directory. Also you will see lots of executable files under the /bin which links to the /bin/busybox.</p>
-
-<h3>Startup Configuration</h3>
-
-<p>Create the /etc/group file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/group
-</span><span class='line'>root:*:0:
-</span><span class='line'>daemon:*:1:
-</span><span class='line'>bin:*:2:
-</span><span class='line'>sys:*:3:
-</span><span class='line'>adm:*:4:
-</span><span class='line'>tty:*:5:
-</span><span class='line'>disk:*:6:
-</span><span class='line'>lp:*:7:lp
-</span><span class='line'>mail:*:8:
-</span><span class='line'>news:*:9:
-</span><span class='line'>u p:*:10:
-</span><span class='line'>proxy:*:13:
-</span><span class='line'>kmem:*:15:
-</span><span class='line'>dialout:*:20:
-</span><span class='line'>fax:*:21:
-</span><span class='line'>voice:*:22:
-</span><span class='line'>cdrom:*:24:
-</span><span class='line'>floppy:*:25:
-</span><span class='line'>tape:*:26:
-</span><span class='line'>s o:*:27:
-</span><span class='line'>a io:*:29:
-</span><span class='line'>sshd:*:74:
-</span><span class='line'>ppp:x:99:
-</span><span class='line'>500:x:500:plg
-</span><span class='line'>501:x:501:fa
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the /etc/passwd file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/passwd
-</span><span class='line'>root::0:0:root:/:/bin/sh
-</span><span class='line'>ftp::14:50:FTP User:/var/ftp:
-</span><span class='line'>bin:*:1:1:bin:/bin:
-</span><span class='line'>daemon:*:2:2:daemon:/sbin:
-</span><span class='line'>nobody:*:99:99:Nobody:/:
-</span><span class='line'>sky::502:502:Linux User,,,:/home/sky:/bin/sh
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the hostname:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/sysconfig/HOSTNAME 
-</span><span class='line'>utu2440
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the inittab file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/inittab
-</span><span class='line'>#etc/inittab
-</span><span class='line'>::sysinit:/etc/init.d/rcS
-</span><span class='line'>
-</span><span class='line'># Start an "askfirst" shell on /dev/tty2-4
-</span><span class='line'>console::askfirst:-/bin/sh
-</span><span class='line'>tty2::askfirst:-/bin/sh
-</span><span class='line'>tty3::askfirst:-/bin/sh
-</span><span class='line'>tty4::askfirst:-/bin/sh
-</span><span class='line'>
-</span><span class='line'># /sbin/getty invocations for selected ttys
-</span><span class='line'>tty4::respawn:/sbin/getty 38400 tty5
-</span><span class='line'>tty5::respawn:/sbin/getty 38400 tty6
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>::ctrlaltdel:/sbin/reboot
-</span><span class='line'>::shutdown:/bin/umount -a –r
-</span><span class='line'>$ chmod 777 etc/init.d/rcS
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit etc/init.d/rcS, this file will be executed everytime we bootup the linux system:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/init.d/rcS
-</span><span class='line'>#!/bin/sh
-</span><span class='line'>PATH=/sbin:/bin:/usr/sbin:/usr/bin
-</span><span class='line'>runlevel=S 
-</span><span class='line'>prevlevel=N
-</span><span class='line'>umask 022 
-</span><span class='line'>export PATH runlevel prevlevel
-</span><span class='line'>echo "----------mount all----------------"
-</span><span class='line'>mount -a 
-</span><span class='line'>echo /sbin/mdev&gt;/proc/sys/kernel/hotplug
-</span><span class='line'>mdev -s
-</span><span class='line'>### Added from utu2440
-</span><span class='line'>
-</span><span class='line'>trap ":" INT QUIT TSTP
-</span><span class='line'>##################################
-</span><span class='line'>#/bin/mount -t tmpfs tmpfs /dev
-</span><span class='line'>#/bin/mount -t sysfs sysfs /sys
-</span><span class='line'>
-</span><span class='line'>################################## 
-</span><span class='line'>mkdir /dev/pts
-</span><span class='line'>/bin/mknod /dev/pts/0 c 136 0
-</span><span class='line'>/bin/mknod /dev/pts/1 c 136 1
-</span><span class='line'>/bin/mknod /dev/pts/2 c 136 2
-</span><span class='line'>/bin/mknod /dev/pts/3 c 136 3
-</span><span class='line'>/bin/mknod /dev/pts/4 c 136 4
-</span><span class='line'>/bin/mknod /dev/pts/5 c 136 5
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>/bin/mount -t devpts devpts /dev/pts
-</span><span class='line'>#/bin/mount -t proc none /proc
-</span><span class='line'>ln -s /dev/ts0 /dev/h3600_tsraw
-</span><span class='line'>/sbin/ifconfig eth0 10.0.0.15
-</span><span class='line'>/usr/sbin/telnetd -l /bin/login
-</span><span class='line'>echo "After telnetd"
-</span><span class='line'>/usr/bin/tty&gt;/root/tty.txt
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Create a new fstab file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat etc/fstab 
-</span><span class='line'>#device mount-point  type       option      dump  fsck  order
-</span><span class='line'>proc      /proc             proc      defaults        0      0
-</span><span class='line'>none     /tmp              ramfs     defaults       0       0
-</span><span class='line'>sysfs     /sys              sysfs      defaults        0      0
-</span><span class='line'>mdev    /dev              ramfs     defaults        0       0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Testing filesystem</h3>
-
-<p>Set the nfs boot options:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>utu-bootloader=&gt;&gt;&gt;setenv bootargs 'console=ttySAC0 init=/linuxrc root=/dev/nfs nfsroot=10.0.0.11:/media/nfs/rootfs,proto=tcp,nolock ip=10.0.0.15:10.0.0.1:10.0.0.1:255.255.255.0:www.yctek.com:eth0:off'
-</span><span class='line'>utu-bootloader=&gt;&gt;&gt;setenv bootargs 'console=ttySAC0 init=/linuxrc root=/dev/nfs nfsroot=10.0.0.11:/media/nfs/rootfs,proto=tcp,nolock ip=10.0.0.15'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>then we could boot into the nfs based filesystem.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Please press Enter to activate this console. NET: Registered protocol family 10
-</span><span class='line'>
-</span><span class='line'>[root@www ~]# 
-</span><span class='line'>[root@www ~]# uname -a
-</span><span class='line'>Linux www 2.6.39 #6 Mon Oct 20 16:12:43 CST 2014 armv4tl GNU/Linux
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/27">&larr; Older</a>
@@ -4622,6 +3759,14 @@ Then Make and make install:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/11/13/win10-tips-for-using-xshell/">Win10 Tips for Using Xshell</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/11/13/variety/">Variety</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/11/05/good-material/">Good Material</a>
       </li>
     
@@ -4631,14 +3776,6 @@ Then Make and make install:</p>
     
       <li class="post">
         <a href="/blog/2015/11/04/cloudstack-vrlian-jie-shu/">CloudStack VR连接数</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/01/moving-cloudstack-from-vm-to-physical-node/">Moving CloudStack From VM to Physical Node</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/10/29/thinking-in-vr/">Thinking in VR</a>
       </li>
     
   </ul>

@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Since the OpenContrail deploy is using local deployment, that means, directly deploy to local machine. But the lab lack of the environment of the &hellip;">
+  <meta name="description" content="Since the deployment meets some problem, I have to consider doing some tricks in the MAAS controller, to let the deployment much more easier and time &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,332 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/24/deploy-maas-11/">Deploy MAAS(11)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-24T09:14:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:14 am</span></time>
+        
+         | <a href="/blog/2015/03/24/deploy-maas-11/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Since the deployment meets some problem, I have to consider doing some tricks in the MAAS controller, to let the deployment much more easier and time-saving, following is the steps for setting up such environment.</p>
+
+<h3>Resize Maas Controller Disk</h3>
+
+<p>Since the Mass Controller machine only have 40G size harddisk, it will be not enough if we enable the repository cache for guest machines, thus we have to resize the disk.  <br/>
+First shutdown the virtual machine.   <br/>
+Resize the qcow2 file via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># virsh dumpxml MassController | grep qcow2
+</span><span class='line'>      &lt;driver name='qemu' type='qcow2' cache='none'/&gt;
+</span><span class='line'>      &lt;source file='/home/juju/img/MassController.qcow2'/&gt;
+</span><span class='line'># qemu-img resize /home/juju/img/MassController.qcow2 +40GB
+</span><span class='line'>Image resized.
+</span><span class='line'># qemu-img info /home/juju/img/MassController.qcow2
+</span><span class='line'>image: /home/juju/img/MassController.qcow2
+</span><span class='line'>file format: qcow2
+</span><span class='line'>virtual size: 80G (85899345920 bytes)
+</span><span class='line'>disk size: 9.4G
+</span><span class='line'>cluster_size: 65536
+</span><span class='line'># virsh start MassController
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now use a liveCD for startup the machine, this will bootup the machine into a iso booted environment.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://downloads.sourceforge.net/gparted/gparted-live-0.21.0-1-i586.iso
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Bootup the machine and resize like following:  <br/>
+<img src="/images/2015_03_24_10_28_21_791x423.jpg" alt="/images/2015_03_24_10_28_21_791x423.jpg" /></p>
+
+<h3>squid-deb-proxy</h3>
+
+<p>In Mass Controller machine, install following packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install squid-deb-proxy avahi-utils
+</span><span class='line'>$ sudo start squid-deb-proxy
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Every client should install following package:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install squid-deb-proxy-client
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Don&rsquo;t install squid-deb-proxy, because it will cause maas to be removed.</p>
+
+<p>In fact MAAS manages its own squid, named maas-proxy, which could be examined via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ps -ef | grep squid
+</span><span class='line'>proxy      763     1  0 Mar23 ?        00:00:07 /usr/sbin/squid3 -N -f /etc/maas/maas-proxy.conf
+</span><span class='line'>Trusty      3892  3861  0 00:13 pts/5    00:00:00 grep --color=auto squid
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This may cause all of the packages, or images be cached in squid, but it will be very helpful if we want to speedup the installation speed. <br/>
+configure the squide&rsquo;s cache directory size via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/maas/maas-proxy.conf
+</span><span class='line'>
+</span><span class='line'>cache_dir ufs /var/spool/squid 100 16 256
+</span><span class='line'>By default, the cache_dir directory may be commented.
+</span><span class='line'>
+</span><span class='line'>/var/spool/squid – This is the directory folder where squid will use to swap cache your server web files
+</span><span class='line'>100 – The amount of disk space to use in MB for your caching directory
+</span><span class='line'>16 – the first-level subdirectories which will be created in your cache directory
+</span><span class='line'>256 – The number of second-level subdirectories which will be created under each first level directory
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+We should add following configuration under the configure.yaml of the .juju/:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>maas-server: http://10.17.17.200/MAAS
+</span><span class='line'>http-proxy: http://10.17.17.200:8000
+</span><span class='line'>#https-proxy: http://10.17.17.200:3128
+</span><span class='line'>no-proxy: localhost,10.17.17.0/24
+</span><span class='line'>apt-http-proxy: http://10.17.17.200:8000
+</span><span class='line'>#apt-https-proxy: http://10.17.17.200:3128
+</span><span class='line'>apt-ftp-proxy: http://10.17.17.200:8000
+</span><span class='line'>type: maas
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After configuration, the bootstrap and add-machine will succesfully deployed.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/23/using-juju-for-deploying-opencontrail/">Using Juju for Deploying OpenContrail</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-23T11:37:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2015</span></span> <span class='time'>11:37 am</span></time>
+        
+         | <a href="/blog/2015/03/23/using-juju-for-deploying-opencontrail/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Preparation</h3>
+
+<p>First we have to create 4 images which will hold our own opearating system.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> 1016  qemu-img create -f qcow2 OpenContrail0.qcow2 40G
+</span><span class='line'> 1017  qemu-img create -f qcow2 OpenContrail1.qcow2 40G
+</span><span class='line'> 1018  qemu-img create -f qcow2 OpenContrail3.qcow2 40G
+</span><span class='line'> 1019  qemu-img create -f qcow2 OpenContrail2.qcow2 40G
+</span><span class='line'> 1020  ls
+</span><span class='line'> 1021  history
+</span><span class='line'># pwd
+</span><span class='line'>/home/juju/img/OpenContrail
+</span><span class='line'># qemu-img create -f qcow2 OpenContrail0.qcow2 40G
+</span><span class='line'># qemu-img create -f qcow2 OpenContrail1.qcow2 40G
+</span><span class='line'># qemu-img create -f qcow2 OpenContrail3.qcow2 40G
+</span><span class='line'># qemu-img create -f qcow2 OpenContrail2.qcow2 40G
+</span><span class='line'># ls
+</span><span class='line'>OpenContrail0.qcow2  OpenContrail1.qcow2  OpenContrail2.qcow2  OpenContrail3.qcow2
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Second, we create the four nodes in the virt-manager, each of them have 3G Memory, and have the cpu copied. Their network deployed to the newly added isolated network. <br/>
+<img src="/images/2015_03_23_11_55_12_711x170.jpg" alt="/images/2015_03_23_11_55_12_711x170.jpg" />  <br/>
+After commission, the status should be &ldquo;ready&rdquo;.</p>
+
+<h3>Juju</h3>
+
+<p>Copy the new environment named OpenContrail:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat ~/.juju/environments.yaml 
+</span><span class='line'># This file has been generated by juju quickstart v2.0.1
+</span><span class='line'># at 2015-03-19 06:36:40 UTC.
+</span><span class='line'>
+</span><span class='line'>default: maas
+</span><span class='line'>environments:
+</span><span class='line'>  maas:
+</span><span class='line'>    admin-secret: xxxx
+</span><span class='line'>    default-series: trusty
+</span><span class='line'>    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
+</span><span class='line'>    maas-server: http://10.17.17.200/MAAS
+</span><span class='line'>    type: maas
+</span><span class='line'>  OpenContrail:
+</span><span class='line'>    admin-secret: xxxx
+</span><span class='line'>    default-series: trusty
+</span><span class='line'>    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
+</span><span class='line'>    maas-server: http://10.17.17.200/MAAS
+</span><span class='line'>    type: maas
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+Then <code>juju switch</code> and examine you are currently operate at OpenContrail via <code>juju switch -l</code>, the result should be OpenContrail. <br/>
+Bootstrap the environment via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints="mem=3G"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+Use <code>juju show-log</code> will display the logs for juju.</p>
+
+<p>Deploy from local repository:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ export JUJU_REPOSITORY=/home/Trusty/Code/deployOpenContrail/contrail-deployer/charms
+</span><span class='line'>$ juju deploy --to 0 juju-gui
+</span><span class='line'>$ juju deploy --to lxc:0 mysql
+</span><span class='line'>$ juju deploy --to lxc:0 keystone
+</span><span class='line'>$ juju deploy --to lxc:0 nova-cloud-controller
+</span><span class='line'>$ juju deploy --to lxc:0 glance
+</span><span class='line'>$ juju deploy --to lxc:0 rabbitmq-server
+</span><span class='line'>$ juju deploy --to lxc:0 openstack-Trustyboard
+</span><span class='line'>$ juju deploy --to lxc:0 cinder 
+</span><span class='line'>$ juju deploy --to lxc:0 neutron-api
+</span><span class='line'>$ juju deploy --to lxc:0 quantum-gateway
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>HomeWorking</h3>
+
+<p>First I created the local charm repository, and then start deploying.   <br/>
+Problem is lxc template download is too time-wasting, thus I have to manually download the images and let it run as if the cache image is available.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# du -hs *
+</span><span class='line'>178M    ubuntu-14.04-server-cloudimg-amd64-root.tar.gz
+</span><span class='line'>root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# pwd
+</span><span class='line'>/var/cache/lxc/cloud-trusty
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use local repository for deploying other version&rsquo;s container, then run a cassandra:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms local:precise/cassandra
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1154,234 +1480,6 @@ Now you could install more newer version of the maas and etc.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/12/maas-deploy-4/">MAAS Deploy(4)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-12T20:52:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:52 pm</span></time>
-        
-         | <a href="/blog/2015/03/12/maas-deploy-4/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>From now we will start deploying Juju to our MAAS cluster.</p>
-
-<h3>Installation of Juju</h3>
-
-<p>The installation steps are:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo add-apt-repository ppa:juju/stable
-</span><span class='line'>$ sudo apt-get update
-</span><span class='line'>$ sudo apt-get install juju-quickstart juju-core
-</span><span class='line'>$ sudo apt-get install juju-local juju
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configuration of Juju</h3>
-
-<p>First initialize the configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju init
-</span><span class='line'>A boilerplate environment configuration file has been written to /home/Trusty/.juju/environments.yaml.
-</span><span class='line'>Edit the file to configure your juju environment and run bootstrap.
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we have to edit the environments.yaml, to manually specify our own configuration.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /home/Trusty/.juju/environments.yaml
-</span><span class='line'>default: maas
-</span><span class='line'>environments:
-</span><span class='line'>    maas:
-</span><span class='line'>        type: maas
-</span><span class='line'>        maas-server: 'http://10.17.17.202/MAAS/'
-</span><span class='line'>        maas-oauth: 'ntQBr8QTPgeTyfYuMq:HGKFChwM65QXtABNS4:SK7bnuGNDN7fLB9k7HNspYLch4kc6RLs'
-</span><span class='line'>        bootstrap-timeout: 1800
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run <code>juju bootstrap</code> for automatically configure the juju&rsquo;s run environment.</p>
-
-<p>If you want to know the detailed debug info, simply run <code>juju bootstrap --show-log</code> to view the full logs.</p>
-
-<h3>Deploy Juju Services:</h3>
-
-<p>We want to setup a wordpress APP, so deploy the nodes via following commands:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju deploy wordpress && juju deploy mysql 
-</span><span class='line'>Added charm "cs:trusty/wordpress-1" to the environment.
-</span><span class='line'>Added charm "cs:trusty/mysql-23" to the environment.
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now examine the juju&rsquo;s status via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju status
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then we add the relationship between wordpress and mysql:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju add-relation wordpress mysql
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Expose wordpress via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju expose wordpress
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Upgrade juju version:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo add-apt-repository ppa:juju/stable
-</span><span class='line'>$ sudo vim /etc/apt/sources.list
-</span><span class='line'>deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-</span><span class='line'>deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-</span><span class='line'>$ sudo apt-get update && sudo apt-get install juju
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>With the newest juju we could do more safer operation, or some strange things will happen.</p>
-
-<p>Seems sometimes it&rsquo;s not so stable. Why? Maybe because its configuratiojj</p>
-
-<p>Tried another computer.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/12/maas-deploy-3/">MAAS Deploy(3)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-12T19:43:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>7:43 pm</span></time>
-        
-         | <a href="/blog/2015/03/12/maas-deploy-3/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Following is the steps for creating virtual nodes and let it be administrated by MAAS Cluster.</p>
-
-<h3>Node Creation</h3>
-
-<p>First create a null iso via <code>touch none.iso</code>, later we will use this iso for booting the node.  <br/>
-Create a new virtual machine -> select &ldquo;Local installation media(ISO images or CDROM) -> Use Local Iso image(/home/Trusty/none.iso) -> Memory 512MB, CPU 1 Core -> Disk 20 GB ->  name: MASSTestNode0 -> Customize configuration before install -> Finish.</p>
-
-<p>Customization: <br/>
-Boot Option, select NIC and Disk1.  <br/>
-Disk1 Option, select advanced -> virtio. <br/>
-NIC Option, select &ldquo;virtualization network maasisotest NAT&rdquo;, virtio.  <br/>
-Click &ldquo;Begin Installation&rdquo;, start installation, and quickly shut it off.</p>
-
-<p>Clone it to 3 nodes. Then click start and let it startup via ipxe. After a while they will be powered off.</p>
-
-<h3>MAAS Network Configuration</h3>
-
-<p>We want to make MAAS controller be the pxe server in this isolated network, so we visit following webpage and do configuration: <br/>
-&ldquo;Edit Cluster Controller&rdquo; -> Edit Interface eth0 -> Mangement(DNS and DHCP)  <br/>
-Router IP: 10.17.17.1  <br/>
-DHCP dynamic IP range low value: 10.17.17.101 <br/>
-DHCP dynamic IP range high value: 10.17.17.199  <br/>
-Then &ldquo;Save Interface&rdquo; and let this MASS controller serves all of the created nodes.</p>
-
-<h3>MAAS Node Configuration</h3>
-
-<p>Now after bootup the newly created nodes, your nodes page will be looks like following:  <br/>
-<img src="/images/2015_03_12_20_22_33_974x371.jpg" alt="/images/2015_03_12_20_22_33_974x371.jpg" />  <br/>
-Click them and edit like following steps:  <br/>
-First in your host machine run <code>sudo virsh list --all</code> to get the corresponding virtual machines.  <br/>
-Then use <code>sudo virsh dumpxml xxxx | grep mac</code> to get the corresponding mac address, then fill the contents.   <br/>
-For example:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo virsh dumpxml MASSTestNode0 | grep mac
-</span><span class='line'>    &lt;type arch='x86_64' machine='pc-i440fx-2.2'&gt;hvm&lt;/type&gt;
-</span><span class='line'>      &lt;mac address='52:54:00:2f:68:e3'/&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then the configuration images is like following:  <br/>
-<img src="/images/2015_03_12_20_33_05_479x466.jpg" alt="/images/2015_03_12_20_33_05_479x466.jpg" />  <br/>
-Also you should login as user maas and do following command to let you access remote&rsquo;s qemu:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libvirt-bin
-</span><span class='line'>$ ssh-copy-id Trusty@10.17.17.1
-</span><span class='line'>$ virsh -c qemu+ssh://Trusty@10.17.17.1/system list --all
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then save node, and select it, in bulk actions, select &ldquo;Commision Selected Nodes&rdquo;, it will start commision, and after its successful, it will be looked like &ldquo;ready&rdquo; state. Remember its previous state is &ldquo;New&rdquo;.  <br/>
-Also comission the other 2 nodes.</p>
-
-<p>The next step we will let Juju runs on MAAS, and build more fantanstic applications.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/16">&larr; Older</a>
@@ -1399,6 +1497,14 @@ Also comission the other 2 nodes.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/11/13/win10-tips-for-using-xshell/">Win10 Tips for Using Xshell</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/11/13/variety/">Variety</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/11/05/good-material/">Good Material</a>
       </li>
     
@@ -1408,14 +1514,6 @@ Also comission the other 2 nodes.</p>
     
       <li class="post">
         <a href="/blog/2015/11/04/cloudstack-vrlian-jie-shu/">CloudStack VR连接数</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/01/moving-cloudstack-from-vm-to-physical-node/">Moving CloudStack From VM to Physical Node</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/10/29/thinking-in-vr/">Thinking in VR</a>
       </li>
     
   </ul>

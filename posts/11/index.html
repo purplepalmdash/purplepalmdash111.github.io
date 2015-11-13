@@ -9,26 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Cobbler Profiles For getting the profiles and get the detailed information of the profile. 1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-# cobbler &hellip;">
+  <meta name="description" content="目的 最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。 硬件及网络准备 物理服务器 物理服务器: i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置， &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -84,6 +65,382 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno/">三节点搭建OpenStack Juno(1)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-24T14:36:34+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>2:36 pm</span></time>
+        
+         | <a href="/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>目的</h3>
+
+<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
+
+<h3>硬件及网络准备</h3>
+
+<h4>物理服务器</h4>
+
+<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。  <br/>
+物理服务器操作系统: Ubuntu14.04</p>
+
+<h4>虚拟机：</h4>
+
+<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.  <br/>
+虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.  <br/>
+虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
+
+<h4>网络规划</h4>
+
+<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。      <br/>
+Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。  <br/>
+External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。 <br/>
+当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
+
+<h4>节点网络名规划</h4>
+
+<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.  <br/>
+Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
+Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
+
+<p>一个参考的例图如下:  <br/>
+<img src="/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
+
+<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
+
+<h3>虚拟机初始化配置</h3>
+
+<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pwd
+</span><span class='line'>/media/repo/Image/3NodeOpenStack
+</span><span class='line'>$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
+</span><span class='line'>Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+</span><span class='line'>$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
+</span><span class='line'>Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+</span><span class='line'>$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
+</span><span class='line'>Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:  <br/>
+<img src="/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
+
+<p>各个节点的network定义文件如下:</p>
+
+<p>控制节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.55.55.2
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.55.55.1
+</span><span class='line'>dns-nameservers 114.114.114.114</span></code></pre></td></tr></table></div></figure>
+
+
+<p>网络节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.55.55.3
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.55.55.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>auto eth1
+</span><span class='line'>iface eth1 inet static
+</span><span class='line'>address 10.66.66.3
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>
+</span><span class='line'>auto eth2
+</span><span class='line'>iface eth2 inet static
+</span><span class='line'>address 192.168.1.3
+</span><span class='line'>netmask 255.255.255.0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>计算节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.55.55.4
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.55.55.1
+</span><span class='line'>dns-nameservers 114.114.114.114
+</span><span class='line'>
+</span><span class='line'>auto eth1
+</span><span class='line'>iface eth1 inet static
+</span><span class='line'>address 10.66.66.4
+</span><span class='line'>netmask 255.255.255.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/hosts
+</span><span class='line'>127.0.0.1       localhost
+</span><span class='line'>127.0.1.1       Controller
+</span><span class='line'>10.55.55.2      Controller
+</span><span class='line'>10.55.55.3      Network
+</span><span class='line'>10.55.55.4      Compute
+</span><span class='line'>......
+</span><span class='line'>
+</span><span class='line'>$ cat /etc/hostname
+</span><span class='line'>Controller
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>网络配置完毕后，保证可以通过<code>ping Controller</code>等命令达到互通。</p>
+
+<p>在进入到后续步骤前，更新所有节点到最新状态:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get update && sudo apt-get upgrade && sudo apt-get dist-upgrade && sudo reboot</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>NTP 服务器/客户端配置</h3>
+
+<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
+
+<h4>NTP服务器</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get -y install ntp
+</span><span class='line'># vim /etc/ntp.conf
+</span><span class='line'>    # 修改成大陆时间
+</span><span class='line'>    server 2.cn.pool.ntp.org
+</span><span class='line'>    server 1.asia.pool.ntp.org
+</span><span class='line'>    server 2.asia.pool.ntp.org
+</span><span class='line'>    # 修改 restrict 設定
+</span><span class='line'>    restrict -4 default kod notrap nomodify
+</span><span class='line'>    restrict -6 default kod notrap nomodify
+</span><span class='line'># service ntp restart</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>NTP客户端</h4>
+
+<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get -y install ntp
+</span><span class='line'># vim /etc/ntp.conf
+</span><span class='line'>    # 設定 controller 為參照的 time server
+</span><span class='line'>    # 並將其他 server 開頭的設定進行註解
+</span><span class='line'>    server 10.55.55.2 iburst
+</span><span class='line'># service ntp restart</span></code></pre></td></tr></table></div></figure>
+
+
+<p>检查结果是否正确:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoNetwork:~# ntpq -c peers
+</span><span class='line'>     remote           refid      st t when poll reach   delay   offset  jitter
+</span><span class='line'>==============================================================================
+</span><span class='line'> Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049</span></code></pre></td></tr></table></div></figure>
+
+
+<p>接下来真正进入OpenStack的安装和配置过程。</p>
+
+<h3>源设定</h3>
+
+<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:   <br/>
+所有节点上(Controller,Network,Compute):</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install ubuntu-cloud-keyring
+</span><span class='line'>$ sudo bash
+</span><span class='line'># echo "deb http://ubuntu-cloud.archive.canonical.com/ubuntu" "trusty-updates/juno main" &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
+</span><span class='line'># apt-get update && apt-get -y dist-upgrade</span></code></pre></td></tr></table></div></figure>
+
+
+<p>第一部分就先到这里。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/23/use-apt-cacher-for-speeding-up-deployment/">Use Apt-cacher for Speeding Up Deployment</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-23T08:27:55+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2015</span></span> <span class='time'>8:27 am</span></time>
+        
+         | <a href="/blog/2015/05/23/use-apt-cacher-for-speeding-up-deployment/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Installation</h3>
+
+<p>Install apt-cacher via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install apt-cacher</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Choose &ldquo;Daemon&rdquo; When you see following picture:</p>
+
+<p><img src="/images/2015_05_23_08_28_39_418x264.jpg" alt="/images/2015_05_23_08_28_39_418x264.jpg" /></p>
+
+<h3>Configuration</h3>
+
+<p>Make sure the configuration <code>AUTOSTART=1</code> in <code>/etc/default/apt-cacher</code>.</p>
+
+<p>Enable <code>allowed_hosts=*</code> in <code>/etc/apt-cacher/apt-cacher.conf</code>.</p>
+
+<p>Now restart the machine, and check the apt-cacher service via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ps -ef | grep apt
+</span><span class='line'>www-data   825     1  0 20:34 ?        00:00:00 /usr/bin/perl /usr/sbin/apt-cacher -R 3 -d -p /var/run/apt-cacher.pid
+</span><span class='line'>$ sudo netstat -anp | grep 3142
+</span><span class='line'>tcp6       0      0 :::3142                 :::*                    LISTEN      825/perl</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now when you setup the machines, point the http-proxy into this machine, it will automatically cache the packages.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -796,7 +1153,7 @@ The steps are followed by following URL:  <br/>
 
 <h3>Github Account</h3>
 
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#x69;&#108;&#116;&#x6f;&#58;&#103;&#105;&#x74;&#64;&#x67;&#x69;&#116;&#104;&#117;&#x62;&#46;&#99;&#x6f;&#x6d;">&#x67;&#x69;&#x74;&#64;&#x67;&#105;&#x74;&#104;&#117;&#98;&#46;&#99;&#x6f;&#109;</a></p>
+<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T <a href="&#109;&#x61;&#x69;&#x6c;&#116;&#x6f;&#58;&#103;&#x69;&#116;&#64;&#103;&#x69;&#x74;&#x68;&#117;&#98;&#x2e;&#x63;&#x6f;&#109;">&#x67;&#105;&#x74;&#64;&#103;&#x69;&#116;&#104;&#117;&#x62;&#46;&#x63;&#111;&#x6d;</a></p>
 
 <h3>Repository</h3>
 
@@ -1551,409 +1908,6 @@ For Power Management:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-11T19:53:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>7:53 pm</span></time>
-        
-         | <a href="/blog/2015/05/11/automatically-recover-ssh-connection/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Thanks for the Great File Wall, my ssh connection to my vps is not stable, so I use following scripts for automatically maintain the ssh conneciton, once the connection down, it will restart immediately.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim autokeepssh.sh 
-</span><span class='line'>#!/bin/bash
-</span><span class='line'>
-</span><span class='line'>while [ '' == '' ]
-</span><span class='line'>do
-</span><span class='line'>        # Use ssh -R for reverse ssh
-</span><span class='line'>        ssh_d_process_num=`ps aux|grep -E 'ssh -NfR' |grep -v grep |wc -l`
-</span><span class='line'>        if [ "$ssh_d_process_num" == "0" ]; then
-</span><span class='line'>                # Automatically start the ssh proxy 
-</span><span class='line'>                echo "Autostart!"
-</span><span class='line'>                ssh -NfR 4389:localhost:22 Trusty@xxx.xxx.xxx.xxx -p xxxx &
-</span><span class='line'>        #else
-</span><span class='line'>        #       echo 'ssh -d running'
-</span><span class='line'>        fi
-</span><span class='line'>
-</span><span class='line'>        sleep 5
-</span><span class='line'>done
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>-R means I started a reverse connection.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/11/setup-pxe-server/">Setup PXE Server</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-11T14:12:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>2:12 pm</span></time>
-        
-         | <a href="/blog/2015/05/11/setup-pxe-server/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>This article record how to setup the pxe server and setup the CentOS quick installation repository, using it we could quickly setup the CentOS on new machine.</p>
-
-<h3>Installation</h3>
-
-<p>To install following packages for preparing the environment:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install dnsmasq tftpd-hpa apache2 system-config-kickstart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the apache2&rsquo;s default configuration file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/apache2/sites-enabled/000-default.conf
-</span><span class='line'>        DocumentRoot /var/www/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the dnsmasq via following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/dnsmasq.conf
-</span><span class='line'>bogus-priv
-</span><span class='line'>filterwin2k
-</span><span class='line'>interface=eth0
-</span><span class='line'>domain=nova.com
-</span><span class='line'>dhcp-range=10.7.7.100,10.7.7.150,12h
-</span><span class='line'>dhcp-option=3,10.7.7.1
-</span><span class='line'>dhcp-option=6,114.114.114.114
-</span><span class='line'>dhcp-option=121,10.7.7.0/24
-</span><span class='line'>dhcp-boot=/var/tftproot/pxelinux.0
-</span><span class='line'>enable-tftp
-</span><span class='line'>tftp-root=/var/tftproot
-</span><span class='line'>dhcp-authoritative
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Copy the pxelinux.0 from an installed CentOS, and copy it to /var/tftproot/</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:~]# scp /usr/share/syslinux/pxelinux.0 Trusty@10.7.7.2:/home/Trusty
-</span><span class='line'>Trusty@WolfHunterPXE:~$ sudo cp /home/Trusty/pxelinux.0 /var/tftproot/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Prepare the Repository</h3>
-
-<p>We need to copy the installation media into the corresponding directory:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mkdir -p /var/www/CentOS
-</span><span class='line'>$ sudo mount CentOS-6.3-x86_64-bin-DVD1.iso /mnt
-</span><span class='line'>$ sudo cp -rf /mnt/* /var/www/CentOS
-</span><span class='line'>$ sudo mkdir -p /mnt1
-</span><span class='line'>$ sudo mount CentOS-6.3-x86_64-bin-DVD2.iso /mnt1
-</span><span class='line'>$ sudo cp -rf /mnt1/Packages/* /var/www/CentOS/Packages/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Copy the CentOS&rsquo;s kernel and kernel-startup file into the /var/tftproot/CentOS directory:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mkdir -p /var/tftproot/CentOS
-</span><span class='line'>$ sudo cp /mnt/images/pxeboot/initrd.img /var/tftproot/CentOS
-</span><span class='line'>$ sudo cp /mnt/images/pxeboot/vmlinuz /var/tftproot/CentOS
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now your repository for installation is ready.</p>
-
-<h3>Configuration</h3>
-
-<p>Edit the boot.msg file for user choosen:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /var/tftproot/boot.msg
-</span><span class='line'>### START INSTALLING ######
-</span><span class='line'>Choose installation type(0/1/2),the DEFAULT is 100:
-</span><span class='line'>0 CentOS-6.3-64-No-RAID-Basic
-</span><span class='line'>1 CentOS-6.3-64-No-RAID-minidesktop-virtualization-for testing
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When user choose the corresponding items, then /var/tftproot/pxelinux.cfg/default file will choose the correspoiding files.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@WolfHunterPXE:~$ sudo mkdir -p /var/tftproot/pxelinux.cfg
-</span><span class='line'>Trusty@WolfHunterPXE:~$ sudo vim /var/tftproot/pxelinux.cfg/default
-</span><span class='line'>default 100
-</span><span class='line'>display boot.msg
-</span><span class='line'>
-</span><span class='line'># Label 100 , boot from hddisk
-</span><span class='line'>LABEL 100
-</span><span class='line'>localboot 0x80
-</span><span class='line'>
-</span><span class='line'>### Label 0, minimal CentOS
-</span><span class='line'>label 0
-</span><span class='line'>kernel CentOS/vmlinuz
-</span><span class='line'>append ks=http://10.7.7.2/cfg/Centos-minibasic.cfg vga=normal initrd=CentOS/initrd.img devfs=nomount ramdisk_size=9216 nofb
-</span><span class='line'>
-</span><span class='line'>### Label 1, minimal-Desktop CentOS 
-</span><span class='line'>label 1
-</span><span class='line'>kernel CentOS/vmlinuz
-</span><span class='line'>append ks=http://10.7.7.2/cfg/Centos-minidesktop.cfg vga=normal initrd=CentOS/initrd.img devfs=nomount ramdisk_size=9216 nofb
-</span><span class='line'>
-</span><span class='line'>prompt 1 
-</span><span class='line'>timeout 900
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Get kickstart file</h3>
-
-<p>In a installed CentOS Server, install system-config-kickstart via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install system-config-kickstart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run <code>sudo system-config-kickstart</code> for getting the graphical configuration window, like following:</p>
-
-<p><img src="/images/2015_05_11_14_50_05_931x572.jpg" alt="/images/2015_05_11_14_50_05_931x572.jpg" />   <br/>
-Customize the partition:</p>
-
-<p><img src="/images/2015_05_11_14_52_09_842x576.jpg" alt="/images/2015_05_11_14_52_09_842x576.jpg" />   <br/>
-Do other configurations, after everything is OK, save it.</p>
-
-<p>An example cfg file is listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat minidesktop.cfg 
-</span><span class='line'>#platform=x86, AMD64, or Intel EM64T
-</span><span class='line'>#version=DEVEL
-</span><span class='line'># Firewall configuration
-</span><span class='line'>firewall --disabled
-</span><span class='line'># Install OS instead of upgrade
-</span><span class='line'>install
-</span><span class='line'># Use network installation
-</span><span class='line'>url --url="http://10.7.7.2/CentOS"
-</span><span class='line'># Root password
-</span><span class='line'>rootpw --iscrypted $1$aRvLvJNH$ElcmZ2Msl4MbD.fHdnos9.
-</span><span class='line'># System authorization information
-</span><span class='line'>auth  --useshadow  --passalgo=sha512
-</span><span class='line'># Use graphical install
-</span><span class='line'>graphical
-</span><span class='line'>firstboot --disable
-</span><span class='line'># System keyboard
-</span><span class='line'>keyboard us
-</span><span class='line'># System language
-</span><span class='line'>lang en_US
-</span><span class='line'># SELinux configuration
-</span><span class='line'>selinux --disabled
-</span><span class='line'># Installation logging level
-</span><span class='line'>logging --level=info
-</span><span class='line'>
-</span><span class='line'># System timezone
-</span><span class='line'>timezone  Asia/Hong_Kong
-</span><span class='line'># System bootloader configuration
-</span><span class='line'>bootloader --location=mbr
-</span><span class='line'># Clear the Master Boot Record
-</span><span class='line'>zerombr
-</span><span class='line'># Partition clearing information
-</span><span class='line'>clearpart --all  
-</span><span class='line'># Disk partitioning information
-</span><span class='line'>part swap --fstype="swap" --size=1024
-</span><span class='line'>part / --asprimary --fstype="ext4" --grow --size=1
-</span><span class='line'>
-</span><span class='line'>%packages
-</span><span class='line'>@basic-desktop
-</span><span class='line'>@chinese-support
-</span><span class='line'>@internet-browser
-</span><span class='line'>@x11
-</span><span class='line'>-ibus-table-cangjie
-</span><span class='line'>-ibus-table-erbi
-</span><span class='line'>-ibus-table-wubi
-</span><span class='line'>
-</span><span class='line'>%end
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Copy it under the /var/www/cfg/CentOS-minidesktop.cfg.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@WolfHunterPXE:~$ sudo mkdir -p /var/www/cfg
-</span><span class='line'>Trusty@WolfHunterPXE:~$ sudo cp minidesktop.cfg /var/www/cfg/CentOS-minidesktop.cfg
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Testing</h3>
-
-<p>Now create a new machine , set its bootup to pxe-network.  <br/>
-Trouble Shooting, only need for CentOS:  <br/>
-<img src="/images/2015_05_11_16_18_47_609x332.jpg" alt="/images/2015_05_11_16_18_47_609x332.jpg" /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>- Ctrl+B
-</span><span class='line'>- dhcp net0
-</span><span class='line'>- config
-</span><span class='line'>
-</span><span class='line'>- Ctrl+X
-</span><span class='line'>- autoboot
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/12">&larr; Older</a>
@@ -1971,6 +1925,14 @@ Trouble Shooting, only need for CentOS:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/11/13/win10-tips-for-using-xshell/">Win10 Tips for Using Xshell</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/11/13/variety/">Variety</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/11/05/good-material/">Good Material</a>
       </li>
     
@@ -1980,14 +1942,6 @@ Trouble Shooting, only need for CentOS:  <br/>
     
       <li class="post">
         <a href="/blog/2015/11/04/cloudstack-vrlian-jie-shu/">CloudStack VR连接数</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/01/moving-cloudstack-from-vm-to-physical-node/">Moving CloudStack From VM to Physical Node</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/10/29/thinking-in-vr/">Thinking in VR</a>
       </li>
     
   </ul>
