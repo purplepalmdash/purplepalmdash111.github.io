@@ -9,13 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="刚安装好的ArchLinux上只有基本的系统组件，启动以后连ifconfig都没有（其实ifconfig早在N年前就被干掉，以ip命令代替了)。在这种一穷二白的情况下，如何配置好网络参数？下面的步骤可以让人一劳永逸。 1. 查看网络接口信息: 1
-2
-3
-4
-5
-6
-$ ip link show &hellip;">
+  <meta name="description" content="安装完ArchLinux后，发现网卡无法从路由器通过dhcp得到地址，ArchLinux的dhcp客户端是dhcpcd,默认配置文件。路由器型号是TP-link WR340G v5, 2010年入手的。 手动调用dhcpcd时候发现LOG里有NAK消息爆出。 翻了下Arch的论坛， &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -71,6 +65,198 @@ $ ip link show &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/07/07/archlinuxwang-luo-pei-zhi-wen-ti/">ArchLinux DHCP配置问题</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-07-07T12:10:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>7</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:10 pm</span></time>
+        
+         | <a href="/blog/2013/07/07/archlinuxwang-luo-pei-zhi-wen-ti/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>安装完ArchLinux后，发现网卡无法从路由器通过dhcp得到地址，ArchLinux的dhcp客户端是dhcpcd,默认配置文件。路由器型号是TP-link WR340G v5, 2010年入手的。</p>
+
+<p>手动调用dhcpcd时候发现LOG里有NAK消息爆出。</p>
+
+<p>翻了下Arch的论坛，这个问题是由于dhcpcd的参数配置引发的，某些dhcpcd向路由器请求的参数无法得到而导致，个人觉得大约是WR340G版本够老，无法提供这些个参数。</p>
+
+<h2>解决方案一：</h2>
+
+<p>编辑/etc/dhcpcd.conf， 注释掉classless_static_routes 和 interface_mtu即可:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># option classless_static_routes
+</span><span class='line'>
+</span><span class='line'># Respect the network MTU.
+</span><span class='line'># option interface_mtu</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而后我们可以用systemd在每次启动的时候自动调用dhcpcd绑定地址:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ systemctl enable dhcpcd@enp0s25
+</span><span class='line'>$ systemctl start dhcpcd@enp0s25</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>解决方案二:</h2>
+
+<p>安装dhclient:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S dhclient
+</span><span class='line'>$ dhclient enp0s25</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这种方法需要每次手动输入，不过我们可以使用netctl包来自动管理网络接口信息：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cp /etc/netctl/examples/ethernet-dhcp /etc/netctl/ethernet-dhcp</span></code></pre></td></tr></table></div></figure>
+
+
+<p>由netctl.profile查到指定dhcp客户端的字段，而后在/etc/netctl/ethernet-dhcp文件中添加：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>DHCPClient=dhclient
+</span><span class='line'># !!! 别忘了修改dhcp侦听的设备地址：
+</span><span class='line'># Interface=eth0
+</span><span class='line'>Interface=enp0s25</span></code></pre></td></tr></table></div></figure>
+
+
+<p>把ethernet-dhcp作为netctl的默认启动配置文件：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ netctl enable ethernet-dhcp</span></code></pre></td></tr></table></div></figure>
+
+
+<p>立即开启netctl:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ netctl start ethernet-dhcp</span></code></pre></td></tr></table></div></figure>
+
+
+<p>查看netctl服务运行情况，我的网络是桥接的，和依据上面步骤配出来的字段会有所不同</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ systemctl list-units -t service | grep netctl
+</span><span class='line'>netctl@bridge.service        loaded active exited  Example Bridge connection</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果切换了网络环境，例如如果在待机唤醒时处于另一网络中，则需要用下列命令重新配置网络:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ netctl restart ethernet-dhcp</span></code></pre></td></tr></table></div></figure>
+
+
+<p>两种方法各有千秋，前者比较灵活，但是遇到复杂网络配置的时候可能会很棘手，譬如多网卡/桥接等模型时容易把人弄晕。后者配置选项很多，但一劳永逸。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/07/06/archlinuxshang-an-zhuang-armbian-yi-lian/">ArchLinux上安装arm编译链</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-07-06T20:14:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>8:14 pm</span></time>
+        
+         | <a href="/blog/2013/07/06/archlinuxshang-an-zhuang-armbian-yi-lian/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>在X86_64的ArchLinux上安装Mentor Graphics提供的arm交叉编译链时出现下列问题：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./arm-2013.05-23-arm-none-eabi.bin 
+</span><span class='line'>Checking for required programs: awk grep sed bzip2 gunzip
+</span><span class='line'>===============================================================
+</span><span class='line'>Error: Missing 32-bit libraries on 64-bit Linux host
+</span><span class='line'>===============================================================
+</span><span class='line'>Your 64-bit Linux host is missing the 32-bit libraries
+</span><span class='line'>required to install and use Sourcery CodeBench.</span></code></pre></td></tr></table></div></figure>
+
+
+<p>解决方法：</p>
+
+<p>编辑/etc/pacman.conf，去掉下列两行的注释</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[multilib]
+</span><span class='line'>Include = /etc/pacman.d/mirrorlist</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而后安装必要的ia32相关的包：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -Sy
+</span><span class='line'>$ pacman -S lib32-glibc
+</span><span class='line'>$ pacman -S lib32-gtk lib32-gtk2</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装好以后执行前面被中断的安装进程，这时候可以顺利安装了。</p>
+
+<p>安装完毕后记得把交叉编译链的路径加入到系统路径中，最好在~/.bashrc里加上一笔:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>export PATH=$HOME/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_EABI/bin:$PATH
+</span><span class='line'>export PATH=$HOME/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_GNU_Linux/bin:$PATH</span></code></pre></td></tr></table></div></figure>
+
+
+<p>ArchLinux的yaourt仓库里也有arm-none-eabi和arm-none-linux-eabi等交叉编译链，但是每次编译都会出现莫名其妙的错误，使用现成的编译链能大大节省开发时间。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -734,6 +920,14 @@ int main(void)
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/11/18/tips-on-archlinux-on-ssd-for-surfacepro/">Tips on ArchLinux on SSD for SurfacePro</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/11/16/spice-client/">Spice Client</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/11/13/win10-tips-for-using-xshell/">Win10 Tips for Using Xshell</a>
       </li>
     
@@ -743,14 +937,6 @@ int main(void)
     
       <li class="post">
         <a href="/blog/2015/11/05/good-material/">Good Material</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/05/frdm-kl02z-tips-1/">FRDM-KL02Z Tips(1)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/04/cloudstack-vrlian-jie-shu/">CloudStack VR连接数</a>
       </li>
     
   </ul>

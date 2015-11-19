@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Following record all of the necessary steps for deploying cloudstack management node on kvm based environment. Get The CookBook You need following &hellip;">
+  <meta name="description" content="Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it. Preparation I use two VMs for this experiment, &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,409 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-06-08T09:48:20+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:48 am</span></time>
+        
+         | <a href="/blog/2015/06/08/openvswitch-and-vxlan-how-to/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it.</p>
+
+<h3>Preparation</h3>
+
+<p>I use two VMs for this experiment, created a new virtual network, it&rsquo;s 10.94.94.0/24, every vm machines adds into this network. <br/>
+VM1, VM2, both have 1G Memory. 1 Core. <br/>
+VM1: 10.94.94.11, VM2: 10.94.94.12.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get update && sudo apt-get -y upgrade
+</span><span class='line'>$ sudo apt-get install build-essential$
+</span><span class='line'>$ sudo reboot
+</span><span class='line'>$ uname -a
+</span><span class='line'>$ uname -a
+</span><span class='line'>Linux OpenVSwitchVM1 3.13.0-24-generic #47-Ubuntu SMP Fri May 2 23:30:00 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>Generate DEB</h3>
+
+<p>Following steps includes install dependencies, fetching source code, build, generate package, notice we use 2.3.0 version of the openvswitch.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y build-essential fakeroot debhelper \
+</span><span class='line'>                    autoconf automake bzip2 libssl-dev \
+</span><span class='line'>                    openssl graphviz python-all procps \
+</span><span class='line'>                    python-qt4 python-zopeinterface \
+</span><span class='line'>                    python-twisted-conch libtool
+</span><span class='line'>$ wget http://openvswitch.org/releases/openvswitch-2.3.0.tar.gz
+</span><span class='line'>$ tar xzvf openvswitch-2.3.0.tar.gz
+</span><span class='line'>$ cd openvsiwtch-2.3.0
+</span><span class='line'>$ DEB_BUILD_OPTIONS='parallel=8 nocheck' fakeroot debian/rules binary
+</span><span class='line'>$ cd ..
+</span><span class='line'>$ ls -al *.deb
+</span><span class='line'>openvswitch-common_2.3.0-1_amd64.deb         openvswitch-ipsec_2.3.0-1_amd64.deb   openvswitch-vtep_2.3.0-1_amd64.deb
+</span><span class='line'>openvswitch-datapath-dkms_2.3.0-1_all.deb    openvswitch-pki_2.3.0-1_all.deb       python-openvswitch_2.3.0-1_all.deb
+</span><span class='line'>openvswitch-datapath-source_2.3.0-1_all.deb  openvswitch-switch_2.3.0-1_amd64.deb
+</span><span class='line'>openvswitch-dbg_2.3.0-1_amd64.deb            openvswitch-test_2.3.0-1_all.deb
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also copy all of the deb files into another PC.</p>
+
+<h3>Installation</h3>
+
+<p>In two machines, do following steps for installing.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y bridge-utils
+</span><span class='line'>$ sudo dpkg -i openvswitch-common_2.3.1-1_amd64.deb \
+</span><span class='line'>         openvswitch-switch_2.3.1-1_amd64.deb</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>VM Netorking Configuration</h3>
+
+<p>For VM1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-br br0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-br br1
+</span><span class='line'># ovs-vsctl add-port br0 eth0
+</span><span class='line'># ifconfig eth0 0 up
+</span><span class='line'># ifconfig br0 10.94.94.11
+</span><span class='line'># route add default gw 10.94.94.1 br0
+</span><span class='line'># ifconfig br1 172.10.0.1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For VM2:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># ovs-vsctl add-br br0
+</span><span class='line'># ovs-vsctl add-br br1
+</span><span class='line'># ovs-vsctl add-port br0 eth0
+</span><span class='line'># ifconfig eth0 0 up && ifconfig br0 10.94.94.12
+</span><span class='line'># route add default gw 10.94.94.1
+</span><span class='line'># ifconfig br1 172.10.1.1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Ping each other, we could see br1 is not OK.</p>
+
+<h3>VXLAN Setup</h3>
+
+<p>On VM1, do following operation, to set the vx1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.12
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl show
+</span><span class='line'>a1e9afb6-345a-4f79-8e0b-131cd43cfb67
+</span><span class='line'>    Bridge "br0"
+</span><span class='line'>        Port "eth0"
+</span><span class='line'>            Interface "eth0"
+</span><span class='line'>        Port "br0"
+</span><span class='line'>            Interface "br0"
+</span><span class='line'>                type: internal
+</span><span class='line'>    Bridge "br1"
+</span><span class='line'>        Port "br1"
+</span><span class='line'>            Interface "br1"
+</span><span class='line'>                type: internal
+</span><span class='line'>        Port "vx1"
+</span><span class='line'>            Interface "vx1"
+</span><span class='line'>                type: vxlan
+</span><span class='line'>                options: {remote_ip="10.94.94.12"}
+</span><span class='line'>    ovs_version: "2.3.0"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>On VM2, do following operation, to set vx1</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@OpenVSwitchVM2:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.11
+</span><span class='line'>root@OpenVSwitchVM2:~# ovs-vsctl show
+</span><span class='line'>bce3f2b5-9b77-41dc-8130-b8922dd7ac9e
+</span><span class='line'>    Bridge "br1"
+</span><span class='line'>        Port "vx1"
+</span><span class='line'>            Interface "vx1"
+</span><span class='line'>                type: vxlan
+</span><span class='line'>                options: {remote_ip="10.94.94.11"}
+</span><span class='line'>        Port "br1"
+</span><span class='line'>            Interface "br1"
+</span><span class='line'>                type: internal
+</span><span class='line'>    Bridge "br0"
+</span><span class='line'>        Port "br0"
+</span><span class='line'>            Interface "br0"
+</span><span class='line'>                type: internal
+</span><span class='line'>        Port "eth0"
+</span><span class='line'>            Interface "eth0"
+</span><span class='line'>    ovs_version: "2.3.0"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So now you could ping each other via the br1 address.</p>
+
+<h3>Mirror Port</h3>
+
+<p>Do the following things for setting up the mirror port.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#  modprobe dummy
+</span><span class='line'>#  ip link set up dummy0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 dummy0
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl --id=@m create mirror name=mirror0 -- add bridge br1 mirrors @m
+</span><span class='line'>33931f5a-008f-44cf-abc6-38afb3062b5e
+</span><span class='line'>root@OpenVSwitchVM1:~# ovs-vsctl list port dummy0
+</span><span class='line'>_uuid               : 5f5fe675-b1ee-4acd-a0ab-f14e952d1603
+</span><span class='line'>bond_downdelay      : 0
+</span><span class='line'>bond_fake_iface     : false
+</span><span class='line'>bond_mode           : []
+</span><span class='line'>bond_updelay        : 0
+</span><span class='line'>external_ids        : {}
+</span><span class='line'>fake_bridge         : false
+</span><span class='line'>interfaces          : [a6fbabe9-790d-4be8-a362-b7cbdd46db89]
+</span><span class='line'>lacp                : []
+</span><span class='line'>mac                 : []
+</span><span class='line'>name                : "dummy0"
+</span><span class='line'>other_config        : {}
+</span><span class='line'>qos                 : []
+</span><span class='line'>statistics          : {}
+</span><span class='line'>status              : {}
+</span><span class='line'>tag                 : []
+</span><span class='line'>trunks              : []
+</span><span class='line'>vlan_mode           : []
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/06/07/quickly-change-centos-networking/">Quickly Change CentOS Networking</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-06-07T14:44:00+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>7</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>2:44 pm</span></time>
+        
+         | <a href="/blog/2015/06/07/quickly-change-centos-networking/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>When adding the existing qcow2 files to a new machine, following steps needs to be done to enable the new configuration for the networking:</p>
+
+<h3>Change udev rules</h3>
+
+<p>Change the eth1 to eth0, and disable the previous defined eth0:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CentOSVM1 ~]# cat /etc/udev/rules.d/70-persistent-net.rules
+</span><span class='line'># This file was automatically generated by the /lib/udev/write_net_rules
+</span><span class='line'># program, run by the persistent-net-generator.rules rules file.
+</span><span class='line'>#
+</span><span class='line'># You can modify it, as long as you keep each rule on a single
+</span><span class='line'># line, and change only the value of the NAME= key.
+</span><span class='line'>
+</span><span class='line'># PCI device 0x1af4:0x1000 (virtio-pci)
+</span><span class='line'>#SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="52:54:00:23:14:96", ATTR{type}=="1", KERNEL=="eth*", NAME="eth0"
+</span><span class='line'>
+</span><span class='line'># PCI device 0x1af4:0x1000 (virtio-pci)
+</span><span class='line'>SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="52:54:00:bc:c6:f5", ATTR{type}=="1", KERNEL=="eth*", NAME="eth0"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Change the ethernet configuration</h3>
+
+<h4>Hostname</h4>
+
+<p>The hostname and the gateway could be modified via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat /etc/sysconfig/network
+</span><span class='line'>NETWORKING=yes
+</span><span class='line'>+ HOSTNAME=CentOSVM1
+</span><span class='line'>+ GATEWAY=172.16.0.1</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Change the IP configuration of the eth0</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@CentOSVM1 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0
+</span><span class='line'>DEVICE=eth0
+</span><span class='line'>TYPE=Ethernet
+</span><span class='line'>UUID=9d92e12c-54a3-404a-bd1c-ae033e8e968c
+</span><span class='line'>ONBOOT=yes
+</span><span class='line'>NM_CONTROLLED=yes
+</span><span class='line'>BOOTPROTO=none
+</span><span class='line'>+ IPADDR=172.16.0.20
+</span><span class='line'>PREFIX=24
+</span><span class='line'>GATEWAY=172.16.0.1
+</span><span class='line'>DNS1=114.114.114.114
+</span><span class='line'>DNS2=180.76.76.76
+</span><span class='line'>DEFROUTE=yes
+</span><span class='line'>IPV4_FAILURE_FATAL=yes
+</span><span class='line'>IPV6INIT=no
+</span><span class='line'>NAME="System eth0"
+</span><span class='line'>#HWADDR=52:54:00:23:14:96
+</span><span class='line'>+ HWADDR=52:54:00:BC:C6:F5
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>By now you could customize the network configuration of the CentOS using the same qcow2 disk file.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2397,1026 +2800,6 @@ Chef Workstation: 4-Core, 8G Memory, a physical machine, IP address: xxx.xxx.0.1
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM Machine</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-25T11:46:28+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:46 am</span></time>
-        
-         | <a href="/blog/2015/05/25/lxcize-the-kvm-machine/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In order to make exsiting kvm based machine to be lxc container, following is the steps.    <br/>
-Refers to:  <br/>
-<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
-
-<h3>Convert Disk Formats</h3>
-
-<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
-
-<h3>LXC the KVM</h3>
-
-<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> myvm.conf
-</span><span class='line'>lxc.network.type = veth
-</span><span class='line'>lxc.network.flags = up
-</span><span class='line'>lxc.network.link = br0
-</span><span class='line'>lxc.network.name = eth0
-</span><span class='line'>lxc.network.ipv4 = xxx.xxx.10.230/24
-</span><span class='line'>lxc.network.ipv4.gateway = xxx.xxx.0.176
-</span><span class='line'>#lxc.network.link = lxcbr0
-</span><span class='line'>lxc.utsname = myvminlxc
-</span><span class='line'>
-</span><span class='line'>lxc.tty = 4
-</span><span class='line'>lxc.pts = 1024
-</span><span class='line'>lxc.rootfs = /dev/mapper/loop0p1
-</span><span class='line'>lxc.arch = amd64
-</span><span class='line'>lxc.cap.drop = sys_module mac_admin
-</span><span class='line'>
-</span><span class='line'>lxc.cgroup.devices.deny = a
-</span><span class='line'># Allow any mknod (but not using the node)
-</span><span class='line'>lxc.cgroup.devices.allow = c *:* m
-</span><span class='line'>lxc.cgroup.devices.allow = b *:* m
-</span><span class='line'># /dev/null and zero
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:3 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:5 rwm
-</span><span class='line'># consoles
-</span><span class='line'>lxc.cgroup.devices.allow = c 5:1 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 5:0 rwm
-</span><span class='line'>#lxc.cgroup.devices.allow = c 4:0 rwm
-</span><span class='line'>#lxc.cgroup.devices.allow = c 4:1 rwm
-</span><span class='line'># /dev/{,u}random
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:9 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:8 rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 136:* rwm
-</span><span class='line'>lxc.cgroup.devices.allow = c 5:2 rwm
-</span><span class='line'># rtc
-</span><span class='line'>lxc.cgroup.devices.allow = c 254:0 rwm
-</span><span class='line'>#fuse
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:229 rwm
-</span><span class='line'>#tun
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:200 rwm
-</span><span class='line'>#full
-</span><span class='line'>lxc.cgroup.devices.allow = c 1:7 rwm
-</span><span class='line'>#hpet
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:228 rwm
-</span><span class='line'>#kvm
-</span><span class='line'>lxc.cgroup.devices.allow = c 10:232 rwm</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo kpartx -a Contrail.img</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now start the machine via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-start -n myvminlxc -f ./myvm.conf</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
-
-<h3>TroubleShooting</h3>
-
-<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/selinux/config
-</span><span class='line'>#SELINUX=permissive
-</span><span class='line'>SELINUX=disabled
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>kpartx -a /home/xxxxx/iso/Contrail.raw
-</span><span class='line'>lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/">三节点搭建OpenStack Juno(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-24T22:37:28+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:37 pm</span></time>
-        
-         | <a href="/blog/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>MySQL数据库</h3>
-
-<p>绝大多数的OpenStack服务使用SQL数据库来存储信息，一般情况下数据库运行在控制节点上，这里我们使用MariaDB或者MySQL来作为SQL数据库。</p>
-
-<p>安装, 注意安装过程中需要输入密码:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install mariadb-server python-mysqldb</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置, 主要是更改了bind的地址，添加了一些有用选项，并支持UTF-8编码:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/mysql/my.cnf
-</span><span class='line'>[mysqld]
-</span><span class='line'>...
-</span><span class='line'>bind-address = 10.55.55.2
-</span><span class='line'>...
-</span><span class='line'>default-storage-engine = innodb
-</span><span class='line'>innodb_file_per_table
-</span><span class='line'>collation-server = utf8_general_ci
-</span><span class='line'>init-connect = 'SET NAMES utf8'
-</span><span class='line'>character-set-server = utf8</span></code></pre></td></tr></table></div></figure>
-
-
-<p>完成安装，包括重启服务及加密数据库服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service mysql restart
-</span><span class='line'># mysql_secure_installation </span></code></pre></td></tr></table></div></figure>
-
-
-<h3>消息服务器</h3>
-
-<p>OpenStack使用message broker用来在各种服务器之间调度操作和协调状态信息，通常情况下消息服务器也运行在控制节点上，OpenStack支持RabbitMQ, Qpid和ZeroMQ, 这里使用RabbitMQ.</p>
-
-<p>安装:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install rabbitmq-server</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置，首先我们需要设定rabbitMQ使用的密码:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># rabbitmqctl change_password guest RABBIT_PASS
-</span><span class='line'>Changing password for user "guest" ...
-</span><span class='line'>...done.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>如果是RabbitMQ 3.3.0或者更新的版本，则需要激活guest用户的远程访问权限。</p>
-
-<p>检查RabbitMQ版本:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># rabbitmqctl status | grep rabbit
-</span><span class='line'>Status of node rabbit@Controller ...
-</span><span class='line'> {running_applications,[{rabbit,"RabbitMQ","3.2.4"},</span></code></pre></td></tr></table></div></figure>
-
-
-<p>这里我们的版本是3.2.4所以不需要做任何修改，直接重启RabbitMQ服务即可。若是3.3.0以后的版本，则需要参考官方文档作更为详细的配置。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service rabbitmq-server restart</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>鉴权(Identity)服务</h3>
-
-<p>鉴权服务的作用主要有:   <br/>
-1. 跟踪用户及其权限。   <br/>
-2. 提供可用服务的服务类别及API endpoint.</p>
-
-<p>详细的关于Identity的介绍可以参见OpenStack官方文档。只有理解了其理念后才能明了OpenStack架构中各种服务的角色和地位.</p>
-
-<p>首先创建keystone所需要的数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 36
-</span><span class='line'>Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE keystone;
-</span><span class='line'>Query OK, 1 row affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' \
-</span><span class='line'>    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
-</span><span class='line'>Query OK, 0 rows affected (0.01 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' \
-</span><span class='line'>    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; quit;
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建一个随机值，用于管理token在初始化配置时使用:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># openssl rand -hex 10
-</span><span class='line'>760bc221f4dc966693e5</span></code></pre></td></tr></table></div></figure>
-
-
-<p>安装和配置组件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install keystone python-keystoneclient</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置, 更改<code>admin_token</code>为刚才生成的随机数:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/keystone/keystone.conf
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>admin_token = 760bc221f4dc966693e5
-</span><span class='line'>...
-</span><span class='line'>[database]
-</span><span class='line'>...
-</span><span class='line'>connection = mysql://keystone:KEYSTONE_DBPASS@Controller/keystone
-</span><span class='line'>...
-</span><span class='line'>[token]
-</span><span class='line'>...
-</span><span class='line'>provider = keystone.token.providers.uuid.Provider
-</span><span class='line'>driver = keystone.token.persistence.backends.sql.Token
-</span><span class='line'>...
-</span><span class='line'>[revoke]
-</span><span class='line'>...
-</span><span class='line'>driver = keystone.contrib.revoke.backends.sql.Revoke
-</span><span class='line'>...
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>verbose = True</span></code></pre></td></tr></table></div></figure>
-
-
-<p>修改完毕后，使用以下命令来同步Identity服务数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># su -s /bin/sh -c "keystone-manage db_sync" keystone</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启鉴权服务，删除Ubuntu使用的默认sqlite数据库, 并完成安装:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service keystone restart
-</span><span class='line'># rm -f /var/lib/keystone/keystone.db </span></code></pre></td></tr></table></div></figure>
-
-
-<p>使用下列命令来激活cron任务，以便每小时判断tokens的存活时间:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># (crontab -l -u keystone 2&gt;&1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush &gt;/var/log/keystone/keystone-tokenflush.log 2&gt;&1' &gt;&gt; /var/spool/cron/crontabs/keystone</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>创建tenants, users, roles</h4>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># export OS_SERVICE_TOKEN=760bc221f4dc966693e5
-</span><span class='line'># export OS_SERVICE_ENDPOINT=http://Controller:35357/v2.0
-</span><span class='line'># keystone tenant-create --name admin --description "Admin Tenant"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |           Admin Tenant           |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 6f5f440aa9de4b2fa205f43df073ddfa |
-</span><span class='line'>|     name    |              admin               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'># keystone user-create --name admin --pass XXXXXXXXX --email xxxxxxxx@gmail.com
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |        XXXXXXXX@gmail.com        |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | 7bc9be5493e345518a384383872ab274 |
-</span><span class='line'>|   name   |              admin               |
-</span><span class='line'>| username |              admin               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'># keystone role-create --name admin
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|    id    | 65b6ccaa3b434c848ccb757be43d6b41 |
-</span><span class='line'>|   name   |              admin               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'># keystone user-role-add --user admin --tenant admin --role admin
-</span><span class='line'># keystone tenant-create --name demo --description "Demo Tenant"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |           Demo Tenant            |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 459c25933274483fb01ce66d9514add6 |
-</span><span class='line'>|     name    |               demo               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'># keystone user-create --name demo --tenant demo --pass xxxxx --email xxxxxxx@gmail.com
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |        xxxxxxx@gmail.com        |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | b2f3d8a239b34edfb50fa67c5aca8f83 |
-</span><span class='line'>|   name   |               demo               |
-</span><span class='line'>| tenantId | 459c25933274483fb01ce66d9514add6 |
-</span><span class='line'>| username |               demo               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'># keystone tenant-create --name service --description "Service Tenant"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |          Service Tenant          |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 08a675be93a04cca8a74159a3eefa288 |
-</span><span class='line'>|     name    |             service              |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'># keystone service-create --name keystone --type identity --description "OpenStack Identity"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |        OpenStack Identity        |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | bf7613d9563c47a9af80ecdb4f26f3f5 |
-</span><span class='line'>|     name    |             keystone             |
-</span><span class='line'>|     type    |             identity             |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'># keystone endpoint-create --service-id $(keystone service-list | awk '/ identity / {print $2}') --publicurl http://Controller:5000/v2.0 --internalurl http://Controller:5000/v2.0 --adminurl http://Controller:35357/v2.0 --region regionOne
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   adminurl  |   http://Controller:35357/v2.0   |
-</span><span class='line'>|      id     | c2c7a6c24b1d411b996f2e30fefc70b6 |
-</span><span class='line'>| internalurl |   http://Controller:5000/v2.0    |
-</span><span class='line'>|  publicurl  |   http://Controller:5000/v2.0    |
-</span><span class='line'>|    region   |            regionOne             |
-</span><span class='line'>|  service_id | bf7613d9563c47a9af80ecdb4f26f3f5 |
-</span><span class='line'>+-------------+----------------------------------+</span></code></pre></td></tr></table></div></figure>
-
-
-<p>验证, 详细的说明参见OpenStack官方文档:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># unset OS_SERVICE_TOKEN OS_SERVICE_ENDPOINT
-</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 token-get
-</span><span class='line'>+-----------+----------------------------------+
-</span><span class='line'>|  Property |              Value               |
-</span><span class='line'>+-----------+----------------------------------+
-</span><span class='line'>|  expires  |       2015-05-24T16:43:08Z       |
-</span><span class='line'>|     id    | 612b529c9c754b87a153abd39284aff6 |
-</span><span class='line'>| tenant_id | 6f5f440aa9de4b2fa205f43df073ddfa |
-</span><span class='line'>|  user_id  | 7bc9be5493e345518a384383872ab274 |
-</span><span class='line'>+-----------+----------------------------------+
-</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 tenant-list
-</span><span class='line'>+----------------------------------+---------+---------+
-</span><span class='line'>|                id                |   name  | enabled |
-</span><span class='line'>+----------------------------------+---------+---------+
-</span><span class='line'>| 6f5f440aa9de4b2fa205f43df073ddfa |  admin  |   True  |
-</span><span class='line'>| 459c25933274483fb01ce66d9514add6 |   demo  |   True  |
-</span><span class='line'>| 08a675be93a04cca8a74159a3eefa288 | service |   True  |
-</span><span class='line'>+----------------------------------+---------+---------+
-</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 user-list
-</span><span class='line'>+----------------------------------+-------+---------+--------------------+
-</span><span class='line'>|                id                |  name | enabled |       email        |
-</span><span class='line'>+----------------------------------+-------+---------+--------------------+
-</span><span class='line'>| 7bc9be5493e345518a384383872ab274 | admin |   True  | xxxxxxx@gmail.com |
-</span><span class='line'>| b2f3d8a239b34edfb50fa67c5aca8f83 |  demo |   True  | xxxxxxx@gmail.com |
-</span><span class='line'>+----------------------------------+-------+---------+--------------------+
-</span><span class='line'># keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 role-list
-</span><span class='line'>+----------------------------------+----------+
-</span><span class='line'>|                id                |   name   |
-</span><span class='line'>+----------------------------------+----------+
-</span><span class='line'>| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
-</span><span class='line'>| 65b6ccaa3b434c848ccb757be43d6b41 |  admin   |
-</span><span class='line'>+----------------------------------+----------+
-</span><span class='line'># keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 token-get
-</span><span class='line'>+-----------+----------------------------------+
-</span><span class='line'>|  Property |              Value               |
-</span><span class='line'>+-----------+----------------------------------+
-</span><span class='line'>|  expires  |       2015-05-24T16:46:34Z       |
-</span><span class='line'>|     id    | 0d8a9472b0f547dfabc62594b4fb146f |
-</span><span class='line'>| tenant_id | 459c25933274483fb01ce66d9514add6 |
-</span><span class='line'>|  user_id  | b2f3d8a239b34edfb50fa67c5aca8f83 |
-</span><span class='line'>+-----------+----------------------------------+
-</span><span class='line'># keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 user-list
-</span><span class='line'>You are not authorized to perform the requested action: admin_required (HTTP 403)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>创建脚本</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat admin-openrc.sh 
-</span><span class='line'>export OS_TENANT_NAME=admin
-</span><span class='line'>export OS_USERNAME=admin
-</span><span class='line'>export OS_PASSWORD=xxxxx
-</span><span class='line'>export OS_AUTH_URL=http://Controller:35357/v2.0
-</span><span class='line'># cat demo-openrc.sh
-</span><span class='line'>export OS_TENANT_NAME=demo
-</span><span class='line'>export OS_USERNAME=demo
-</span><span class='line'>export OS_PASSWORD=xxxxx
-</span><span class='line'>export OS_AUTH_URL=http://Controller:5000/v2.0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>下次使用时直接用<code>source admin-openrc.sh</code>或者<code>source demo-openrc.sh</code>即可。</p>
-
-<h3>镜像服务</h3>
-
-<p>添加镜像服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@Controller:~# mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 40
-</span><span class='line'>Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE glance;
-</span><span class='line'>Query OK, 1 row affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; quit;
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建glance用户:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># source  /home/dash/admin-openrc.sh
-</span><span class='line'># keystone user-create --name glance --pass xxxxx
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |                                  |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | a3108e4267154acd809f3978d360e6cd |
-</span><span class='line'>|   name   |              glance              |
-</span><span class='line'>| username |              glance              |
-</span><span class='line'>+----------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>赋予glance用户admin权限:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># keystone user-role-add --user glance --tenant service --role admin</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建service entity和service end-point:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> keystone service-create --name glance --type image --description "OpenStack Image Service"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |     OpenStack Image Service      |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 8736ca50fdf741afb5fcc2d078b1cd9b |
-</span><span class='line'>|     name    |              glance              |
-</span><span class='line'>|     type    |              image               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'># keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://Controller:9292 --internalurl http://Controller:9292 --adminurl http://Controller:9292 --region regionOne
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   adminurl  |      http://Controller:9292      |
-</span><span class='line'>|      id     | 340f40f0558c4a5b8fa88089aee69767 |
-</span><span class='line'>| internalurl |      http://Controller:9292      |
-</span><span class='line'>|  publicurl  |      http://Controller:9292      |
-</span><span class='line'>|    region   |            regionOne             |
-</span><span class='line'>|  service_id | 8736ca50fdf741afb5fcc2d078b1cd9b |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>安装服务组件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install glance python-glanceclient</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/glance/glance-api.conf
-</span><span class='line'>[database]
-</span><span class='line'>...
-</span><span class='line'>connection = mysql://glance:GLANCE_DBPASS@controller/glance
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>...
-</span><span class='line'>auth_uri = http://controller:5000/v2.0
-</span><span class='line'>identity_uri = http://controller:35357
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = glance
-</span><span class='line'>admin_password = GLANCE_PASS
-</span><span class='line'>[paste_deploy]
-</span><span class='line'>...
-</span><span class='line'>flavor = keystone
-</span><span class='line'>[glance_store]
-</span><span class='line'>...
-</span><span class='line'>default_store = file
-</span><span class='line'>filesystem_store_datadir = /var/lib/glance/images/
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>notification_driver = noop
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>verbose = True</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置<code>/etc/glance/glance-registry.conf</code>文件，完成以下配置:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[database]
-</span><span class='line'>...
-</span><span class='line'>connection = mysql://glance:GLANCE_DBPASS@controller/glance
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>...
-</span><span class='line'>auth_uri = http://controller:5000/v2.0
-</span><span class='line'>identity_uri = http://controller:35357
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = glance
-</span><span class='line'>admin_password = GLANCE_PASS
-</span><span class='line'>[paste_deploy]
-</span><span class='line'>...
-</span><span class='line'>flavor = keystone
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>notification_driver = noop
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>...
-</span><span class='line'>notification_driver = noop</span></code></pre></td></tr></table></div></figure>
-
-
-<p>同步数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># su -s /bin/sh -c "glance-manage db_sync" glance</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启服务，删除默认的sqlite数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service glance-registry restart
-</span><span class='line'># service glance-api restart
-</span><span class='line'># rm -f /var/lib/glance/glance.sqlite
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>验证:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
-</span><span class='line'># source ~/admin-openrc.sh
-</span><span class='line'># glance image-create --name "cirros-0.3.3-x86_64" --file ~/cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
-</span><span class='line'>[=============================&gt;] 100%
-</span><span class='line'>+------------------+--------------------------------------+
-</span><span class='line'>| Property         | Value                                |
-</span><span class='line'>+------------------+--------------------------------------+
-</span><span class='line'>| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
-</span><span class='line'>| container_format | bare                                 |
-</span><span class='line'>| created_at       | 2015-05-24T16:25:32                  |
-</span><span class='line'>| deleted          | False                                |
-</span><span class='line'>| deleted_at       | None                                 |
-</span><span class='line'>| disk_format      | qcow2                                |
-</span><span class='line'>| id               | 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 |
-</span><span class='line'>| is_public        | True                                 |
-</span><span class='line'>| min_disk         | 0                                    |
-</span><span class='line'>| min_ram          | 0                                    |
-</span><span class='line'>| name             | cirros-0.3.3-x86_64                  |
-</span><span class='line'>| owner            | 6f5f440aa9de4b2fa205f43df073ddfa     |
-</span><span class='line'>| protected        | False                                |
-</span><span class='line'>| size             | 13200896                             |
-</span><span class='line'>| status           | active                               |
-</span><span class='line'>| updated_at       | 2015-05-24T16:25:32                  |
-</span><span class='line'>| virtual_size     | None                                 |
-</span><span class='line'>+------------------+--------------------------------------+
-</span><span class='line'># glance image-list
-</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-</span><span class='line'>| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
-</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-</span><span class='line'>| 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
-</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>控制节点基本上配置成功，明天继续。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/11">&larr; Older</a>
@@ -3434,6 +2817,14 @@ Refers to:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/11/18/tips-on-archlinux-on-ssd-for-surfacepro/">Tips on ArchLinux on SSD for SurfacePro</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/11/16/spice-client/">Spice Client</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/11/13/win10-tips-for-using-xshell/">Win10 Tips for Using Xshell</a>
       </li>
     
@@ -3443,14 +2834,6 @@ Refers to:  <br/>
     
       <li class="post">
         <a href="/blog/2015/11/05/good-material/">Good Material</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/05/frdm-kl02z-tips-1/">FRDM-KL02Z Tips(1)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/04/cloudstack-vrlian-jie-shu/">CloudStack VR连接数</a>
       </li>
     
   </ul>
