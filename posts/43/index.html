@@ -9,7 +9,20 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Wiring Pictures The UltraSound sensor is like following picture, it only sold at 8RMB on Taobao: The Wiring Pictures is listed as following: Working &hellip;">
+  <meta name="description" content="接着上一个日志来，玩一个小tricky，通过SPI总线自己想输入的字符。 主机端，添加下列头文件 #include &lt;string.h>
+这使得可以使用strcpy等函数。 重写transfer()函数 spidev_test.c1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +78,1184 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/12/29/little-tricky-on-spi/">Little Tricky on SPI</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-12-29T17:13:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:13 pm</span></time>
+        
+         | <a href="/blog/2013/12/29/little-tricky-on-spi/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>接着上一个日志来，玩一个小tricky，通过SPI总线自己想输入的字符。 <br/>
+主机端，添加下列头文件
+    #include &lt;string.h>
+这使得可以使用strcpy等函数。  <br/>
+重写transfer()函数</p>
+
+<figure class='code'><figcaption><span>spidev_test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">transfer_mine</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">tx</span><span class="p">[</span><span class="mi">140</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">memcpy</span><span class="p">(</span><span class="n">tx</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">tx</span><span class="p">[</span><span class="n">strlen</span><span class="p">(</span><span class="n">tx</span><span class="p">)]</span> <span class="o">=</span> <span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">rx</span><span class="p">[</span><span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">tx</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="p">};</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">spi_ioc_transfer</span> <span class="n">tr</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">tx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">tx</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">rx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">rx</span><span class="p">,</span>
+</span><span class='line'>      <span class="c1">//.len = ARRAY_SIZE(tx),</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">len</span> <span class="o">=</span> <span class="n">len</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">delay_usecs</span> <span class="o">=</span> <span class="n">delay</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">speed_hz</span> <span class="o">=</span> <span class="n">speed</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">bits_per_word</span> <span class="o">=</span> <span class="n">bits</span><span class="p">,</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_MESSAGE</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tr</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t send spi message&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在main()函数里，改写调用的方式：</p>
+
+<figure class='code'><figcaption><span>spidev_test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">char</span> <span class="n">myinput</span><span class="p">[</span><span class="mi">140</span><span class="p">]</span><span class="o">=</span><span class="s">&quot;Trustywill, Hi, this is Trusty&quot;</span><span class="p">;</span>
+</span><span class='line'><span class="n">transfer_mine</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">myinput</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这样就可以将自定义的字符传输过去了，140是随便设置的值，可以设置为别的更大或者更小的值。 <br/>
+当然你也可以从命令行输入想传输的字符, 这里就不深入了。。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/12/29/spilian-jie-raspberrypihe-arduino/">SPI连接raspberryPI和Arduino</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-12-29T15:06:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>3:06 pm</span></time>
+        
+         | <a href="/blog/2013/12/29/spilian-jie-raspberrypihe-arduino/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>下面是使用SPI在RaspberryPI和Arduino Nano w之间进行双机通信的一个例子。借助它可以很好的理解SPI的工作原理。</p>
+
+<h3>背景知识</h3>
+
+<p>RaspberryPI GPIO布局图：   <br/>
+<img src="/images/GPIOs.png" alt="/images/GPIOs.png" />  <br/>
+从图中我们可以看到，RaspberryPI上与SPI通信相关的主要是GPIO 10（MOSI), GPIO 9(MISO)和GPIO 11(SCLK).  <br/>
+Arduino布局图：  <br/>
+SPI: 10 (SS), 11 (MOSI), 12 (MISO), 13 (SCK). These pins support SPI communication using the SPI library. SS代表Slava Select.      <br/>
+事实上我们要使用的仅仅是11/12/13三个口而已。</p>
+
+<h3>连线图</h3>
+
+<p>如下图进行连线，简单来说，R(10 MOSI)->A(12 MISO), R(9, MISO)->A(11, MOSI), R(11, SCLK) ->A(13, SCK)：     <br/>
+<img src="/images/spiconnector.jpg" alt="/images/spiconnector.jpg" /></p>
+
+<h3>Arduino端程序</h3>
+
+<figure class='code'><figcaption><span>spin.ino</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="c1">// Written by Nick Gammon</span>
+</span><span class='line'><span class="c1">// February 2011</span>
+</span><span class='line'><span class="cm">/**</span>
+</span><span class='line'><span class="cm"> * Send arbitrary number of bits at whatever clock rate (tested at 500 KHZ and 500 HZ).</span>
+</span><span class='line'><span class="cm"> * This script will capture the SPI bytes, when a &#39;\n&#39; is recieved it will then output</span>
+</span><span class='line'><span class="cm"> * the captured byte stream via the serial.</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;SPI.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">char</span> <span class="n">buf</span> <span class="p">[</span><span class="mi">100</span><span class="p">];</span>
+</span><span class='line'><span class="k">volatile</span> <span class="n">byte</span> <span class="n">pos</span><span class="p">;</span>
+</span><span class='line'><span class="k">volatile</span> <span class="n">boolean</span> <span class="n">process_it</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span> <span class="p">(</span><span class="mi">115200</span><span class="p">);</span>   <span class="c1">// debugging</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// have to send on master in, *slave out*</span>
+</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="n">MISO</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// turn on SPI in slave mode</span>
+</span><span class='line'>  <span class="n">SPCR</span> <span class="o">|=</span> <span class="n">_BV</span><span class="p">(</span><span class="n">SPE</span><span class="p">);</span>
+</span><span class='line'>  <span class="c1">//SPCR is  Arduino SPI Control Register</span>
+</span><span class='line'>  <span class="c1">// __BV&#39;s definition is like : #define _BV(bit) (1 &lt;&lt; (bit))</span>
+</span><span class='line'>  <span class="c1">// SPE is the register of the SPI Enable</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// get ready for an interrupt </span>
+</span><span class='line'>  <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>   <span class="c1">// buffer empty</span>
+</span><span class='line'>  <span class="n">process_it</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// now turn on interrupts</span>
+</span><span class='line'>  <span class="n">SPI</span><span class="p">.</span><span class="n">attachInterrupt</span><span class="p">();</span>
+</span><span class='line'>
+</span><span class='line'><span class="p">}</span>  <span class="c1">// end of setup</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// SPI interrupt routine</span>
+</span><span class='line'><span class="n">ISR</span> <span class="p">(</span><span class="n">SPI_STC_vect</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'><span class="n">byte</span> <span class="n">c</span> <span class="o">=</span> <span class="n">SPDR</span><span class="p">;</span>  <span class="c1">// grab byte from SPI Data Register</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// add to buffer if room</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&lt;</span> <span class="k">sizeof</span> <span class="n">buf</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>    <span class="n">buf</span> <span class="p">[</span><span class="n">pos</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="n">c</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// example: newline means time to process buffer</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">c</span> <span class="o">==</span> <span class="sc">&#39;\n&#39;</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">process_it</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="p">}</span>  <span class="c1">// end of room available</span>
+</span><span class='line'><span class="p">}</span>  <span class="c1">// end of interrupt routine SPI_STC_vect</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// main loop - wait for flag set in interrupt routine</span>
+</span><span class='line'><span class="kt">void</span> <span class="n">loop</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">process_it</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>    <span class="n">buf</span> <span class="p">[</span><span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">Serial</span><span class="p">.</span><span class="n">println</span> <span class="p">(</span><span class="n">buf</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">process_it</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>  <span class="c1">// end of flag set</span>
+</span><span class='line'>
+</span><span class='line'><span class="p">}</span>  <span class="c1">// end of loop</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Code Walking through:  <br/>
+Arduino SPI Control Register (SPCR), set it to</p>
+
+<figure class='code'><figcaption><span>spin.ino</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">SPCR</span> <span class="o">|=</span> <span class="n">_BV</span><span class="p">(</span><span class="n">SPE</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>SPI Data Register (SPDR), SPI数据寄存器。 中断程序中，每次从SPDR中取回一个byte 并存储在c中。</p>
+
+<figure class='code'><figcaption><span>spin.ino</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">if</span> <span class="p">(</span><span class="n">c</span> <span class="o">==</span> <span class="sc">&#39;\n&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="n">process_it</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里通过设置全局变量process_it来影响loop中对接收数据的处理，在loop()中有如下代码段：</p>
+
+<figure class='code'><figcaption><span>spin.ino</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">if</span> <span class="p">(</span><span class="n">process_it</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="c1">//.....</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>从上面看到，如果process_it为0,则loop中一直在空循环，只有当所有的数据全部接收完毕后，才会一次性打印出所有的数据。在打印完数据后，程序将自动将buf清0, 清0是通过将pos简单置0而实现的，实际的数据其实还在。</p>
+
+<h3>RaspberryPI 端程序</h3>
+
+<figure class='code'><figcaption><span>spi_test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+<span class='line-number'>149</span>
+<span class='line-number'>150</span>
+<span class='line-number'>151</span>
+<span class='line-number'>152</span>
+<span class='line-number'>153</span>
+<span class='line-number'>154</span>
+<span class='line-number'>155</span>
+<span class='line-number'>156</span>
+<span class='line-number'>157</span>
+<span class='line-number'>158</span>
+<span class='line-number'>159</span>
+<span class='line-number'>160</span>
+<span class='line-number'>161</span>
+<span class='line-number'>162</span>
+<span class='line-number'>163</span>
+<span class='line-number'>164</span>
+<span class='line-number'>165</span>
+<span class='line-number'>166</span>
+<span class='line-number'>167</span>
+<span class='line-number'>168</span>
+<span class='line-number'>169</span>
+<span class='line-number'>170</span>
+<span class='line-number'>171</span>
+<span class='line-number'>172</span>
+<span class='line-number'>173</span>
+<span class='line-number'>174</span>
+<span class='line-number'>175</span>
+<span class='line-number'>176</span>
+<span class='line-number'>177</span>
+<span class='line-number'>178</span>
+<span class='line-number'>179</span>
+<span class='line-number'>180</span>
+<span class='line-number'>181</span>
+<span class='line-number'>182</span>
+<span class='line-number'>183</span>
+<span class='line-number'>184</span>
+<span class='line-number'>185</span>
+<span class='line-number'>186</span>
+<span class='line-number'>187</span>
+<span class='line-number'>188</span>
+<span class='line-number'>189</span>
+<span class='line-number'>190</span>
+<span class='line-number'>191</span>
+<span class='line-number'>192</span>
+<span class='line-number'>193</span>
+<span class='line-number'>194</span>
+<span class='line-number'>195</span>
+<span class='line-number'>196</span>
+<span class='line-number'>197</span>
+<span class='line-number'>198</span>
+<span class='line-number'>199</span>
+<span class='line-number'>200</span>
+<span class='line-number'>201</span>
+<span class='line-number'>202</span>
+<span class='line-number'>203</span>
+<span class='line-number'>204</span>
+<span class='line-number'>205</span>
+<span class='line-number'>206</span>
+<span class='line-number'>207</span>
+<span class='line-number'>208</span>
+<span class='line-number'>209</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/*</span>
+</span><span class='line'><span class="cm"> * SPI testing utility (using spidev driver)</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * Copyright (c) 2007  MontaVista Software, Inc.</span>
+</span><span class='line'><span class="cm"> * Copyright (c) 2007  Anton Vorontsov &lt;avorontsov@ru.mvista.com&gt;</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * This program is free software; you can redistribute it and/or modify</span>
+</span><span class='line'><span class="cm"> * it under the terms of the GNU General Public License as published by</span>
+</span><span class='line'><span class="cm"> * the Free Software Foundation; either version 2 of the License.</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * Cross-compile with cross-gcc -I/path/to/cross-kernel/include</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#include &lt;stdint.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;unistd.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;stdio.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;stdlib.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;getopt.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;fcntl.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;sys/ioctl.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;linux/types.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;linux/spi/spidev.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">pabort</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">s</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">perror</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">abort</span><span class="p">();</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">device</span> <span class="o">=</span> <span class="s">&quot;/dev/spidev0.0&quot;</span><span class="p">;</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">uint8_t</span> <span class="n">mode</span><span class="p">;</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">uint8_t</span> <span class="n">bits</span> <span class="o">=</span> <span class="mi">8</span><span class="p">;</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">uint32_t</span> <span class="n">speed</span> <span class="o">=</span> <span class="mi">500000</span><span class="p">;</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">uint16_t</span> <span class="n">delay</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">transfer</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">tx</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>        <span class="mh">0x48</span><span class="p">,</span> <span class="mh">0x45</span><span class="p">,</span> <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x4F</span><span class="p">,</span>
+</span><span class='line'>        <span class="mh">0x20</span><span class="p">,</span>
+</span><span class='line'>        <span class="mh">0x57</span><span class="p">,</span> <span class="mh">0x4F</span><span class="p">,</span> <span class="mh">0x52</span><span class="p">,</span> <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x44</span><span class="p">,</span>
+</span><span class='line'>        <span class="mh">0x0A</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">rx</span><span class="p">[</span><span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">tx</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="p">};</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">spi_ioc_transfer</span> <span class="n">tr</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">tx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">tx</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">rx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">rx</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">len</span> <span class="o">=</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">tx</span><span class="p">),</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">delay_usecs</span> <span class="o">=</span> <span class="n">delay</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">speed_hz</span> <span class="o">=</span> <span class="n">speed</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">bits_per_word</span> <span class="o">=</span> <span class="n">bits</span><span class="p">,</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_MESSAGE</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tr</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t send spi message&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> for (ret = 0; ret &lt; ARRAY_SIZE(tx); ret++) {</span>
+</span><span class='line'><span class="cm">     if (!(ret % 6))</span>
+</span><span class='line'><span class="cm">         puts(&quot;&quot;);</span>
+</span><span class='line'><span class="cm">     printf(&quot;%.2X &quot;, rx[ret]);</span>
+</span><span class='line'><span class="cm"> }</span>
+</span><span class='line'><span class="cm"> puts(&quot;&quot;);</span>
+</span><span class='line'><span class="cm">    */</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">print_usage</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">prog</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Usage: %s [-DsbdlHOLC3]</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">prog</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">puts</span><span class="p">(</span><span class="s">&quot;  -D --device   device to use (default /dev/spidev1.1)</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -s --speed    max speed (Hz)</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -d --delay    delay (usec)</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -b --bpw      bits per word </span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -l --loop     loopback</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -H --cpha     clock phase</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -O --cpol     clock polarity</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -L --lsb      least significant bit first</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -C --cs-high  chip select active high</span><span class="se">\n</span><span class="s">&quot;</span>
+</span><span class='line'>       <span class="s">&quot;  -3 --3wire    SI/SO signals shared</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">parse_opts</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">option</span> <span class="n">lopts</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;device&quot;</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;D&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;speed&quot;</span><span class="p">,</span>   <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;s&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;delay&quot;</span><span class="p">,</span>   <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;d&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;bpw&quot;</span><span class="p">,</span>     <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;b&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;loop&quot;</span><span class="p">,</span>    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;l&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;cpha&quot;</span><span class="p">,</span>    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;H&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;cpol&quot;</span><span class="p">,</span>    <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;O&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;lsb&quot;</span><span class="p">,</span>     <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;L&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;cs-high&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;C&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;3wire&quot;</span><span class="p">,</span>   <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;3&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;no-cs&quot;</span><span class="p">,</span>   <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;N&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="s">&quot;ready&quot;</span><span class="p">,</span>   <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="sc">&#39;R&#39;</span> <span class="p">},</span>
+</span><span class='line'>          <span class="p">{</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span> <span class="p">},</span>
+</span><span class='line'>      <span class="p">};</span>
+</span><span class='line'>      <span class="kt">int</span> <span class="n">c</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="n">c</span> <span class="o">=</span> <span class="n">getopt_long</span><span class="p">(</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="s">&quot;D:s:d:b:lHOLC3NR&quot;</span><span class="p">,</span> <span class="n">lopts</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="n">c</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="k">switch</span> <span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;D&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">device</span> <span class="o">=</span> <span class="n">optarg</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;s&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">speed</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">optarg</span><span class="p">);</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;d&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">delay</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">optarg</span><span class="p">);</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;b&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">bits</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">optarg</span><span class="p">);</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;l&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_LOOP</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;H&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_CPHA</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;O&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_CPOL</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;L&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_LSB_FIRST</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;C&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_CS_HIGH</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;3&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_3WIRE</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;N&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_NO_CS</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">case</span> <span class="sc">&#39;R&#39;</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">mode</span> <span class="o">|=</span> <span class="n">SPI_READY</span><span class="p">;</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="k">default</span><span class="o">:</span>
+</span><span class='line'>          <span class="n">print_usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>          <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">ret</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">fd</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">parse_opts</span><span class="p">(</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t open device&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/*</span>
+</span><span class='line'><span class="cm">  * spi mode</span>
+</span><span class='line'><span class="cm">  */</span>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_WR_MODE</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mode</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t set spi mode&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_RD_MODE</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mode</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t get spi mode&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/*</span>
+</span><span class='line'><span class="cm">  * bits per word</span>
+</span><span class='line'><span class="cm">  */</span>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_WR_BITS_PER_WORD</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">bits</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t set bits per word&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_RD_BITS_PER_WORD</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">bits</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t get bits per word&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/*</span>
+</span><span class='line'><span class="cm">  * max speed hz</span>
+</span><span class='line'><span class="cm">  */</span>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_WR_MAX_SPEED_HZ</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">speed</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t set max speed hz&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_RD_MAX_SPEED_HZ</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">speed</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t get max speed hz&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;spi mode: %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;bits per word: %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">bits</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;max speed: %d Hz (%d KHz)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">speed</span><span class="p">,</span> <span class="n">speed</span><span class="o">/</span><span class="mi">1000</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">transfer</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>解析： 在main()函数中，设置完spi总线的相关参数后，调用transfer(fd)来传递参数。  <br/>
+transfer()函数的实现如下:</p>
+
+<figure class='code'><figcaption><span>spidev_test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">transfer</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">tx</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>        <span class="mh">0x48</span><span class="p">,</span> <span class="mh">0x45</span><span class="p">,</span> <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x4F</span><span class="p">,</span>
+</span><span class='line'>        <span class="mh">0x20</span><span class="p">,</span>
+</span><span class='line'>        <span class="mh">0x57</span><span class="p">,</span> <span class="mh">0x4F</span><span class="p">,</span> <span class="mh">0x52</span><span class="p">,</span> <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x44</span><span class="p">,</span>
+</span><span class='line'>        <span class="mh">0x0A</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'>  <span class="kt">uint8_t</span> <span class="n">rx</span><span class="p">[</span><span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">tx</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">,</span> <span class="p">};</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">spi_ioc_transfer</span> <span class="n">tr</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">tx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">tx</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">rx_buf</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">rx</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">len</span> <span class="o">=</span> <span class="n">ARRAY_SIZE</span><span class="p">(</span><span class="n">tx</span><span class="p">),</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">delay_usecs</span> <span class="o">=</span> <span class="n">delay</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">speed_hz</span> <span class="o">=</span> <span class="n">speed</span><span class="p">,</span>
+</span><span class='line'>      <span class="p">.</span><span class="n">bits_per_word</span> <span class="o">=</span> <span class="n">bits</span><span class="p">,</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_MESSAGE</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tr</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">pabort</span><span class="p">(</span><span class="s">&quot;can&#39;t send spi message&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> for (ret = 0; ret &lt; ARRAY_SIZE(tx); ret++) {</span>
+</span><span class='line'><span class="cm">     if (!(ret % 6))</span>
+</span><span class='line'><span class="cm">         puts(&quot;&quot;);</span>
+</span><span class='line'><span class="cm">     printf(&quot;%.2X &quot;, rx[ret]);</span>
+</span><span class='line'><span class="cm"> }</span>
+</span><span class='line'><span class="cm"> puts(&quot;&quot;);</span>
+</span><span class='line'><span class="cm">    */</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>tx即为字符串，'H'=0x48, &lsquo;E&rsquo;=0x45, &lsquo;L&rsquo;=0x4c, &lsquo;L&rsquo;=0x4c, &lsquo;O&rsquo;=0x4f, &lsquo; &rsquo;=0x20, &lsquo;W&rsquo;=0x57, &lsquo;O&rsquo;=0x4f, &lsquo;R&rsquo;=0x52, &lsquo;L&rsquo;=0x4c, &rsquo;D'=0x44, &lsquo;\n&rsquo;=0x0a.  <br/>
+实际传送则是调用：
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+有关它的解释如下：</p>
+
+<figure class='code'><figcaption><span>include/uapi/linux/spi/spidev.h</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">SPI_IOC_MESSAGE</span> <span class="n">gives</span> <span class="n">userspace</span> <span class="n">the</span> <span class="n">equivalent</span> <span class="n">of</span> <span class="n">kernel</span> <span class="n">spi_sync</span><span class="p">().</span>
+</span><span class='line'>  <span class="mi">72</span> <span class="o">*</span> <span class="n">Pass</span> <span class="n">it</span> <span class="n">an</span> <span class="n">array</span> <span class="n">of</span> <span class="n">related</span> <span class="n">transfers</span><span class="p">,</span> <span class="n">they</span><span class="err">&#39;</span><span class="n">ll</span> <span class="n">execute</span> <span class="n">together</span><span class="p">.</span>
+</span><span class='line'>  <span class="mi">73</span> <span class="o">*</span> <span class="n">Each</span> <span class="n">transfer</span> <span class="n">may</span> <span class="n">be</span> <span class="n">half</span> <span class="n">duplex</span> <span class="p">(</span><span class="n">either</span> <span class="n">direction</span><span class="p">)</span> <span class="n">or</span> <span class="n">full</span> <span class="n">duplex</span><span class="p">.</span>
+</span><span class='line'>  <span class="mi">74</span> <span class="o">*</span>
+</span><span class='line'>  <span class="mi">75</span> <span class="o">*</span>      <span class="k">struct</span> <span class="n">spi_ioc_transfer</span> <span class="n">mesg</span><span class="p">[</span><span class="mi">4</span><span class="p">];</span>
+</span><span class='line'>  <span class="mi">76</span> <span class="o">*</span>      <span class="p">...</span>
+</span><span class='line'>  <span class="mi">77</span> <span class="o">*</span>      <span class="n">status</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SPI_IOC_MESSAGE</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">mesg</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#define SPI_IOC_MESSAGE(N) _IOW(SPI_IOC_MAGIC, 0, char[SPI_MSGSIZE(N)])</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>调用完transfer()函数后，调用close()来关闭文件描述符。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/12/28/tsc3200-on-arduino/">TSC3200 on Arduino</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-12-28T19:20:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>7:20 pm</span></time>
+        
+         | <a href="/blog/2013/12/28/tsc3200-on-arduino/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Introduction</h3>
+
+<p>The detailed information could be seen as in :  <br/>
+<a href="http://www.eefocus.com/zhang700309/blog/13-08/296390_6c438.html">http://www.eefocus.com/zhang700309/blog/13-08/296390_6c438.html</a></p>
+
+<h3>Wiring:</h3>
+
+<p>Notice we use the interrupt 1.  <br/>
+<img src="/images/tsc3200d.jpg" alt="images/tsc3200d.jpg" /></p>
+
+<h3>Code</h3>
+
+<figure class='code'><figcaption><span>tsc3200d.ino</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;TimerOne.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cp">#define S0     6   </span><span class="c1">// Please notice the Pin&#39;s define</span>
+</span><span class='line'><span class="cp">#define S1     5</span>
+</span><span class='line'><span class="cp">#define S2     4</span>
+</span><span class='line'><span class="cp">#define S3     2</span>
+</span><span class='line'><span class="cp">#define OUT    3</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span>   <span class="n">g_count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>    <span class="c1">// count the frequecy</span>
+</span><span class='line'><span class="kt">int</span>   <span class="n">g_array</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span>     <span class="c1">// store the RGB value</span>
+</span><span class='line'><span class="kt">int</span>   <span class="n">g_flag</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>     <span class="c1">// filter of RGB queue</span>
+</span><span class='line'><span class="kt">float</span> <span class="n">g_SF</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span>        <span class="c1">// save the RGB Scale factor</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Init TSC230 and setting Frequency.</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">TSC_Init</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="n">S0</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="n">S1</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="n">S2</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="n">S3</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="n">OUT</span><span class="p">,</span> <span class="n">INPUT</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="n">S0</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>  <span class="c1">// OUTPUT FREQUENCY SCALING 2%</span>
+</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="n">S1</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Select the filter color </span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">TSC_FilterColor</span><span class="p">(</span><span class="kt">int</span> <span class="n">Level01</span><span class="p">,</span> <span class="kt">int</span> <span class="n">Level02</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">Level01</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">Level01</span> <span class="o">=</span> <span class="n">HIGH</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">Level02</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">Level02</span> <span class="o">=</span> <span class="n">HIGH</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="n">S2</span><span class="p">,</span> <span class="n">Level01</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="n">S3</span><span class="p">,</span> <span class="n">Level02</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">TSC_Count</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">g_count</span> <span class="o">++</span> <span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">TSC_Callback</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">switch</span><span class="p">(</span><span class="n">g_flag</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>    <span class="k">case</span> <span class="mi">0</span><span class="o">:</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;-&gt;WB Start&quot;</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">TSC_WB</span><span class="p">(</span><span class="n">LOW</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>              <span class="c1">//Filter without Red</span>
+</span><span class='line'>         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">case</span> <span class="mi">1</span><span class="o">:</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;-&gt;Frequency R=&quot;</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_count</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">g_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">g_count</span><span class="p">;</span>
+</span><span class='line'>         <span class="n">TSC_WB</span><span class="p">(</span><span class="n">HIGH</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>            <span class="c1">//Filter without Green</span>
+</span><span class='line'>         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">case</span> <span class="mi">2</span><span class="o">:</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;-&gt;Frequency G=&quot;</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_count</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">g_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">g_count</span><span class="p">;</span>
+</span><span class='line'>         <span class="n">TSC_WB</span><span class="p">(</span><span class="n">LOW</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>             <span class="c1">//Filter without Blue</span>
+</span><span class='line'>         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">case</span> <span class="mi">3</span><span class="o">:</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="s">&quot;-&gt;Frequency B=&quot;</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_count</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;-&gt;WB End&quot;</span><span class="p">);</span>
+</span><span class='line'>         <span class="n">g_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">g_count</span><span class="p">;</span>
+</span><span class='line'>         <span class="n">TSC_WB</span><span class="p">(</span><span class="n">HIGH</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>             <span class="c1">//Clear(no filter)   </span>
+</span><span class='line'>         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>   <span class="k">default</span><span class="o">:</span>
+</span><span class='line'>         <span class="n">g_count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">TSC_WB</span><span class="p">(</span><span class="kt">int</span> <span class="n">Level0</span><span class="p">,</span> <span class="kt">int</span> <span class="n">Level1</span><span class="p">)</span>      <span class="c1">//White Balance</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">g_count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">g_flag</span> <span class="o">++</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">TSC_FilterColor</span><span class="p">(</span><span class="n">Level0</span><span class="p">,</span> <span class="n">Level1</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">Timer1</span><span class="p">.</span><span class="n">setPeriod</span><span class="p">(</span><span class="mi">1000000</span><span class="p">);</span>             <span class="c1">// set 1s period</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">TSC_Init</span><span class="p">();</span>
+</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">Timer1</span><span class="p">.</span><span class="n">initialize</span><span class="p">();</span>             <span class="c1">// defaulte is 1s</span>
+</span><span class='line'>  <span class="n">Timer1</span><span class="p">.</span><span class="n">attachInterrupt</span><span class="p">(</span><span class="n">TSC_Callback</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">attachInterrupt</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">TSC_Count</span><span class="p">,</span> <span class="n">RISING</span><span class="p">);</span>
+</span><span class='line'> <span class="n">pinMode</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'> <span class="n">pinMode</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'> <span class="n">pinMode</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
+</span><span class='line'> <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'> <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'> <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">4000</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span><span class="mi">3</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">g_SF</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">255.0</span><span class="o">/</span> <span class="n">g_array</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>     <span class="c1">//R Scale factor</span>
+</span><span class='line'>  <span class="n">g_SF</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">255.0</span><span class="o">/</span> <span class="n">g_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">;</span>    <span class="c1">//G Scale factor</span>
+</span><span class='line'>  <span class="n">g_SF</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mf">255.0</span><span class="o">/</span> <span class="n">g_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">;</span>    <span class="c1">//B Scale factor</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">2</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>   <span class="n">g_flag</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>   <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span><span class="mi">3</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="kt">int</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="n">g_SF</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+</span><span class='line'>   <span class="k">if</span><span class="p">(((</span><span class="n">g_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">&gt;</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">&amp;&amp;</span> <span class="p">((</span><span class="n">g_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">&gt;</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">2</span><span class="p">])))</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="k">else</span> <span class="k">if</span><span class="p">(((</span><span class="n">g_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">&gt;</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="o">&amp;&amp;</span> <span class="p">((</span><span class="n">g_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">&gt;</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">2</span><span class="p">])))</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="k">else</span> <span class="k">if</span><span class="p">(((</span><span class="n">g_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">&gt;</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">&amp;&amp;</span> <span class="p">((</span><span class="n">g_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">&gt;</span><span class="p">(</span><span class="n">g_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">g_SF</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="k">else</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="n">delay</span><span class="p">(</span><span class="mi">4000</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Effect</h3>
+
+<p>First, the program will caculate the RBG base value out.  <br/>
+If you put the sensor on a red object, red LED will be lighten, turn the sensor facing a green object, green LED will be lighten; blue object for blue LED.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1016,467 +2207,6 @@ The right steps for using bluetooth:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/12/19/enable-bluetooth-headset-on-jogger-2/">Enable Bluetooth Headset on Jogger(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-12-19T09:11:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>19</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:11 am</span></time>
-        
-         | <a href="/blog/2013/12/19/enable-bluetooth-headset-on-jogger-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since trying to enable BT headset failed on Ubuntu12.04 Server, I decide to try xubuntu version. So I download the image from <a href="http://joggler.exotica.org.uk/ubuntu/">http://joggler.exotica.org.uk/ubuntu/</a>, then extract it to get the image.</p>
-
-<h3>Get the filesystem</h3>
-
-<p>Use fdisk to get the img layout</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:/media/nfs/xubuntu# fdisk -l xubuntu_12.04-v1.4-ext4.img 
-</span><span class='line'>                      Device Boot      Start         End      Blocks   Id  System
-</span><span class='line'>xubuntu_12.04-v1.4-ext4.img1   *        2048      126975       62464    e  W95 FAT16 (LBA)
-</span><span class='line'>xubuntu_12.04-v1.4-ext4.img2          126976      626687      249856   82  Linux swap / Solaris
-</span><span class='line'>xubuntu_12.04-v1.4-ext4.img3          626688     7800831     3587072   83  Linux
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So we can caculate the offset is 626688X512=320864256.   <br/>
-Use following commands to copy the filesystem out to the actual disk:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mount ./xubuntu_12.04-v1.4-ext4.img  -o offset=320864256 /mnt3/
-</span><span class='line'>$ mount /dev/uba5 /mnt
-</span><span class='line'>$ cp -ar /mnt3/* /mnt/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>My disk layout is:   <br/>
-<img src="/images/playout.jpg" alt="playout.jpg" /></p>
-
-<h3>Modification for bootup Xubuntu</h3>
-
-<h4>Add new item for grub:</h4>
-
-<p>Get the disk labels:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls /dev/disk/by-label/
-</span><span class='line'>Xubuntu  linux-boot  linux-root  linux-swap  mmc-boot  mmc-root
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The newly added label &ldquo;Xubuntu&rdquo; is the one we store the filesystem of Xubuntu. We need to add a new item to point at this partition.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:/boot# cat grub.cfg
-</span><span class='line'>loadfont /unicode.pf2
-</span><span class='line'>terminal_output gfxterm
-</span><span class='line'>set timeout=5
-</span><span class='line'>menuentry "XUbuntu 12.04 LTS (Precise) - 3.2.32joggler1" {
-</span><span class='line'>  linux /vmlinuz-3.2.32joggler1 root=LABEL=Xubuntu ro quiet splash text
-</span><span class='line'>  initrd /initrd.img-3.2.32joggler1
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h5>Change the fstab</h5>
-
-<p>We have to change the root partition to &ldquo;Xubuntu&rdquo;</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:/mnt3# cat /mnt3/etc/fstab
-</span><span class='line'># /etc/fstab: static file system information.
-</span><span class='line'>#
-</span><span class='line'># Use 'blkid -o value -s UUID' to print the universally unique identifier
-</span><span class='line'># for a device; this may be used with UUID= as a more robust way to name
-</span><span class='line'># devices that works even if disks are added and removed. See fstab(5).
-</span><span class='line'>#
-</span><span class='line'># &lt;file system&gt; &lt;mount point&gt;   &lt;type&gt;  &lt;options&gt;       &lt;dump&gt;  &lt;pass&gt;
-</span><span class='line'>proc             /proc        proc    nodev,noexec,nosuid 0       0
-</span><span class='line'>LABEL=Xubuntu  /      ext4    errors=remount-ro,noatime       0       1
-</span><span class='line'>LABEL=linux-boot /boot        vfat    defaults        0       0
-</span><span class='line'>LABEL=linux-swap none     swap    sw          0       0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now reboot to see if we could enter xubuntu?  Since we cannot use keyboard in grub, we could only enable one distribution, this is different from the tranditional grub.</p>
-
-<h4>Configure Bluetooth</h4>
-
-<p>Install module for pulseaudio</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get install pulseaudio-module-bluetooth
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then reboot. Currently connect the bluetooth, then in pulseaudio you will select the corresponding sound card. Enjoy it!  <br/>
-Tips for avoiding auto hiberate of usb disk, as root:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ crontab -e
-</span><span class='line'>*/4 * * * * fdisk -l /dev/uba &gt;/dev/null
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now your disk will never be hiberate, avoiding system from broken.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/12/18/enable-bluetooth-headset-on-joggler/">Enable Bluetooth Headset on Joggler</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-12-18T17:08:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:08 pm</span></time>
-        
-         | <a href="/blog/2013/12/18/enable-bluetooth-headset-on-joggler/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>TroubleShooting on alsa</h3>
-
-<p>Current user canot use alsamixer</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@joggler:~$ alsamixer 
-</span><span class='line'>cannot open mixer: No such file or directory
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This is because the current user is not in the &ldquo;audio&rdquo; group, use root to add current user into &ldquo;audio&rdquo; group:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@joggler:~# usermod -a -G audio Trusty
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Unmute the channel:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ amixer sset Master unmute
-</span><span class='line'>Simple mixer control 'Master',0
-</span><span class='line'>  Capabilities: pvolume pswitch penum
-</span><span class='line'>  Playback channels: Front Left - Front Right
-</span><span class='line'>  Limits: Playback 0 - 31
-</span><span class='line'>  Mono:
-</span><span class='line'>  Front Left: Playback 24 [77%] [-10.50dB] [on]
-</span><span class='line'>  Front Right: Playback 24 [77%] [-10.50dB] [on]
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we can use wired headset for listening music.</p>
-
-<h3>Setup Bluetooth</h3>
-
-<p>Scan the available equipments:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@joggler:~$ hcitool scan
-</span><span class='line'>Scanning ...
-</span><span class='line'>  geougwoguw  geige   
-</span><span class='line'>  geougwoguw  geige521
-</span><span class='line'>  geougwoguw  geige   
-</span><span class='line'>  geougwoguw  geige723
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Repair:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>bluez-simple-agent hci0 dd:64:22:KK:FF:BD repair
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then edit your /etc/asound.conf file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#/etc/asound.conf
-</span><span class='line'>
-</span><span class='line'>pcm.btheadset {
-</span><span class='line'>   type plug
-</span><span class='line'>   slave {
-</span><span class='line'>       pcm {
-</span><span class='line'>           type bluetooth
-</span><span class='line'>           device XX:XX:XX:XX:XX:XX 
-</span><span class='line'>           profile "auto"
-</span><span class='line'>       }   
-</span><span class='line'>   }   
-</span><span class='line'>   hint {
-</span><span class='line'>       show on
-</span><span class='line'>       description "BT Headset"
-</span><span class='line'>   }   
-</span><span class='line'>}
-</span><span class='line'>ctl.btheadset {
-</span><span class='line'>  type bluetooth
-</span><span class='line'>}  
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>mplayer using bluetooth:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>mplayer -ao alsa:device=btheadset bad.mp3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Set the default sound card to bluetooth</h3>
-
-<p>Edit the .asoundrc file.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@joggler:~$ cat .asoundrc    
-</span><span class='line'>pcm.!default {
-</span><span class='line'>   type plug
-</span><span class='line'>   slave {
-</span><span class='line'>       pcm {
-</span><span class='line'>           type bluetooth
-</span><span class='line'>           device dd:64:22:KK:FF:BD
-</span><span class='line'>           profile "auto"
-</span><span class='line'>       }   
-</span><span class='line'>   }   
-</span><span class='line'>   hint {
-</span><span class='line'>       show on
-</span><span class='line'>       description "BT Headset"
-</span><span class='line'>   }   
-</span><span class='line'>}
-</span><span class='line'>##ctl.btheadset {
-</span><span class='line'>##  type bluetooth
-</span><span class='line'>##}
-</span><span class='line'>
-</span><span class='line'>bluez-simple-agent hci0 dd:64:22:KK:FF:BD repair
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then edit your /etc/asound.conf file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#/etc/asound.conf
-</span><span class='line'>
-</span><span class='line'>pcm.btheadset {
-</span><span class='line'>   type plug
-</span><span class='line'>   slave {
-</span><span class='line'>       pcm {
-</span><span class='line'>           type bluetooth
-</span><span class='line'>           device XX:XX:XX:XX:XX:XX 
-</span><span class='line'>           profile "auto"
-</span><span class='line'>       }   
-</span><span class='line'>   }   
-</span><span class='line'>   hint {
-</span><span class='line'>       show on
-</span><span class='line'>       description "BT Headset"
-</span><span class='line'>   }   
-</span><span class='line'>}
-</span><span class='line'>ctl.btheadset {
-</span><span class='line'>  type bluetooth
-</span><span class='line'>}  
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>mplayer using bluetooth:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>mplayer -ao alsa:device=btheadset bad.mp3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Set the default sound card to bluetooth</h3>
-
-<p>TBD, here I meet lots of problems.
-Edit the .asoundrc file.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>
-</span><span class='line'>
-</span><span class='line'>apt-get autoremove pulseaudio
-</span><span class='line'>pulseaudio --start
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Why aplay -L and aplay -l will get different result? I have no idea.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/12/17/fastly-search-package-infos-in-archlinux/">Fastly Search Package Infos in ArchLinux</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-12-17T14:14:00+08:00'><span class='date'><span class='date-month'>Dec</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>2:14 pm</span></time>
-        
-         | <a href="/blog/2013/12/17/fastly-search-package-infos-in-archlinux/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>You can use pkgfile to view the metadata of the pacman files:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>pacman -Ss pkgfile
-</span><span class='line'>extra/pkgfile 11-1 [installed]
-</span><span class='line'>    a pacman .files metadata explorer
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Usage:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>pkgfile ls
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then you will see &ldquo;ls&rdquo; belogns to which package.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/44">&larr; Older</a>
@@ -1494,6 +2224,10 @@ Edit the .asoundrc file.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/11/25/awesomes-battery-indicator/">Awesome's Battery Indicator</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/11/18/tips-on-archlinux-on-ssd-for-surfacepro/">Tips on ArchLinux on SSD for SurfacePro</a>
       </li>
     
@@ -1507,10 +2241,6 @@ Edit the .asoundrc file.</p>
     
       <li class="post">
         <a href="/blog/2015/11/13/variety/">Variety</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/05/good-material/">Good Material</a>
       </li>
     
   </ul>
