@@ -9,15 +9,9 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="USB Ethernet Insert the USB Ethernet Dongle into the Ubuntu14.04, it will be automatically
-recognized and initialized. 1
-2
-3
-4
-5
-6
-7
-$ dmesg | tail [ &hellip;">
+  <meta name="description" content="目的 主要涉及到CloudStack的网络模型，最近在搭建一个环境时有诸多不了解，索性开始做实
+验，在虚拟机里验证虚拟机的网络模型。 环境准备 内存 16G 的嵌套虚拟机一台，安装Ubuntu 14.04 x86_64版本。 安装完毕后，开启桌
+面环境Xubuntu，及安装virt- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -73,6 +67,186 @@ $ dmesg | tail [ &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/10/17/tips-on-setting-virtual-machine-networking/">Tips on Setting Virtual Machine Networking</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-10-17T08:11:29+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:11 am</span></time>
+        
+         | <a href="/blog/2015/10/17/tips-on-setting-virtual-machine-networking/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>目的</h3>
+
+<p>主要涉及到CloudStack的网络模型，最近在搭建一个环境时有诸多不了解，索性开始做实
+验，在虚拟机里验证虚拟机的网络模型。</p>
+
+<h3>环境准备</h3>
+
+<p>内存 16G 的嵌套虚拟机一台，安装<code>Ubuntu 14.04 x86_64</code>版本。 安装完毕后，开启桌
+面环境Xubuntu，及安装virt-manager等常用的管理虚拟机的组件。</p>
+
+<p>网络配置如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/network/interfaces
+</span><span class='line'>    # The loopback network interface
+</span><span class='line'>    auto lo
+</span><span class='line'>    iface lo inet loopback
+</span><span class='line'>    
+</span><span class='line'>    # The primary network interface
+</span><span class='line'>    auto eth0
+</span><span class='line'>    iface eth0 inet manual
+</span><span class='line'>    
+</span><span class='line'>    auto br0
+</span><span class='line'>    iface br0 inet dhcp
+</span><span class='line'>    bridge_ports eth0
+</span><span class='line'>    
+</span><span class='line'>    auto isolationbr
+</span><span class='line'>    iface isolationbr inet static
+</span><span class='line'>    bridge_ports none
+</span><span class='line'>    bridge_fd 5
+</span><span class='line'>    bridge_stp off
+</span><span class='line'>    bridge_maxwait 1
+</span><span class='line'>    address 172.16.0.1
+</span><span class='line'>    netmask 255.255.0.0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里我们将eth0桥接到br0，并建立一个物理上隔绝的网桥isolationbr, 手动配置其地址
+为172.16.0.1/16。</p>
+
+<p>开启嵌套虚拟机的内核包转发功能:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/sysctl.conf
+</span><span class='line'>net.ipv4.ip_forward=1
+</span><span class='line'># sysctl -w net.ipv4.ip_forward=1
+</span><span class='line'># reboot</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启后验证内核包转发功能:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat /proc/sys/net/ipv4/ip_forward 
+</span><span class='line'>1
+</span><span class='line'># sysctl -p
+</span><span class='line'>net.ipv4.ip_forward = 1</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>验证网桥1</h3>
+
+<p>用已经创建好的qcow2文件创建一台虚拟机，选择网络配置如下：</p>
+
+<p><img src="/images/2015_10_17_08_47_08_808x488.jpg" alt="/images/2015_10_17_08_47_08_808x488.jpg" /></p>
+
+<p>注意我们将虚拟机的第一块网卡桥接到我们刚才创建的isolationbr网桥上，当然这时候
+虚拟机启动时是没有IP地址的，我们手动配置如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/network/interfaces
+</span><span class='line'>    # The primary network interface
+</span><span class='line'>    auto eth0
+</span><span class='line'>    iface eth0 inet static
+</span><span class='line'>    address 172.16.0.2
+</span><span class='line'>    netmask 255.255.0.0
+</span><span class='line'>    gateway 172.16.0.1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动虚拟机后，我们可以ping通嵌套虚拟机<code>172.16.0.1</code>但是无法ping通局域网内其
+他机器。</p>
+
+<h3>验证转发</h3>
+
+<p>在嵌套虚拟机上，打开iptables的转发规则即可实现创建出的虚拟机与Internet的连接:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -t nat -A POSTROUTING -s 172.16.0.0/16 ! -d 172.16.0.0/16 -j
+</span><span class='line'>MASQUERADE</span></code></pre></td></tr></table></div></figure>
+
+
+<p>虚拟机上，ping外网地址:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ping 223.5.5.5
+</span><span class='line'>PING 223.5.5.5 (223.5.5.5) 56(84) bytes of data.
+</span><span class='line'>64 bytes from 223.5.5.5: icmp_seq=1 ttl=50 time=37.1 ms
+</span><span class='line'>64 bytes from 223.5.5.5: icmp_seq=2 ttl=50 time=35.4 ms
+</span><span class='line'>64 bytes from 223.5.5.5: icmp_seq=3 ttl=50 time=35.6 ms</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>存储转发规则</h3>
+
+<p>Ubuntu14.04可以用下列命令将iptables设置的规则永久保存，每次开机启动:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables-save&gt;/etc/iptables.rules
+</span><span class='line'># vim /etc/network/interfaces
+</span><span class='line'>  pre-up iptables-restore &lt; /etc/iptables.rules</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这样在重启宿主机后，我们设置的转发规则依然生效。</p>
+
+<p>如果需要动态配置IP地址，则启动嵌套虚拟机端的dhcpd或者dnsmasq服务即可。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2908,6 +3082,10 @@ $ sudo systemctl start openntpd</p>
 
 <p>$ pip install dbus-python  -i <a href="http://pypi.douban.com/simple">http://pypi.douban.com/simple</a> &ndash;trusted-host pypi.douban.com
 ```</p>
+
+<h3>57. Python based visualization</h3>
+
+<p><a href="https://github.com/shengxinjing/my_blog/issues/1">https://github.com/shengxinjing/my_blog/issues/1</a></p>
 </div>
   
   
@@ -3067,213 +3245,6 @@ $ sudo systemctl start openntpd</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/10/12/tips-on-cloud-init/">Tips on Cloud-Init</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-10-12T10:50:53+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:50 am</span></time>
-        
-         | <a href="/blog/2015/10/12/tips-on-cloud-init/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>参考</h3>
-
-<p>主要参考了  <br/>
-<a href="http://huang-wei.github.io/programming/2013/12/23/run-cloud-init-in-local-kvm.html">http://huang-wei.github.io/programming/2013/12/23/run-cloud-init-in-local-kvm.html</a></p>
-
-<p>这里主要记录的是操作步骤。</p>
-
-<h3>介绍</h3>
-
-<p>红帽介绍:   <br/>
- Cloud-Init 是一个用来自动配置虚拟机的初始设置（如主机名，网卡和密钥）的工具。它可以在
-使用模板部署虚拟机时使用，从而达到避免网络冲突的目的。   <br/>
-在使用这个工具前，cloud-init 软件包必须在虚拟机上被安装。安装后，Cloud-Init 服务会在系
-统启动时搜索如何配置系统的信息。您可以使用只运行一次窗口来提供只需要配置一次的设置信息
-；或在 新建虚拟机、编辑虚拟机和编辑模板窗口中输入虚拟机每次启动都需要的配置信息。</p>
-
-<h3>cloud-init安装</h3>
-
-<p>Ubuntu 14.04上可以通过以下命令来安装cloud-init:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ apt-cache search cloud-utils
-</span><span class='line'>cloud-utils - metapackage for installation of upstream cloud-utils source
-</span><span class='line'>$ sudo apt-get install cloud-utils</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>镜像准备</h3>
-
-<p>在<a href="http://cloud-images.ubuntu.com/releases/">http://cloud-images.ubuntu.com/releases/</a>
-可以找到Ubuntu制作的ubuntu cloud image, image分版本, 这里使用14.04的image。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://cloud-images.ubuntu.com/releases/14.04.3/
-</span><span class='line'>release-20151008/ubuntu-14.04-server-cloudimg-amd64-disk1.img</span></code></pre></td></tr></table></div></figure>
-
-
-<p>取回来后的镜像可以直接使用，但解压开后读取速度会更快:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img convert -O qcow2 ubuntu-14.04-server-cloudimg-amd64-disk1.img my_vm.img</span></code></pre></td></tr></table></div></figure>
-
-
-<p>对比两个镜像大小可以看到:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img info ubuntu-14.04-server-cloudimg-amd64-disk1.img 
-</span><span class='line'>image: ubuntu-14.04-server-cloudimg-amd64-disk1.img
-</span><span class='line'>file format: qcow2
-</span><span class='line'>virtual size: 2.2G (2361393152 bytes)
-</span><span class='line'>disk size: 246M
-</span><span class='line'>cluster_size: 65536
-</span><span class='line'>Format specific information:
-</span><span class='line'>    compat: 0.10
-</span><span class='line'>$ qemu-img info my_vm.img 
-</span><span class='line'>image: my_vm.img
-</span><span class='line'>file format: qcow2
-</span><span class='line'>virtual size: 2.2G (2361393152 bytes)
-</span><span class='line'>disk size: 903M
-</span><span class='line'>cluster_size: 65536
-</span><span class='line'>Format specific information:
-</span><span class='line'>    compat: 1.1
-</span><span class='line'>    lazy refcounts: false</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>配置脚本内容</h3>
-
-<p>my-user-data内容:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat my-user-data
-</span><span class='line'>#cloud-config
-</span><span class='line'>password: xxxxxx
-</span><span class='line'>chpasswd: { expire: False }
-</span><span class='line'>ssh_pwauth: True
-</span><span class='line'>
-</span><span class='line'>ssh_authorized_keys:
-</span><span class='line'> - ssh-rsa xxxxxx
-</span><span class='line'>
-</span><span class='line'>timezone: Asia/Chongqing</span></code></pre></td></tr></table></div></figure>
-
-
-<p>通过my-user-data生成img文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cloud-localds my-seed.img my-user-data</span></code></pre></td></tr></table></div></figure>
-
-
-<p>由之前的my_vm.img和my-seed.img文件启动虚拟机:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512</span></code></pre></td></tr></table></div></figure>
-
-
-<p>通过qemu的窗口或者ssh登录系统: <code>ssh -p 2222 ubuntu@localhost</code>.</p>
-
-<h3>引入meta-data</h3>
-
-<p>meta-data的内容与虚拟机的实例相关，只用来做初始化，虚拟机实例运行完一次以后就不需要修改
-。但如果要引入更新，则重建一下instance-id即可。</p>
-
-<p>更新my-meta-data文件内容:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ echo "instance-id: $(uuidgen || echo i-abcdefg)" &gt; my-meta-data</span></code></pre></td></tr></table></div></figure>
-
-
-<p>由my-meta-data和my-user-data生成my-seed.img文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cloud-localds my-seed.img my-user-data my-meta-data</span></code></pre></td></tr></table></div></figure>
-
-
-<p>启动虚拟机:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512
-</span><span class='line'>$ kvm -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>其他初始化行为</h3>
-
-<p>需要初始化的脚本:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat hello_world.sh 
-</span><span class='line'>#!/bin/bash
-</span><span class='line'>echo "hello world!" &gt;&gt; /home/ubuntu/test</span></code></pre></td></tr></table></div></figure>
-
-
-<p>将初始化脚本和cloud config data合并:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ write-mime-multipart
-</span><span class='line'>--output=combined-userdata.txt hello_world.sh:text/x-shellscript my-user-data</span></code></pre></td></tr></table></div></figure>
-
-
-<p>由生成的combined-userdata.txt生成my-seed.img:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ echo "instance-id: $(uuidgen || echo i-abcdefg)" &gt; my-meta-data
-</span><span class='line'>$ cloud-localds my-seed.img combined-userdata.txt my-meta-data</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启后即可得到更新后的系统镜像.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/4">&larr; Older</a>
@@ -3291,6 +3262,10 @@ $ sudo systemctl start openntpd</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/07/rundeck-tips/">Rundeck Tips</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/05/bluetooth-nap-how-to/">Bluetooth NAP How-To</a>
       </li>
     
@@ -3304,10 +3279,6 @@ $ sudo systemctl start openntpd</p>
     
       <li class="post">
         <a href="/blog/2015/11/25/awesomes-battery-indicator/">Awesome's Battery Indicator</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/11/18/tips-on-archlinux-on-ssd-for-surfacepro/">Tips on ArchLinux on SSD for SurfacePro</a>
       </li>
     
   </ul>
