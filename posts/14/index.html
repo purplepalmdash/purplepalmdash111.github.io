@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="在OpenStack HA部署好的基础上集成OpenContrail是一个比较繁琐的过程，所以这一节里我们主要做集成前的准备工作，准备网络拓扑和创建好OpenContrail本地部署仓库。 网络规划 在Miranti提供的集成参考里，有如下的图，定义了整个环境的网络拓扑。 &hellip;">
+  <meta name="description" content="前面已经准备好了集成OpenContrail的所有事宜，接下来就是真正部署OpenContrail的过程了。部署OpenContrail需要修改所有的Contrail Controller节点，OpenStack Controller节点， OpenStack Compute节点，为了避免混淆， &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,657 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4/">使用Fuel部署OpenContrail(4)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-27T19:44:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>7:44 pm</span></time>
+        
+         | <a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-4/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>前面已经准备好了集成OpenContrail的所有事宜，接下来就是真正部署OpenContrail的过程了。部署OpenContrail需要修改所有的Contrail Controller节点，OpenStack Controller节点， OpenStack Compute节点，为了避免混淆，本节主要完成在Contrail Controller上的部署工作。</p>
+
+<h3>OpenStack Controller节点部署后配置</h3>
+
+<p>在所有的OpenStack Controller节点(OS1,OS2,OS3)上，打开/usr/lib/ocf/resource.d/mirantis/ns_haproxy文件，编辑以下字段: <br/>
+OCF_Parameters部分:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>OCF_RESKEY_private_network_default="10.55.55.0/24"
+</span><span class='line'>OCF_RESKEY_private_network_gateway_default="10.55.55.1"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> <br/>
+在meta_data()函数中，添加以下内容:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&lt;parameter name="private_network"&gt;
+</span><span class='line'>&lt;longdesc lang="en"&gt;
+</span><span class='line'>Private L3 network that should be configured inside the namespace
+</span><span class='line'>&lt;/longdesc&gt;
+</span><span class='line'>&lt;shortdesc lang="en"&gt;Namespace private network&lt;/shortdesc&gt;
+</span><span class='line'>&lt;content type="string" default="${OCF_RESKEY_private_network_default}" /&gt;
+</span><span class='line'>&lt;/parameter&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;parameter name="private_network_gateway"&gt;
+</span><span class='line'>&lt;longdesc lang="en"&gt;
+</span><span class='line'>Private L3 network gateway that should be configured inside the namespace.
+</span><span class='line'>&lt;/longdesc&gt;
+</span><span class='line'>&lt;shortdesc lang="en"&gt;Namespace private gateway network&lt;/shortdesc&gt;
+</span><span class='line'>&lt;content type="string" default="${OCF_RESKEY_private_network_gateway_default}" /&gt;
+</span><span class='line'>&lt;/parameter&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>set_ns_routing()函数中，添加一下内容:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>nsip route list | grep -q "${OCF_RESKEY_private_network}"
+</span><span class='line'>if [ $? -gt 0 ]; then
+</span><span class='line'>ocf_log debug "Creating ${OCF_RESKEY_private_network} route inside the namespace"
+</span><span class='line'>ocf_run nsip route add "${OCF_RESKEY_private_network}" via "${OCF_RESKEY_private_network_gateway}"
+</span><span class='line'>fi
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>以上的修改是为了引入haproxy的namespace的。</p>
+
+<h3>配置Contrail部署节点</h3>
+
+<p>我们引入了三个Contrail Controller节点，从中挑选一个，作为部署的管理节点，OpenContrail通过fabric下发安装指令给各节点机，因此我们首先要准备的是部署节点。这里的例子中，我们选择Contrail1(10.20.0.10)作为部署节点。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># echo 'deb http://10.20.0.2:8080/contrail/ /' &gt; /etc/apt/sources.list.d/contrail.list
+</span><span class='line'># echo -e "Package: *\nPin: release l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences
+</span><span class='line'># &gt;/etc/apt/sources.list
+</span><span class='line'># apt-get update
+</span><span class='line'># apt-get install -y python-paramiko contrail-fabric-utils contrail-setup
+</span><span class='line'># pip install --upgrade --no-deps --index-url=”” /opt/contrail/python_packages/Fabric-1.7.0.tar.gz
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>apt-get udpate前我们需要清空本机上的sources.list文件，因为经过前两步后，本机的sources.list中会加上10.20.0.2的默认源，这会引发update失败，因此我们清空此文件。  <br/>
+安装完一些准备包后，部署节点进入就绪状态。</p>
+
+<h3>编写testbed.py</h3>
+
+<p>testbed.py文件定义了整个OpenContrail的组建部署节点信息，在编写此文件前，我们需要得到以下信息:  <br/>
+A. OpenStack的Service_Token, 在任何一台OpenStack Controller机器上，运行以下命令以得到系统当前的service_token值:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-20:~# cat /etc/keystone/keystone.conf  | grep -i "admin_token=" | more
+</span><span class='line'>#admin_token=ADMIN
+</span><span class='line'>admin_token=rVlaAKUs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>记下rVlaAKUs这个值，在testbed.py文件中我们会用到。</p>
+
+<ol type="a">
+<li>OpenStack Controller的Public vip和Management vip, 如下所示，结合我们的网络规划，Public vip是172网段，而Management vip则是10.55.55网段的IP:</li>
+</ol>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-20:~# source /root/openrc 
+</span><span class='line'>root@node-20:~# keystone endpoint-list | grep 5000
+</span><span class='line'>| 0e3c0684e8ae4c9fa4e080c9e1c66513 | RegionOne |         http://172.16.0.4:5000/v2.0          |         http://10.55.55.4:5000/v2.0          |       http://10.55.55.4:35357/v2.0      | f822df80ee1042d9b10d57118bb410aa |
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ol type="a">
+<li><p>Contrail Controller的内部vip和外部vip, 因为我们把Contrail Controller的Private IP分配在10.77.77.0/24网段，所以我们暂时选用10.77.77.9作为两个vip的地址。</p></li>
+<li><p>如果有外部路由器，则需要配置外部路由器的IP地址。这次的部署中我们不采用外部路由器，因而对比于官方的推荐配置文件，我们的testbed.py中删除了这一部分。</p></li>
+</ol>
+
+
+<p>综合考虑到上述因素后，我们的testbed.py文件定义如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-24:~# vim /opt/contrail/utils/fabfile/testbeds/testbed.py|more
+</span><span class='line'>from fabric.api import env
+</span><span class='line'>#Management ip addresses of hosts in the cluster
+</span><span class='line'>os_ctrl01 = 'root@10.55.55.6'
+</span><span class='line'>os_ctrl02 = 'root@10.55.55.7'
+</span><span class='line'>os_ctrl03 = 'root@10.55.55.8'
+</span><span class='line'>c_ctrl01 = 'root@10.77.77.10'
+</span><span class='line'>c_ctrl02 = 'root@10.77.77.11'
+</span><span class='line'>c_ctrl03 = 'root@10.77.77.12'
+</span><span class='line'>c_db01 = 'root@10.77.77.10'
+</span><span class='line'>c_db02 = 'root@10.77.77.11'
+</span><span class='line'>c_db03 = 'root@10.77.77.12'
+</span><span class='line'>#External routers
+</span><span class='line'># ext_routers = [('gateway01', '&lt;Gateway_node1_LOOPBACK_ip&gt;'), ('gateway02', '&lt;Gateway_node2_LOOPBACK_ip&gt;')]
+</span><span class='line'>#Autonomous system number
+</span><span class='line'>router_asn = 64512
+</span><span class='line'>#Host from which the fab commands are triggered to install and provision
+</span><span class='line'>deploy_node = 'root@10.77.77.10'
+</span><span class='line'>#Role definition of the hosts.
+</span><span class='line'>env.roledefs = {
+</span><span class='line'>'all': [c_ctrl01, c_ctrl02, c_ctrl03, c_db01, c_db02, c_db03],
+</span><span class='line'>'cfgm': [c_ctrl01, c_ctrl02, c_ctrl03],
+</span><span class='line'>'openstack': [os_ctrl01, os_ctrl02, os_ctrl03],
+</span><span class='line'>'control': [c_ctrl01, c_ctrl02, c_ctrl03],
+</span><span class='line'>'compute': [],
+</span><span class='line'>'collector': [c_ctrl01, c_ctrl02, c_ctrl03],
+</span><span class='line'>'webui': [c_ctrl01, c_ctrl02, c_ctrl03],
+</span><span class='line'>'database': [c_db01, c_db02, c_db03],
+</span><span class='line'>'build': [deploy_node],
+</span><span class='line'>'storage-master': [],
+</span><span class='line'>'storage-compute': [],
+</span><span class='line'>}
+</span><span class='line'>#Openstack admin password
+</span><span class='line'>env.openstack_admin_password = 'admin'
+</span><span class='line'>env.password = 'r00tme'
+</span><span class='line'>#Passwords of each host
+</span><span class='line'>env.passwords = {
+</span><span class='line'>os_ctrl01: 'r00tme',
+</span><span class='line'>os_ctrl02: 'r00tme',
+</span><span class='line'>os_ctrl03: 'r00tme',
+</span><span class='line'>c_ctrl01: 'r00tme',
+</span><span class='line'>c_ctrl02: 'r00tme',
+</span><span class='line'>c_ctrl03: 'r00tme',
+</span><span class='line'>c_db01: 'r00tme',
+</span><span class='line'>c_db02: 'r00tme',
+</span><span class='line'>c_db03: 'r00tme',
+</span><span class='line'>deploy_node: 'r00tme',
+</span><span class='line'>}
+</span><span class='line'>#For reimage purpose
+</span><span class='line'>env.ostypes = {
+</span><span class='line'>os_ctrl01: 'ubuntu',
+</span><span class='line'>os_ctrl02: 'ubuntu',
+</span><span class='line'>os_ctrl03: 'ubuntu',
+</span><span class='line'>c_ctrl01: 'ubuntu',
+</span><span class='line'>c_ctrl02: 'ubuntu',
+</span><span class='line'>c_ctrl03: 'ubuntu',
+</span><span class='line'>c_db01: 'ubuntu',
+</span><span class='line'>c_db02: 'ubuntu',
+</span><span class='line'>c_db03: 'ubuntu',
+</span><span class='line'>deploy_node: 'ubuntu',
+</span><span class='line'>}
+</span><span class='line'>env.openstack = {
+</span><span class='line'>'service_token' : 'rVlaAKUs'
+</span><span class='line'>}
+</span><span class='line'>env.ha = {
+</span><span class='line'>'internal_vip': '10.55.55.4',
+</span><span class='line'>'external_vip': '172.16.0.4',
+</span><span class='line'>'contrail_internal_vip': '10.77.77.9',
+</span><span class='line'>'contrail_external_vip': '10.77.77.9',
+</span><span class='line'>}
+</span><span class='line'>env.keystone = {
+</span><span class='line'>'service_tenant': 'services',
+</span><span class='line'>'admin_token': 'rVlaAKUs',
+</span><span class='line'>}
+</span><span class='line'>multi_tenancy = True
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>编写完testbed.py文件后，就可以根据文件中的定义，部署OpenContrail的组件到多台节点主机了。  <br/>
+Fuel Controller节点上的id_rsa文件可以实现对各个节点的无密码登录，拷贝它到我们的Contrail部署节点上:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># scp 10.20.0.2:/root/.ssh/id_rsa /root/.ssh/id_rsa
+</span><span class='line'># chmod 0600 /root/.ssh/id_rsa
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>部署多节点</h3>
+
+<p>首先切换到/opt/contrail/utils目录下，所有用fab执行的部署都需要在这个目录下执行。执行以下操作, 以初始化各部署子节点:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cd /opt/contrail/utils
+</span><span class='line'># fab -P -R control -w -- "ls /etc/apt/sources.list.d/contrail.list || echo 'deb \
+</span><span class='line'>http://10.20.0.2:8080/contrail/ /' &gt; \
+</span><span class='line'>/etc/apt/sources.list.d/contrail.list"
+</span><span class='line'># fab -P -R control -w -- 'ls /etc/apt/preferences || echo -e "Package: *\nPin: release \
+</span><span class='line'>l=Ubuntu\nPin-Priority: 100" &gt; /etc/apt/preferences'
+</span><span class='line'># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+</span><span class='line'>--allow-unauthenticated install python-crypto python-netaddr python-paramiko \
+</span><span class='line'>contrail-fabric-utils contrail-setup'
+</span><span class='line'># fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
+</span><span class='line'>/opt/contrail/python_packages/ecdsa-0.10.tar.gz'
+</span><span class='line'># fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url="" \
+</span><span class='line'>/opt/contrail/python_packages/Fabric-1.7.0.tar.gz'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果出现apt-get update的问题，可以如上面提到的，手动登录到各个节点上去清空/etc/apt/sources.list文件，当然一般情况下不会出现这个问题。  <br/>
+运行以下命令，接受sun的协议:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'echo "sun-java6-plugin shared/accepted-sun-dlj-v1-1 boolean \
+</span><span class='line'>true" | /usr/bin/debconf-set-selections' && fab -P -R control -w -- 'echo "sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean \
+</span><span class='line'> true" | /usr/bin/debconf-set-selections' && fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 select \
+</span><span class='line'>true" | sudo debconf-set-selections' && fab -P -R control -w -- 'echo "debconf shared/accepted-oracle-license-v1-1 seen \
+</span><span class='line'> true" | sudo debconf-set-selections'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>OpenContrail组件依赖于特定版本的tzdata， 用以下命令安装：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+</span><span class='line'> --allow-unauthenticated install tzdata=2014e-0ubuntu0.12.04'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装和设置database, 并检查节点的状态:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> # fab install_database && fab setup_database
+</span><span class='line'> # fab -R database -w -- "contrail-status"
+</span><span class='line'> # nodetool status
+</span><span class='line'>--  Address      Load       Tokens  Owns   Host ID                               Rack
+</span><span class='line'>UN  10.77.77.12  141.84 MB  256     33.3%  4ea3abec-16ee-417a-b78c-69e8dca292be  rack1
+</span><span class='line'>UN  10.77.77.11  141.33 MB  256     35.8%  d7677bf2-1447-48af-b1d4-356b4a8d6cff  rack1
+</span><span class='line'>UN  10.77.77.10  134.28 MB  256     30.9%  e418e4ef-af22-4874-ad94-777d6b4c511c  rack1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>当看到上面有三个条目时，代表安装成功，可以进行下一步。</p>
+
+<p>安装cfgm, control, collector, webui 组件以及keepalived集群。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab install_cfgm && fab install_control && fab install_collector && fab install_webui && fab setup_contrail_keepalived && fab fixup_restart_haproxy_in_collector 2&gt;&1 | tee all.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>删除掉/etc/keepalived/keepalived.conf里的EXTERNAL部分, 值得注意的是，在三个Contrail Controller上，都需要执行此操作:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/keepalived/keepalived.conf
+</span><span class='line'>......remove something......
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>删除以后，重新启动keepalived服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'service keepalived restart'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更新haproxy的配置文件，添加WebUI的虚拟IP地址(vip). 值得注意的是，在三个Contrail Controller上，都需要执行此操作:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/haproxy/haproxy.cfg
+</span><span class='line'>#contrail-webui-marker-start
+</span><span class='line'>frontend contrail-webui-api *:443
+</span><span class='line'>    mode tcp
+</span><span class='line'>    default_backend contrail-webui-api
+</span><span class='line'>backend contrail-webui-api
+</span><span class='line'>    mode tcp
+</span><span class='line'>    balance roundrobin
+</span><span class='line'>    option nolinger
+</span><span class='line'>    stick on src
+</span><span class='line'>    stick-table type ip size 200k expire 300m
+</span><span class='line'>    option tcp-check
+</span><span class='line'>    tcp-check connect port 8143
+</span><span class='line'>    default-server error-limit 1 on-error mark-down
+</span><span class='line'>    server 10.77.77.10 10.77.77.10:8143 check inter 2000 rise 2 fall 3
+</span><span class='line'>    server 10.77.77.11 10.77.77.11:8143 check inter 2000 rise 2 fall 3
+</span><span class='line'>    server 10.77.77.12 10.77.77.12:8143 check inter 2000 rise 2 fall 3
+</span><span class='line'>#contrail-webui-marker-end
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改完以后，重启haproxy服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'service haproxy restart'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改每个节点上的tenant服务名称，从'service'改成'services':</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- "sed -i '49s/service/services/g' \
+</span><span class='line'>/usr/local/lib/python2.7/dist-packages/contrail_provisioning/config/quantum_in_keystone_setup.py"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置cfgm服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab setup_cfgm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这时我们可以验证neutron endpoint是否被正确安装，在任何一个OpenStack Controller节点上，运行以下命令:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># keystone service-list
+</span><span class='line'># keystone endpoint-list
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>例如:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-20:~# keystone service-list | grep neutron
+</span><span class='line'>| 2f4c887f68a9428aa448cbd688d7061f | neutron  |    network     |             network              |
+</span><span class='line'>root@node-20:~# keystone endpoint-list | grep 2f4c887f68a9428aa448cbd688d7061f
+</span><span class='line'>| 7dd2c25e69ad4a3296f272aa253001c8 | RegionOne |            http://10.77.77.9:9696            |            http://10.77.77.9:9696            |          http://10.77.77.9:9696         | 2f4c887f68a9428aa448cbd688d7061f |
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>成功的话，接着下一步设置，删除所有的Contrail Controller节点上文件/etc/haproxy/haproxy.cfg里的rabbit字段：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/haproxy/haproxy.cfg
+</span><span class='line'>......remove something......
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动haproxy服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'service haproxy restart'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>设置control,collector,webui组件服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab setup_control
+</span><span class='line'># fab setup_collector && fab setup_webui
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在任一OpenStack Controller节点上，运行以下命令，得到rabbit的密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@node-22:~# cat /etc/rabbitmq/rabbitmq.config | grep default_pass
+</span><span class='line'>    {default_pass,        &lt;&lt;"gYFQP10P"&gt;&gt;},
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置neutron插件，使用运行在OpenStack Controller上的rabbit 集群, 这里的rabbit_password使用上面得到的值:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#  fab -P -R control -w -- 'openstack-config --del /etc/neutron/neutron.conf DEFAULT rabbit_host'
+</span><span class='line'>#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_hosts \
+</span><span class='line'>  10.55.55.6:5673,10.55.55.7:5673,10.55.55.8:5673'
+</span><span class='line'>#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_userid \
+</span><span class='line'>   nova'
+</span><span class='line'>#  fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT \
+</span><span class='line'>  rabbit_password gYFQP10P'
+</span><span class='line'># fab -P -R control -w -- 'service neutron-server restart'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置contrail-api以使用运行在OpenStack Controller上的rabbit集群:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'perl -pi -e \
+</span><span class='line'> "s/rabbit_server.*$/rabbit_server=10.55.55.4/" /etc/contrail/contrail-api.conf'
+</span><span class='line'># fab -P -R control -w -- 'perl -pi -e "s/rabbit_port.*$/rabbit_port=5672/" \
+</span><span class='line'> /etc/contrail/contrail-api.conf'
+</span><span class='line'># fab -R control -w -- "perl -pi -e 'print \"rabbit_password=gYFQP10P\n\" \
+</span><span class='line'> if \$_ =~ rabbit_port' /etc/contrail/contrail-api.conf"
+</span><span class='line'># fab -P -R control -w -- "perl -pi -e 'print \"rabbit_user=nova\n\" if \$_ =~ rabbit_port' \
+</span><span class='line'> /etc/contrail/contrail-api.conf"
+</span><span class='line'># fab -P -R control -w -- "service contrail-api restart"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使用前面下载的OpenContrail 插件，作为neutron挂载的插件, 或者你可以直接从github克隆下来:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /tmp/contrail-repo
+</span><span class='line'># apt-get install -y git
+</span><span class='line'># git clone https://github.com/Juniper/contrail-neutron-plugin.git /tmp/contrail-repo
+</span><span class='line'># cd /tmp/contrail-repo
+</span><span class='line'># git checkout 3189155
+</span><span class='line'># cp -r /tmp/contrail-repo/neutron_plugin_contrail/plugins/opencontrail \
+</span><span class='line'>/usr/share/pyshared/neutron_plugin_contrail/plugins/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动neutron-service:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cd /opt/contrail/utils
+</span><span class='line'># fab -P -R cfgm -w -- 'service neutron-server restart'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>设置Contrail Controller之间的BGP节点发现，metadata服务及encapsulation类型:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab prov_control_bgp && fab prov_metadata_services && fab prov_encap_type
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>用以下命令验证安装是否成功:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab verify_cfgm
+</span><span class='line'># fab verify_control
+</span><span class='line'># fab verify_collector
+</span><span class='line'># fab verify_webui
+</span><span class='line'># fab -R control -w -- "contrail-status"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更新rc.d，这样在启动的时候，不会启动supervisor-support进程：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fab -P -R control -w -- 'update-rc.d supervisor-support-service disable'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>用浏览器访问以下页面，以确认Contrail已经被正确安装:    <br/>
+<a href="https://10.77.77.9">https://10.77.77.9</a>   <br/>
+此时你看到的页面应该如下：   <br/>
+<img src="/images/2015_04_27_21_49_07_1006x746.jpg" alt="/images/2015_04_27_21_49_07_1006x746.jpg" /></p>
+
+<p>本章过完以后，我们的OpenContrail部署已经完成了大半，接下来就是在Compute和OpenStack Controller节点上的配置，达到最后的集成过程。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1837,91 +2488,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/04/14/an-zhuang-icehouse-at-ubuntu14-dot-04-6/">安装Icehouse@Ubuntu14.04(6)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-04-14T11:39:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:39 am</span></time>
-        
-         | <a href="/blog/2015/04/14/an-zhuang-icehouse-at-ubuntu14-dot-04-6/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>这里我们安装horizon服务，使得我们对OpenStack的管理做到可视化.</p>
-
-<h3>安装horizon</h3>
-
-<p>在Controller节点上，安装需要的包:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get -y install openstack-Trustyboard apache2 libapache2-mod-wsgi memcached python-memcache
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>建议删除ubuntu提供的主题，这个主题会使得一些翻译失效:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get remove --purge openstack-Trustyboard-ubuntu-theme
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置DashBoard的本地配置文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# vim /etc/openstack-Trustyboard/local_settings.py 
-</span><span class='line'>    OPENSTACK_HOST = "10.17.17.211"
-</span><span class='line'>    TIME_ZONE = "Asia/Shanghai"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重新启动服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service apache2 restart
-</span><span class='line'>root@JunoController:~# service memcached restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>访问<code>http://10.17.17.211/horizon</code>登入到DashBoard以管理OpenStack.</p>
-
-<h3>查看OpenStack版本</h3>
-
-<p>节点机器起名错误，应该是IcehouseController/IcehouseCompute/IcehouseNetwork之类，但是这里可以通过以下命令来查看OpenStack安装的版本：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# dpkg -l | grep nova-common
-</span><span class='line'>ii  nova-common                         1:2014.1.4-0ubuntu2                   all          OpenStack Compute - common files
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>2014.1.4</code>就是我们要关注的版本信息，在:  <br/>
-<a href="https://wiki.openstack.org/wiki/Releases">https://wiki.openstack.org/wiki/Releases</a>  <br/>
-可以查到，它属于Icehouse.  <br/>
-<img src="/images/2015_04_14_11_58_39_490x203.jpg" alt="/images/2015_04_14_11_58_39_490x203.jpg" /></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/15">&larr; Older</a>
@@ -1939,6 +2505,10 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/12/ba-wan-tl-sg108e/">把玩TL-SG108E</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/10/openvswitch-on-ubuntu14-dot-04/">OpenVswitch on Ubuntu14.04</a>
       </li>
     
@@ -1952,10 +2522,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
     
       <li class="post">
         <a href="/blog/2015/12/05/bluetooth-nap-how-to/">Bluetooth NAP How-To</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/04/on-bluetooth-pan/">On Bluetooth PAN</a>
       </li>
     
   </ul>
