@@ -9,8 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Since I met so many problems in archlinux installation on SSD, plus UEFI issues, I use
-following virt machine for re-produce the problem and try to &hellip;">
+  <meta name="description" content="Refers to: https://wiki.archlinux.org/index.php/Beginners'guide%28%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87%29 Partition Check if you are in efi mode: 1 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -66,6 +65,208 @@ following virt machine for re-produce the problem and try to &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/08/30/tips-for-ssd-installation/">Tips for SSD Installation</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-08-30T14:45:24+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>2:45 pm</span></time>
+        
+         | <a href="/blog/2015/08/30/tips-for-ssd-installation/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Refers to:  <br/>
+<a href="https://wiki.archlinux.org/index.php/Beginners'_guide_%28%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87%29">https://wiki.archlinux.org/index.php/Beginners'<em>guide</em>%28%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87%29</a></p>
+
+<h3>Partition</h3>
+
+<p>Check if you are in efi mode:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># efivar -l</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then format your disk using parted:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># parted /dev/sda
+</span><span class='line'>(parted) mkpart ESP fat32 1M 513M
+</span><span class='line'>(parted) set 1 boot on
+</span><span class='line'>(parted) mkpart primary ext4 513M 100%</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Check if your partition is aligned:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># blockdev --getalignoff /dev/sda
+</span><span class='line'>0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I have 2 disks, one for ssd, the other for hdd, so I want to share the swap partition,
+and locate the /var directory in the hdd, modify it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkfs.ext4 /dev/sda2
+</span><span class='line'># mkfs.vfat -F32 /dev/sda1
+</span><span class='line'># mount /dev/sda2 /mnt
+</span><span class='line'># mkdir -p /mnt/boot
+</span><span class='line'># mount /dev/sda1 /mnt/boot
+</span><span class='line'># swapon /dev/sdb1
+</span><span class='line'># mkdir /media/
+</span><span class='line'># mount /dev/sdb2 /media
+</span><span class='line'># mkdir /media/var_for_sda
+</span><span class='line'># ln -s /media/var_for_sda /mnt/var</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you could do pacstrap.</p>
+
+<h3>Installation</h3>
+
+<p>Installation are the same as the guildeline show,</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pacman -S dosfstools efibootmgr
+</span><span class='line'># bootctl --path=/boot install
+</span><span class='line'># vim /boot/loader/entries/arch.conf
+</span><span class='line'>title          Arch Linux
+</span><span class='line'>linux          /vmlinuz-linux
+</span><span class='line'>initrd         /initramfs-linux.img
+</span><span class='line'>options        root=/dev/sda2 rw
+</span><span class='line'># vim /boot//loader/loader.conf
+</span><span class='line'>#timeout 3
+</span><span class='line'>default arch
+</span><span class='line'>timeout 5</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For wireless connection:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pacman -S iw wpa_supplicant
+</span><span class='line'># pacman -S dialog</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Modification of the /etc/fstab:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># /dev/sda2
+</span><span class='line'>UUID=xxxxxxxxxxxxxxxxxxxxxxxx       /               ext4 default,rw,data=ordered,noatime,discard 0 1
+</span><span class='line'>
+</span><span class='line'># /dev/sda1
+</span><span class='line'>UUID=xxxxxxxxxxxxxxxxx          /boot           vfat rw,noatime,discard,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro  0 2
+</span><span class='line'>
+</span><span class='line'># /dev/sdb1
+</span><span class='line'>UUID=xxxxxxxxxxxxxxxxxxx       none            swap defaults        0 0
+</span><span class='line'>
+</span><span class='line'># /dev/sdb2
+</span><span class='line'>UUID=xxxxxxxxxxxxxxxxxxx       /media          ext4    rw,relatime,data=ordered        0 2
+</span><span class='line'>
+</span><span class='line'># Only for /var , use mount -o bind
+</span><span class='line'>/media/var_for_sda      /var    none    bind</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now reboot everything will be OK.</p>
+
+<h3>Configuration For SSD</h3>
+
+<p>Profile-sync-daemon for optimization of Browser :</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt profile-sync-daemon
+</span><span class='line'>$ sudo vim /etc/psd.conf
+</span><span class='line'>USERS="XXXXX"
+</span><span class='line'>BROWSERS="chromium firefox"
+</span><span class='line'>USE_OVERLAYFS="yes"
+</span><span class='line'>$ sudo systemctl enable psd.service
+</span><span class='line'>$ sudo systemctl start psd.service</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Test it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ profile-sync-daemon parse</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use <code>firefox -P</code> for changing the profile position. I put all of the profils on HDD.</p>
+
+<p>For chromium, softlink the ~/.config/chromium to HDD disk then you play the tricks for
+avoiding HDD from too much write.   .</p>
+
+<h3>Quickly Add User</h3>
+
+<p>Use following command for quickly adding the user with specified priviledge:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># useradd -m -g root -G \
+</span><span class='line'>audio,video,floppy,network,rfkill,scanner,storage,optical,power,wheel,uucp -s  \
+</span><span class='line'>/usr/bin/zsh xxxxx
+</span><span class='line'># passwd xxxxx</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1271,436 +1472,6 @@ different repositories, following are the configuration file.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/08/20/kickstarting-ubuntu-in-spacewalk/">Kickstarting Ubuntu in SpaceWalk</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-08-20T11:58:14+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:58 am</span></time>
-        
-         | <a href="/blog/2015/08/20/kickstarting-ubuntu-in-spacewalk/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Preparation</h3>
-
-<p>You have to use apt-mirror for getting the packages to local repository, so that you
-could directly install the system via http method. The configuration file for
-apt-mirror is listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /etc/apt/mirror.list
-</span><span class='line'>set base_path /mnt/myrepo
-</span><span class='line'>set nthreads     20
-</span><span class='line'>set _tilde 0
-</span><span class='line'>#################Trusty Repository Starts ########################
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse main/debian-installer restricted/debian-installer multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse main/debian-installer restricted/debian-installer multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>#################Trusty Repository ends ########################
-</span><span class='line'>
-</span><span class='line'>#################Precise Repository starts ########################
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise main main/debian-installer restricted restricted/debian-installer universe multiverse multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
-</span><span class='line'>deb-amd64 http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise main main/debian-installer restricted restricted/debian-installer universe multiverse multiverse/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
-</span><span class='line'>deb-i386 http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
-</span><span class='line'>
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
-</span><span class='line'>deb-src http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
-</span><span class='line'>#################Precise Repository ends ########################</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Sync your local repository via <code>apt-mirror</code>, the sync procedure could takes many days,
-depends on your bandwidth.</p>
-
-<h3>Make Your Own KickStart File</h3>
-
-<p>You have to install <code>system-config-kickstart</code> for generating the kickstart file. But
-the official program conflicts with hwdata, we manually downgrade it and install
-specified version, then sytem-config-kickstart could be installed.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get remove hwda
-</span><span class='line'># wget ftp://mirror.ovh.net/mirrors/ftp.debian.org/debian/pool/main/h/hwdata/hwdata_0.234-1_all.deb
-</span><span class='line'># dpkg -i hwdata_0.267-1_all.deb
-</span><span class='line'># sudo apt-get install system-config-kickstart</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Run it and its effects is like following:</p>
-
-<p><img src="/images/2015_08_20_12_07_59_637x562.jpg" alt="/images/2015_08_20_12_07_59_637x562.jpg" /></p>
-
-<p>Select the installation method via:</p>
-
-<p><img src="/images/2015_08_20_12_09_02_541x361.jpg" alt="/images/2015_08_20_12_09_02_541x361.jpg" /></p>
-
-<p>Save your kickstart file, and save it into some webserver&rsquo;s directory, since PXE always
-have the network connection, we could put it the reachable webserver.</p>
-
-<h3>PXE Menu Configuration</h3>
-
-<p>Just give out an example of the PXE Menu on SpaceWalk:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /var/lib/tftpboot/pxelinux.cfg/default 
-</span><span class='line'>DEFAULT menu
-</span><span class='line'>PROMPT 0
-</span><span class='line'>MENU TITLE Cobbler | http://fedorahosted.org/cobbler
-</span><span class='line'>TIMEOUT 200
-</span><span class='line'>TOTALTIMEOUT 6000
-</span><span class='line'>ONTIMEOUT local
-</span><span class='line'>
-</span><span class='line'>LABEL local
-</span><span class='line'>        MENU LABEL (local)
-</span><span class='line'>        MENU DEFAULT
-</span><span class='line'>        LOCALBOOT 0
-</span><span class='line'>
-</span><span class='line'>LABEL precise-ia32:1:SpacewalkDefaultOrganization
-</span><span class='line'>        kernel /images/precise-ia32:1:SpacewalkDefaultOrganization/vmlinuz
-</span><span class='line'>        MENU LABEL precise-ia32:1:SpacewalkDefaultOrganization
-</span><span class='line'>        append ks=http://192.168.0.79/ubuntu1204kickstart1.cfg initrd=/images/precise-ia32:1:SpacewalkDefaultOrganization/initrd.gz ksdevice=eth0 --
-</span><span class='line'>        ipappend 2
-</span><span class='line'>MENU end</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We use the kickstart file located in a webserver, using this we could install the
-system unattendly.</p>
-
-<p>An example of the this kickstart file is listed:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-<span class='line-number'>85</span>
-<span class='line-number'>86</span>
-<span class='line-number'>87</span>
-<span class='line-number'>88</span>
-<span class='line-number'>89</span>
-<span class='line-number'>90</span>
-<span class='line-number'>91</span>
-<span class='line-number'>92</span>
-<span class='line-number'>93</span>
-<span class='line-number'>94</span>
-<span class='line-number'>95</span>
-<span class='line-number'>96</span>
-<span class='line-number'>97</span>
-<span class='line-number'>98</span>
-<span class='line-number'>99</span>
-<span class='line-number'>100</span>
-<span class='line-number'>101</span>
-<span class='line-number'>102</span>
-<span class='line-number'>103</span>
-<span class='line-number'>104</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat ubuntu1204kickstart1.cfg  | more
-</span><span class='line'>#Generated by Kickstart Configurator
-</span><span class='line'>#platform=x86
-</span><span class='line'>
-</span><span class='line'>#System language
-</span><span class='line'>lang en_US
-</span><span class='line'>#Language modules to install
-</span><span class='line'>langsupport en_US
-</span><span class='line'>#System keyboard
-</span><span class='line'>keyboard us
-</span><span class='line'>#System mouse
-</span><span class='line'>mouse
-</span><span class='line'>#System timezone
-</span><span class='line'>timezone Asia/Shanghai
-</span><span class='line'>#Root password
-</span><span class='line'>rootpw --iscrypted xxxxxxxxxxxxxxxxxxxxxxxxxxx
-</span><span class='line'>#Initial user
-</span><span class='line'>user xxxx --fullname "xxxx" --iscrypted --password xxxxxxxxxxxxxxxxxxxxxx
-</span><span class='line'>#Reboot after installation
-</span><span class='line'>reboot
-</span><span class='line'>#Use text mode install
-</span><span class='line'>text
-</span><span class='line'>#Install OS instead of upgrade
-</span><span class='line'>install
-</span><span class='line'>#Use Web installation
-</span><span class='line'>url --url http://192.168.0.79/ubuntu/
-</span><span class='line'>#System bootloader configuration
-</span><span class='line'>bootloader --location=mbr 
-</span><span class='line'>#Clear the Master Boot Record
-</span><span class='line'>zerombr yes
-</span><span class='line'>#Partition clearing information
-</span><span class='line'>clearpart --all --initlabel 
-</span><span class='line'>#Disk partitioning information
-</span><span class='line'>part swap --size 1024 
-</span><span class='line'>part / --fstype ext4 --size 1 --grow 
-</span><span class='line'>#System authorization infomation
-</span><span class='line'>auth  --useshadow  --enablemd5 
-</span><span class='line'>#Network information
-</span><span class='line'>network --bootproto=dhcp --device=eth0
-</span><span class='line'>#Firewall configuration
-</span><span class='line'>firewall --disabled 
-</span><span class='line'>#Do not configure the X Window System
-</span><span class='line'>skipx
-</span><span class='line'>
-</span><span class='line'>%packages
-</span><span class='line'>ubuntu-minimal
-</span><span class='line'>openssh-server
-</span><span class='line'>screen
-</span><span class='line'>curl
-</span><span class='line'>wget
-</span><span class='line'>
-</span><span class='line'>%post
-</span><span class='line'>
-</span><span class='line'># update fstab for the root partition
-</span><span class='line'>perl -pi -e 's/(errors=remount-ro)/noatime,nodiratime,$1,barrier=0/' /etc/fstab
-</span><span class='line'>
-</span><span class='line'># point sh to bash instead of dash
-</span><span class='line'>rm /bin/sh
-</span><span class='line'>ln -s /bin/bash /bin/sh
-</span><span class='line'>
-</span><span class='line'># add normal apt source list
-</span><span class='line'>(
-</span><span class='line'>cat &lt;&lt;'EOP'
-</span><span class='line'>deb http://192.168.0.79/ubuntu/ precise main restricted universe
-</span><span class='line'>deb http://192.168.0.79/ubuntu/ precise-security main restricted universe
-</span><span class='line'>deb http://192.168.0.79/ubuntu/ precise-updates main restricted universe
-</span><span class='line'>EOP
-</span><span class='line'>) &gt; /etc/apt/sources.list
-</span><span class='line'>apt-get update
-</span><span class='line'>apt-get upgrade -y
-</span><span class='line'>
-</span><span class='line'># install some additional packages
-</span><span class='line'># apt-get install -y xenstore-utils
-</span><span class='line'>
-</span><span class='line'># set up xenserver automation scripts
-</span><span class='line'># AUTOMATER_REPO=https://raw.github.com/krobertson/xenserver-automater
-</span><span class='line'># curl $AUTOMATER_REPO/master/usr/sbin/xe-set-hostname &gt; /usr/sbin/xe-set-hostname
-</span><span class='line'># curl $AUTOMATER_REPO/master/usr/sbin/xe-set-network &gt; /usr/sbin/xe-set-network
-</span><span class='line'># curl $AUTOMATER_REPO/master/usr/sbin/generate-sshd-keys &gt; /usr/sbin/generate-sshd-keys
-</span><span class='line'># curl $AUTOMATER_REPO/master/etc/init/xe-automator.conf &gt; /etc/init/xe-automator.conf
-</span><span class='line'># chmod a+x /usr/sbin/xe-set-hostname
-</span><span class='line'># chmod a+x /usr/sbin/xe-set-network
-</span><span class='line'># chmod a+x /usr/sbin/generate-sshd-keys
-</span><span class='line'>
-</span><span class='line'># setup locales
-</span><span class='line'>locale-gen en_US.UTF-8
-</span><span class='line'>update-locale LANG="en_US.UTF-8"
-</span><span class='line'>echo 'LANG=en_US.UTF-8' &gt;&gt; /etc/environment
-</span><span class='line'>echo 'LC_ALL=en_US.UTF-8' &gt;&gt; /etc/environment
-</span><span class='line'>
-</span><span class='line'># install xe tools
-</span><span class='line'># cd /tmp
-</span><span class='line'># wget http://some/url/to/xe-guest-utilities_6.0.0-743_amd64.deb
-</span><span class='line'># dpkg -i xe-guest-utilities_6.0.0-743_amd64.deb
-</span><span class='line'>
-</span><span class='line'># install paravirt kernel image
-</span><span class='line'>apt-get install -f -y linux-virtual
-</span><span class='line'>dpkg -l | grep generic | grep linux | awk '{print $2}' | xargs apt-get remove -y
-</span><span class='line'>
-</span><span class='line'># clean up some stuff
-</span><span class='line'>rm -f /etc/ssh/ssh_host_*
-</span><span class='line'>rm -f /var/cache/apt/archives/*.deb
-</span><span class='line'>rm -f /var/cache/apt/*cache.bin
-</span><span class='line'>rm -f /var/lib/apt/lists/*_Packages</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<h3>A Known Bug</h3>
-
-<p>The initrd.gz file and vmlinuz file should be picked from the installation iso. While
-the spacewalk uses a CentOS based initrd.gz file for starting the system. thus you will
-met &ldquo;cdrom&rdquo; error.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls -l /var/lib/tftpboot/images/precise-ia32:1:SpacewalkDefaultOrganization/
-</span><span class='line'>total 31788
-</span><span class='line'>-r--r--r-- 1 root root 18434355 Aug 20 11:36 initrd.gz
-</span><span class='line'>-r--r--r-- 3 root root  8188836 Aug  7  2014 initrd.gz.back
-</span><span class='line'>-r--r--r-- 3 root root  5919280 Jul 29  2014 vmlinuz</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/6">&larr; Older</a>
@@ -1718,6 +1489,10 @@ met &ldquo;cdrom&rdquo; error.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/15/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang/">用Graphite呈现广州空气质量</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/12/ba-wan-tl-sg108e/">把玩TL-SG108E</a>
       </li>
     
@@ -1731,10 +1506,6 @@ met &ldquo;cdrom&rdquo; error.</p>
     
       <li class="post">
         <a href="/blog/2015/12/07/rundeck-tips/">Rundeck Tips</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/05/bluetooth-nap-how-to/">Bluetooth NAP How-To</a>
       </li>
     
   </ul>

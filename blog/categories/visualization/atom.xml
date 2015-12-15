@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Visualization | Dash]]></title>
+  <link href="http://purplepalmdash.github.io/blog/categories/visualization/atom.xml" rel="self"/>
+  <link href="http://purplepalmdash.github.io/"/>
+  <updated>2015-12-15T20:11:48+08:00</updated>
+  <id>http://purplepalmdash.github.io/</id>
+  <author>
+    <name><![CDATA[Dash]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[用Graphite呈现广州空气质量]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2015/12/15/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang/"/>
+    <updated>2015-12-15T10:05:39+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2015/12/15/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang</id>
+    <content type="html"><![CDATA[<h3>数据源准备</h3>
+
+<p>数据源地址在:   <br/>
+<a href="http://210.72.1.216:8080/gzaqi_new/RealTimeDate.html">http://210.72.1.216:8080/gzaqi_new/RealTimeDate.html</a></p>
+
+<p>但是这个地址取回数据比较困难。而在<a href="http://www.gzepb.gov.cn/">http://www.gzepb.gov.cn/</a>
+右侧的栏里可以通过点击，打开某个监测点当前的空气质量指数,例如海珠湖的数据位于:</p>
+
+<p><a href="http://210.72.1.216:8080/gzaqi_new/DataList2.html?EPNAME=%E6%B5%B7%E7%8F%A0%E6%B9%96">http://210.72.1.216:8080/gzaqi_new/DataList2.html?EPNAME=%E6%B5%B7%E7%8F%A0%E6%B9%96</a></p>
+
+<h3>Beautiful Soup</h3>
+
+<p>Beautiful Soup可以被理解为网页爬虫，用于爬取某个页面并取回所需信息。在Ubuntu/Debian系统
+中，安装命令如下。同时为了使用对XML解析速度更快的lxml解析器，我们安装python-lxml:</p>
+
+<pre><code>$ sudo apt-get install -y python-bs4
+$ sudo apt-get install -y python-lxml 
+</code></pre>
+
+<p>现在我们打开某个终端，开始用命令行交互的方式，取回海珠湖监测点的数据:</p>
+
+<p>首先，引入所需的库：</p>
+
+<pre><code># python
+Python 2.7.6 (default, Jun 22 2015, 17:58:13) 
+[GCC 4.8.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+&gt;&gt;&gt; from bs4 import BeautifulSoup
+&gt;&gt;&gt; import urllib2
+&gt;&gt;&gt; response = urllib2.urlopen('http://210.72.1.216:8080/gzaqi_new/DataList2.html?EPNAME=%E6%B5%B7%E7%8F%A0%E6%B9%96')
+&gt;&gt;&gt; print response.info()
+Content-Length: 10216
+Content-Type: text/html
+Last-Modified: Wed, 13 May 2015 08:12:28 GMT
+Accept-Ranges: bytes
+ETag: "b680828d548dd01:da2"
+Server: Microsoft-IIS/6.0
+X-Powered-By: ASP.NET
+Date: Tue, 15 Dec 2015 02:25:17 GMT
+Connection: close
+
+&gt;&gt;&gt; html = response.read()
+&gt;&gt;&gt; print "Get the length :", len(html)
+Get the length : 10216
+&gt;&gt;&gt; response.close()  # best practice to close the file
+</code></pre>
+
+<p>上述的操作里调用urllib2取回了页面， html变量里包含了该网页的内容。接下来我们使用
+BeautifulSoup来美化并从中取回我们想要的元素。</p>
+
+<pre><code>&gt;&gt;&gt; soup = BeautifulSoup(html, 'html.parser')    
+&gt;&gt;&gt; print soup.prettify()
+</code></pre>
+
+<p>仔细检查后发现，用urllib2取回的网页中，html变量里未包含当前的数据值。通过阅读代码得知，
+当前页面的值是浏览器在载入网页时执行javascript函数得到的。因而我们使用一个真实的浏览器
+来实现页面的抓取。</p>
+
+<p>Selenium是一套用于进行浏览器自动化测试的开源工具集，可进行Web应用的端到端测试
+。Selenium主要包括两个工具：一是Selenium IDE，二是Selenium WebDriver（简称
+WebDriver）. 安装命令如下:</p>
+
+<pre><code>$ pip install selenium
+</code></pre>
+
+<p>使用selenium抓取该网页的代码如下:</p>
+
+<pre><code>&gt;&gt;&gt; from contextlib import closing
+&gt;&gt;&gt; from selenium.webdriver import Firefox
+&gt;&gt;&gt; from selenium.webdriver.support.ui import WebDriverWait
+&gt;&gt;&gt; url='http://210.72.1.216:8080/gzaqi_new/DataList2.html?EPNAME=%E6%B5%B7%E7%8F%A0%E6%B9%96'
+&gt;&gt;&gt; with closing(Firefox()) as browser:
+...   browser.get(url)
+...   page_source = browser.page_source
+... 
+&gt;&gt;&gt; print page_source
+&gt;&gt;&gt; soup = BeautifulSoup(page_source, 'html.parser')
+&gt;&gt;&gt; print soup
+</code></pre>
+
+<p>现在我们可以看到，取回的<code>page_source</code>变量中已经包含有该时段的数据。接下来就是如何把数据
+从其中提取出来的过程。</p>
+
+<p>定位到含有数据的表格, 根据其层叠结构，获得tr的值:</p>
+
+<pre><code>&gt;&gt;&gt; table = soup.find('table', {'class': 'headTable'})
+&gt;&gt;&gt; for td in table.tbody.tr:
+...     print td
+... 
+&lt;td class="SO2_24H"&gt;7&lt;/td&gt;
+&lt;td class="NO2_24H"&gt;50&lt;/td&gt;
+&lt;td class="PM10_24H"&gt;29&lt;/td&gt;
+&lt;td class="CO_24H"&gt;31&lt;/td&gt;
+&lt;td class="O3_8H_24H"&gt;18&lt;/td&gt;
+&lt;td class="PM25_24H"&gt;25&lt;/td&gt;
+&lt;td class="AQI"&gt;50&lt;/td&gt;
+&lt;td class="Pollutants"&gt;—&lt;/td&gt;
+&lt;td class="jibie2"&gt;--&lt;/td&gt;
+&lt;td class="jibie2"&gt;一级&lt;/td&gt;
+&lt;td class="leibie"&gt;优                  &lt;/td&gt;
+&lt;td class="yanse"&gt;&lt;img alt="" src="Images/you.jpg"/&gt;&lt;/td&gt;
+</code></pre>
+
+<p>更进一步得到值:</p>
+
+<pre><code>&gt;&gt;&gt; for td in table.tbody.tr:
+...     print td.contents[0]
+... 
+7
+50
+29
+31
+18
+25
+50
+—
+--
+一级
+优                  
+&lt;img alt="" src="Images/you.jpg"/&gt;
+</code></pre>
+
+<p>对应的图片如下:</p>
+
+<p><img src="/images/2015_12_15_12_06_23_943x201.jpg" alt="/images/2015_12_15_12_06_23_943x201.jpg" /></p>
+
+<p>提取出来了数据，就可以做后续处理了。</p>
+
+<h3>Graphite</h3>
+
+<p>Graphite的搭建过程不提及。基于我们前面提取出的数据，只需要将其写入Graphite，就可以看
+到数据的显示了。</p>
+
+<p>具体的写入代码参考(需翻墙):</p>
+
+<p><a href="http://coreygoldberg.blogspot.com/2012/04/python-getting-data-into-graphite-code.html">http://coreygoldberg.blogspot.com/2012/04/python-getting-data-into-graphite-code.html</a></p>
+
+<p>按照博客中提供的例子，写入到Graphite后的数据在Graphite看起来是这样的:</p>
+
+<p><img src="/images/2015_12_15_14_48_48_318x115.jpg" alt="/images/2015_12_15_14_48_48_318x115.jpg" /></p>
+
+<p>而对应的数据格式则如下:</p>
+
+<pre><code> sending message:
+     system.monitorserver.loadavg_1min 0.18 1450161396
+     system.monitorserver.loadavg_5min 0.25 1450161396
+     system.monitorserver.loadavg_15min 0.23 1450161396
+</code></pre>
+
+<p>我们可以仿照这样的数据来组织自己的空气质量数据。</p>
+
+<h3>数据来源再加工</h3>
+
+<p>前面取回地址失败， 因为它只是返回空气日报的地址，我们需要的是实时情况，所以还是回到  <br/>
+<a href="http://210.72.1.216:8080/gzaqi_new/RealTimeDate.html">http://210.72.1.216:8080/gzaqi_new/RealTimeDate.html</a></p>
+
+<p>这里需要在selenium里模拟出鼠标快速点击所有链接的效果。</p>
+
+<p>下面是一次完整的点击白云山按钮并获得PM2.5页面的过程:</p>
+
+<pre><code>root@monitorserver:~/Code# python
+Python 2.7.6 (default, Jun 22 2015, 17:58:13) 
+[GCC 4.8.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+&gt;&gt;&gt; from contextlib import closing
+&gt;&gt;&gt; from selenium.webdriver import Firefox
+&gt;&gt;&gt; from selenium.webdriver.support.ui import WebDriverWait
+&gt;&gt;&gt; driver = Firefox()                                                 
+&gt;&gt;&gt; driver.get('http://210.72.1.216:8080/gzaqi_new/RealTimeDate.html')
+&gt;&gt;&gt; driver.refresh()
+&gt;&gt;&gt; baiyunmountain=driver.find_element_by_id("白云山")
+&gt;&gt;&gt; baiyunmountain.click()
+&gt;&gt;&gt; PM25=driver.find_element_by_id("PM25")
+&gt;&gt;&gt; type(PM25)
+&lt;class 'selenium.webdriver.remote.webelement.WebElement'&gt;
+&gt;&gt;&gt; PM25.click()
+</code></pre>
+]]></content>
+  </entry>
+  
+</feed>
