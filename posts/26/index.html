@@ -9,14 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Get the UnixBench and run 1
-2
-3
-4
-5
-wget http://byte-unixbench.googlecode.com/files/UnixBench5.1.3.tgz
-tar xvf UnixBench5.1.3.tgz cd UnixBench
-./Run &hellip;">
+  <meta name="description" content="Using Sysfs The easiest way to do general purpose I/O(gpio) on BBB is through the terminal and shell command. sysfs is the virtual file system which &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -72,6 +65,494 @@ tar xvf UnixBench5.1.3.tgz cd UnixBench
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/13/ebc-exercises-on-bbb-control-led/">EBC Exercises on BBB - Control LED</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-13T16:09:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:09 pm</span></time>
+        
+         | <a href="/blog/2014/11/13/ebc-exercises-on-bbb-control-led/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Using Sysfs</h3>
+
+<p>The easiest way to do general purpose I/O(gpio) on BBB is through the terminal and shell command.  sysfs is the virtual file system which exposes the drivers for the hardware so you can directly use them.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cd /sys/class/leds
+</span><span class='line'># ls
+</span><span class='line'># beaglebone:green:usr0  beaglebone:green:usr1  beaglebone:green:usr2  beaglebone:green:usr3
+</span><span class='line'># cd beaglebone\:green\:usr0
+</span><span class='line'># cat trigger 
+</span><span class='line'>none nand-disk mmc0 mmc1 timer oneshot [heartbeat] backlight gpio cpu0 default-on transient 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If you want to disable the heartbeat:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># echo none &gt; trigger
+</span><span class='line'># cat trigger 
+</span><span class='line'>[none] nand-disk mmc0 mmc1 timer oneshot heartbeat backlight gpio cpu0 default-on transient 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Turn on/off the led via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># echo 1 &gt; brightness
+</span><span class='line'># echo 0 &gt; brightness
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>More trigger options via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># echo timer&gt;trigger 
+</span><span class='line'># cat trigger 
+</span><span class='line'>none nand-disk mmc0 mmc1 [timer] oneshot heartbeat backlight gpio cpu0 default-on transient 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Set the deplay frequency:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>echo 100&gt;delay_on
+</span><span class='line'>echo 900&gt;delay_off
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Adding Own LED</h3>
+
+<p>Add the connection of LED.   <br/>
+P9 Pin1 &ndash;> 220 ohm  &ndash;> LED Negative Pin
+P9 Pin 12 -> Led Positive Pin</p>
+
+<p>Pin 12 in the table is shown in table as GPIO1_28. Bank of 32 each, so find the gpio number via:      <br/>
+1*32+28=60.</p>
+
+<p>We have to turn this pin on.</p>
+
+<h4>Turn it ON</h4>
+
+<p>export/unexport, turn on/off of the LED via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd /sys/class/gpio/
+</span><span class='line'>$ echo 60 &gt; export
+</span><span class='line'>$ cd gpio60/
+</span><span class='line'>$ echo out &gt; direction
+</span><span class='line'>$ echo 1 &gt; value
+</span><span class='line'>$ echo 0 &gt; value
+</span><span class='line'>$ cd ..
+</span><span class='line'>$ ls
+</span><span class='line'>export  gpio60  gpiochip0  gpiochip32  gpiochip64  gpiochip96  unexport
+</span><span class='line'>$ echo 60 &gt; unexport
+</span><span class='line'>$ ls -F
+</span><span class='line'>export  gpiochip0@  gpiochip32@  gpiochip64@  gpiochip96@  unexport
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Add Own Key</h3>
+
+<p>Connection for the key:  <br/>
+P9 Pin 3(3.3V) &ndash;>220 ohm &ndash;> Key 1  <br/>
+P9 Pin 42 &ndash;> Key 2  <br/>
+Pin 42 is GPIO0_7, then the actual gpio number is Just 7.</p>
+
+<h4>Read Value</h4>
+
+<p>export/unexport, read value via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cd /sys/class/gpio/
+</span><span class='line'># echo 7 &gt; export
+</span><span class='line'># cd gpio7/
+</span><span class='line'># echo in &gt; direction
+</span><span class='line'># cat value
+</span><span class='line'># cat value 
+</span><span class='line'>0
+</span><span class='line'>Hold down the button and see the result: 
+</span><span class='line'># cat value 
+</span><span class='line'>1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+The script for reading the gpio value:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># ./readgpio.sh 7
+</span><span class='line'>sh: echo: I/O error
+</span><span class='line'>trap: SIGINT: bad trap
+</span><span class='line'>__________________________|^^^^^^^^^^^^^^^^^^^^^^^|__________|^^^^^^^^^^|___
+</span><span class='line'>___|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^
+</span><span class='line'>^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|____|^^^^^^^^|____|^^|__|^^|_|^^^^^^|___|^^
+</span><span class='line'>|__|^|__|^|__|^|__|^^|___|^|_|^|___|^|_|^|_|^|_|^^|_|^|_|^|_|^^|_|^^^^^^^^^^^^^|______|^^^^^^^^^^^^^^^
+</span><span class='line'>^^^^^^^^^^^^^^^^^^^^^^^^|____|^^^^^^^^^^^|_____|^^^^^^^^^^^^^^|____|^^^^^^^^^^
+</span><span class='line'>^^^|___|^^^^^^^^^^^^|____|^^^^^^^^^^^^|__|^^^^^^^^^^|__|^^^^^^^^|__|^^^^^^^|___|^^^^
+</span><span class='line'>^|_____|^^^^^|____|^^^^^^^^^^^^^^^^^^^^^^^|___|^^^^^^^^^^^^^^^^^|___|^^^^^^^^^^^
+</span><span class='line'>|_^C
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This seems like a little game.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/13/ebc-exercises-on-bbb/">EBC Exercises on BBB</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-13T09:29:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>9:29 am</span></time>
+        
+         | <a href="/blog/2014/11/13/ebc-exercises-on-bbb/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Tips on Building Kenrel</h3>
+
+<p>Via following commands you could build the 3.8 kernel for BBB:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone git://github.com/RobertCNelson/linux-dev.git
+</span><span class='line'>$ cd linux-dev
+</span><span class='line'>$ git checkout origin/am33x-v3.8 -b am33x-v3.8
+</span><span class='line'>$ time git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+</span><span class='line'>$ cp system.sh.sample system.sh
+</span><span class='line'>$ diff system.sh*
+</span><span class='line'>15c15
+</span><span class='line'>&lt; CC=arm-linux-gnueabi-
+</span><span class='line'>---
+</span><span class='line'>&gt; #CC=arm-linux-gnueabi-
+</span><span class='line'>21c21
+</span><span class='line'>&lt; LINUX_GIT=~/BeagleBoard/linux-stable/
+</span><span class='line'>---
+</span><span class='line'>&gt; #LINUX_GIT=/home/user/linux-stable/
+</span><span class='line'>31c31
+</span><span class='line'>&lt; ZRELADDR=0x80008000
+</span><span class='line'>---
+</span><span class='line'>&gt; #ZRELADDR=0x80008000
+</span><span class='line'>$ ./build_kernel.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>U-boot Cross-compile</h3>
+
+<p>Download the U-boot and cross-compile it.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># git clone git://git.denx.de/u-boot.git
+</span><span class='line'># cd u-boot/
+</span><span class='line'># git checkout v2013.07 -b tmp
+</span><span class='line'># wget https://raw.github.com/eewiki/u-boot-patches/master/v2013.07/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+</span><span class='line'># patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+</span><span class='line'># setpogo # For setting my cross-compiler to arm-linux-gnueabi-
+</span><span class='line'># export ARCH=arm
+</span><span class='line'># export CROSS_COMPILE=arm-linux-gnueabi-
+</span><span class='line'># make
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After building you will get MLO and u-boot.img.</p>
+
+<h3>Test on NFS</h3>
+
+<p>Prepare the NFS File System.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>mkdir dtbs
+</span><span class='line'>tar xzvf 3.8.13-bone53-dtbs.tar.gz -C ./dtbs
+</span><span class='line'>cp dtbs/am335x-boneblack.dtb /srv/tftp/
+</span><span class='line'>cp 3.8.13-bone53.zImage /srv/tftp/
+</span><span class='line'>mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux" -d /srv/tftp/3.8.13-bone53.zImage  /srv/tftp/uImage
+</span><span class='line'>tar xJvf ubuntu-14.04-console-armhf-2014-08-13.tar.xz -C /srv/nfs4/
+</span><span class='line'>cd /srv/nfs4/ubuntu-14.04-console-armhf-2014-08-13
+</span><span class='line'>tar xvf armhf-rootfs-ubuntu-trusty.tar -C ../Ubuntu_fs/
+</span><span class='line'>chmod 777 -R Ubuntu_fs/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then boot the system from U-boot Via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>setenv ipaddr 192.168.1.16
+</span><span class='line'>setenv serverip 192.168.1.221
+</span><span class='line'>tftpboot ${fdtaddr} am335x-boneblack.dtb
+</span><span class='line'>tftpboot ${kloadaddr} uImage
+</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rootfstype=nfs rw nfsroot=192.168.1.221:/srv/nfs4/Ubuntu_fs ip=192.168.1.1 
+</span><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now boot the BBB and we got the ssh enabled, via ssh ubuntu@192.168.1.1, password is temppwd.</p>
+
+<p>Sometimes you will meet sudo problem, just chown and chmod is OK</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># chmod 4755 some_related_file
+</span><span class='line'># chown root some_related_file
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+Since NFS gonna the write priviledge error, go back for SD card.</p>
+
+<h3>SD Card</h3>
+
+<p>FileSystem Preparation:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ export DISK=/dev/mmcblk0
+</span><span class='line'>$ dd if=/dev/zero of=${DISK} bs=1M count=10
+</span><span class='line'>$ dd if=./u-boot/MLO of=${DISK} count=1 seek=1 conv=notrunc bs=128k
+</span><span class='line'>$ dd if=./u-boot/u-boot.img of=${DISK} count=2 seek=1 conv=notrunc bs=384k
+</span><span class='line'> sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
+</span><span class='line'>1,,0x83,*
+</span><span class='line'>__EOF__
+</span><span class='line'>$ mkfs.ext4 /dev/mmcblk0p1 -L rootfs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Copy the Operating system into the sd card partition 1, later we will use /mnt for mounting the partition 1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mount /dev/mmcblk0p1 /mnt
+</span><span class='line'># cd ubuntu-14.04.1-console-armhf-2014-10-29
+</span><span class='line'># tar xvf armhf-rootfs-ubuntu-trusty.tar -C /mnt/
+</span><span class='line'># sync
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now install the kernel image into the ubuntu system. Imagine your SD is mount to /mnt/</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cp /media/y/embedded/BBB/EBC/3.8Kernel/linux-dev/deploy/3.8.13-bone53.zImage /mnt/boot/vmlinuz-3.8.13-bone53
+</span><span class='line'>tar xzvf /media/y/embedded/BBB/EBC/3.8Kernel/linux-dev/deploy/3.8.13-bone53-dtbs.tar.gz -C /mnt/boot/dtbs/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now create the following uEnv.txt located in /mnt/boot/ and /mnt/:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>##This will work with: Angstrom's 2013.06.20 u-boot.
+</span><span class='line'> 
+</span><span class='line'>loadaddr=0x82000000
+</span><span class='line'>fdtaddr=0x88000000
+</span><span class='line'>rdaddr=0x88080000
+</span><span class='line'> 
+</span><span class='line'>initrd_high=0xffffffff
+</span><span class='line'>fdt_high=0xffffffff
+</span><span class='line'>
+</span><span class='line'>console=ttyO0,115200n8
+</span><span class='line'>mmcroot=/dev/mmcblk0p1 ro
+</span><span class='line'> 
+</span><span class='line'>loadximage=load mmc 0:1 ${loadaddr} /boot/vmlinuz-3.8.13-bone53
+</span><span class='line'>loadxfdt=load mmc 0:1 ${fdtaddr} /boot/dtbs/3.8.13-bone53/am335x-boneblack.dtb
+</span><span class='line'>loadxrd=load mmc 0:1 ${rdaddr} /boot/initrd.img-${uname_r}; setenv rdsize ${filesize}
+</span><span class='line'>loaduEnvtxt=load mmc 0:1 ${loadaddr} /boot/uEnv.txt ; env import -t ${loadaddr} ${filesize};
+</span><span class='line'>loadall=run loaduEnvtxt; run loadximage; run loadxfdt;
+</span><span class='line'> 
+</span><span class='line'>mmcargs=setenv bootargs console=tty0 console=${console} ${optargs} ${cape_disable} ${cape_enable} root=${mmcroot} rootfstype=${mmcrootfstype} ${cmdline}
+</span><span class='line'> 
+</span><span class='line'>uenvcmd=run loadall; run mmcargs; bootz ${loadaddr} - ${fdtaddr};
+</span><span class='line'>optargs="debug"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Enable the dhcp, /mnt/etc/network/interfaces:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'> 
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet dhcp
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Enable the serial port:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /mnt/etc/init/serial.conf
+</span><span class='line'>start on stopped rc RUNLEVEL=[2345]
+</span><span class='line'>stop on runlevel [!2345]
+</span><span class='line'> 
+</span><span class='line'>respawn
+</span><span class='line'>exec /sbin/getty 115200 ttyO0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now restart and you got the 3.8 kernel enabled, so next time if you want to change the kernel, simply change the uEnv.txt file is OK.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ubuntu@arm:/boot$ uname -a
+</span><span class='line'>Linux arm 3.8.13-bone53 #1 SMP Tue Nov 11 18:40:19 CST 2014 armv7l armv7l armv7l GNU/Linux
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1276,207 +1757,6 @@ All of the files and folder are located under <code>$BBB/201411</code> folder.</
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/11/05/build-chromiumos/">Build ChromiumOS</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-11-05T17:43:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>5:43 pm</span></time>
-        
-         | <a href="/blog/2014/11/05/build-chromiumos/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>First Time Build</h3>
-
-<p>This build failed for I could not get the repository sync.</p>
-
-<p>I setup the environment on 159&rsquo;s /media/nfs:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-</span><span class='line'>$ export PATH="$PATH":`pwd`/depot_tools
-</span><span class='line'>$ echo $PATH
-</span><span class='line'>/home/ubuntu/bin:/home/ubuntu/bin:/home/ubuntu/bin:/home/ubuntu/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/media/nfs/ChromiumOS/depot_tools
-</span><span class='line'>$ cat script.sh 
-</span><span class='line'>#!/bin/sh
-</span><span class='line'>cat &gt;./sudo_editor&lt;&lt;EOF
-</span><span class='line'>#!/bin/sh
-</span><span class='line'>echo Defaults !tty_tickets &gt; $1
-</span><span class='line'>echo Defaults timestamp_timeout=180 &gt;&gt; $1
-</span><span class='line'>EOF
-</span><span class='line'>chmod +x ./sudo_editor
-</span><span class='line'>sudo EDITOR=./sudo_editor visudo -f /etc/sudoers.d/relax_requirements
-</span><span class='line'>$ export BOARD=x86-generic
-</span><span class='line'>$ repo init -u https://git.chromium.org/chromiumos/manifest.git
-</span><span class='line'>$ repo sync
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Second Time Build</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Trusty@Linux59:~/Code/ChromiumOS&gt; pwd
-</span><span class='line'>/home/Trusty/Code/ChromiumOS
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS&gt;  git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS&gt; export PATH=`pwd`/depot_tools:"$PATH"
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS&gt; mkdir chromiumos
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS&gt; cd chromiumos/
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS/chromiumos&gt; repo init -u https://chromium.googlesource.com/chromiumos/manifest.git --repo-url https://chromium.googlesource.com/external/repo.git 
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS/chromiumos&gt; repo sync
-</span><span class='line'>Trusty@Linux59:~/Code/ChromiumOS/chromiumos&gt; cros_sdk
-</span><span class='line'>root's password:
-</span><span class='line'>(cr) ((c405e7b...)) Trusty@Linux59 ~/trunk/src/scripts $ export BOARD=x86-generic
-</span><span class='line'>(cr) ((c405e7b...)) Trusty@Linux59 ~/trunk/src/scripts $ ./setup_board --board=${BOARD}
-</span><span class='line'># ./set_shared_user_password.sh
-</span><span class='line'># ./build_packages --board=${BOARD}
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/11/05/enable-nfs-server-of-53/">Enable Nfs Server of 53</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-11-05T17:08:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>5:08 pm</span></time>
-        
-         | <a href="/blog/2014/11/05/enable-nfs-server-of-53/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Only enabled the nfs server and use the max disk for building, the nfs server runs Redhat RHEL6.2, the same procedure could be applied to CentOS Based system.   <br/>
-Steps:  <br/>
-Query for installed packages in server:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ rpm -qa nfs-utils
-</span><span class='line'>$ rpm -qa rpcbind
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Edit the nfs based directory:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /etc/exports
-</span><span class='line'>/home/Trusty/share/       *(rw,sync,no_subtree_check,no_root_squash)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start the service and test:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># service rpcbind start
-</span><span class='line'># service nfs start
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In client machine, just type following command for mount the remote nfs directory:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mount -t nfs 1xx.xxx.xxx.xx:/home/Trusty/share /mnt/
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Make nfs server automatically start when system boot:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># chkconfig nfs on
-</span><span class='line'># chkconfig rpcbind on
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Client Machine(59), do following for automatically mount nfs:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim /etc/fstab
-</span><span class='line'># Using NFS
-</span><span class='line'>1xx.xxx.xxx.xx:/home/Trusty/share /media/nfs/     nfs     rsize=8192,wsize=8192,timeo=14,intr     0       0
-</span><span class='line'>$ mount -a
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then everytime this clent machine startup the remote nfs directory will be mounted to local directory.</p>
-
-<p>If you are ubuntu client, then you should install nfs-client via;</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>sudo apt-get install nfs-common
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/27">&larr; Older</a>
@@ -1494,6 +1774,14 @@ Query for installed packages in server:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-4/">用Graphite呈现广州空气质量(4)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-3/">用Graphite呈现广州空气质量(3)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-2/">用Graphite呈现广州空气质量(2)</a>
       </li>
     
@@ -1503,14 +1791,6 @@ Query for installed packages in server:</p>
     
       <li class="post">
         <a href="/blog/2015/12/12/ba-wan-tl-sg108e/">把玩TL-SG108E</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/10/openvswitch-on-ubuntu14-dot-04/">OpenVswitch on Ubuntu14.04</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/08/tessera-how-to/">Tessera How-to</a>
       </li>
     
   </ul>
