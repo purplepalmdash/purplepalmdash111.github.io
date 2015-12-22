@@ -9,15 +9,10 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Login to mysql commandline via: 1
+  <meta name="description" content="Setup iptables Install iptables-persistent, so that the iptables rules will be saved even reboot the machine: 1
 2
-3
-4
-# mysql -uroot -p
-mysql&gt; use wordpress
-.........
-Database changed Display the COLUMNS of wp_comments: 1
-2 &hellip;">
+# apt-get update
+# apt-get install &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -73,6 +68,204 @@ Database changed Display the COLUMNS of wp_comments: 1
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/06/automatically-filter-spambot-on-digitalocean/">Automatically Filter SpamBot on DigitalOcean</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-06T15:41:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>3:41 pm</span></time>
+        
+         | <a href="/blog/2014/11/06/automatically-filter-spambot-on-digitalocean/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Setup iptables</h3>
+
+<p>Install iptables-persistent, so that the iptables rules will be saved even reboot the machine:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get update
+</span><span class='line'># apt-get install iptables-persistent
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Script for manually add iptables</h3>
+
+<p>Use following scritp for manually add iptables items:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c">#!/bin/sh</span>
+</span><span class='line'><span class="c"># This script runs once per hour, Directly remove the ips which post comments</span>
+</span><span class='line'><span class="c"># more than 4 times per hour. And who comments less than 3 times we should sent</span>
+</span><span class='line'><span class="c"># its ip to old ips file. The old ips files will be used for analyse once per day</span>
+</span><span class='line'><span class="c"># The run frequency is controlled by  crontab.   </span>
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Before Start, empty the deathSentence</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'>&gt;/var/log/apache2/deathSentence
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># First cat the file and try to found the bot ip list</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Pipe 1: The one who called POST method should be monitored</span>
+</span><span class='line'><span class="c"># Pipe 2: Get the ip address who called POST method.</span>
+</span><span class='line'><span class="c"># Pipe 3: Sort the ip addresses. </span>
+</span><span class='line'><span class="c"># Pipe 4: Calculate the repeated times. First column, times; Second column, ip address.</span>
+</span><span class='line'><span class="c"># Pipe 5: Sort via first column(times) numerically(Not textly!) .</span>
+</span><span class='line'><span class="c"># Pipe 6: If the Call POST time bigger than 4 in one hour, catch it!</span>
+</span><span class='line'><span class="c"># Pipe 7: Yes we caught this thief! Get its ipaddr.</span>
+</span><span class='line'><span class="c"># Write these thieves into the death sentence</span>
+</span><span class='line'>cat /var/log/apache2/other_vhosts_access.log <span class="p">|</span> grep <span class="s2">&quot;POST&quot;</span> <span class="p">|</span> awk <span class="s1">&#39;{print $2}&#39;</span> <span class="p">|</span> sort <span class="p">|</span> uniq --count <span class="p">|</span> sort -n <span class="p">|</span> awk <span class="s1">&#39;$1&gt;4&#39;</span> <span class="p">|</span> awk <span class="o">{</span><span class="s1">&#39;print $2&#39;</span><span class="o">}</span>&gt;/var/log/apache2/deathSentence
+</span><span class='line'><span class="c"># Those who comments but equal or more than 4 times will be append to wishList</span>
+</span><span class='line'>cat /var/log/apache2/other_vhosts_access.log <span class="p">|</span> grep <span class="s2">&quot;POST&quot;</span> <span class="p">|</span> awk <span class="s1">&#39;{print $2}&#39;</span> <span class="p">|</span> sort <span class="p">|</span> uniq --count <span class="p">|</span> sort -n <span class="p">|</span> awk <span class="s1">&#39;$1&lt;5&#39;</span> <span class="p">|</span> awk <span class="o">{</span><span class="s1">&#39;print $2&#39;</span><span class="o">}</span>&gt;&gt;/var/log/apache2/wishList
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Second we add this bot ip list into the netfilter</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="k">for</span> i in <span class="sb">`</span>cat /var/log/apache2/deathSentence<span class="sb">`</span>
+</span><span class='line'><span class="k">do</span>
+</span><span class='line'>  <span class="c">#echo $i</span>
+</span><span class='line'>  iptables -A INPUT -s <span class="nv">$i</span> -j DROP
+</span><span class='line'><span class="k">done</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Finally empty the other_vhosts_access.log</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'>&gt;/var/log/apache2/other_vhosts_access.log
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Oh, also add myself into the blacklist, so un-lock me:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>iptables -A INPUT -s 1xx.x.x.x -j ACCEPT
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Since those wishList should also be cared, wrote following scripts for judge, every 4 hours will be make a decision.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c">#!/bin/sh</span>
+</span><span class='line'><span class="c"># This script runs once 4 hours, used for processing the /var/log/apache2/wishList</span>
+</span><span class='line'><span class="c"># ip address lists. Those bad guys who were in wishList, if their total appear times</span>
+</span><span class='line'><span class="c"># bigger than 4 times, will be added to iptable&#39;s drop rules.</span>
+</span><span class='line'>&gt;/var/log/apache2/deathSentence_4hour
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Read the ip list and store those bad guys into deathSentence_4hour</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'>cat /var/log/apache2/wishList <span class="p">|</span> sort <span class="p">|</span> uniq --count <span class="p">|</span> sort -n <span class="p">|</span> awk <span class="s1">&#39;$1&gt;4&#39;</span> <span class="p">|</span> awk <span class="o">{</span><span class="s1">&#39;$print $2&#39;</span><span class="o">}</span>&gt;/var/log/apache2/deathSentence_4hour
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Now you got the bad guys, add them into iptables</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="k">for</span> i in <span class="sb">`</span>cat /var/log/apache2/deathSentence_4hour<span class="sb">`</span>
+</span><span class='line'><span class="k">do</span>
+</span><span class='line'>        <span class="c">#echo $i</span>
+</span><span class='line'>        iptables -A INPUT -s <span class="nv">$i</span> -j DROP
+</span><span class='line'><span class="k">done</span>
+</span><span class='line'>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'><span class="c"># Finally empty the wishList</span>
+</span><span class='line'><span class="c">######################################################</span>
+</span><span class='line'>&gt;/var/log/apache2/wishList
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Crontab It!</h3>
+
+<p>Run <code>auto_add_bot_ip.sh</code> at every minute 0 of 1 hour, then run <code>auto_judge_wishlist.sh</code> at every minute 10 of every 4 hours.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c"># m h  dom mon dow   command</span>
+</span><span class='line'><span class="m">0</span> */1 * * * /root/code/auto_add_bot_ip.sh
+</span><span class='line'><span class="m">10</span> */4 * * * /root/code/auto_judge_wishlist.sh
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1405,1060 +1598,6 @@ Now the partition should be:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/29/arduino-performance/">Arduino Performance</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-29T10:43:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:43 am</span></time>
-        
-         | <a href="/blog/2014/10/29/arduino-performance/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Program Storage</h3>
-
-<p>Classical Blink program:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/*</span>
-</span><span class='line'><span class="cm">  Blink</span>
-</span><span class='line'><span class="cm">  Turns on an LED on for one second, then off for one second, repeatedly.</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm">  Most Arduinos have an on-board LED you can control. On the Uno and</span>
-</span><span class='line'><span class="cm">  Leonardo, it is attached to digital pin 13. If you&#39;re unsure what</span>
-</span><span class='line'><span class="cm">  pin the on-board LED is connected to on your Arduino model, check</span>
-</span><span class='line'><span class="cm">  the documentation at http://arduino.cc</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm">  This example code is in the public domain.</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm">  modified 8 May 2014</span>
-</span><span class='line'><span class="cm">  by Scott Fitzgerald</span>
-</span><span class='line'><span class="cm"> */</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// the setup function runs once when you press reset or power the board</span>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// initialize digital pin 13 as an output.</span>
-</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// the loop function runs over and over again forever</span>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>   <span class="c1">// turn the LED on (HIGH is the voltage level)</span>
-</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>              <span class="c1">// wait for a second</span>
-</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>    <span class="c1">// turn the LED off by making the voltage LOW</span>
-</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>              <span class="c1">// wait for a second</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Compilation size:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span><span class="mi">082</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Comment the pinMode(13, OUTPUT), then the compilation size would be:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">948</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Since PB5 is the output pin for 13, One command for replacing pinMode():</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// initialize digital pin 13 as an output.</span>
-</span><span class='line'>  <span class="c1">//pinMode(13, OUTPUT);</span>
-</span><span class='line'>  <span class="n">bitSet</span><span class="p">(</span><span class="n">DDRB</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Further:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">//digitalWrite(13, HIGH);   // turn the LED on (HIGH is the voltage level)</span>
-</span><span class='line'>  <span class="n">bitSet</span><span class="p">(</span><span class="n">PINB</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>              <span class="c1">// wait for a second</span>
-</span><span class='line'>  <span class="c1">//digitalWrite(13, LOW);    // turn the LED off by making the voltage LOW</span>
-</span><span class='line'>  <span class="n">bitSet</span><span class="p">(</span><span class="n">PINB</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>              <span class="c1">// wait for a second</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">680</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use bitSet() for reverse the bit, then the size will greatly reduced.</p>
-
-<p>Further reduction will consider replace the delay(1000) with an empty for() loop, which is listed as following:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="c1">//delay(1000);              // wait for a second</span>
-</span><span class='line'>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span><span class="mi">32000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The binary size is:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">478</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We could add following declaration:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="k">for</span> <span class="p">(</span><span class="k">volatile</span> <span class="kt">int</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span><span class="mi">32000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Serial Communication</h3>
-
-<p>Origin serial communication source code:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;Hello World!&quot;</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">// Do Nothing.</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Size is:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span><span class="mo">034</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Remove all of the functionality, then the size is:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">472</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Directly manuplate the serial port hardware:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#define BAUD_RATE 9600</span>
-</span><span class='line'><span class="cp">#define BAUD_RATE_DIVISOR (F_CPU/16/BAUD_RATE -1 )</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">usart_putc</span><span class="p">(</span><span class="kt">char</span> <span class="n">c</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">loop_until_bit_is_set</span><span class="p">(</span><span class="n">UCSR0A</span><span class="p">,</span> <span class="n">UDRE0</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">UDR0</span> <span class="o">=</span> <span class="n">c</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">//Serial.begin(9600);</span>
-</span><span class='line'>  <span class="c1">//Serial.println(&quot;Hello World!&quot;);</span>
-</span><span class='line'>  <span class="n">UCSR0A</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UCSR0B</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">TXEN0</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UCSR0C</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">UCSZ01</span> <span class="o">|</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">UCSZ00</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UBRR0</span> <span class="o">=</span> <span class="n">BAUD_RATE_DIVISOR</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">usart_putc</span><span class="p">(</span><span class="sc">&#39;!&#39;</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">usart_putc</span><span class="p">(</span><span class="sc">&#39;m&#39;</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">// Do Nothing.</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now the size is:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">528</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add one function for output sentence:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#define BAUD_RATE 9600</span>
-</span><span class='line'><span class="cp">#define BAUD_RATE_DIVISOR (F_CPU/16/BAUD_RATE -1 )</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">usart_putc</span><span class="p">(</span><span class="kt">char</span> <span class="n">c</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">loop_until_bit_is_set</span><span class="p">(</span><span class="n">UCSR0A</span><span class="p">,</span> <span class="n">UDRE0</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">UDR0</span> <span class="o">=</span> <span class="n">c</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">usart_puts</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">s</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="o">*</span><span class="n">s</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="n">usart_putc</span><span class="p">(</span><span class="o">*</span><span class="n">s</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">s</span><span class="o">++</span><span class="p">;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">//Serial.begin(9600);</span>
-</span><span class='line'>  <span class="c1">//Serial.println(&quot;Hello World!&quot;);</span>
-</span><span class='line'>  <span class="n">UCSR0A</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UCSR0B</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">TXEN0</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UCSR0C</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">UCSZ01</span> <span class="o">|</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">UCSZ00</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UBRR0</span> <span class="o">=</span> <span class="n">BAUD_RATE_DIVISOR</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">usart_puts</span><span class="p">(</span><span class="s">&quot;Hello, World!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>  <span class="c1">//usart_putc(&#39;!&#39;);</span>
-</span><span class='line'>  <span class="c1">//usart_putc(&#39;m&#39;);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">// Do Nothing.</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The size changes to:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">542</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add version for output integers:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#define BAUD_RATE 9600</span>
-</span><span class='line'><span class="cp">#define BAUD_RATE_DIVISOR (F_CPU/16/BAUD_RATE -1 )</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">usart_putc</span><span class="p">(</span><span class="kt">char</span> <span class="n">c</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">loop_until_bit_is_set</span><span class="p">(</span><span class="n">UCSR0A</span><span class="p">,</span> <span class="n">UDRE0</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">UDR0</span> <span class="o">=</span> <span class="n">c</span><span class="p">;</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">usart_puts</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">s</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="o">*</span><span class="n">s</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="n">usart_putc</span><span class="p">(</span><span class="o">*</span><span class="n">s</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">s</span><span class="o">++</span><span class="p">;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">usart_puti</span><span class="p">(</span><span class="kt">long</span> <span class="n">i</span><span class="p">)</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="kt">char</span> <span class="n">s</span><span class="p">[</span><span class="mi">25</span><span class="p">];</span>
-</span><span class='line'>  <span class="n">itoa</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">usart_puts</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">//Serial.begin(9600);</span>
-</span><span class='line'>  <span class="c1">//Serial.println(&quot;Hello World!&quot;);</span>
-</span><span class='line'>  <span class="n">UCSR0A</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UCSR0B</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">TXEN0</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UCSR0C</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">UCSZ01</span> <span class="o">|</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">UCSZ00</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">UBRR0</span> <span class="o">=</span> <span class="n">BAUD_RATE_DIVISOR</span><span class="p">;</span>
-</span><span class='line'>  <span class="n">usart_puts</span><span class="p">(</span><span class="s">&quot;Hello, World!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">usart_puti</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>
-</span><span class='line'>  <span class="c1">//usart_putc(&#39;!&#39;);</span>
-</span><span class='line'>  <span class="c1">//usart_putc(&#39;m&#39;);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="c1">// Do Nothing.</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Because we called itoa(), so in this version the size will greatly improved to:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Binary</span> <span class="n">sketch</span> <span class="nl">size</span><span class="p">:</span> <span class="mi">782</span> <span class="n">bytes</span> <span class="p">(</span><span class="n">of</span> <span class="n">a</span> <span class="mi">32</span><span class="p">,</span><span class="mi">256</span> <span class="n">byte</span> <span class="n">maximum</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>SRAM</h3>
-
-<p>Edit the preference of Arduino, under the <code>/root/.arduino/preference.txt</code>:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">build</span><span class="p">.</span><span class="n">verbose</span><span class="o">=</span><span class="nb">true</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then build and you will see the tmp file.</p>
-
-<p>Install following packages on Archlinux:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">sudo</span> <span class="n">pacman</span> <span class="o">-</span><span class="n">S</span> <span class="n">avr</span><span class="o">-</span><span class="n">gcc</span>
-</span><span class='line'><span class="err">$</span> <span class="n">sudo</span> <span class="n">pacman</span> <span class="o">-</span><span class="n">S</span> <span class="n">avr</span><span class="o">-</span><span class="n">gdb</span> <span class="n">avrdude</span> <span class="n">simavr</span> <span class="n">avr</span><span class="o">-</span><span class="n">libc</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then you can use avr-size to view the generated elf file size:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">avr</span><span class="o">-</span><span class="n">size</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">build7485065177781002113</span><span class="p">.</span><span class="n">tmp</span><span class="o">/</span><span class="n">BareMinimum</span><span class="p">.</span><span class="n">cpp</span><span class="p">.</span><span class="n">elf</span>
-</span><span class='line'>   <span class="n">text</span>    <span class="n">data</span>     <span class="n">bss</span>     <span class="n">dec</span>     <span class="n">hex</span> <span class="n">filename</span>
-</span><span class='line'>    <span class="mi">472</span>       <span class="mi">0</span>       <span class="mi">9</span>     <span class="mi">481</span>     <span class="mf">1e1</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">build7485065177781002113</span><span class="p">.</span><span class="n">tmp</span><span class="o">/</span><span class="n">BareMinimum</span><span class="p">.</span><span class="n">cpp</span><span class="p">.</span><span class="n">elf</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Or more detailed:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">avr</span><span class="o">-</span><span class="n">size</span> <span class="o">-</span><span class="n">C</span> <span class="o">--</span><span class="n">mcu</span><span class="o">=</span><span class="n">atmega328p</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">build7485065177781002113</span><span class="p">.</span><span class="n">tmp</span><span class="o">/</span><span class="n">BareMinimum</span><span class="p">.</span><span class="n">cpp</span><span class="p">.</span><span class="n">elf</span>
-</span><span class='line'><span class="n">AVR</span> <span class="n">Memory</span> <span class="n">Usage</span>
-</span><span class='line'><span class="o">----------------</span>
-</span><span class='line'><span class="nl">Device</span><span class="p">:</span> <span class="n">atmega328p</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Program</span><span class="p">:</span>     <span class="mi">472</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">1.4</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">text</span> <span class="o">+</span> <span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bootloader</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Data</span><span class="p">:</span>          <span class="mi">9</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">0.4</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bss</span> <span class="o">+</span> <span class="p">.</span><span class="n">noinit</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add  some definition of global variables:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">char</span> <span class="n">c</span><span class="p">;</span>
-</span><span class='line'><span class="kt">char</span> <span class="n">msg</span><span class="p">[]</span><span class="o">=</span><span class="s">&quot;This is a message&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// put your setup code here, to run once:</span>
-</span><span class='line'>  <span class="n">c</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check the size:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">avr</span><span class="o">-</span><span class="n">size</span> <span class="o">-</span><span class="n">C</span> <span class="o">--</span><span class="n">mcu</span><span class="o">=</span><span class="n">atmega328p</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">build7485065177781002113</span><span class="p">.</span><span class="n">tmp</span><span class="o">/</span><span class="n">BareMinimum</span><span class="p">.</span><span class="n">cpp</span><span class="p">.</span><span class="n">elf</span>
-</span><span class='line'><span class="n">AVR</span> <span class="n">Memory</span> <span class="n">Usage</span>
-</span><span class='line'><span class="o">----------------</span>
-</span><span class='line'><span class="nl">Device</span><span class="p">:</span> <span class="n">atmega328p</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Program</span><span class="p">:</span>     <span class="mi">498</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">1.5</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">text</span> <span class="o">+</span> <span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bootloader</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Data</span><span class="p">:</span>         <span class="mi">28</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">1.4</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bss</span> <span class="o">+</span> <span class="p">.</span><span class="n">noinit</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Use pgmspace</h3>
-
-<p>If we use pgmspace, then the source code would be:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/*</span>
-</span><span class='line'><span class="cm"> PROGMEM string demo</span>
-</span><span class='line'><span class="cm"> How to store a table of strings in program memory (flash), </span>
-</span><span class='line'><span class="cm"> and retrieve them.</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm"> Information summarized from:</span>
-</span><span class='line'><span class="cm"> http://www.nongnu.org/avr-libc/user-manual/pgmspace.html</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm"> Setting up a table (array) of strings in program memory is slightly complicated, but</span>
-</span><span class='line'><span class="cm"> here is a good template to follow. </span>
-</span><span class='line'>
-</span><span class='line'><span class="cm"> Setting up the strings is a two-step process. First define the strings.</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm">*/</span>
-</span><span class='line'>
-</span><span class='line'><span class="cp">#include &lt;avr/pgmspace.h&gt;</span>
-</span><span class='line'><span class="n">prog_char</span> <span class="n">string_0</span><span class="p">[]</span> <span class="n">PROGMEM</span> <span class="o">=</span> <span class="s">&quot;String 0&quot;</span><span class="p">;</span>   <span class="c1">// &quot;String 0&quot; etc are strings to store - change to suit.</span>
-</span><span class='line'><span class="n">prog_char</span> <span class="n">string_1</span><span class="p">[]</span> <span class="n">PROGMEM</span> <span class="o">=</span> <span class="s">&quot;String 1&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="n">prog_char</span> <span class="n">string_2</span><span class="p">[]</span> <span class="n">PROGMEM</span> <span class="o">=</span> <span class="s">&quot;String 2&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="n">prog_char</span> <span class="n">string_3</span><span class="p">[]</span> <span class="n">PROGMEM</span> <span class="o">=</span> <span class="s">&quot;String 3&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="n">prog_char</span> <span class="n">string_4</span><span class="p">[]</span> <span class="n">PROGMEM</span> <span class="o">=</span> <span class="s">&quot;String 4&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="n">prog_char</span> <span class="n">string_5</span><span class="p">[]</span> <span class="n">PROGMEM</span> <span class="o">=</span> <span class="s">&quot;String 5&quot;</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Then set up a table to refer to your strings.</span>
-</span><span class='line'>
-</span><span class='line'><span class="n">PROGMEM</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">string_table</span><span class="p">[]</span> <span class="o">=</span>       <span class="c1">// change &quot;string_table&quot; name to suit</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">string_0</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_1</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_2</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_3</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_4</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_5</span> <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="mi">30</span><span class="p">];</span>    <span class="c1">// make sure this is large enough for the largest string it must hold</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>           
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>            
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="cm">/* Using the string table in program memory requires the use of special functions to retrieve the data.</span>
-</span><span class='line'><span class="cm">     The strcpy_P function copies a string from program space to a string in RAM (&quot;buffer&quot;). </span>
-</span><span class='line'><span class="cm">     Make sure your receiving string in RAM  is large enough to hold whatever</span>
-</span><span class='line'><span class="cm">     you are retrieving from program space. */</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="n">strcpy_P</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">pgm_read_word</span><span class="p">(</span><span class="o">&amp;</span><span class="p">(</span><span class="n">string_table</span><span class="p">[</span><span class="n">i</span><span class="p">])));</span> <span class="c1">// Necessary casts and dereferencing, just copy. </span>
-</span><span class='line'>    <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span> <span class="n">buffer</span> <span class="p">);</span>
-</span><span class='line'>    <span class="n">delay</span><span class="p">(</span> <span class="mi">500</span> <span class="p">);</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check the size:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">avr</span><span class="o">-</span><span class="n">size</span> <span class="o">-</span><span class="n">C</span> <span class="o">--</span><span class="n">mcu</span><span class="o">=</span><span class="n">atmega328p</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">build7485065177781002113</span><span class="p">.</span><span class="n">tmp</span><span class="o">/</span><span class="n">sketch_oct29b</span><span class="p">.</span><span class="n">cpp</span><span class="p">.</span><span class="n">elf</span>
-</span><span class='line'><span class="n">AVR</span> <span class="n">Memory</span> <span class="n">Usage</span>
-</span><span class='line'><span class="o">----------------</span>
-</span><span class='line'><span class="nl">Device</span><span class="p">:</span> <span class="n">atmega328p</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Program</span><span class="p">:</span>    <span class="mi">2324</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">7.1</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">text</span> <span class="o">+</span> <span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bootloader</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Data</span><span class="p">:</span>        <span class="mi">225</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">11.0</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bss</span> <span class="o">+</span> <span class="p">.</span><span class="n">noinit</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Replace back to ordinary conditions:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/*</span>
-</span><span class='line'><span class="cm"> PROGMEM string demo</span>
-</span><span class='line'><span class="cm"> How to store a table of strings in program memory (flash), </span>
-</span><span class='line'><span class="cm"> and retrieve them.</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm"> Information summarized from:</span>
-</span><span class='line'><span class="cm"> http://www.nongnu.org/avr-libc/user-manual/pgmspace.html</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm"> Setting up a table (array) of strings in program memory is slightly complicated, but</span>
-</span><span class='line'><span class="cm"> here is a good template to follow. </span>
-</span><span class='line'>
-</span><span class='line'><span class="cm"> Setting up the strings is a two-step process. First define the strings.</span>
-</span><span class='line'>
-</span><span class='line'><span class="cm">*/</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">char</span> <span class="n">string_0</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;String 0&quot;</span><span class="p">;</span>   <span class="c1">// &quot;String 0&quot; etc are strings to store - change to suit.</span>
-</span><span class='line'><span class="kt">char</span> <span class="n">string_1</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;String 1&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="kt">char</span> <span class="n">string_2</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;String 2&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="kt">char</span> <span class="n">string_3</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;String 3&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="kt">char</span> <span class="n">string_4</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;String 4&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="kt">char</span> <span class="n">string_5</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;String 5&quot;</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Then set up a table to refer to your strings.</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">string_table</span><span class="p">[]</span> <span class="o">=</span>      <span class="c1">// change &quot;string_table&quot; name to suit</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">string_0</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_1</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_2</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_3</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_4</span><span class="p">,</span>
-</span><span class='line'>  <span class="n">string_5</span> <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="mi">30</span><span class="p">];</span>    <span class="c1">// make sure this is large enough for the largest string it must hold</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>           
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>            
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="cm">/* Using the string table in program memory requires the use of special functions to retrieve the data.</span>
-</span><span class='line'><span class="cm">     The strcpy_P function copies a string from program space to a string in RAM (&quot;buffer&quot;). </span>
-</span><span class='line'><span class="cm">     Make sure your receiving string in RAM  is large enough to hold whatever</span>
-</span><span class='line'><span class="cm">     you are retrieving from program space. */</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="c1">//strcpy_P(buffer, (char*)pgm_read_word(&amp;(string_table[i]))); // Necessary casts and dereferencing, just copy. </span>
-</span><span class='line'>    <span class="n">strcpy</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)(</span><span class="o">&amp;</span><span class="p">(</span><span class="n">string_table</span><span class="p">[</span><span class="n">i</span><span class="p">])));</span> <span class="c1">// Necessary casts and dereferencing, just copy. </span>
-</span><span class='line'>    <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span> <span class="n">buffer</span> <span class="p">);</span>
-</span><span class='line'>    <span class="n">delay</span><span class="p">(</span> <span class="mi">500</span> <span class="p">);</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then the size would be:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">avr</span><span class="o">-</span><span class="n">size</span> <span class="o">-</span><span class="n">C</span> <span class="o">--</span><span class="n">mcu</span><span class="o">=</span><span class="n">atmega328p</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">build7485065177781002113</span><span class="p">.</span><span class="n">tmp</span><span class="o">/</span><span class="n">sketch_oct29c</span><span class="p">.</span><span class="n">cpp</span><span class="p">.</span><span class="n">elf</span>
-</span><span class='line'><span class="n">AVR</span> <span class="n">Memory</span> <span class="n">Usage</span>
-</span><span class='line'><span class="o">----------------</span>
-</span><span class='line'><span class="nl">Device</span><span class="p">:</span> <span class="n">atmega328p</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Program</span><span class="p">:</span>    <span class="mi">2320</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">7.1</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">text</span> <span class="o">+</span> <span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bootloader</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="nl">Data</span><span class="p">:</span>        <span class="mi">291</span> <span class="n">bytes</span> <span class="p">(</span><span class="mf">14.2</span><span class="o">%</span> <span class="n">Full</span><span class="p">)</span>
-</span><span class='line'><span class="p">(.</span><span class="n">data</span> <span class="o">+</span> <span class="p">.</span><span class="n">bss</span> <span class="o">+</span> <span class="p">.</span><span class="n">noinit</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Performance</h3>
-
-<p>Use Arduino for test the performance of Arduino:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;Arduino performance test begins now.&quot;</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'><span class="k">extern</span> <span class="k">volatile</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">timer0_millis</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-</span><span class='line'>  <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">stop_time</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="n">stop_time</span><span class="o">=</span> <span class="n">millis</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1000</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="n">timer0_millis</span> <span class="o">&lt;</span><span class="n">stop_time</span><span class="p">)</span> <span class="n">i</span><span class="o">++</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">print</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot; loops in one second.&quot;</span><span class="p">);</span>
-</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The result from the serial port:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Arduino</span> <span class="n">performance</span> <span class="n">test</span> <span class="n">begins</span> <span class="n">now</span><span class="p">.</span>
-</span><span class='line'><span class="mi">836912</span> <span class="n">loops</span> <span class="n">in</span> <span class="n">one</span> <span class="n">second</span><span class="p">.</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Test for digitalwrite():</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="n">timer0_millis</span> <span class="o">&lt;</span><span class="n">stop_time</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">i</span><span class="o">++</span><span class="p">;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Output:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Arduino</span> <span class="n">performance</span> <span class="n">test</span> <span class="n">begins</span> <span class="n">now</span><span class="p">.</span>
-</span><span class='line'><span class="mi">111198</span> <span class="n">loops</span> <span class="n">in</span> <span class="n">one</span> <span class="n">second</span><span class="p">.</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If we change the functionality into:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="n">timer0_millis</span> <span class="o">&lt;</span><span class="n">stop_time</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="c1">//digitalWrite(13, HIGH);</span>
-</span><span class='line'>    <span class="c1">//digitalWrite(13, LOW);</span>
-</span><span class='line'>    <span class="n">bitSet</span><span class="p">(</span><span class="n">PORTB</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">bitClear</span><span class="p">(</span><span class="n">PORTB</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>
-</span><span class='line'>    <span class="n">i</span><span class="o">++</span><span class="p">;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then the performance result will be:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">Arduino</span> <span class="n">performance</span> <span class="n">test</span> <span class="n">begins</span> <span class="n">now</span><span class="p">.</span>
-</span><span class='line'><span class="mi">691362</span> <span class="n">loops</span> <span class="n">in</span> <span class="n">one</span> <span class="n">second</span><span class="p">.</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Slow Down CPU</h3>
-
-<p>We change the prescale clock frequency, thus we could get a power-saving mode, which will consume less power.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* Slow down the avr cpu speed*/</span>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;Normal serial communiation at 9600 bps&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="n">noInterrupts</span><span class="p">();</span>  <span class="c1">//disable interrupts temporarily</span>
-</span><span class='line'>  <span class="n">CLKPR</span> <span class="o">=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">CLKPCE</span><span class="p">;</span>  <span class="c1">// enable clock prescaler write sequence</span>
-</span><span class='line'>  <span class="n">CLKPR</span> <span class="o">=</span> <span class="mi">8</span><span class="p">;</span>  <span class="c1">// 62,500(0.0625MHZ), comparing to 16, 000, 000(16MHZ)</span>
-</span><span class='line'>  <span class="n">interrupts</span><span class="p">();</span>  <span class="c1">//re-enable interrupts</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>  <span class="c1">//LED is on</span>
-</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>  <span class="c1">//0.01 second delay</span>
-</span><span class='line'>  <span class="n">digitalWrite</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>  <span class="c1">// LED is off</span>
-</span><span class='line'>  <span class="n">delay</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Let CPU sleep</h3>
-
-<p>Via set_sleep_mode() and sleep_mode() we could let CPU sleep for power-saving.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* putting CPU into sleep */</span>
-</span><span class='line'><span class="cp">#include &lt;avr/sleep.h&gt;</span>
-</span><span class='line'><span class="k">extern</span> <span class="k">volatile</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">timer0_millis</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">setup</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="n">pinMode</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="n">OUTPUT</span><span class="p">);</span>   <span class="c1">// an LED is attached to D13</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">begin</span><span class="p">(</span><span class="mi">9600</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kt">void</span> <span class="nf">loop</span><span class="p">()</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="n">timer0_millis</span><span class="o">&lt;</span><span class="mi">1000</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="n">set_sleep_mode</span><span class="p">(</span><span class="n">SLEEP_MODE_IDLE</span><span class="p">);</span>  <span class="c1">// select &quot;lightly napping &quot;</span>
-</span><span class='line'>    <span class="n">sleep_mode</span><span class="p">();</span>  <span class="c1">// go to sleep</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="n">timer0_millis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>   <span class="c1">// reset millisecond counter</span>
-</span><span class='line'>  <span class="n">bitSet</span><span class="p">(</span><span class="n">PINB</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>    <span class="c1">// toggle LED</span>
-</span><span class='line'>  <span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="s">&quot;I am waked!&quot;</span><span class="p">);</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/28">&larr; Older</a>
@@ -2476,6 +1615,10 @@ Now the partition should be:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/22/cloudmonkey-issue/">CloudMonkey Issue</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/17/netscaler-vpxchu-shi-hua-pei-zhi/">NetScaler VPX初始化配置</a>
       </li>
     
@@ -2489,10 +1632,6 @@ Now the partition should be:</p>
     
       <li class="post">
         <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-2/">用Graphite呈现广州空气质量(2)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/15/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang/">用Graphite呈现广州空气质量</a>
       </li>
     
   </ul>
