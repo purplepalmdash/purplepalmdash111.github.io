@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="安装Identity服务 首先创建keystone所需数据库: 1
+  <meta name="description" content="Image Service 用于提供给用户用于快速启动虚拟机的镜像文件，这样的服务称为glance服务。 Glance服务数据库设定 在mysql中创建glance数据库: 1
 2
 3
 4
@@ -32,9 +32,7 @@
 21
 22
 23
-24
-root@JunoController:~# mysql -u root -p
-Enter password &hellip;">
+24 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -90,6 +88,415 @@ Enter password &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/">安装Icehouse@Ubuntu14.04(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-13T16:54:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:54 pm</span></time>
+        
+         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Image Service 用于提供给用户用于快速启动虚拟机的镜像文件，这样的服务称为glance服务。</p>
+
+<h3>Glance服务数据库设定</h3>
+
+<p>在mysql中创建glance数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 33
+</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE glance;
+</span><span class='line'>Query OK, 1 row affected (0.01 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxx'
+</span><span class='line'>    -&gt; ;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>创建Glance的user/role/tenant权限</h3>
+
+<p>用admin的权限，创建以下权限：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  source ~/openstack/admin-openrc.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建glance用户:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-create --name glance --pass engine
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |                                  |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | c706febbcc8843fb97383c9fdfba6214 |
+</span><span class='line'>|   name   |              glance              |
+</span><span class='line'>| username |              glance              |
+</span><span class='line'>+----------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>用户glance属于admin角色，使用service tanant:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>keystone user-role-add --user glance --tenant service --role admin
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在keystone注册glance服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name glance --type image --description "OpenStack Image Service"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |     OpenStack Image Service      |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 3d52d2992b9f423eb9868304e4405fab |
+</span><span class='line'>|     name    |              glance              |
+</span><span class='line'>|     type    |              image               |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在keystone创建服务的end-point:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://10.17.17.211:9292 --internalurl http://10.17.17.211:9292 --adminurl http://10.17.17.211:9292 --region regionOne
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   adminurl  |     http://10.17.17.211:9292     |
+</span><span class='line'>|      id     | f44400bebc07408d8e0f4e70a0d18475 |
+</span><span class='line'>| internalurl |     http://10.17.17.211:9292     |
+</span><span class='line'>|  publicurl  |     http://10.17.17.211:9292     |
+</span><span class='line'>|    region   |            regionOne             |
+</span><span class='line'>|  service_id | 3d52d2992b9f423eb9868304e4405fab |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>安装Glance服务</h3>
+
+<p>安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get -y install glance python-glanceclient
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/glance/glance-api.conf
+</span><span class='line'>[database]
+</span><span class='line'># sqlite_db = /var/lib/glance/glance.sqlite
+</span><span class='line'>backend = sqlalchemy
+</span><span class='line'>connection = mysql://glance:engine@10.17.17.211/glance
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>auth_uri = http://10.17.17.211:5000
+</span><span class='line'>auth_host = 10.17.17.211
+</span><span class='line'>auth_port = 35357
+</span><span class='line'>auth_protocol = http
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = engine
+</span><span class='line'>#  vim /etc/glance/glance-registry.conf
+</span><span class='line'>[database]
+</span><span class='line'># The file name to use with SQLite (string value)
+</span><span class='line'>#sqlite_db = /var/lib/glance/glance.sqlite
+</span><span class='line'>backend = sqlalchemy
+</span><span class='line'>connection = mysql://glance:engine@10.17.17.211/glance
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>auth_uri = http://10.17.17.211:5000
+</span><span class='line'>auth_host = 10.17.17.211
+</span><span class='line'>auth_port = 35357
+</span><span class='line'>auth_protocol = http
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = engine
+</span><span class='line'># rm -f /var/lib/glance/glance.sqlite
+</span><span class='line'># su -s /bin/sh -c "glance-manage db_sync" glance
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里会碰到一个问题，解决方案如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# su -s /bin/sh -c "glance-manage db_sync" glance
+</span><span class='line'>2015-04-13 17:20:22.637 9455 CRITICAL glance [-] ValueError: Tables "migrate_version" have non utf8 collation, please make sure all tables are CHARSET=utf8
+</span><span class='line'>
+</span><span class='line'>root@JunoController:~# mysql -u root -p glance
+</span><span class='line'>Enter password: 
+</span><span class='line'>Reading table information for completion of table and column names
+</span><span class='line'>You can turn off this feature to get a quicker startup with -A
+</span><span class='line'>
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 29
+</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [glance]&gt; alter table migrate_version convert to character set utf8 collate utf8_unicode_ci;
+</span><span class='line'>Query OK, 1 row affected (0.09 sec)                
+</span><span class='line'>Records: 1  Duplicates: 0  Warnings: 0
+</span><span class='line'>
+</span><span class='line'>MariaDB [glance]&gt; flush privileges;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [glance]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启服务，</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service glance-registry restart
+</span><span class='line'>root@JunoController:~# service glance-api restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>验证Glance服务</h3>
+
+<p>首先下载镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://cdn.download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建Glance可见镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># glance image-create --name "cirros-0.3.3-x86_64" --file cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
+</span><span class='line'>[=============================&gt;] 100%
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| Property         | Value                                |
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
+</span><span class='line'>| container_format | bare                                 |
+</span><span class='line'>| created_at       | 2015-04-13T09:27:54                  |
+</span><span class='line'>| deleted          | False                                |
+</span><span class='line'>| deleted_at       | None                                 |
+</span><span class='line'>| disk_format      | qcow2                                |
+</span><span class='line'>| id               | 68f14900-8b25-4329-ad56-8fbd497c6812 |
+</span><span class='line'>| is_public        | True                                 |
+</span><span class='line'>| min_disk         | 0                                    |
+</span><span class='line'>| min_ram          | 0                                    |
+</span><span class='line'>| name             | cirros-0.3.3-x86_64                  |
+</span><span class='line'>| owner            | ea1f0a6b15dc4796958f087c38756ed1     |
+</span><span class='line'>| protected        | False                                |
+</span><span class='line'>| size             | 13200896                             |
+</span><span class='line'>| status           | active                               |
+</span><span class='line'>| updated_at       | 2015-04-13T09:27:54                  |
+</span><span class='line'>| virtual_size     | None                                 |
+</span><span class='line'>+------------------+--------------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>检查镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# ls /var/lib/glance/images/
+</span><span class='line'>68f14900-8b25-4329-ad56-8fbd497c6812
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>列出可用镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# glance image-list
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>好了，现在glance服务可以使用了，接下来将创建compute节点和网络节点。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2299,148 +2706,6 @@ Problem is lxc template download is too time-wasting, thus I have to manually do
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/23/deploy-local-service-using-juju/">Deploy Local Service Using Juju</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-23T09:11:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2015</span></span> <span class='time'>9:11 am</span></time>
-        
-         | <a href="/blog/2015/03/23/deploy-local-service-using-juju/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since the OpenContrail deploy is using local deployment, that means, directly deploy to local machine. But the lab lack of the environment of the local ubuntu based machine, so I want to deploy a service to local first, then transform the whole project from local deployment to MAAS deployment. <br/>
-In a Ubuntu14.04 machine, do following steps.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo add-apt-repository ppa:juju/stable 
-</span><span class='line'>$ sudo vim /etc/apt/source.list
-</span><span class='line'># This is for juju
-</span><span class='line'>deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-</span><span class='line'>deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-</span><span class='line'>$ sudo apt-get install juju juju-core juju-local juju-quickstart
-</span><span class='line'>$ sudo apt-get install charm-tools
-</span><span class='line'>$ sudo apt-get install uvtool-libvirt uvtool
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the juju for using local:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/juju/plugins.git ~/.juju-plugins
-</span><span class='line'>$ vim ~/.zshrc
-</span><span class='line'># Add juju_plugins to global path
-</span><span class='line'>PATH=$PATH:$HOME/.juju-plugin
-</span><span class='line'>$ source ~/.zshrc
-</span><span class='line'>$ juju init
-</span><span class='line'>$ vim ~/.juju/environments.yaml
-</span><span class='line'>local:
-</span><span class='line'> type: local
-</span><span class='line'>
-</span><span class='line'> # &lt;Commented Section&gt;
-</span><span class='line'>
-</span><span class='line'> # The default series to deploy the state-server and charms on.
-</span><span class='line'> #
-</span><span class='line'> default-series: precise
-</span><span class='line'> #
-</span><span class='line'> ## ** add these lines to support KVM and LXC deployment **
-</span><span class='line'> lxc-use-clone: true
-</span><span class='line'> container: kvm
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start the machine via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju bootstrap --debug
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the machines via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$  juju set-constraints mem=512M
-</span><span class='line'>[Trusty@~]$  juju add-machine --constraints "root-disk=16G mem=1G"
-</span><span class='line'>created machine 1
-</span><span class='line'>[Trusty@~]$ juju status
-</span><span class='line'>environment: local
-</span><span class='line'>machines:
-</span><span class='line'>  "0":
-</span><span class='line'>    agent-state: started
-</span><span class='line'>    agent-version: 1.21.3.1
-</span><span class='line'>    dns-name: localhost
-</span><span class='line'>    instance-id: localhost
-</span><span class='line'>    series: trusty
-</span><span class='line'>    state-server-member-status: has-vote
-</span><span class='line'>  "1":
-</span><span class='line'>    instance-id: pending
-</span><span class='line'>    series: precise
-</span><span class='line'>services: {}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After a long wait, it will boot a machine which have 1G and 1 Core, and let it running.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/17">&larr; Older</a>
@@ -2458,6 +2723,10 @@ In a Ubuntu14.04 machine, do following steps.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/23/elastistoryu-cloudstackji-cheng/">ElastiStor与CloudStack集成</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/22/cloudmonkey-issue/">CloudMonkey Issue</a>
       </li>
     
@@ -2471,10 +2740,6 @@ In a Ubuntu14.04 machine, do following steps.</p>
     
       <li class="post">
         <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-3/">用Graphite呈现广州空气质量(3)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-2/">用Graphite呈现广州空气质量(2)</a>
       </li>
     
   </ul>

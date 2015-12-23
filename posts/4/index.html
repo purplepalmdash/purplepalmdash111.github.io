@@ -9,15 +9,9 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="USB Ethernet Insert the USB Ethernet Dongle into the Ubuntu14.04, it will be automatically
-recognized and initialized. 1
-2
-3
-4
-5
-6
-7
-$ dmesg | tail [ &hellip;">
+  <meta name="description" content="目的 主要涉及到CloudStack的网络模型，最近在搭建一个环境时有诸多不了解，索性开始做实
+验，在虚拟机里验证虚拟机的网络模型。 环境准备 内存 16G 的嵌套虚拟机一台，安装Ubuntu 14.04 x86_64版本。 安装完毕后，开启桌
+面环境Xubuntu，及安装virt- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -73,6 +67,186 @@ $ dmesg | tail [ &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/10/17/tips-on-setting-virtual-machine-networking/">Tips on Setting Virtual Machine Networking</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-10-17T08:11:29+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:11 am</span></time>
+        
+         | <a href="/blog/2015/10/17/tips-on-setting-virtual-machine-networking/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>目的</h3>
+
+<p>主要涉及到CloudStack的网络模型，最近在搭建一个环境时有诸多不了解，索性开始做实
+验，在虚拟机里验证虚拟机的网络模型。</p>
+
+<h3>环境准备</h3>
+
+<p>内存 16G 的嵌套虚拟机一台，安装<code>Ubuntu 14.04 x86_64</code>版本。 安装完毕后，开启桌
+面环境Xubuntu，及安装virt-manager等常用的管理虚拟机的组件。</p>
+
+<p>网络配置如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/network/interfaces
+</span><span class='line'>    # The loopback network interface
+</span><span class='line'>    auto lo
+</span><span class='line'>    iface lo inet loopback
+</span><span class='line'>    
+</span><span class='line'>    # The primary network interface
+</span><span class='line'>    auto eth0
+</span><span class='line'>    iface eth0 inet manual
+</span><span class='line'>    
+</span><span class='line'>    auto br0
+</span><span class='line'>    iface br0 inet dhcp
+</span><span class='line'>    bridge_ports eth0
+</span><span class='line'>    
+</span><span class='line'>    auto isolationbr
+</span><span class='line'>    iface isolationbr inet static
+</span><span class='line'>    bridge_ports none
+</span><span class='line'>    bridge_fd 5
+</span><span class='line'>    bridge_stp off
+</span><span class='line'>    bridge_maxwait 1
+</span><span class='line'>    address 172.16.0.1
+</span><span class='line'>    netmask 255.255.0.0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里我们将eth0桥接到br0，并建立一个物理上隔绝的网桥isolationbr, 手动配置其地址
+为172.16.0.1/16。</p>
+
+<p>开启嵌套虚拟机的内核包转发功能:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/sysctl.conf
+</span><span class='line'>net.ipv4.ip_forward=1
+</span><span class='line'># sysctl -w net.ipv4.ip_forward=1
+</span><span class='line'># reboot</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启后验证内核包转发功能:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat /proc/sys/net/ipv4/ip_forward 
+</span><span class='line'>1
+</span><span class='line'># sysctl -p
+</span><span class='line'>net.ipv4.ip_forward = 1</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>验证网桥1</h3>
+
+<p>用已经创建好的qcow2文件创建一台虚拟机，选择网络配置如下：</p>
+
+<p><img src="/images/2015_10_17_08_47_08_808x488.jpg" alt="/images/2015_10_17_08_47_08_808x488.jpg" /></p>
+
+<p>注意我们将虚拟机的第一块网卡桥接到我们刚才创建的isolationbr网桥上，当然这时候
+虚拟机启动时是没有IP地址的，我们手动配置如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/network/interfaces
+</span><span class='line'>    # The primary network interface
+</span><span class='line'>    auto eth0
+</span><span class='line'>    iface eth0 inet static
+</span><span class='line'>    address 172.16.0.2
+</span><span class='line'>    netmask 255.255.0.0
+</span><span class='line'>    gateway 172.16.0.1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动虚拟机后，我们可以ping通嵌套虚拟机<code>172.16.0.1</code>但是无法ping通局域网内其
+他机器。</p>
+
+<h3>验证转发</h3>
+
+<p>在嵌套虚拟机上，打开iptables的转发规则即可实现创建出的虚拟机与Internet的连接:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -t nat -A POSTROUTING -s 172.16.0.0/16 ! -d 172.16.0.0/16 -j
+</span><span class='line'>MASQUERADE</span></code></pre></td></tr></table></div></figure>
+
+
+<p>虚拟机上，ping外网地址:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ping 223.5.5.5
+</span><span class='line'>PING 223.5.5.5 (223.5.5.5) 56(84) bytes of data.
+</span><span class='line'>64 bytes from 223.5.5.5: icmp_seq=1 ttl=50 time=37.1 ms
+</span><span class='line'>64 bytes from 223.5.5.5: icmp_seq=2 ttl=50 time=35.4 ms
+</span><span class='line'>64 bytes from 223.5.5.5: icmp_seq=3 ttl=50 time=35.6 ms</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>存储转发规则</h3>
+
+<p>Ubuntu14.04可以用下列命令将iptables设置的规则永久保存，每次开机启动:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables-save&gt;/etc/iptables.rules
+</span><span class='line'># vim /etc/network/interfaces
+</span><span class='line'>  pre-up iptables-restore &lt; /etc/iptables.rules</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这样在重启宿主机后，我们设置的转发规则依然生效。</p>
+
+<p>如果需要动态配置IP地址，则启动嵌套虚拟机端的dhcpd或者dnsmasq服务即可。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2381,7 +2555,17 @@ $ exit</p>
 
 <h1>update-rc.d tomcat6 disable</h1>
 
-<p>```</p>
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>
+</span><span class='line'>### 66. Quickly get the alive IP
+</span><span class='line'>Using nmap and grep we could get the alive IP lists:    
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>$ nmap -v -sn 10.47.58.0/24 | grep &ldquo;up&rdquo; -B1
+```</p>
 </div>
   
   
@@ -2748,43 +2932,6 @@ $ exit</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/10/09/20151009bei-zhu/">20151009备注</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-10-09T22:21:11+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:21 pm</span></time>
-        
-         | <a href="/blog/2015/10/09/20151009bei-zhu/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Mirantis</h3>
-
-<p>定时任务，更新Mirantis镜像</p>
-
-<h3>Autossh Issue</h3>
-
-<p>取远端服务器上的某个值，若该值为真，则临时建立反向链接。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/5">&larr; Older</a>
@@ -2802,6 +2949,10 @@ $ exit</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/23/elastistoryu-cloudstackji-cheng/">ElastiStor与CloudStack集成</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/22/cloudmonkey-issue/">CloudMonkey Issue</a>
       </li>
     
@@ -2815,10 +2966,6 @@ $ exit</p>
     
       <li class="post">
         <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-3/">用Graphite呈现广州空气质量(3)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-2/">用Graphite呈现广州空气质量(2)</a>
       </li>
     
   </ul>
