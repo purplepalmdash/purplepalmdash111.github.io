@@ -9,8 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Mirantis 定时任务，更新Mirantis镜像 Autossh Issue 取远端服务器上的某个值，若该值为真，则临时建立反向链接。
-">
+  <meta name="description" content="参考 主要参考了 http://huang-wei.github.io/programming/2013/12/23/run-cloud-init-in-local-kvm.html 这里主要记录的是操作步骤。 介绍 红帽介绍: Cloud-Init 是一个用来自动配置虚拟机的初始设置（如主机名， &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -66,6 +65,213 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/10/12/tips-on-cloud-init/">Tips on Cloud-Init</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-10-12T10:50:53+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:50 am</span></time>
+        
+         | <a href="/blog/2015/10/12/tips-on-cloud-init/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>参考</h3>
+
+<p>主要参考了  <br/>
+<a href="http://huang-wei.github.io/programming/2013/12/23/run-cloud-init-in-local-kvm.html">http://huang-wei.github.io/programming/2013/12/23/run-cloud-init-in-local-kvm.html</a></p>
+
+<p>这里主要记录的是操作步骤。</p>
+
+<h3>介绍</h3>
+
+<p>红帽介绍:   <br/>
+ Cloud-Init 是一个用来自动配置虚拟机的初始设置（如主机名，网卡和密钥）的工具。它可以在
+使用模板部署虚拟机时使用，从而达到避免网络冲突的目的。   <br/>
+在使用这个工具前，cloud-init 软件包必须在虚拟机上被安装。安装后，Cloud-Init 服务会在系
+统启动时搜索如何配置系统的信息。您可以使用只运行一次窗口来提供只需要配置一次的设置信息
+；或在 新建虚拟机、编辑虚拟机和编辑模板窗口中输入虚拟机每次启动都需要的配置信息。</p>
+
+<h3>cloud-init安装</h3>
+
+<p>Ubuntu 14.04上可以通过以下命令来安装cloud-init:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ apt-cache search cloud-utils
+</span><span class='line'>cloud-utils - metapackage for installation of upstream cloud-utils source
+</span><span class='line'>$ sudo apt-get install cloud-utils</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>镜像准备</h3>
+
+<p>在<a href="http://cloud-images.ubuntu.com/releases/">http://cloud-images.ubuntu.com/releases/</a>
+可以找到Ubuntu制作的ubuntu cloud image, image分版本, 这里使用14.04的image。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://cloud-images.ubuntu.com/releases/14.04.3/
+</span><span class='line'>release-20151008/ubuntu-14.04-server-cloudimg-amd64-disk1.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>取回来后的镜像可以直接使用，但解压开后读取速度会更快:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img convert -O qcow2 ubuntu-14.04-server-cloudimg-amd64-disk1.img my_vm.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>对比两个镜像大小可以看到:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img info ubuntu-14.04-server-cloudimg-amd64-disk1.img 
+</span><span class='line'>image: ubuntu-14.04-server-cloudimg-amd64-disk1.img
+</span><span class='line'>file format: qcow2
+</span><span class='line'>virtual size: 2.2G (2361393152 bytes)
+</span><span class='line'>disk size: 246M
+</span><span class='line'>cluster_size: 65536
+</span><span class='line'>Format specific information:
+</span><span class='line'>    compat: 0.10
+</span><span class='line'>$ qemu-img info my_vm.img 
+</span><span class='line'>image: my_vm.img
+</span><span class='line'>file format: qcow2
+</span><span class='line'>virtual size: 2.2G (2361393152 bytes)
+</span><span class='line'>disk size: 903M
+</span><span class='line'>cluster_size: 65536
+</span><span class='line'>Format specific information:
+</span><span class='line'>    compat: 1.1
+</span><span class='line'>    lazy refcounts: false</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>配置脚本内容</h3>
+
+<p>my-user-data内容:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat my-user-data
+</span><span class='line'>#cloud-config
+</span><span class='line'>password: xxxxxx
+</span><span class='line'>chpasswd: { expire: False }
+</span><span class='line'>ssh_pwauth: True
+</span><span class='line'>
+</span><span class='line'>ssh_authorized_keys:
+</span><span class='line'> - ssh-rsa xxxxxx
+</span><span class='line'>
+</span><span class='line'>timezone: Asia/Chongqing</span></code></pre></td></tr></table></div></figure>
+
+
+<p>通过my-user-data生成img文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cloud-localds my-seed.img my-user-data</span></code></pre></td></tr></table></div></figure>
+
+
+<p>由之前的my_vm.img和my-seed.img文件启动虚拟机:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512</span></code></pre></td></tr></table></div></figure>
+
+
+<p>通过qemu的窗口或者ssh登录系统: <code>ssh -p 2222 ubuntu@localhost</code>.</p>
+
+<h3>引入meta-data</h3>
+
+<p>meta-data的内容与虚拟机的实例相关，只用来做初始化，虚拟机实例运行完一次以后就不需要修改
+。但如果要引入更新，则重建一下instance-id即可。</p>
+
+<p>更新my-meta-data文件内容:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ echo "instance-id: $(uuidgen || echo i-abcdefg)" &gt; my-meta-data</span></code></pre></td></tr></table></div></figure>
+
+
+<p>由my-meta-data和my-user-data生成my-seed.img文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cloud-localds my-seed.img my-user-data my-meta-data</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动虚拟机:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512
+</span><span class='line'>$ kvm -net nic -net user,hostfwd=tcp::2222-:22 -hda my_vm.img -hdb my-seed.img -m 512</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>其他初始化行为</h3>
+
+<p>需要初始化的脚本:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat hello_world.sh 
+</span><span class='line'>#!/bin/bash
+</span><span class='line'>echo "hello world!" &gt;&gt; /home/ubuntu/test</span></code></pre></td></tr></table></div></figure>
+
+
+<p>将初始化脚本和cloud config data合并:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ write-mime-multipart
+</span><span class='line'>--output=combined-userdata.txt hello_world.sh:text/x-shellscript my-user-data</span></code></pre></td></tr></table></div></figure>
+
+
+<p>由生成的combined-userdata.txt生成my-seed.img:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ echo "instance-id: $(uuidgen || echo i-abcdefg)" &gt; my-meta-data
+</span><span class='line'>$ cloud-localds my-seed.img combined-userdata.txt my-meta-data</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启后即可得到更新后的系统镜像.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1161,333 +1367,6 @@ see following partition configuration in the terminal:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/08/25/enable-trusty-kickstart-for-spacewalk/">Enable Trusty KickStart for SpaceWalk</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-08-25T16:06:17+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:06 pm</span></time>
-        
-         | <a href="/blog/2015/08/25/enable-trusty-kickstart-for-spacewalk/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Import distro-tree</h3>
-
-<p>Copy iso content into the distro-tree:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mount -t  iso9660 -o loop /mnt/iso/ubuntu-14.04.3-server-amd64.iso /mnt1/
-</span><span class='line'># mkdir /var/distro-trees/ubuntu-14.04.3-amd64
-</span><span class='line'># chmod 755 /var/distro-trees/ubuntu-14.04.3-amd64/
-</span><span class='line'># cp -ar /mnt1/* /var/distro-trees/ubuntu-14.04.3-amd64/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We will copy the pxeboot startup file from CentOS7 into ubuntu14.04 distro tree for
-cheating the spacewalk:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mount -t iso9660 -o loop /mnt/iso/CentOS-7-x86_64-Everything-1503-01.iso /mnt2/
-</span><span class='line'># mkdir -p /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/
-</span><span class='line'># cp /mnt2/images/pxeboot/{initrd.img,vmlinuz} /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/
-</span><span class='line'># ls /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/ -l -h
-</span><span class='line'>....</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Kickstarting</h3>
-
-<p>Now in spacewalk go to Systems->Kickstart->Distributions, with the parameters like
-following picture:</p>
-
-<p><img src="/images/2015_08_25_16_17_53_595x352.jpg" alt="/images/2015_08_25_16_17_53_595x352.jpg" />  <br/>
-We copy the CentOS Kernel and initrd, so Spacewalk use redhat parameters for this
-distribution, later we will fix this.</p>
-
-<p>Now create a profile via go to Systems->Kickstart->Profiles and &ldquo;upload a new kickstart
-file&rdquo;, just like following picture.</p>
-
-<p><img src="/images/2015_08_25_16_22_53_617x590.jpg" alt="/images/2015_08_25_16_22_53_617x590.jpg" /></p>
-
-<p>We fix the hardcoded breed from redhat to ubuntu via following steps:</p>
-
-<p>Get the list info via <code>cobbler list</code>:</p>
-
-<p><img src="/images/2015_08_25_16_27_12_515x205.jpg" alt="/images/2015_08_25_16_27_12_515x205.jpg" /></p>
-
-<p>Report the selected distro info:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cobbler distro report --name=trustyamd64:1:SpacewalkDefaultOrganization</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p><img src="/images/2015_08_25_16_28_48_990x256.jpg" alt="/images/2015_08_25_16_28_48_990x256.jpg" /></p>
-
-<p>Edit it like following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cobbler distro edit --name trustyamd64:1:SpacewalkDefaultOrganization --breed=ubuntu --os-version=jaunty --initrd=/var/distro-trees/ubuntu-14.04.3-amd64/install/netboot/ubuntu-installer/amd64/initrd.gz --kernel=/var/distro-trees/ubuntu-14.04.3-amd64/install/vmlinuz </span></code></pre></td></tr></table></div></figure>
-
-
-<p>We should notice the initrd file and kernel has been modified!!!</p>
-
-<p><img src="/images/2015_08_25_16_32_24_933x261.jpg" alt="/images/2015_08_25_16_32_24_933x261.jpg" /></p>
-
-<p>Now edit the <code>/var/lib/tftpboot/pxelinux.cfg/default</code> file, find the item and modify it like following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>LABEL trustykickstart:1:SpacewalkDefaultOrganization
-</span><span class='line'>        kernel /images/trustyamd64:1:SpacewalkDefaultOrganization/vmlinuz
-</span><span class='line'>        MENU LABEL trustykickstart:1:SpacewalkDefaultOrganization
-</span><span class='line'>        append initrd=/images/trustyamd64:1:SpacewalkDefaultOrganization/initrd.gz  ks=http://192.168.0.79/trustykickstart.cfg ksdevice=eth0 --
-</span><span class='line'>        ipappend 2</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could kickstart your ubuntu trusty now.</p>
-
-<h3>Register to SpaceWalk</h3>
-
-<p>First create a key under spacewalk for activating all of the trusty clients:  <br/>
-<img src="/images/2015_08_26_11_10_35_378x489.jpg" alt="/images/2015_08_26_11_10_35_378x489.jpg" /></p>
-
-<p>Register the client via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install apt-transport-spacewalk rhnsd
-</span><span class='line'># vim /usr/lib/python2.7/xmlrpclib.py
-</span><span class='line'>    def dump_nil (self, value, write):
-</span><span class='line'>    - if not self.allow_none:
-</span><span class='line'>    - raise TypeError, "cannot marshal None unless allow_none is enabled"
-</span><span class='line'>    +# if not self.allow_none:
-</span><span class='line'>    +# raise TypeError, "cannot marshal None unless allow_none is enabled"
-</span><span class='line'># apt-get install python-libxml2
-</span><span class='line'># mkdir /var/lock/subsys
-</span><span class='line'># vim /etc/hosts
-</span><span class='line'>10.11.11.3      spacewalk
-</span><span class='line'># rhnreg_ks --activationkey=1-trustyamd64 --serverUrl=http://spacewalk/XMLRPC
-</span><span class='line'>Warning: unable to enable rhnsd with chkconfig</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Register to the main channel:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /etc/apt/sources.list.d/spacewalk.list
-</span><span class='line'>deb spacewalk://spacewalk channels: main
-</span><span class='line'># apt-get update</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Added more software channels in the spacewalk web.</p>
-
-<p><img src="/images/2015_08_26_11_22_13_607x454.jpg" alt="/images/2015_08_26_11_22_13_607x454.jpg" /></p>
-
-<p>Update it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get update && apt-get update
-</span><span class='line'>Apt-Spacewalk: Updating sources.list
-</span><span class='line'>WARNING:root:could not open file '/etc/apt/sources.list'
-</span><span class='line'>
-</span><span class='line'>Ign spacewalk://spacewalk channels: InRelease
-</span><span class='line'>Ign spacewalk://spacewalk channels: Release.gpg
-</span><span class='line'>Ign spacewalk://spacewalk channels: Release
-</span><span class='line'>Ign spacewalk://spacewalk channels:/main amd64 Packages/DiffIndex
-</span><span class='line'>Ign spacewalk://spacewalk channels:/main i386 Packages/DiffIndex
-</span><span class='line'>Get:1 spacewalk://spacewalk channels:/trusty-amd64-updates amd64 Packages [829 kB]
-</span><span class='line'>Get:2 spacewalk://spacewalk channels:/trusty-amd64-backports amd64 Packages [5,177 B]
-</span><span class='line'>Get:3 spacewalk://spacewalk channels:/trusty-amd64-security amd64 Packages [437 kB]
-</span><span class='line'>Get:4 spacewalk://spacewalk channels:/trusty-amd64-updates i386 Packages [829 kB]
-</span><span class='line'>Get:5 spacewalk://spacewalk channels:/trusty-amd64-backports i386 Packages [5,177 B]
-</span><span class='line'>Get:6 spacewalk://spacewalk channels:/trusty-amd64-security i386 Packages [437 kB]
-</span><span class='line'>Get:7 spacewalk://spacewalk channels:/main amd64 Packages [2,017 kB]
-</span><span class='line'>Get:8 spacewalk://spacewalk channels:/main i386 Packages [2,017 kB]
-</span><span class='line'>Ign spacewalk://spacewalk channels:/main Translation-en_US
-</span><span class='line'>Ign spacewalk://spacewalk channels:/main Translation-en
-</span><span class='line'>Ign spacewalk://spacewalk channels:/trusty-amd64-backports Translation-en_US
-</span><span class='line'>Ign spacewalk://spacewalk channels:/trusty-amd64-backports Translation-en
-</span><span class='line'>Ign spacewalk://spacewalk channels:/trusty-amd64-security Translation-en_US
-</span><span class='line'>Ign spacewalk://spacewalk channels:/trusty-amd64-security Translation-en
-</span><span class='line'>Ign spacewalk://spacewalk channels:/trusty-amd64-updates Translation-en_US
-</span><span class='line'>Ign spacewalk://spacewalk channels:/trusty-amd64-updates Translation-en
-</span><span class='line'>Fetched 6,577 kB in 1s (5,320 kB/s)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Met many problems, perhaps the repository error.</p>
-
-<p>Fix Bug, In spacewalk server, change following items:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@spacewalk trusty-ia32]# cat Packages | grep -i "Package: python$" -A2
-</span><span class='line'>Package: python
-</span><span class='line'>Version: 2.7.5-5ubuntu3
-</span><span class='line'>Multi-Arch: allowed
-</span><span class='line'>[root@spacewalk trusty-ia32]# cat Packages | grep -i "Package: python3$" -A2
-</span><span class='line'>Package: python3
-</span><span class='line'>Version: 3.4.0-0ubuntu2
-</span><span class='line'>Multi-Arch: allowed
-</span><span class='line'>[root@spacewalk trusty-ia32]# pwd
-</span><span class='line'>/var/cache/rhn/repodata/trusty-ia32</span></code></pre></td></tr></table></div></figure>
-
-
-<p>And regenerate the Packages.gz via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># rm -f Packages.gz
-</span><span class='line'># gzip -c Packages Packages.gz</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now re-install firefox you won&rsquo;t meet problem.</p>
-
-<h3>Enable &ldquo;Push&rdquo;</h3>
-
-<p>Install the packages, precise&rsquo;s package will also be OK for trusty.</p>
-
-<p>Notice, the Trusty could use saucy based deb.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/rhncfg_5.10.14-1ubuntu1%7Esaucy2_all.deb
-</span><span class='line'>$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/osad_5.11.27-1ubuntu1%7Esaucy5_all.deb
-</span><span class='line'>$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/pyjabber_0.5.0-1.4ubuntu3%7Esaucy1_all.deb
-</span><span class='line'>$ sudo dpkg -i osad_5.11.27-1ubuntu1~saucy5_all.deb
-</span><span class='line'>$ sudo dpkg -i pyjabber_0.5.0-1.4ubuntu3~saucy1_all.deb</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Import the certification file and modify the osad&rsquo;s certification file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd /usr/share/rhn
-</span><span class='line'># wget http://spacewalk.example.com/pub/RHN-ORG-TRUSTED-SSL-CERT
-</span><span class='line'># vim /etc/sysconfig/rhn/up2date
-</span><span class='line'>sslCACert=/usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
-</span><span class='line'># vim /etc/sysconfig/rhn/osad.conf
-</span><span class='line'>osa_ssl_cert = /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
-</span><span class='line'># service osad start
-</span><span class='line'># update-rc.d osad defaults
-</span><span class='line'># reboot</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If you encounter problem, check the version of the osad/pyjabber, remove the precise
-version and install saucy version on Trusty via <code>dpkg -P osad &amp;&amp; dpkg -P pyjabber</code>,
-install the right version, then everything will becomes OK.</p>
-
-<h3>Enable Remote Command</h3>
-
-<p>Install and Configure it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># dpkg -i rhncfg_5.10.14-1ubuntu1~saucy2_all.deb 
-</span><span class='line'># rhn-actions-control --enable-run
-</span><span class='line'># mkdir /var/spool/rhn</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Also add configuration:   <br/>
-<img src="/images/2015_08_27_15_09_31_375x346.jpg" alt="/images/2015_08_27_15_09_31_375x346.jpg" /></p>
-
-<p>Now you could run command in spacewalk backend.</p>
-
-<h3>Errata</h3>
-
-<p>Following the tips on <a href="http://cefs.steve-meier.de/">http://cefs.steve-meier.de/</a>  <br/>
-Import erratas into the system.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ./errata-import.pl --server spacewalk --errata ./errata.latest.xml  --rhsa-oval \
-</span><span class='line'>./com.redhat.rhsa-all.xml --channel centos6-i386 --os-version 6 --publish</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/6">&larr; Older</a>
@@ -1505,6 +1384,10 @@ Import erratas into the system.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/25/ji-cheng-elastistordao-cloudstackzhong/">集成elastistor到CloudStack中</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/23/elastistoryu-cloudstackji-cheng/">ElastiStor与CloudStack集成</a>
       </li>
     
@@ -1518,10 +1401,6 @@ Import erratas into the system.</p>
     
       <li class="post">
         <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-4/">用Graphite呈现广州空气质量(4)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-3/">用Graphite呈现广州空气质量(3)</a>
       </li>
     
   </ul>

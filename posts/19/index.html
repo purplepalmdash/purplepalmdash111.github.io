@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested &hellip;">
+  <meta name="description" content="Since I want to use bridge network in libvirt, while the standard bridge networking is not available for me to use, so following tips is for creating &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,216 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/02/15/libvirt-network-configuration/">Libvirt Network Configuration</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-02-15T22:52:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>15</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:52 pm</span></time>
+        
+         | <a href="/blog/2015/02/15/libvirt-network-configuration/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Since I want to use bridge network in libvirt, while the standard bridge networking is not available for me to use, so following tips is for creating and managing the networking.</p>
+
+<h3>Enable Bridge</h3>
+
+<p>In host machine(OpenSuse), create bridge via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo brctl addbr br0
+</span><span class='line'>$ sudo brctl addif br0 eth0 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will add eth0 to bridge 0, while in startup file of OpenSuse we will do following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
+</span><span class='line'>/etc/sysconfig/network
+</span><span class='line'># cat ifcfg-eth0 
+</span><span class='line'>BOOTPROTO='static'
+</span><span class='line'>STARTMODE='ifplugd'
+</span><span class='line'>IFPLUGD_PRIORITY='1'
+</span><span class='line'>NAME='RTL8111/8168B PCI Express Gigabit Ethernet controller'
+</span><span class='line'>USERCONTROL='no' 
+</span><span class='line'># cat ifcfg-br0 
+</span><span class='line'>BOOTPROTO='static'
+</span><span class='line'>STARTMODE='auto'
+</span><span class='line'>IPADDR='192.168.0.xxx/24'
+</span><span class='line'>NAME='Bridge For Virtualization'
+</span><span class='line'>BRIDGE='yes'
+</span><span class='line'>BRIDGE_PORTS='eth0'
+</span><span class='line'>BRIDGE_FORWARDDELAY='0'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So next time reboot you will see br0 hold the address of <code>192.168.0.xxx</code>, this is the bridge port we have.</p>
+
+<h3>Virtual Machine Configuration</h3>
+
+<p>First list all of the virtual machine we have</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo virsh list --all
+</span><span class='line'> Id    Name                           State
+</span><span class='line'>----------------------------------------------------
+</span><span class='line'> 2     Ubuntu12043                    running
+</span><span class='line'> -     OpenContrail                   shut off
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the one we want to edit via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo virsh edit Ubuntu12043
+</span><span class='line'>    &lt;interface type='bridge'&gt;
+</span><span class='line'>      &lt;mac address='24:42:53:21:52:49'/&gt;
+</span><span class='line'>      &lt;source bridge='br0'/&gt;
+</span><span class='line'>      &lt;model type='virtio'/&gt;
+</span><span class='line'>      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
+</span><span class='line'>    &lt;/interface&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So next time when you boot-up the machine, it will have the physical network which connecting to br0.</p>
+
+<h3>Configure route</h3>
+
+<p>In virtual machine, give the fixed ip address via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo ifconfig eth0 192.168.188.188
+</span><span class='line'>$ sudo ip route add 192.168.0.0/24 dev eth0
+</span><span class='line'>$ sudo route add default gw 192.168.0.xxx
+</span><span class='line'>$ sudo route -n
+</span><span class='line'>Destination     Gateway         Genmask         Flags Metric Ref    Use Iface                                                                 
+</span><span class='line'>0.0.0.0         192.168.0.119   0.0.0.0         UG    0      0        0 eth0                                                                  
+</span><span class='line'>192.168.0.0     0.0.0.0         255.255.255.0   U     0      0        0 eth0                                                                  
+</span><span class='line'>192.168.188.0   0.0.0.0         255.255.255.0   U     0      0        0 eth0   
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We want make it permanent via:  <br/>
+First make the permanent ip address:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># cat /etc/network/interfaces 
+</span><span class='line'># This file describes the network interfaces available on your system
+</span><span class='line'># and how to activate them. For more information, see interfaces(5).
+</span><span class='line'>
+</span><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>        address 192.168.188.188
+</span><span class='line'>        netmask 255.255.255.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Second we want to configure the route:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ tail  /etc/rc.local
+</span><span class='line'>ip route add 192.168.0.0/24 dev eth0
+</span><span class='line'>route add default gw 192.168.0.xxx
+</span><span class='line'>echo "nameserver 114.114.114.114"&gt;&gt;/etc/resolv.conf
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will set the route and the default gateway of your device, also the nameserver will be set.   <br/>
+But while in the host machine, you will add following iptables rules:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># ip route add 192.168.188.0/24 dev br0
+</span><span class='line'># iptables -t nat -A POSTROUTING -s 192.168.188.0/24 -j SNAT --to 192.168.0.xxx
+</span><span class='line'># iptables -A FORWARD -s 192.168.188.188 -j ACCEPT
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The iptables rules should be saved via <code>iptables-save</code>, while the route rules should be added into following file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$  cat /etc/rc.d/after.local 
+</span><span class='line'>ip route add 192.168.188.0/24 dev br0                
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now reboot the host machine, you route configuration will be saved.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1075,37 +1285,6 @@ More and more.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/31/try-opencontrail-in-ubuntu/">Try OpenContrail in Ubuntu</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-31T23:36:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>31</span><span class='date-suffix'>st</span>, <span class='date-year'>2015</span></span> <span class='time'>11:36 pm</span></time>
-        
-         | <a href="/blog/2015/01/31/try-opencontrail-in-ubuntu/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>To be write</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/20">&larr; Older</a>
@@ -1123,6 +1302,10 @@ More and more.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/12/25/ji-cheng-elastistordao-cloudstackzhong/">集成elastistor到CloudStack中</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/23/elastistoryu-cloudstackji-cheng/">ElastiStor与CloudStack集成</a>
       </li>
     
@@ -1136,10 +1319,6 @@ More and more.</p>
     
       <li class="post">
         <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-4/">用Graphite呈现广州空气质量(4)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/16/yong-graphitecheng-xian-yan-zhou-kong-qi-zhi-liang-3/">用Graphite呈现广州空气质量(3)</a>
       </li>
     
   </ul>
