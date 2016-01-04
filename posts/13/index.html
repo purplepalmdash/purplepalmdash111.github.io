@@ -9,13 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Get the existing subnet: 1
-2
-3
-4
-5
-6
-root@Controller:~# neutron subnet-list &hellip;">
+  <meta name="description" content="Following article records all of the steps for using chef for deploying OpenStack. Refers to: http://ehaselwanter.com/en/blog/2014/10/15/deploying- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -71,6 +65,617 @@ root@Controller:~# neutron subnet-list &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/06/01/chef-for-deploying-openstack/">Chef for Deploying OpenStack</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-06-01T11:19:34+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2015</span></span> <span class='time'>11:19 am</span></time>
+        
+         | <a href="/blog/2015/06/01/chef-for-deploying-openstack/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Following article records all of the steps for using chef for deploying OpenStack.</p>
+
+<p>Refers to:  <br/>
+<a href="http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/">http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/</a></p>
+
+<h3>Change vbox files</h3>
+
+<p>Edit the Vagrantfile for bring up the vbox, then startup the machine, modify its content , save it.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim Vagrantfile
+</span><span class='line'>    # -*- mode: ruby -*-
+</span><span class='line'>    # vi: set ft=ruby :
+</span><span class='line'>    Vagrant::Config.run do |config|
+</span><span class='line'>    config.vm.box = "Trusy64"
+</span><span class='line'>    config.vm.box_url = "http://xxx.xxx.xxx.xxx/opscode_ubuntu-14.04_chef-provisionerless.box"
+</span><span class='line'>    config.vm.customize ["modifyvm", :id, "--memory", 1024]
+</span><span class='line'>    end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+Login to the running machine and modify its default repository from official to local repository.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant up
+</span><span class='line'>$ vagrant ssh
+</span><span class='line'>(YourVagrantMachine) $ sudo vim /etc/apt/sources.list
+</span><span class='line'>(YourVagrantMachine) $ sudo vim /etc/apt/apt.conf
+</span><span class='line'>(YourVagrantMachine) $ sudo apt-get update && sudo apt-get -y upgrade</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now save your modification to the vbox file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant package --base vagrant_default_1433130468275_38998
+</span><span class='line'>$ ls
+</span><span class='line'>package.box Vagrantfile</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Setup Chef Code</h3>
+
+<p>First install the vagrant plugins via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant plugin install vagrant-berkshelf
+</span><span class='line'>$ vagrant plugin install vagrant-chef-zero
+</span><span class='line'>$ vagrant plugin install vagrant-omnibus
+</span><span class='line'>$ vagrant plugin list</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Get the repository from github, modify the file <code>vagrant_linux.rb</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[xxxx@~/Code/Chef/MasterVersion]$ git clone https://github.com/stackforge/openstack-chef-repo.git
+</span><span class='line'>$ cd openstack-chef-repo
+</span><span class='line'>$ vim vagrant_linux.rb
+</span><span class='line'>  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_centos-7.1_chef-provisionerless.box'
+</span><span class='line'>  url 'http://xxx.xxx.xxx.xxx/opscode_centos-7.1_chef-provisionerless.box'
+</span><span class='line'>
+</span><span class='line'>  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_ubuntu-14.04_chef-provisionerless.box'
+</span><span class='line'>  url 'http://xxx.xxx.xxx.xxx/package.box'
+</span><span class='line'>
+</span><span class='line'>  'vm.box' =&gt; 'ubuntu14'</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Download all of the cookbooks, and modify the rubygems.org to Chinese mirror, Thanks for the fucking GreatFW!:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ chef exec rake berks_vendor
+</span><span class='line'>$ cp -r cookbooks cookbooks.back
+</span><span class='line'>$ cd cookbooks
+</span><span class='line'>$ find . -type f -exec sed -i -e 's/https:\/\/rubygems.org/http:\/\/mirrors.aliyun.com\/rubygems/g' {} \; </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the ruby definition file for avoiding <code>Chef encountered an error attempting to load the node data for "controller"</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim ./aio-neutron.rb
+</span><span class='line'>machine 'controller' do
+</span><span class='line'>  add_machine_options vagrant_config: controller_config
+</span><span class='line'>+  chef_server( :chef_server_url =&gt; 'http://localhost:8889')
+</span><span class='line'>  role 'allinone-compute'
+</span><span class='line'>  role 'os-image-upload'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>One Cookbook needs to modify, because it will automatically use source from <code>rubygems.org</code>, Thanks again for the fucking GreatFW!:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd cookbooks
+</span><span class='line'>$ vim ./mysql2_chef_gem/libraries/provider_mysql2_chef_gem_mysql.rb
+</span><span class='line'>             options("--clear-sources --source http://mirrors.aliyun.com/rubygems/gems/mysql2-0.3.18.gem") 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now begin to provision via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ chef exec rake aio_neutron 2&gt;&1 | tee aio_neutron.txt</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After installation and configuration, you could visit following URL for your OpenStack:</p>
+
+<p><a href="https://127.0.0.1:9443">https://127.0.0.1:9443</a></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/26/chef-setup/">Chef Setup</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-05-26T16:17:14+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:17 pm</span></time>
+        
+         | <a href="/blog/2015/05/26/chef-setup/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>For automatically deploying OpenStack, I use Chef for deployment, following records the steps for setting up the whole environment.</p>
+
+<h3>Machine Preparation</h3>
+
+<p>Chef Server: 2-Core, 3G Memory, IP address: xxx.xxx.10.211, Ubuntu14.04.  <br/>
+Chef Workstation: 4-Core, 8G Memory, a physical machine, IP address: xxx.xxx.0.119, Ubuntu14.04.</p>
+
+<h3>Install Server</h3>
+
+<p>Install the chef-server package, which downloaded from chef.io website, after installation, simply reconfigure it, this finishes the installation and configuration.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dpkg -i chef-server-core_12.0.8-1_amd64.deb
+</span><span class='line'>$ sudo chef-server-ctl reconfigure</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Configure the permit file, also create the user and organization for the chef:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># sudo chef-server-ctl user-crate YourName FirstName LastName Email PassWord --filename YourPermitFileName
+</span><span class='line'>$ sudo chef-server-ctl user-create youname YYYXXX Man xxxxxxx@163.com YOURPASSWORD --filename ~/youname.pem
+</span><span class='line'># sudo chef-server-ctl org-create YourOrgName Your Company Name  --association_user YourUser --filename  YourOrgnizationPermitFile
+</span><span class='line'>$ sudo chef-server-ctl org-create youname YYYXXX Software, Inc. --association_user youname --filename ~/youname_org.pem</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install opscode-manager and reconfigure it via following commands:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dpkg -i opscode-manage_1.13.0-1_amd64.deb 
+</span><span class='line'>$ sudo opscode-manage-ctl reconfigure</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now visit the webiste to see the Chef Server UI.</p>
+
+<p><a href="https://YourURL">https://YourURL</a></p>
+
+<p><img src="/images/2015_05_26_16_44_58_610x297.jpg" alt="/images/2015_05_26_16_44_58_610x297.jpg" /></p>
+
+<h3>Chef Workstation</h3>
+
+<p>I use the physical machine for Chef Workstation.</p>
+
+<p>Install it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dpkg -i chef_12.3.0-1_amd64.deb</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Fetch back the chef repository from github, configure it and add the ignore directory:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/opscode/chef-repo.git
+</span><span class='line'>$ cd chef-repo 
+</span><span class='line'>$ mkdir .chef
+</span><span class='line'>$ echo ".chef"&gt;&gt;~/chef-repo/.gitignore
+</span><span class='line'>$ git add .
+</span><span class='line'>$ git commit -m "Exclude the ./.chef directory from version control"
+</span><span class='line'>[master 64515ff] Exclude the ./.chef directory from version control
+</span><span class='line'> 1 file changed, 1 insertion(+)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install the chefdk, and verify the chef, you should see all of the components OK, then you could continue for next step:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dpkg -i chefdk_0.6.0-1_amd64.deb 
+</span><span class='line'>$ chef verify</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Transfer all of the pem file from the ChefServer to ChefWorkstation, and put them under the folder of ~/chef-repo/.chef:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ scp xxx@xxxxx:/home/xxx/*.pem xxxx@ChefWorkstation:/home/xxxx/chef-repo/.chef</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add following item under the Workstation&rsquo;s configuration:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/hosts
+</span><span class='line'>XXX.xxx.xxx.xxx  ChefServer</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now configure the knife.rb and let your authentification be verified.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim ~/chef-repo/.chef/knife.rb
+</span><span class='line'>current_dir = File.dirname(__FILE__)
+</span><span class='line'>log_level                :info
+</span><span class='line'>log_location             STDOUT
+</span><span class='line'>node_name                "xxxxxxxxx"
+</span><span class='line'>client_key               "#{current_dir}/xxxxxxxxx.pem"
+</span><span class='line'>validation_client_name   "xxxxxxxxx_org"
+</span><span class='line'>validation_key           "#{current_dir}/xxxxxxxxx_org.pem"
+</span><span class='line'>chef_server_url          "https://ChefServer/organizations/xxxxxxxxx"
+</span><span class='line'>syntax_check_cache_path  "#{ENV['HOME']}/.chef/syntaxcache"
+</span><span class='line'>cookbook_path            ["#{current_dir}/../cookbooks"]
+</span><span class='line'>$ knife ssl fetch
+</span><span class='line'>WARNING: Certificates from ChefServer will be fetched and placed in your trusted_cert
+</span><span class='line'>directory (/home/dash/chef-repo/.chef/trusted_certs).
+</span><span class='line'>
+</span><span class='line'>Knife has no means to verify these are the correct certificates. You should
+</span><span class='line'>verify the authenticity of these certificates after downloading.
+</span><span class='line'>
+</span><span class='line'>Adding certificate for ChefServer in /home/xxxx/chef-repo/.chef/trusted_certs/ChefServer.crt
+</span><span class='line'>$ knife ssl check
+</span><span class='line'>Connecting to host ChefServer:443
+</span><span class='line'>Successfully verified certificates from `ChefServer'</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Check how many clients has been added into the ChefServer, currently only one,</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ knife client list
+</span><span class='line'>xxxxxx-validator</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Added Nodes</h3>
+
+<p>In Client1, Install the</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo dpkg -i chef_12.3.0-1_amd64.deb </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the pem files to every nodes:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># knife bootstrap Client1 -x xxxxxx -P XXXXXXXXXXXXX --sudo</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If above steps fail, you should manually specify the ssl verification.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># scp Server/xxx.pem /home/xxxxx
+</span><span class='line'># cp /home/xxxx/xxx.pem /etc/chef/validation.pem
+</span><span class='line'># sudo chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /etc/chef/validation.pem
+</span><span class='line'>##### OR
+</span><span class='line'>#  sudo chef-client -l debug -S https://ChefServer/organizations/xxxxx  -K /home/xxxx/xxxxx.pem</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>Bootstrap again:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># knife bootstrap Client1  -N ChefClient1 -x xxxxx -P xxxxxx --sudo --use-sudo-password</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After bootstrap success, list all of the client:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@ChefWorkstation:~/chef-repo# knife client list
+</span><span class='line'>ChefClient1                                                                                                                                
+</span><span class='line'>xxxx-validator </span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Using Cookbook</h3>
+
+<p>Create the Cookbook named <code>nginx</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@ChefWorkstation:~# cd chef-repo/
+</span><span class='line'>root@ChefWorkstation:~/chef-repo# ls
+</span><span class='line'>chefignore  cookbooks  data_bags  environments  LICENSE  README.md  roles
+</span><span class='line'>root@ChefWorkstation:~/chef-repo# knife cookbook create nginx
+</span><span class='line'>oot@ChefWorkstation:~/chef-repo/cookbooks/nginx# ls
+</span><span class='line'>attributes  CHANGELOG.md  definitions  files  libraries  metadata.rb  providers  README.md  recipes  resources  templates</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the cookbook:</p>
+
+<p>Enable the installation:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim recipes/default.rb
+</span><span class='line'>package 'nginx' do
+</span><span class='line'>  action :install
+</span><span class='line'>end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Enable check the status:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>service 'nginx' do
+</span><span class='line'>  action [ :enable, :start ]
+</span><span class='line'>end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the index.html file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cookbook_file "/usr/share/nginx/html/index.html" do
+</span><span class='line'>  source "index.html"
+</span><span class='line'>  mode "0644"
+</span><span class='line'>end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Prepare the default index.html file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd ~/chef-repo/cookbooks/nginx/files/default
+</span><span class='line'>$ vim index.html
+</span><span class='line'>&lt;html&gt;
+</span><span class='line'>  &lt;head&gt;
+</span><span class='line'>    &lt;title&gt;Hello there&lt;/title&gt;
+</span><span class='line'>  &lt;/head&gt;
+</span><span class='line'>  &lt;body&gt;
+</span><span class='line'>    &lt;h1&gt;This is a test&lt;/h1&gt;
+</span><span class='line'>    &lt;p&gt;Please work!&lt;/p&gt;
+</span><span class='line'>  &lt;/body&gt;
+</span><span class='line'>&lt;/html&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Since the nginx need apt-get to achive the latest status, add another package named apt:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>knife cookbook create apt</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the default rb file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vim ~/chef-repo/cookbooks/apt/recipes/default.rb
+</span><span class='line'>execute "apt-get update" do
+</span><span class='line'>  command "apt-get update"
+</span><span class='line'>end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the default rb file of the nginx:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>+++ include_recipe "apt"
+</span><span class='line'>
+</span><span class='line'>package 'nginx' do
+</span><span class='line'>  action :install
+</span><span class='line'>end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Also add it to the metadata.rb file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim ~/chef-repo/cookbooks/nginx/metadata.rb
+</span><span class='line'>
+</span><span class='line'>long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
+</span><span class='line'>version          '0.1.0'
+</span><span class='line'>
+</span><span class='line'>+++  depends "apt"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add Cookbook to your nodes:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>knife cookbook upload apt
+</span><span class='line'>knife cookbook upload nginx</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>knife cookbook upload -a</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the specified node:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>knife node edit name_of_node
+</span><span class='line'>
+</span><span class='line'>{
+</span><span class='line'>  "name": "client1",
+</span><span class='line'>  "chef_environment": "_default",
+</span><span class='line'>  "normal": {
+</span><span class='line'>    "tags": [
+</span><span class='line'>
+</span><span class='line'>    ]
+</span><span class='line'>  },
+</span><span class='line'>  "run_list": [
+</span><span class='line'>
+</span><span class='line'>+++ "recipe[name_of_recipe1]", 
+</span><span class='line'>+++ "recipe[name_of_recipe2]" 
+</span><span class='line'>
+</span><span class='line'>  ]
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In every want-to-deploy nodes, run:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo chef-client</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Use  Market</h3>
+
+<p>Download and use the knife</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ knife cookbook site download learn_chef_apache2
+</span><span class='line'>$ tar xzvf learn_chef_apache2-0.2.1.tar.gz -C cookbooks/
+</span><span class='line'>$ knife cookbook  upload -a </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Besure to edit the node&rsquo;s recipes.</p>
+
+<p>Two tips:</p>
+
+<p>Remove the cookbook from the server&rsquo;s list:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># knife cookbook delete learn_chef_apache2 0.2.1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Directly remove the recipe from the node:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># knife node run_list remove ChefClient1 recipe[nginx]
+</span><span class='line'># knife node run_list remove ChefClient1 recipe[eclipse]</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3095,409 +3700,6 @@ Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/20/setup-centos6-slash-7-local-repository/">Setup CentOS6/7 Local Repository</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-20T11:32:56+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:32 am</span></time>
-        
-         | <a href="/blog/2015/05/20/setup-centos6-slash-7-local-repository/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>For speeding up the deployment, I have to setup the local repository for CentOS6/7, following is the steps for setting up such two repositories.  <br/>
-The steps are followed by following URL:  <br/>
-<a href="https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror">https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror</a></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd /etc/yum.repos.d/
-</span><span class='line'># curl -O https://copr.fedoraproject.org/coprs/baurzhanm/mrepo/repo/epel-6/baurzhanm-mrepo-epel-6.repo
-</span><span class='line'># vim baurzhanm-mrepo-epel-6.repo
-</span><span class='line'># yum update
-</span><span class='line'># yum -y install screen lftp httpd mrepo
-</span><span class='line'># vim mrepo.conf
-</span><span class='line'>    ### Configuration file for mrepo
-</span><span class='line'>    
-</span><span class='line'>    ### The [main] section allows to override mrepo's default settings
-</span><span class='line'>    ### The mrepo-example.conf gives an overview of all the possible settings
-</span><span class='line'>    [main]
-</span><span class='line'>    srcdir = /var/mrepo
-</span><span class='line'>    wwwdir = /var/www/mrepo
-</span><span class='line'>    confdir = /etc/mrepo.conf.d
-</span><span class='line'>    arch = x86_64
-</span><span class='line'>    
-</span><span class='line'>    mailto = root@localhost
-</span><span class='line'>    smtp-server = localhost
-</span><span class='line'>    
-</span><span class='line'>    #rhnlogin = username:password
-</span><span class='line'>    
-</span><span class='line'>    ### Any other section is considered a definition for a distribution
-</span><span class='line'>    ### You can put distribution sections in /etc/mrepo.conf.d/
-</span><span class='line'>    ### Examples can be found in the documentation at:
-</span><span class='line'>    ###     /usr/share/doc/mrepo-0.8.9/dists/.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the configuration files for CentOS 6:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim  /etc/mrepo.conf.d/centos6.conf
-</span><span class='line'>[centos6]
-</span><span class='line'>name = CentOS $release ($arch)
-</span><span class='line'>release = 6
-</span><span class='line'>arch = x86_64
-</span><span class='line'>metadata = yum repomd
-</span><span class='line'>
-</span><span class='line'>#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-6.6-x86_64-bin-DVD?.iso
-</span><span class='line'>#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-</span><span class='line'>#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-</span><span class='line'>extras = http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/
-</span><span class='line'>epel = http://mirrors.aliyun.com/epel/$release/$arch/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add configuraiton files for CentOS 7:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim  /etc/mrepo.conf.d/centos7.conf
-</span><span class='line'>[centos7]
-</span><span class='line'>name = CentOS $release ($arch)
-</span><span class='line'>release = 7
-</span><span class='line'>arch = x86_64
-</span><span class='line'>metadata = yum repomd
-</span><span class='line'>
-</span><span class='line'>#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-7.0-1406-x86_64-DVD.iso
-</span><span class='line'>#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-</span><span class='line'>#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-</span><span class='line'>#epel = http://mirrors.aliyun.com/epel/$release/$arch/
-</span><span class='line'>extra=http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use following comands for initial sync, it will take a very~long~long~long time.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mrepo -g -u -vvv [centos6|centos7]</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After syncing, add definition into the apache&rsquo;s configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vi /etc/httpd/conf.d/mrepo.conf
-</span><span class='line'>--- ADD ---
-</span><span class='line'>AddDescription "CentOS 6 for x86" centos6-i386
-</span><span class='line'>AddDescription "CentOS 6 for x86_64" centos6-x86_64
-</span><span class='line'>AddDescription "CentOS 7 for x86" centos7-i386
-</span><span class='line'>AddDescription "CentOS 7 for x86_64" centos7-x86_64
-</span><span class='line'>--- ADD ---
-</span><span class='line'># Add repofile for CentOS 6 mirror
-</span><span class='line'>cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos6-x86_64/CentOS-local-http.repo 
-</span><span class='line'>#
-</span><span class='line'># CentOS-local-http.repo
-</span><span class='line'>#
-</span><span class='line'> 
-</span><span class='line'>[0-base]
-</span><span class='line'>name=CentOS-local-base
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.os/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'> 
-</span><span class='line'>[0-updates]
-</span><span class='line'>name=CentOS-local-updates
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.updates/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'>EOF
-</span><span class='line'> 
-</span><span class='line'># Add repofile for CentOS 7 mirror
-</span><span class='line'>cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos7-x86_64/CentOS-local-http.repo 
-</span><span class='line'>#
-</span><span class='line'># CentOS-local-http.repo
-</span><span class='line'>#
-</span><span class='line'> 
-</span><span class='line'>[0-base]
-</span><span class='line'>name=CentOS-local-base
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.os/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'> 
-</span><span class='line'>[0-updates]
-</span><span class='line'>name=CentOS-local-updates
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.updates/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'>EOF
-</span><span class='line'> 
-</span><span class='line'># chkconfig httpd on
-</span><span class='line'># service httpd restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>mrepo for CentOS6.5</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:/home/juju/mrepo]# cat /etc/mrepo.conf.d/centos6.5.conf  
-</span><span class='line'>### URL: http://www.centos.org/
-</span><span class='line'> 
-</span><span class='line'>[centos6.5]
-</span><span class='line'>name = CentOS $release ($arch)
-</span><span class='line'>release = 6.5
-</span><span class='line'>arch = x86_64
-</span><span class='line'>metadata = yum repomd
-</span><span class='line'>
-</span><span class='line'>os=http://vault.centos.org/$release/os/$arch/Packages/
-</span><span class='line'>updates=http://vault.centos.org/$release/updates/$arch/Packages/
-</span><span class='line'>extras=http://vault.centos.org/$release/extras/$arch/Packages/
-</span><span class='line'>centosplus=http://vault.centos.org/$release/centosplus/$arch/Packages/
-</span><span class='line'>fasttrack=http://vault.centos.org/$release/fasttrack/$arch/Packages/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>sync the repository via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mrepo -g -u -vvv centos6.5</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/19/setup-local-repository/">Setup Local Repository</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-19T11:57:19+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>19</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:57 am</span></time>
-        
-         | <a href="/blog/2015/05/19/setup-local-repository/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Ubuntu</h3>
-
-<p>After using apt-mirror syncing all of the packages from the repository website, setup a ftp site:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install -y proftpd
-</span><span class='line'># cat conf.d/anonymous.conf 
-</span><span class='line'>&lt;Anonymous ~ftp&gt;
-</span><span class='line'>   User                    ftp
-</span><span class='line'>   Group                nogroup
-</span><span class='line'>   UserAlias         anonymous ftp
-</span><span class='line'>   RequireValidShell        off
-</span><span class='line'>#   MaxClients                   10
-</span><span class='line'>   &lt;Directory *&gt;
-</span><span class='line'>     &lt;Limit WRITE&gt;
-</span><span class='line'>       DenyAll
-</span><span class='line'>     &lt;/Limit&gt;
-</span><span class='line'>   &lt;/Directory&gt;
-</span><span class='line'> &lt;/Anonymous&gt;
-</span><span class='line'>#  mount --bind /mnt/myrepo/mirror/mirrors.aliyun.com/ /srv/ftp/
-</span><span class='line'># service proftpd restart</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now Open your browser to <code>ftp://Your_URL/</code>, you will find the repository available.</p>
-
-<h3>CentOS Proftpd</h3>
-
-<p>Just remember the default directory is located at <code>/var/ftp</code>,</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y proftpd
-</span><span class='line'># mount --bind /mirror/mirrors.aliyun.com/ /var/ftp/
-</span><span class='line'># service proftpd restart</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Client Configuration</h3>
-
-<p>Replace the URL into your ftp url:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/apt/sources.list
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-security main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-updates main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-security main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-updates main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-proposed main restricted universe multiverse
-</span><span class='line'>deb-src ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiverse
-</span><span class='line'># apt-get update && apt-get upgrade </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using local repository will greately improve your development speed.</p>
-
-<h3>Use apache way(On CentOS6.6)</h3>
-
-<p>By using the symlinks and enable the httpd to start automatically at systemboot.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:/var/www]# cd html/
-</span><span class='line'>[root:/var/www/html]# ln /home/juju/myrepo/mirror/mirrors.aliyun.com/ubuntu -s
-</span><span class='line'>[root:/var/www/html]# chkconfig httpd on</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/14">&larr; Older</a>
@@ -3515,6 +3717,10 @@ The steps are followed by following URL:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/01/03/tips-on-veewee-and-vagrant/">Tips on Veewee and Vagrant</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/30/rtl-sdr-steps/">Rtl-sdr Steps</a>
       </li>
     
@@ -3530,10 +3736,6 @@ The steps are followed by following URL:  <br/>
         <a href="/blog/2015/12/28/re-scan-xenserver-nics/">Re-Scan XenServer NICs</a>
       </li>
     
-      <li class="post">
-        <a href="/blog/2015/12/27/on-virtualbox-virtualized-cs-env/">On Virtualbox Virtualized CS Env</a>
-      </li>
-    
   </ul>
 </section>
 
@@ -3547,7 +3749,7 @@ The steps are followed by following URL:  <br/>
     </div>
   </div>
   <footer role="contentinfo"><p>
-  Copyright &copy; 2015 - Dash -
+  Copyright &copy; 2016 - Dash -
   <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
 </p>
 
