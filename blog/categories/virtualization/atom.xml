@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-01-12T18:49:41+08:00</updated>
+  <updated>2016-01-14T20:25:58+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,44 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[CloudStack使用LXC要点]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/01/14/cloudstackshi-yong-lxcyao-dian/"/>
+    <updated>2016-01-14T19:41:03+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/01/14/cloudstackshi-yong-lxcyao-dian</id>
+    <content type="html"><![CDATA[<h3>先决条件</h3>
+
+<p>Cloudstack 4.6.0, Management Server搭建完毕, Agent包安装完毕.   <br/>
+具体的步骤可以参考KVM的安装.</p>
+
+<h3>Agent机器</h3>
+
+<p>设置hypervisor的类型为LXC模式:</p>
+
+<pre><code>$ vim /etc/cloudstack/agent/agent.properties
+ hypervisor.type=lxc
+$ service cloudstack-agent restart
+</code></pre>
+
+<h3>LXC系统虚拟机模板安装</h3>
+
+<p>在CloudStack Management节点上,运行以下命令安装系统虚拟机模板:</p>
+
+<pre><code>$ /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /mnt1 -u http://192.168.177.13/systemvm64template-4.6.0-kvm.qcow2.bz2 -h lxc -F
+</code></pre>
+
+<p>注意替换以上命令里的镜像下载地址及安装目录.</p>
+
+<h3>添加Zone</h3>
+
+<p>先添加一个基本的Zone,注意选择hypervisor为LXC.  <br/>
+添加一级/二级存储.  <br/>
+添加完毕后, enable zone后, 下载模板, 注意不要选择HVM的选项.</p>
+
+<p>到这里就可以开始创建实例了.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Install CloudStack Mgmt Server on CentOS7]]></title>
@@ -177,6 +215,27 @@ DEFROUTE=yes
 <p>Key-Step:</p>
 
 <p><a href="http://zooi.widodh.nl/cloudstack/build-dep/cloud-manageontap.jar">http://zooi.widodh.nl/cloudstack/build-dep/cloud-manageontap.jar</a></p>
+
+<h3>CentOS7 Isuse On CloudStack4.5.2</h3>
+
+<p>Could not start the service of cloudstack-management, then you should manually add one
+line in definition of the service file:</p>
+
+<pre><code>[root@csmgmt ~]# vim /usr/lib/systemd/system/cloudstack-management.service
+[Service]
++ PermissionsStartOnly=true
+[root@csmgmt ~]# systemctl daemon-reload
+[root@csmgmt ~]# service cloudstack-management start
+Redirecting to /bin/systemctl start  cloudstack-management.service
+[root@csmgmt ~]# netstat -anp | grep 8080
+tcp6       0      0 :::8080                 :::*                    LISTEN
+5665/java  
+</code></pre>
+
+<p>Another issue:</p>
+
+<pre><code>Could not load org.apache.commons.pool.impl.CursorableLinkedList$Cursor
+</code></pre>
 ]]></content>
   </entry>
   
@@ -288,302 +347,6 @@ under terminal.</p>
 <p>Now you could see the newly added NICs in openxenmanager:</p>
 
 <p><img src="/images/2015_12_28_15_27_30_779x232.jpg" alt="/images/2015_12_28_15_27_30_779x232.jpg" /></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[On Virtualbox Virtualized CS Env]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2015/12/27/on-virtualbox-virtualized-cs-env/"/>
-    <updated>2015-12-27T10:07:39+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2015/12/27/on-virtualbox-virtualized-cs-env</id>
-    <content type="html"><![CDATA[<p>Using Virtualbox for building the testing env of cloudstack together with
-elastistor.</p>
-
-<h3>Networking</h3>
-
-<p>Host-only 1: 192.168.56.1/24, no DHCP.   <br/>
-Host-only 2: 172.30.0.1/24, no DHCP.   <br/>
-Host-only 3: 10.10.100.1/24, no DHCP.</p>
-
-<h3>Virtual Machine</h3>
-
-<h4>Machine 1</h4>
-
-<p>For installing CentOS 6.7 based CloudStack 4.5.2.</p>
-
-<pre><code>name: csman
-Type: Linux
-Version: Red Hat(64-bit) 
-Memory: 4096 MB
-Create  a virtual hard drive now
-Choosing VDI
-Choose Dynamically allocated
-Select the size: adjusting to 80.00 GB
-Setting: 
-Adjust CPU Processor to 2
-Storage: Choosing CentOS6.7 DVD 1. 
-Controller: SATA, Choosing "Use Host I/O Cache", this will greatly improve the
-speed.
-Network, The Adpter 1, choosing NAT for default. 
-Click Start for installing.   
-Choosing Basic Server in installing, enable eth0 for dhcp.    
-</code></pre>
-
-<p>After installation, shutdown the VM, add the second adapter. <br/>
-Configure the newly-added eth1:</p>
-
-<pre><code># vim /etc/sysconfig/network-scripts/ifcfg-eth1 
-DEVICE=eth1
-TYPE=Ethernet
-IPADDR=192.168.56.11
-PREFIX=24
-ONBOOT=yes
-NM_CONTROLLED=no
-BOOTPROTO=none
-IPV4_FAILURE_FATAL=yes
-IPV6INIT=no
-NAME=MGMT
-</code></pre>
-
-<p>Shutdown the vm again , add the third adapter, Configure the newly-added eth2:</p>
-
-<pre><code>[root@csman ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth2 
-DEVICE=eth2
-TYPE=Ethernet
-IPADDR=172.30.0.11
-PREFIX=24
-ONBOOT=yes
-NM_CONTROLLED=no
-BOOTPROTO=none
-IPV4_FAILURE_FATAL=yes
-IPV6INIT=no
-NAME=PUBLIC
-</code></pre>
-
-<p>Shutdown the vm again ,this time add eth3, and configure it:</p>
-
-<pre><code>[root@csman ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth3
-DEVICE=eth3
-TYPE=Ethernet
-IPADDR=10.10.100.11
-PREFIX=24
-NAME=STOR
-BOOTPROTO=none
-ONBOOT=yes
-MTU=9000
-VLAN=yes
-USERCTL=no
-MTU=9000
-</code></pre>
-
-<p>Comparing to the guideline, eth3 didn&rsquo;t add vlan tagged networking.</p>
-
-<h4>Machine 2</h4>
-
-<p>For installing Xenserver, which will connected to above cloudstack management
-server.</p>
-
-<pre><code>name: XenServer
-Type: Linux
-Version: Red Hat(64-bit)
-Memory: 8192 MB(more than 3072 is OK)
-Create a virtual hard drive now
-Choosing VDI
-Choose Dynamically allocated
-Select the size: adjusting to 120.00 GB
-Setting: 
-Adjust CPU Processor to 4
-Storage: Choosing XenServer-6.2.0-install-cd.iso
-Controller: SATA, "Use Host I/O Cache"
-Audio: Disable
-Network: Adapter 1, choosing Host-only Adapter, Name choosing vboxnet,
-Advanced choosing Promiscuous Mode: allow all. 
-Click Start for installing.  
-Networking: 192.168.56.101/255.255.255.0, gateway,192.168.56.1
-Hostname: xenserver
-DNS Server 1: 180.76.76.76
-DNS Server 2: 223.5.5.5
-DNS Server 3: 8.8.8.8
-Timezone: Asia/Shanghai
-NTP Server 1: 3.cn.pool.ntp.org
-NTP Server 2: 3.asia.pool.ntp.org
-NTP Server 3: cn.ntp.org.cn
-</code></pre>
-
-<p>After installation, shutdown, and add a new adapter, scan it in XenCenter.</p>
-
-<h4>Machine 3</h4>
-
-<p>Windows 7, for installing xen desktop management tool. Which could attaches to
-host-only adatper 1, with a 192.168.56.0/24 address.</p>
-
-<h4>Machine 4</h4>
-
-<p>4G/2 Core, For installing the Elastistor.</p>
-
-<h4>CloudStack(Machine 1)</h4>
-
-<p>Selinux:</p>
-
-<pre><code># sed -i "/SELINUX=enforcing/ c\SELINUX=permissive" /etc/selinux/config
-</code></pre>
-
-<p>Hostname, change <code>/etc/hosts</code> file:</p>
-
-<pre><code>127.0.0.1 localhost localhost.cstack.local
-192.168.56.11 csman.cstack.local csman
-192.168.56.101 xenserver.cstack.local xenserver
-</code></pre>
-
-<p>NTP Installation:</p>
-
-<pre><code># yum install -y ntp
-# chkconfig ntpd on
-# service ntpd start
-</code></pre>
-
-<p>Install cloudstack/mysql:</p>
-
-<pre><code># yum install -y cloudstack-management mysql-server
-</code></pre>
-
-<p>NFS configuration:</p>
-
-<pre><code># mkdir /exports
-# mkdir -p /exports/primary
-# mkdir -p /exports/secondary
-# chmod 777 -R /exports
-# echo "/exports/primary 10.10.100.0/24(rw,async,no_root_squash)" &gt; /etc/exports
-# echo "/exports/secondary 10.10.100.0/24(rw,async,no_root_squash)" &gt;&gt; /etc/exports
-# exportfs -a
-</code></pre>
-
-<p>sysconfig for nfs:</p>
-
-<pre><code># sed -i -e '/#MOUNTD_NFS_V3="no"/ c\MOUNTD_NFS_V3="yes"' -e '/#RQUOTAD_PORT=875/ c\RQUOTAD_PORT=875' -e '/#LOCKD_TCPPORT=32803/ c\LOCKD_TCPPORT=32803' -e '/#LOCKD_UDPPORT=32769/ c\LOCKD_UDPPORT=32769' -e '/#MOUNTD_PORT=892/ c\MOUNTD_PORT=892' -e '/#STATD_PORT=662/ c\STATD_PORT=662' -e '/#STATD_OUTGOING_PORT=2020/ c\STATD_OUTGOING_PORT=2020' /etc/sysconfig/nfs
-</code></pre>
-
-<p>Iptables configuration:</p>
-
-<pre><code>sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 111 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 111 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 2049 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 2049 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 2020 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 32803 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 32769 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 892 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 892 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 875 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 875 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 662 -j ACCEPT" /etc/sysconfig/iptables
-sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 662 -j ACCEPT" /etc/sysconfig/iptables
-service iptables restart
-</code></pre>
-
-<p>nfs service:</p>
-
-<pre><code># chkconfig nfs on
-# service nfs start
-</code></pre>
-
-<p>MySQL Server Configuration:</p>
-
-<pre><code># sed -i -e '/datadir/ a\innodb_rollback_on_timeout=1' -e '/datadir/ a\innodb_lock_wait_timeout=600' -e '/datadir/ a\max_connections=350' -e '/datadir/ a\log-bin=mysql-bin' -e "/datadir/ a\binlog-format = 'ROW'" -e "/datadir/ a\bind-address = 0.0.0.0" /etc/my.cnf
-# chkconfig mysqld on
-# service mysqld start
-# mysql_secure_installation
-# mysql -u root -p  (enter password when prompted)
-mysql&gt; GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
-mysql&gt; quit
-</code></pre>
-
-<p>Setup Database:</p>
-
-<pre><code># cloudstack-setup-databases cloud:&lt;password&gt;@127.0.0.1 --deploy-as=root:&lt;password&gt;
-# cloudstack-setup-management
-</code></pre>
-
-<p>vhd-util:</p>
-
-<pre><code># cd /usr/share/cloudstack-common/scripts/vm/hypervisor/xenserver/
-# wget http://download.cloud.com.s3.amazonaws.com/tools/vhd-util
-# chmod 755 /usr/share/cloudstack-common/scripts/vm/hypervisor/xenserver/vhd-util
-</code></pre>
-
-<p>System VM template:</p>
-
-<pre><code># /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /exports/secondary/ -u http://192.168.177.13/systemvm64template-4.5-xen.vhd.bz2 -h xenserver -F
-</code></pre>
-
-<h3>Customization</h3>
-
-<p>Don&rsquo;t check hvm for xenserver:</p>
-
-<pre><code># mysql -p&lt;YOURPASSWORD&gt; cloud -e \ "INSERT INTO cloud.configuration (category, instance, component, name, value, description) VALUES ('Advanced', 'DEFAULT', 'management-server', 'xen.check.hvm', 'false', 'Shoud we allow only the XenServers support HVM');"
-</code></pre>
-
-<p>Install cloudstack-usage:</p>
-
-<pre><code># yum install cloudstack-usage -y
-# service cloudstack-usage start
-</code></pre>
-
-<p>Disable the HVM:</p>
-
-<pre><code># mysql -p&lt;password&gt; cloud -e \ "INSERT INTO cloud.configuration (category, instance, component, name, value, description) VALUES ('Advanced', 'DEFAULT', 'management-server', 'xen.check.hvm', 'false', 'Shoud we allow only the XenServers support HVM');"
-</code></pre>
-
-<p>Global Setting:</p>
-
-<pre><code>mysql -u cloud -p&lt;password&gt;
-UPDATE cloud.configuration SET value='8096' WHERE name='integration.api.port';
-UPDATE cloud.configuration SET value='60' WHERE name='expunge.delay';
-UPDATE cloud.configuration SET value='60' WHERE name='expunge.interval';
-UPDATE cloud.configuration SET value='60' WHERE name='account.cleanup.interval';
-UPDATE cloud.configuration SET value='60' WHERE name='capacity.skipcounting.hours';
-UPDATE cloud.configuration SET value='0.99' WHERE name='cluster.cpu.allocated.capacity.disablethreshold';
-UPDATE cloud.configuration SET value='0.99' WHERE name='cluster.memory.allocated.capacity.disablethreshold';
-UPDATE cloud.configuration SET value='0.99' WHERE name='pool.storage.capacity.disablethreshold';
-UPDATE cloud.configuration SET value='0.99' WHERE name='pool.storage.allocated.capacity.disablethreshold';
-UPDATE cloud.configuration SET value='60000' WHERE name='capacity.check.period';
-UPDATE cloud.configuration SET value='1' WHERE name='event.purge.delay';
-UPDATE cloud.configuration SET value='60' WHERE name='network.gc.interval';
-UPDATE cloud.configuration SET value='60' WHERE name='network.gc.wait';
-UPDATE cloud.configuration SET value='600' WHERE name='vm.op.cleanup.interval';
-UPDATE cloud.configuration SET value='60' WHERE name='vm.op.cleanup.wait';
-UPDATE cloud.configuration SET value='600' WHERE name='vm.tranisition.wait.interval';
-UPDATE cloud.configuration SET value='60' WHERE name='vpc.cleanup.interval';
-UPDATE cloud.configuration SET value='4' WHERE name='cpu.overprovisioning.factor';
-UPDATE cloud.configuration SET value='8' WHERE name='storage.overprovisioning.factor';
-UPDATE cloud.configuration SET value='192.168.56.11/32' WHERE name='secstorage.allowed.internal.sites';
-UPDATE cloud.configuration SET value='192.168.56.0/24' WHERE name='management.network.cidr';
-UPDATE cloud.configuration SET value='192.168.56.11' WHERE name='host';
-UPDATE cloud.configuration SET value='false' WHERE name='check.pod.cidrs';
-UPDATE cloud.configuration SET value='0' WHERE name='network.throttling.rate';
-UPDATE cloud.configuration SET value='0' WHERE name='vm.network.throttling.rate';
-UPDATE cloud.configuration SET value='GMT' WHERE name='usage.execution.timezone';
-UPDATE cloud.configuration SET value='16:00' WHERE name='usage.stats.job.exec.time';
-UPDATE cloud.configuration SET value='true' WHERE name='enable.dynamic.scale.vm';
-UPDATE cloud.configuration SET value='9000' WHERE name='secstorage.vm.mtu.size';
-UPDATE cloud.configuration SET value='60' WHERE name='alert.wait';
-UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='domainrouter';
-UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='elasticloadbalancervm';
-UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='secondarystoragevm';
-UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='internalloadbalancervm';
-UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='consoleproxy';
-UPDATE cloud.vm_template SET removed=now() WHERE id='2';
-UPDATE cloud.vm_template SET url='http://192.168.56.11/centos56-x86_64.vhd.bz2' WHERE unique_name='centos56-x86_64-xen';
-quit
-
-service cloudstack-management restart
-</code></pre>
-
-<p>Add iptables rules and restart:</p>
-
-<pre><code># sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 8096 -j ACCEPT" /etc/sysconfig/iptables
-# service iptables restart
-</code></pre>
 ]]></content>
   </entry>
   
