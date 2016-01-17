@@ -9,9 +9,9 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="在多个文件构成的程序中，源文件首先被编译成多个对象(object)文件(.o文件),
-然后交由链接器生成最终的可执行文件，如下图所示： 在组建可执行文件时，链接器主要完成下列操作: 解析符号
-重定位 1. 符号解析 在编译单个文件组成的程序时，所有标号的解析都可以由汇编器替代为对应的地址。 &hellip;">
+  <meta name="description" content="1. 有关异常向量 前面的例子中存在一个大BUG，内存布局中的前8个全字是为异常向量而保留的。当异常发生时控制逻辑将转到这些位置以执行对应的异常处理代码。异常向量和它们的地址如下： Exception Address
+Reset 0x00
+Undefined Instruction 0x04 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +67,417 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/07/11/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-4/">用Qemu和GNU编译链研究ARM汇编(4)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-07-11T21:46:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:46 pm</span></time>
+        
+         | <a href="/blog/2013/07/11/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-4/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>1. 有关异常向量</p>
+
+<p>前面的例子中存在一个大BUG，内存布局中的前8个全字是为异常向量而保留的。当异常发生时控制逻辑将转到这些位置以执行对应的异常处理代码。异常向量和它们的地址如下：</p>
+
+<ul>
+<li>Exception  Address</li>
+<li>Reset  0x00</li>
+<li>Undefined Instruction  0x04</li>
+<li>Software Interrupt (SWI)   0x08</li>
+<li>Prefetch Abort     0x0C</li>
+<li>Data Abort     0x10</li>
+<li>Reserved, not used     0x14</li>
+<li>IRQ    0x18</li>
+<li>FIQ    0x1C</li>
+</ul>
+
+
+<p>按理说，这些个异常向量应该对应到异常处理程序中，既然我们代码中不会有异常发生，索性就用死循环来代替，如下：</p>
+
+<figure class='code'><figcaption><span>vector.s -vector.s </span></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>section <span class="s">&quot;vectors&quot;</span>
+</span><span class='line'>reset<span class="o">:</span>  b     start
+</span><span class='line'>undef<span class="o">:</span>  b     undef
+</span><span class='line'>swi<span class="o">:</span>    b     swi
+</span><span class='line'>pabt<span class="o">:</span>   b     pabt
+</span><span class='line'>dabt<span class="o">:</span>   b     dabt
+</span><span class='line'>        nop
+</span><span class='line'>irq<span class="o">:</span>    b     irq
+</span><span class='line'>fiq<span class="o">:</span>    b     fiq
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>对应的，为了确保这些指令被放置在异常向量地址中，链接脚本也需要做相应的改动：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>SECTIONS {
+</span><span class='line'>        . = 0x00000000;
+</span><span class='line'>        .text : {
+</span><span class='line'>                * (vectors);
+</span><span class='line'>                * (.text);
+</span><span class='line'>                ...
+</span><span class='line'>        }
+</span><span class='line'>        ...
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>异常向量需要放置在所有代码之前，这确保了代了向量是从0x0地址开始。</p>
+
+<p>2. C启动代码</p>
+
+<p>直接执行C代码会造成CPU直接重启，因为和汇编代码不同的是C语言需要初始化运行环境。</p>
+
+<figure class='code'><figcaption><span>sum.c -sum.c </span></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="n">arr</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span> <span class="p">};</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="n">sum</span><span class="p">;</span>
+</span><span class='line'><span class="k">static</span> <span class="k">const</span> <span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span> <span class="o">/</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>        <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">sum</span> <span class="o">+=</span> <span class="n">arr</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>C语言运行环境需要设置
+1. 栈
+2. 全局变量： 已初始化的 &amp;&amp; 未初始化的
+3. 只读数据</p>
+
+<p>2.1 栈设置</p>
+
+<p>栈被用来存储自动变量，传递函数变量，存储返回地址等等。ARM Architecture
+Procedure Call Standard
+(AAPCS)是ARM体系结构中用于生成栈的规则。r13被用于作栈指针。</p>
+
+<p>对于特定的开发板来说，栈开始地址可能不同，对于connex开发板来说，地址可以用下面的代码来定义：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ldr sp, =0xA4000000</span></code></pre></td></tr></table></div></figure>
+
+
+<p>2.2 全局变量</p>
+
+<p>C代码在编译时会把已初始化的全局变量放在.data段中，因而在初始化的汇编代码中，需要把.data段从Flash搬移到RAM中。</p>
+
+<p>C代码确保未初始化的全局变量被初始化成0.
+当C程序被编译时，独立的.bss段被用作未初始化的变量。因为未初始化的值都是0,我们无需将其存储在FLASH中。只不过在搬移的时候，我们需要在程序中将它们初始化为0而已。</p>
+
+<p>2.3 只读数据</p>
+
+<p>const常量会被初始化为.rodata， .rodata也被用于存储字符常量。</p>
+
+<p>.rodata在运行时不会被改变，所以它们可以被直接放置在FLASH中。</p>
+
+<p>2.4 启动代码</p>
+
+<p>Linker脚本需要做下面的事：
+1. .bss部分代替
+2.  vectors部分代替
+3. .rodata部分代替</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>SECTIONS {
+</span><span class='line'>        . = 0x00000000;
+</span><span class='line'>        .text : {
+</span><span class='line'>              * (vectors);
+</span><span class='line'>              * (.text);
+</span><span class='line'>        }
+</span><span class='line'>        .rodata : {
+</span><span class='line'>              * (.rodata);
+</span><span class='line'>        }
+</span><span class='line'>        flash_sdata = .;
+</span><span class='line'>
+</span><span class='line'>        . = 0xA0000000;
+</span><span class='line'>        ram_sdata = .;
+</span><span class='line'>        .data : AT (flash_sdata) {
+</span><span class='line'>              * (.data);
+</span><span class='line'>        }
+</span><span class='line'>        ram_edata = .;
+</span><span class='line'>        data_size = ram_edata - ram_sdata;
+</span><span class='line'>
+</span><span class='line'>        sbss = .;
+</span><span class='line'>        .bss : {
+</span><span class='line'>             * (.bss);
+</span><span class='line'>        }
+</span><span class='line'>        ebss = .;
+</span><span class='line'>        bss_size = ebss - sbss;
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动代码需要完成下列任务：
+1. 中断向量设置
+2. 将.data部分从FLASH拷贝到RAM
+3. 将.bss置0后拷贝到RAM
+4. 设置栈指针(stack pointer)
+5. 分支程序到main函数</p>
+
+<figure class='code'><figcaption><span>startup.s - startup.s </span></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>section <span class="s">&quot;vectors&quot;</span>
+</span><span class='line'>reset<span class="o">:</span>  b     start
+</span><span class='line'>undef<span class="o">:</span>  b     undef
+</span><span class='line'>swi<span class="o">:</span>    b     swi
+</span><span class='line'>pabt<span class="o">:</span>   b     pabt
+</span><span class='line'>dabt<span class="o">:</span>   b     dabt
+</span><span class='line'>        nop
+</span><span class='line'>irq<span class="o">:</span>    b     irq
+</span><span class='line'>fiq<span class="o">:</span>    b     fiq
+</span><span class='line'>
+</span><span class='line'>        <span class="m">.</span>text
+</span><span class='line'>start<span class="o">:</span>
+</span><span class='line'>        <span class="o">@@</span> Copy data to RAM.
+</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>flash_sdata
+</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>ram_sdata
+</span><span class='line'>        ldr   r2<span class="p">,</span> <span class="o">=</span>data_size
+</span><span class='line'>
+</span><span class='line'>        <span class="o">@@</span> Handle data_size <span class="o">==</span> <span class="m">0</span>
+</span><span class='line'>        cmp   r2<span class="p">,</span> <span class="c1">#0</span>
+</span><span class='line'>        beq   init_bss
+</span><span class='line'>copy<span class="o">:</span>
+</span><span class='line'>        ldrb   r4<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1</span>
+</span><span class='line'>        strb   r4<span class="p">,</span> <span class="p">[</span>r1<span class="p">],</span> <span class="c1">#1</span>
+</span><span class='line'>        subs   r2<span class="p">,</span> r2<span class="p">,</span> <span class="c1">#1</span>
+</span><span class='line'>        bne    copy
+</span><span class='line'>
+</span><span class='line'>init_bss<span class="o">:</span>
+</span><span class='line'>        <span class="o">@@</span> Initialize <span class="m">.</span>bss
+</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>sbss
+</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>ebss
+</span><span class='line'>        ldr   r2<span class="p">,</span> <span class="o">=</span>bss_size
+</span><span class='line'>
+</span><span class='line'>        <span class="o">@@</span> Handle bss_size <span class="o">==</span> <span class="m">0</span>
+</span><span class='line'>        cmp   r2<span class="p">,</span> <span class="c1">#0</span>
+</span><span class='line'>        beq   init_stack
+</span><span class='line'>
+</span><span class='line'>        mov   r4<span class="p">,</span> <span class="c1">#0</span>
+</span><span class='line'>zero<span class="o">:</span>
+</span><span class='line'>        strb  r4<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1</span>
+</span><span class='line'>        subs  r2<span class="p">,</span> r2<span class="p">,</span> <span class="c1">#1</span>
+</span><span class='line'>        bne   zero
+</span><span class='line'>
+</span><span class='line'>init_stack<span class="o">:</span>
+</span><span class='line'>        <span class="o">@@</span> Initialize the stack pointer
+</span><span class='line'>        ldr   sp<span class="p">,</span> <span class="o">=</span><span class="mh">0xA4000000</span>
+</span><span class='line'>
+</span><span class='line'>        bl    main
+</span><span class='line'>
+</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b     <span class="kp">stop</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>我们将直接用arm-none-eabi-gcc来编译所有程序：
+    arm-none-eabi-gcc -nostdlib -o csum.elf -T csum.lds csum.c startup.s
+-nostdlib选项用于指定标准C不应该被链接。</p>
+
+<p>查看符号信息：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>arm-none-eabi-nm -n csum.elf 
+</span><span class='line'>00000000 t reset
+</span><span class='line'>00000004 A bss_size
+</span><span class='line'>00000004 t undef
+</span><span class='line'>00000008 t swi
+</span><span class='line'>0000000c t pabt
+</span><span class='line'>00000010 t dabt
+</span><span class='line'>00000018 A data_size
+</span><span class='line'>00000018 t irq
+</span><span class='line'>0000001c t fiq
+</span><span class='line'>00000020 T main
+</span><span class='line'>00000094 t start
+</span><span class='line'>000000a8 t copy
+</span><span class='line'>000000b8 t init_bss
+</span><span class='line'>000000d0 t zero
+</span><span class='line'>000000dc t init_stack
+</span><span class='line'>000000e4 t stop
+</span><span class='line'>00000100 r n
+</span><span class='line'>00000104 R flash_sdata
+</span><span class='line'>a0000000 d arr
+</span><span class='line'>a0000000 D ram_sdata
+</span><span class='line'>a0000018 D ram_edata
+</span><span class='line'>a0000018 D sbss
+</span><span class='line'>a0000018 b sum
+</span><span class='line'>a000001c B ebss</span></code></pre></td></tr></table></div></figure>
+
+
+<p>可以看到： 中断向量从0x0开始; 汇编代码从8个全字后开始(0x20==32==8<em>4);
+只读数据n放在代码之后; arr，初始化后的数据，放在RAM中;
+未初始化的数据,sum放在6个int之后6</em>4==24==0x18</p>
+
+<p>转化成.bin二进制格式后，在Qemu中运行之，检查结果：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-objcopy -O binary csum.elf csum.bin  
+</span><span class='line'>$ dd if=/dev/zero of=./flash.bin bs=4K count=4K
+</span><span class='line'>      $ dd if=csum.bin of=flash.bin bs=4096 conv=notrunc
+</span><span class='line'>      $ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
+</span><span class='line'>(qemu) xp /6dw 0xa0000000
+</span><span class='line'>a0000000:          1         10          4          5
+</span><span class='line'>a0000010:          6          7
+</span><span class='line'>(qemu) xp /1dw 0xa0000018
+</span><span class='line'>a0000018:         33</span></code></pre></td></tr></table></div></figure>
+
+
+<p>我们可以看到，1, 10, 4, 5, 6, 7 分别为数组元素，而结果为33,
+储存在0x18的地址。如果感兴趣，我们大可查找出别的数据地址，这里就不一一述说了。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2355,85 +2766,6 @@ network. Loops are deadly to a network.
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/06/archlinuxshang-an-zhuang-armbian-yi-lian/">ArchLinux上安装arm编译链</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-06T20:14:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>8:14 pm</span></time>
-        
-         | <a href="/blog/2013/07/06/archlinuxshang-an-zhuang-armbian-yi-lian/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>在X86_64的ArchLinux上安装Mentor Graphics提供的arm交叉编译链时出现下列问题：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ./arm-2013.05-23-arm-none-eabi.bin 
-</span><span class='line'>Checking for required programs: awk grep sed bzip2 gunzip
-</span><span class='line'>===============================================================
-</span><span class='line'>Error: Missing 32-bit libraries on 64-bit Linux host
-</span><span class='line'>===============================================================
-</span><span class='line'>Your 64-bit Linux host is missing the 32-bit libraries
-</span><span class='line'>required to install and use Sourcery CodeBench.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>解决方法：</p>
-
-<p>编辑/etc/pacman.conf，去掉下列两行的注释</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[multilib]
-</span><span class='line'>Include = /etc/pacman.d/mirrorlist</span></code></pre></td></tr></table></div></figure>
-
-
-<p>而后安装必要的ia32相关的包：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -Sy
-</span><span class='line'>$ pacman -S lib32-glibc
-</span><span class='line'>$ pacman -S lib32-gtk lib32-gtk2</span></code></pre></td></tr></table></div></figure>
-
-
-<p>安装好以后执行前面被中断的安装进程，这时候可以顺利安装了。</p>
-
-<p>安装完毕后记得把交叉编译链的路径加入到系统路径中，最好在~/.bashrc里加上一笔:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>export PATH=$HOME/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_EABI/bin:$PATH
-</span><span class='line'>export PATH=$HOME/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_GNU_Linux/bin:$PATH</span></code></pre></td></tr></table></div></figure>
-
-
-<p>ArchLinux的yaourt仓库里也有arm-none-eabi和arm-none-linux-eabi等交叉编译链，但是每次编译都会出现莫名其妙的错误，使用现成的编译链能大大节省开发时间。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/60">&larr; Older</a>
@@ -2451,6 +2783,10 @@ network. Loops are deadly to a network.
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/01/15/linux-tips-4/">Linux Tips(4)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/01/14/cloudstackshi-yong-lxcyao-dian/">CloudStack使用LXC要点</a>
       </li>
     
@@ -2464,10 +2800,6 @@ network. Loops are deadly to a network.
     
       <li class="post">
         <a href="/blog/2016/01/03/tips-on-veewee-and-vagrant/">Tips on Veewee and Vagrant</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/12/30/rtl-sdr-steps/">Rtl-sdr Steps</a>
       </li>
     
   </ul>
