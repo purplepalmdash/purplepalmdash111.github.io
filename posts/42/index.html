@@ -9,9 +9,26 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="因为有中转服务器的存在，我们需要建立ssh端口转发，以便一步到位通过中转服务器登录到远程主机。 ssh转发 建立ssh转发： 1
-ssh -L 2121:192.168.1xx.xxx.xxx 1xx.xxx.xxx.xxx -l Tomcat 建立以后则可以： 1
-ssh root@ &hellip;">
+  <meta name="description" content="app2e中有几个很好的关于并发实现的例子，这里加以详细解析。 简单的echo服务器 所谓echo服务器就是将客户端的输入简单的通过socket回送回来。代码实现如下： echoserver.c1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +84,550 @@ ssh root@ &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/04/01/you-guan-bing-fa/">有关并发</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-04-01T19:07:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2014</span></span> <span class='time'>7:07 pm</span></time>
+        
+         | <a href="/blog/2014/04/01/you-guan-bing-fa/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>app2e中有几个很好的关于并发实现的例子，这里加以详细解析。<br /></p>
+
+<h3>简单的echo服务器</h3>
+
+<p>所谓echo服务器就是将客户端的输入简单的通过socket回送回来。代码实现如下：<br /></p>
+
+<figure class='code'><figcaption><span>echoserver.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;csapp.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">clientlen</span><span class="p">;</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">hostent</span> <span class="o">*</span><span class="n">hp</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="o">*</span><span class="n">haddrp</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>      <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">clientlen</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">clientaddr</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="cm">/* determin the domain name and IP address of the client */</span>
+</span><span class='line'>      <span class="n">hp</span> <span class="o">=</span> <span class="n">Gethostbyaddr</span><span class="p">((</span><span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span><span class="p">,</span>
+</span><span class='line'>              <span class="k">sizeof</span><span class="p">(</span><span class="n">clientaddr</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">.</span><span class="n">s_addr</span><span class="p">),</span> <span class="n">AF_INET</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">haddrp</span> <span class="o">=</span> <span class="n">inet_ntoa</span><span class="p">(</span><span class="n">clientaddr</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server conected to %s (%s)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">hp</span><span class="o">-&gt;</span><span class="n">h_name</span><span class="p">,</span> <span class="n">haddrp</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>从代码来看，这是一个很典型的socket通信的例子。连接一旦建立成功，server段会打印出client端的IP地址，并一直在echo程序中晃荡。因为echo()中有while()函数会一直等着从connfd文件描述符读入输入行。当得到来自socket fd的输入时，会打印出接收到的字符个数，并将其写入到socket文件描述符中，由此client段会得到回显字符。<br /></p>
+
+<h3>利用进程实现并发</h3>
+
+<p>上面的简单echo服务器是没法接受一个以上的连接的。因此我们写出echo服务器的第二版，利用子进程实现echo服务器。<br /></p>
+
+<figure class='code'><figcaption><span>echoserverp.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* </span>
+</span><span class='line'><span class="cm"> * echoserverp.c - A concurrent echo server based on processes</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="cm">/* $begin echoserverpmain */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">sigchld_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span> <span class="c1">//line:conc:echoserverp:handlerstart</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="n">waitpid</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">WNOHANG</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">;</span>
+</span><span class='line'>    <span class="k">return</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span> <span class="c1">//line:conc:echoserverp:handlerend</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span><span class="o">=</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">Signal</span><span class="p">(</span><span class="n">SIGCHLD</span><span class="p">,</span> <span class="n">sigchld_handler</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">Fork</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">listenfd</span><span class="p">);</span> <span class="cm">/* Child closes its listening socket */</span>
+</span><span class='line'>      <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>    <span class="cm">/* Child services client */</span> <span class="c1">//line:conc:echoserverp:echofun</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>   <span class="cm">/* Child closes connection with client */</span> <span class="c1">//line:conc:echoserverp:childclose</span>
+</span><span class='line'>      <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>         <span class="cm">/* Child exits */</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span> <span class="cm">/* Parent closes connected socket (important!) */</span> <span class="c1">//line:conc:echoserverp:parentclose</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $end echoserverpmain */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>编译和运行命令如下：<br /></p>
+
+<figure class='code'><figcaption><span>echoserverp.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">echoserverp</span> <span class="n">echoserverp</span><span class="p">.</span><span class="n">c</span> <span class="o">-</span><span class="n">lcsapp</span> <span class="o">-</span><span class="n">lpthread</span>
+</span><span class='line'><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span><span class='line'><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">echoclient</span> <span class="n">localhost</span> <span class="mi">3344</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在多个终端上执行完./echoclient localhost 3344后，我们可以用ps -ef | grep echoserverp来检查当前系统中的进程个数:<br /></p>
+
+<figure class='code'><figcaption><span>echoserverp.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">ps</span> <span class="o">-</span><span class="n">ef</span> <span class="o">|</span> <span class="n">grep</span> <span class="n">echoserverp</span>
+</span><span class='line'><span class="n">Trusty</span>     <span class="mi">30404</span>  <span class="mi">8497</span>  <span class="mi">0</span> <span class="mi">17</span><span class="o">:</span><span class="mi">19</span> <span class="n">pts</span><span class="o">/</span><span class="mi">9</span>    <span class="mo">00</span><span class="o">:</span><span class="mo">00</span><span class="o">:</span><span class="mo">00</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span><span class='line'><span class="n">Trusty</span>     <span class="mi">30651</span> <span class="mi">30404</span>  <span class="mi">0</span> <span class="mi">17</span><span class="o">:</span><span class="mi">19</span> <span class="n">pts</span><span class="o">/</span><span class="mi">9</span>    <span class="mo">00</span><span class="o">:</span><span class="mo">00</span><span class="o">:</span><span class="mo">00</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span><span class='line'><span class="n">Trusty</span>     <span class="mi">31174</span> <span class="mi">30404</span>  <span class="mi">0</span> <span class="mi">17</span><span class="o">:</span><span class="mi">20</span> <span class="n">pts</span><span class="o">/</span><span class="mi">9</span>    <span class="mo">00</span><span class="o">:</span><span class="mo">00</span><span class="o">:</span><span class="mo">00</span> <span class="p">.</span><span class="o">/</span><span class="n">echoserverp</span> <span class="mi">3344</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里看到，在有3个client端连接时，存在3个echoserverp运行实例。<br /></p>
+
+<p>实现的关键在于：<br />
+1. 使用信号, SIGCHLD用于回收僵死进程。
+2. Fork()函数创建子进程。
+3. 创建完子进程后，父进程需要关闭已经建立的socket连接。而子进程则需要关闭它的监听描述符。</p>
+
+<p>优缺点比较：<br />
+父子进程共享文件表，但是不共享用户地址空间。使得一个进程不可能不小心覆盖到另一个进程的虚拟存储器。但是独立的地址空间使得进程共享状态信息变得困难，它们需要用IPC来显示通信。而且进程通常比较慢，因为进程控制和IPC的开销很高。IPC,进程间通信。<br /></p>
+
+<h3>基于I/O多路复用的并发编程</h3>
+
+<figure class='code'><figcaption><span>selectecho.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/* $begin select */</span>
+</span><span class='line'><span class="cp">#include &quot;csapp.h&quot;</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">command</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">listenfd</span><span class="p">,</span> <span class="n">connfd</span><span class="p">,</span> <span class="n">port</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">socklen_t</span> <span class="n">clientlen</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">sockaddr_in</span> <span class="n">clientaddr</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">fd_set</span> <span class="n">read_set</span><span class="p">,</span> <span class="n">ready_set</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;usage: %s &lt;port&gt;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">port</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+</span><span class='line'>    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">Open_listenfd</span><span class="p">(</span><span class="n">port</span><span class="p">);</span>  <span class="c1">//line:conc:select:openlistenfd</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">FD_ZERO</span><span class="p">(</span><span class="o">&amp;</span><span class="n">read_set</span><span class="p">);</span>              <span class="cm">/* Clear read set */</span> <span class="c1">//line:conc:select:clearreadset</span>
+</span><span class='line'>    <span class="n">FD_SET</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">read_set</span><span class="p">);</span> <span class="cm">/* Add stdin to read set */</span> <span class="c1">//line:conc:select:addstdin</span>
+</span><span class='line'>    <span class="n">FD_SET</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">read_set</span><span class="p">);</span>     <span class="cm">/* Add listenfd to read set */</span> <span class="c1">//line:conc:select:addlistenfd</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="n">ready_set</span> <span class="o">=</span> <span class="n">read_set</span><span class="p">;</span>
+</span><span class='line'>  <span class="n">Select</span><span class="p">(</span><span class="n">listenfd</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ready_set</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span> <span class="c1">//line:conc:select:select</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ready_set</span><span class="p">))</span> <span class="c1">//line:conc:select:stdinready</span>
+</span><span class='line'>      <span class="n">command</span><span class="p">();</span> <span class="cm">/* Read command line from stdin */</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">FD_ISSET</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ready_set</span><span class="p">))</span> <span class="p">{</span> <span class="c1">//line:conc:select:listenfdready</span>
+</span><span class='line'>      <span class="n">connfd</span> <span class="o">=</span> <span class="n">Accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">SA</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">clientaddr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">clientlen</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">echo</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span> <span class="cm">/* Echo client input until EOF */</span>
+</span><span class='line'>      <span class="n">Close</span><span class="p">(</span><span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">command</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">Fgets</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">,</span> <span class="n">stdin</span><span class="p">))</span>
+</span><span class='line'>  <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span> <span class="cm">/* EOF */</span>
+</span><span class='line'>    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%s&quot;</span><span class="p">,</span> <span class="n">buf</span><span class="p">);</span> <span class="cm">/* Process the input command */</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">echo</span><span class="p">(</span><span class="kt">int</span> <span class="n">connfd</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">size_t</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">connfd</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;server received %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/* $end select */</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这个例子测试时需要注意的是，当客户端有连接时，终端输入将失效。一个更好的解决方案是使用更细粒度的多路复用，服务器每次循环回送一个文本行。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/04/01/reading-digests-for-app2e/">Reading Digests for APP2E</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-04-01T10:50:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2014</span></span> <span class='time'>10:50 am</span></time>
+        
+         | <a href="/blog/2014/04/01/reading-digests-for-app2e/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Preparation</h3>
+
+<p>Download the files from the student&rsquo;s website of app2e via:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wget http://csapp.cs.cmu.edu/public/ics2/code.tar
+</span><span class='line'>tar xvf code.tar
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Start building the static libs and copy it to system library:<br /></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@XXXyyy lib]$ pwd
+</span><span class='line'>/home/Trusty/code/app2e/practise/lib
+</span><span class='line'>[Trusty@XXXyyy lib]$ cp /home/Trusty/code/app2e/code/src/csapp.c  .
+</span><span class='line'>[Trusty@XXXyyy lib]$ cp /home/Trusty/code/app2e/code/include/csapp.h  .
+</span><span class='line'>[Trusty@XXXyyy lib]$ gcc -c -o csapp.o csapp.c 
+</span><span class='line'>[Trusty@XXXyyy lib]$ ar rcs libcsapp.a csapp.o
+</span><span class='line'>[Trusty@XXXyyy lib]$ sudo cp libcsapp.a  /usr/lib/
+</span><span class='line'>[Trusty@XXXyyy lib]$ sudo cp csapp.h  /usr/include/
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you can directly use libcssapp.a in your own files:<br /></p>
+
+<figure class='code'><figcaption><span>test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;csapp.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Compile the file via:<br /></p>
+
+<figure class='code'><figcaption><span>test.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">test</span> <span class="n">test</span><span class="p">.</span><span class="n">c</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Rio</h3>
+
+<figure class='code'><figcaption><span>cpfile.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;csapp.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="kt">int</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">rio_t</span> <span class="n">rio</span><span class="p">;</span>
+</span><span class='line'>  <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">MAXLINE</span><span class="p">];</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="n">Rio_readinitb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">STDIN_FILENO</span><span class="p">);</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">Rio_readlineb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rio</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">MAXLINE</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>      <span class="n">Rio_writen</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Compile the file via:<br /></p>
+
+<figure class='code'><figcaption><span>cpfile.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">gcc</span> <span class="o">-</span><span class="n">o</span> <span class="n">cpfile</span> <span class="n">cpfile</span><span class="p">.</span><span class="n">c</span>  <span class="o">-</span><span class="n">lcsapp</span> <span class="o">-</span><span class="n">lpthread</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run the app via:<br /></p>
+
+<figure class='code'><figcaption><span>cpfile.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">.</span><span class="o">/</span><span class="n">cpfile</span><span class="o">&lt;</span><span class="n">cpfile</span><span class="p">.</span><span class="n">c</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will print the cpfile.c content on the stdout screen.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1150,167 +1711,6 @@ If we want cron to call the virtual environment, we have to create a script and 
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/03/17/mirageting-from-asp-to-wordpress/">Miragating From ASP to Wordpress(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-03-17T16:02:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:02 pm</span></time>
-        
-         | <a href="/blog/2014/03/17/mirageting-from-asp-to-wordpress/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Recent days I am doing a data migration from asp website to WordPress, Following is how-to. <br /></p>
-
-<h3>Database</h3>
-
-<p>First we have to download the whole website content from the server, in my situation, the website contains a database called &ldquo;xxxx.mdb&rdquo;, I downloaded this database and renamed its name to &ldquo;origin.mdb&rdquo;<br />
-We can use Microsoft Access for opening this database file, and from the left side panel we can see all of the tables. <br />
-We know the about/news1/news2/news3/news4 table which contains the actual webpages content. <br />
-We can see the picture of news1 which displayed as following: <br />
-<img src="/images/tablesInAccess.jpg" alt="/images/tablesInAccess.jpg" /></p>
-
-<h3>CSV Preparation</h3>
-
-<p>In a Ubuntu machine, we install mdbtools via following command:<br /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install mdbtools
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Export the specified tables from the mdb file: <br /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mdb-export origin.mdb news &gt; news.csv
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The CSV file is seperated via semicolon, just linke following:<br /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat news.csv
-</span><span class='line'>id,title,entitle,url,body,enbody,zz,hit,data,ssfl,img,ly,enly,color,encolor,tuijian,px_id,pass,kin
-</span><span class='line'>58,"关于海外游学",,,"&lt;DIV&gt;&lt;B&gt;&lt;FONT size=2 face=Arial&gt;关于游学&lt;/FONT&gt;&lt;/B&gt;&lt;/DIV&gt;
-</span><span class='line'>&lt;DIV&gt;&lt;FONT size=2&gt;&lt;FONT face=Arial&gt;&lt;STRONG&gt;&lt;/STRONG&gt;&lt;B&gt;&lt;/B&gt;&lt;/FONT&gt;&lt;/FONT&gt;&n
-</span><span class='line'>............
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now the news.csv contains all of the content which contains in the news table. <br /></p>
-
-<h3>WordPress Plugins Installation</h3>
-
-<p>Install the WP Ultimate CSV Importer for importing the csv into the WordPress:<br />
-This Plug-ins is fairly frendly, we simply upload the csv onto the plug-in, the plugin will analyse the csv&rsquo;s content,and begin to mapping the database fields. <br />
-<img src="/images/csvimport.jpg" alt="/images/csvimport.jpg" /></p>
-
-<p>Notice: You can import the csv into posts or pages, here I choose &ldquo;Pages&rdquo;, and it got the Parent Pages, so first you have to create the parent page, just as following:<br />
-<img src="/images/parentpage.jpg" alt="/images/parentpage.jpg" /></p>
-
-<p>The content of parent page named &ldquo;[child_pages]&rdquo; is also another plug-in, this plug-in is called &ldquo;Child Pages Shortcode&rdquo;, after installed it, you can get the &ldquo;screenshots&rdquo; of the child pages.<br />
-The actual effects is listed as following picture: <br />
-<img src="/images/childpageshot.jpg" alt="/images/childpageshot.jpg" /></p>
-
-<p>Another plug-in is called &ldquo;Children Index Shortcode&rdquo;. This plug-in will generate all of the child pages' hyper-links. You can call this plug-in via insert &ldquo;children-index&rdquo; into the content of the parent page. <br /></p>
-
-<h3>Change The Theme</h3>
-
-<p>You can easily install themes in wordpress, via Appearence->Theme. <br />
-Currently I use &ldquo;BlackBird Wordpress Theme&rdquo;, the default suport of chinese is pretty good. <br />
-Things to be do:<br />
-1. Check all of the images. <br />
-2. Beautify the pages. <br />
-3. Customize the pages. <br /></p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/03/15/migrating-from-asp-to-wordpress/">Migrating From ASP to WordPress(1)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-03-15T11:00:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>15</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:00 am</span></time>
-        
-         | <a href="/blog/2014/03/15/migrating-from-asp-to-wordpress/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Recently I will moving an old-style website from ASP to WorldPress, that&rsquo;s a funny work. This series will record the steps for migrating. <br /></p>
-
-<h3>Preparation</h3>
-
-<p>First I got all of the files which locates in the ASP.NET Server, the database is very simple, it&rsquo;s a mdb file, which could be viewed by Microsoft Access.<br /></p>
-
-<p>The static files and images could also be downloaded from the server, thus the materials is enough for building a whole-new WorldPress based website.<br /></p>
-
-<h3>Using Python To Generate Content</h3>
-
-<p>All of the webpage information are located in the mdb file, thus we have to do some dealing with this database file. Python could easily retrieve the data out from the database.<br />
-Install pyodbc:<br /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install pyodbc
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Notice when you are using Microsoft  Access for visiting the database, the system will automatically generate a ldb file for you.<br /></p>
-
-<p>In Linux, the pyodbc will encouter un-predicted problems, so I use ActivePython in Windows for analyzing the mdb file.<br /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pypm search pyodbc
-</span><span class='line'>$ pypm install pyodbc
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now begin to analyse the database</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>TBD
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/43">&larr; Older</a>
@@ -1328,7 +1728,15 @@ Install pyodbc:<br /></p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/01/18/tips-on-setup-mesos-cluster/">Tips on Setup Mesos Cluster</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/01/15/linux-tips-4/">Linux Tips(4)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/01/15/vlan-experiment/">Vlan Experiment</a>
       </li>
     
       <li class="post">
@@ -1337,14 +1745,6 @@ Install pyodbc:<br /></p>
     
       <li class="post">
         <a href="/blog/2016/01/11/install-cloudstack-mgmt-server-on-centos7/">Install CloudStack Mgmt Server on CentOS7</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/01/04/purge-cloudstack-env/">Purge CloudStack Env</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/01/03/tips-on-veewee-and-vagrant/">Tips on Veewee and Vagrant</a>
       </li>
     
   </ul>
