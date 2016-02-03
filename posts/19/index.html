@@ -9,11 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="This will record the complete steps for deploying MAAS in a newly installed machine. Installation The start point should be at Ubuntu14.04. 1
-2
-3
-4
-5 &hellip;">
+  <meta name="description" content="This part is for deploying OpenStack using Juju and let it run in single node. Environment Preparation 2 virtual machines created using virt-manager &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -69,6 +65,129 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/17/deploy-maas-8/">Deploy MAAS(8)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-17T14:27:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>2:27 pm</span></time>
+        
+         | <a href="/blog/2015/03/17/deploy-maas-8/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This part is for deploying OpenStack using Juju and let it run in single node.</p>
+
+<h3>Environment Preparation</h3>
+
+<p>2 virtual machines created using virt-manager, each of them has 2 core, 3Gigabyte Memory, around 60G Disk space.</p>
+
+<h3>Deploy</h3>
+
+<p>The most of the nodes are deployed in container.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju deploy --to 0 juju-gui
+</span><span class='line'>$ juju deploy --to lxc:0 mysql
+</span><span class='line'>$ juju deploy --to lxc:0 keystone
+</span><span class='line'>$ juju deploy --to lxc:0 nova-cloud-controller
+</span><span class='line'>$ juju deploy --to lxc:0 glance
+</span><span class='line'>$ juju deploy --to lxc:0 rabbitmq-server
+</span><span class='line'>$ juju deploy --to lxc:0 openstack-Trustyboard
+</span><span class='line'>$ juju deploy --to lxc:0 cinder 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The compute node is deployed in a machine which enable the nested virtualization.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju deploy nova-compute
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add each other&rsquo;s relationship:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju add-relation mysql keystone
+</span><span class='line'>$ juju add-relation nova-cloud-controller mysql
+</span><span class='line'>$ juju add-relation nova-cloud-controller rabbitmq-server
+</span><span class='line'>$ juju add-relation nova-cloud-controller glance
+</span><span class='line'>$ juju add-relation nova-cloud-controller keystone
+</span><span class='line'>$ juju add-relation nova-compute nova-cloud-controller
+</span><span class='line'>$ juju add-relation nova-compute mysql
+</span><span class='line'>$ juju add-relation nova-compute rabbitmq-server:amqp
+</span><span class='line'>$ juju add-relation nova-compute glance
+</span><span class='line'>$ juju add-relation glance mysql
+</span><span class='line'>$ juju add-relation glance keystone
+</span><span class='line'>$ juju add-relation glance cinder
+</span><span class='line'>$ juju add-relation mysql cinder
+</span><span class='line'>$ juju add-relation cinder rabbitmq-server
+</span><span class='line'>$ juju add-relation cinder nova-cloud-controller
+</span><span class='line'>$ juju add-relation cinder keystone
+</span><span class='line'>$ juju add-relation openstack-Trustyboard keystone
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then change the password of keystone via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju set keystone admin-password="helloworld"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Detect the ipaddress of the openstack-Trustyboards via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju status openstack-Trustyboard
+</span><span class='line'>$ http://ip_address_of_Trustyboard/horizon
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The final result is listed like:  <br/>
+<img src="/images/2015_03_17_14_35_25_1037x646.jpg" alt="/images/2015_03_17_14_35_25_1037x646.jpg" /></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1368,204 +1487,6 @@ Windows 8 above are different from other clients.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/06/establish-ubuntu-virt-node/">Establish Ubuntu Virt Node</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-06T04:50:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:50 am</span></time>
-        
-         | <a href="/blog/2015/03/06/establish-ubuntu-virt-node/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Just some tips on how to establish an Ubuntu Virt Node from existing installed system.</p>
-
-<h3>Re-Partition</h3>
-
-<p>2T Disk has been allocated to opensuse, thus I have first umount the mounted /home/ partition and use partition from yast for adjust the partition size, I got 1.9 T size of disk for installing new system.  <br/>
-Umount the mounted /home/ partition is via edit /etc/fstab file.</p>
-
-<h3>Install Ubuntu</h3>
-
-<p>Download the iso file of ubuntu x86_64 version, then enable kvm via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo modprobe kvm
-</span><span class='line'>$ sudo modprobe kvm-intel
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install the system via following commands:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-x86_64 -hda /dev/sda -m 1024 -boot d -cdrom ./install_media.iso
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The above command is for installing the system into the real harddisk. It will automatically install the system onto the harddisk and over-write the MBR. Ubuntu will automatically detect the installed opensuse and generate the system description line.  <br/>
-In grub, the default system will be the installed ubuntu.</p>
-
-<h3>System Preparation</h3>
-
-<p>Install following packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install openssh-server vim-gtk bridge-utils virt-manager git subversion sysfsutils virtualbox awesome firefox chromium-browser xinit libreoffice build-essential pidgin konsole meld  fcitx fcitx-googlepinyin git subversion wqy* zsh rox-filer smplayer cmake scrot thunderbird midori gpicview docker.io  qemu qemu-kvm bridge-utils
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the network via following command:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo brctl addif br0 eth0
-</span><span class='line'>$ cat /etc/network/interfaces
-</span><span class='line'># This file describes the network interfaces available on your system
-</span><span class='line'># and how to activate them. For more information, see interfaces(5).
-</span><span class='line'>
-</span><span class='line'># The loopback network interface
-</span><span class='line'>auto lo
-</span><span class='line'>iface lo inet loopback
-</span><span class='line'>
-</span><span class='line'># The primary network interface
-</span><span class='line'>auto eth0
-</span><span class='line'>iface eth0 inet manual
-</span><span class='line'># If you want to enable the static, uncomment following
-</span><span class='line'># iface eth0 inet static
-</span><span class='line'>#       address 192.168.0.119
-</span><span class='line'>#       netmask 255.255.255.0
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'># Add Bridge Interface
-</span><span class='line'>iface br0 inet static
-</span><span class='line'>address 192.168.0.119
-</span><span class='line'>netmask 255.255.255.0
-</span><span class='line'>gateway 192.168.0.236
-</span><span class='line'>dns-nameservers 114.114.114.114
-</span><span class='line'>bridge_ports eth0
-</span><span class='line'>bridge_stp off
-</span><span class='line'>auto br0
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Restart computer and now you got br0 enabled.</p>
-
-<p>Install QQ:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/apt/sources.list
-</span><span class='line'>deb http://ppa.launchpad.net/lainme/pidgin-lwqq/ubuntu trusty main 
-</span><span class='line'>deb-src http://ppa.launchpad.net/lainme/pidgin-lwqq/ubuntu trusty main
-</span><span class='line'>$ sudo apt-get update && sudo apt-get upgrade
-</span><span class='line'>$ sudo apt-get install pidgin-lwqq
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could use pidgin for chatting.</p>
-
-<p>Install xlockmore for using xlock locking screen:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://packages.ubuntu.com/precise/amd64/xlockmore/download/*xxxx.deb
-</span><span class='line'>$ sudo dpkg -i xlockmore_package.deb
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Disable UTC time via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/default/rcS
-</span><span class='line'># assume that the BIOS clock is set to UTC time (recommended)
-</span><span class='line'>UTC=no
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure ZSH:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim ~/.zshrc
-</span><span class='line'># For setting zsh history
-</span><span class='line'>HISTFILE=$HOME/.zsh_history
-</span><span class='line'>setopt INC_APPEND_HISTORY
-</span><span class='line'>setopt SHARE_HISTORY
-</span><span class='line'>HISTSIZE=5000
-</span><span class='line'>SAVEHIST=5000
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now the history file has been created and you could navigate between command history.</p>
-
-<p>Quick setup for capturing picture:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /usr/bin/mycapscr 
-</span><span class='line'>scrot -s '%Y_%m_%d_%H_%M_%S_$wx$h.jpg' -e 'mv $f ~/capscr/'
-</span><span class='line'>$ mkdir -p ~/capscr
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we got the standard development environment ready.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/20">&larr; Older</a>
@@ -1583,6 +1504,10 @@ In grub, the default system will be the installed ubuntu.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/02/04/hacking-steelseries-engine-3-usb-mouse-under-linux/">Hacking SteelSeries Engine 3 USB Mouse Under Linux</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/01/31/virtio-gpu-working-tips/">Virtio-gpu Working Tips</a>
       </li>
     
@@ -1596,10 +1521,6 @@ In grub, the default system will be the installed ubuntu.</p>
     
       <li class="post">
         <a href="/blog/2016/01/15/linux-tips-4/">Linux Tips(4)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/01/15/vlan-experiment/">Vlan Experiment</a>
       </li>
     
   </ul>
