@@ -9,13 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="An elegant way for juding big-endian or little-endian of processor: 1
-2
-3
-4
-5
-6
-eCCM2-root-root&gt; python -c "import sys;sys.exit(0 if sys.byteorder &hellip;">
+  <meta name="description" content="Background I have BeagleBone Black and RaspberryPi, both of them are cute board. Previous I use BBB for home server, which holds my own Weather APP &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -71,6 +65,200 @@ eCCM2-root-root&gt; python -c "import sys;sys.exit(0 if sys.byteorder &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/10/13/switch-from-bbb-to-raspberrypi/">Switch From BBB to RaspberryPI</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-10-13T20:27:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>8:27 pm</span></time>
+        
+         | <a href="/blog/2014/10/13/switch-from-bbb-to-raspberrypi/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Background</h3>
+
+<p>I have BeagleBone Black and RaspberryPi, both of them are cute board. Previous I use BBB for home server, which holds my own Weather APP website, also serves as a sshd server, dynamic dns server, etc. While Rpi serves like a File server and download server.       <br/>
+Now I want to use BBB for developing some funny things, that means I will transfer all of the functionalities which runs in BBB to Rpi. Following steps will record what I have done.   <br/>
+Before start, update all of the software in Rpi(it runs archLinux):</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -Syu --noconfirm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>sshd</h3>
+
+<p>Previously the sshd on BeagleBone listens on port 3333, now I have to change it back to 22,</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>/[root@alarmpi ~]# cat /etc/ssh/sshd_config
+</span><span class='line'>
+</span><span class='line'>#Port 3333
+</span><span class='line'>Port 22
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Restart the service via <code>systemctl restart sshd</code>, then you could directly ssh to <code>10.0.0.230</code>.</p>
+
+<h3>DDns</h3>
+
+<p>Previous the BBB acts as the Ddns client, thus hold a no-ip.biz based domain name.   <br/>
+On BBB, because it runs the Debian7.1, so the no-ip2 configuraiton is :</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:/etc# ps -ef | grep noip | grep -v grep
+</span><span class='line'>nobody    3184     1  0 Oct07 ?        00:00:01 /usr/local/bin/noip2 -c /usr/local/etc/no-ip2.conf
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>While the configuration file is located at:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@arm:/etc# cat /etc/rc.local
+</span><span class='line'># By default this script does nothing.
+</span><span class='line'># But we will call noip in this scirpt
+</span><span class='line'>/usr/local/bin/noip2 -c /usr/local/etc/no-ip2.conf &
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So first we should comment this line. Then activate the Rpi&rsquo;s no-ip2.</p>
+
+<p>The Rpi&rsquo;s configuraiton is using systemd. <br/>
+The corresponding configuration file is located at:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@alarmpi system]# pwd
+</span><span class='line'>/usr/lib/systemd/system
+</span><span class='line'>[root@alarmpi system]# cat noip2.service 
+</span><span class='line'>[Unit]
+</span><span class='line'>Description=No-IP Dynamic DNS Update Client
+</span><span class='line'>After=network.target
+</span><span class='line'>
+</span><span class='line'>[Service]
+</span><span class='line'>Type=forking
+</span><span class='line'>ExecStart=/usr/bin/noip2 -c /etc/no-ip2.conf
+</span><span class='line'>
+</span><span class='line'>[Install]
+</span><span class='line'>WantedBy=multi-user.target
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Simply disable it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl disable noip2.service
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>ssh with nopasswd</h3>
+
+<p>Make sure all of the configuration is the same in <code>.ssh/authorized_keys</code> <br/>
+Then you could change the port in router, change the default 22 port from BBB to Rpi.</p>
+
+<p>Reboot the router, and BBB &amp; Rpi.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/09/24/convert-different-format-in-python/">Convert Different Format in Python</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-09-24T19:08:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>7:08 pm</span></time>
+        
+         | <a href="/blog/2014/09/24/convert-different-format-in-python/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>The following commands is for directly convert ascii, numbers in python:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ python2
+</span><span class='line'>&gt;&gt;&gt; str(unichr(97))
+</span><span class='line'>'a'
+</span><span class='line'>&gt;&gt;&gt; str(unichr(0x68))
+</span><span class='line'>'h'
+</span><span class='line'>&gt;&gt;&gt; str(unichr(0x5a))
+</span><span class='line'>'Z'
+</span><span class='line'>&gt;&gt;&gt; bin(0x2711)
+</span><span class='line'>'0b10011100010001'
+</span><span class='line'>&gt;&gt;&gt; 0x2711
+</span><span class='line'>10001
+</span><span class='line'>&gt;&gt;&gt; hex(1127)
+</span><span class='line'>'0x467'
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1326,286 +1514,6 @@ In /etc/puppet/puppet.conf, [master] heading:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/08/10/7-weeks-7-databases-reading-digest/">7 Weeks 7 Databases Reading Digest</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-08-10T11:46:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:46 am</span></time>
-        
-         | <a href="/blog/2014/08/10/7-weeks-7-databases-reading-digest/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>This chapter will introduct postgresql.</p>
-
-<h3>Installation in ArchLinux</h3>
-
-<p>Install it via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># pacman -S postgresql
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then configure the initial configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># su - postgres
-</span><span class='line'>[postgres]$ initdb --locale en_US.UTF-8 -E UTF8 -D '/var/lib/postgres/data'
-</span><span class='line'># systemctl enable postgresql
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Create the user:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@Arch_Container ~]# su - postgres
-</span><span class='line'>[postgres@Arch_Container ~]$ createuser --interactive
-</span><span class='line'>Enter name of role to add: root
-</span><span class='line'>Shall the new role be a superuser? (y/n) y
-</span><span class='line'>[postgres@Arch_Container ~]$ exit
-</span><span class='line'>logout
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now using a test command for verifying your postgresql runs OK:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># createdb myDatabaseName
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Create the Database</h3>
-
-<p>Create a database named book:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># createdb book
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Installing plugins cube into the database book.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@Arch_Container postgresql]# psql -d book
-</span><span class='line'>psql (9.3.5)
-</span><span class='line'>Type "help" for help.
-</span><span class='line'>
-</span><span class='line'>book=# CREATE EXTENSION cube;  
-</span><span class='line'>CREATE EXTENSION
-</span><span class='line'>book=# \q
-</span><span class='line'>[root@Arch_Container postgresql]# psql book -c "SELECT '1'::cube;"
-</span><span class='line'> cube 
-</span><span class='line'>------
-</span><span class='line'> (1)
-</span><span class='line'>(1 row)
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/08/10/lxc-archlinux-tutorial/">LXC ArchLinux Tutorial</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-08-10T10:08:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:08 am</span></time>
-        
-         | <a href="/blog/2014/08/10/lxc-archlinux-tutorial/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Installation</h3>
-
-<p>Install <code>lxc</code>, <code>bridge-utils</code>, <code>netctl</code> from the official repository.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S lxc bridge-utils netctl
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>For creating ArchLinux Container, install arch-install-scripts:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S arch-install-scripts
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check Configurations:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ lxc-checkconfig
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Network Configuration</h3>
-
-<p>Since I use systemd for bridged network, so this step remains blank, the official Arch Wiki use netctl.</p>
-
-<h3>Creating Container Using Template</h3>
-
-<p>List all of the available templates:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls /usr/share/lxc/templates 
-</span><span class='line'>lxc-alpine     lxc-centos    lxc-fedora        lxc-oracle  lxc-ubuntu-cloud
-</span><span class='line'>lxc-altlinux   lxc-cirros    lxc-gentoo        lxc-plamo
-</span><span class='line'>lxc-archlinux  lxc-debian    lxc-openmandriva  lxc-sshd
-</span><span class='line'>lxc-busybox    lxc-download  lxc-opensuse      lxc-ubuntu
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now using the template for creating the Linux Container:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-create -n Arch_Container -t /usr/share/lxc/templates/lxc-archlinux
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If the container is created successfully, it will indicates that you could use it from now.</p>
-
-<h3>Start the Container</h3>
-
-<p>List the installed Containers:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-ls
-</span><span class='line'>Arch_Container  
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start the installed Container:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo lxc-start -n Arch_Container
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The default username is root, and you will got a terminal window, now check the network configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@Arch_Container ~]# ip link show dev eth0
-</span><span class='line'>5: eth0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000
-</span><span class='line'>    link/ether xx:xx:xx:xx brd ff:ff:ff:ff:ff:ff
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Simply use <code>dhcpcd</code> we could get the ip address currently, and surely we can see this network configuration is OK now.  <br/>
-Enable the automatically dhcpcd at startup</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ dhcpcd
-</span><span class='line'>$ systemctl enable dhcpcd.service
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now reboot you will notice the ip address has been configurated automatically.</p>
-
-<h3>Create Other Distributions</h3>
-
-<p>First you should install yum and debootstrap from AUR repository.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt -S yum
-</span><span class='line'>$ yaourt -S debootstrap
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Fedora</h4>
-
-<p>Install Fedora or CentOS will failed, I don&rsquo;t know why.</p>
-
-<h4>Debian</h4>
-
-<p>Install rxync first via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>pacman -S rsync
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Some packages failed to download, so won&rsquo;t install.</p>
-
-<p>After installed rsync, install debian container via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>sudo lxc-create -n Debian_Container -t /usr/share/lxc/templates/lxc-debian
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start the container via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> sudo lxc-start -n Debian_Container
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The default username/password are root, In Debian network is not configured.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/34">&larr; Older</a>
@@ -1623,6 +1531,14 @@ Enable the automatically dhcpcd at startup</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/02/15/hacking-steelseries-engine-3-usb-mouse-under-linux-2/">Hacking SteelSeries Engine 3 USB Mouse Under Linux(2)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/02/06/reading-in-2015/">Reading in 2015</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/02/04/hacking-steelseries-engine-3-usb-mouse-under-linux/">Hacking SteelSeries Engine 3 USB Mouse Under Linux</a>
       </li>
     
@@ -1632,14 +1548,6 @@ Enable the automatically dhcpcd at startup</p>
     
       <li class="post">
         <a href="/blog/2016/01/26/read-digest-on-kvm/">Read Digest on KVM</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/01/18/tips-on-setup-mesos-cluster/">Tips on Setup Mesos Cluster</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/01/15/linux-tips-4/">Linux Tips(4)</a>
       </li>
     
   </ul>
