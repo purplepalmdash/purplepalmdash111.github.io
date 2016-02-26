@@ -9,7 +9,8 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Accounting Setting First you should have heroku accounting, then create an app on heroku, write down its repository information, mine is listed as &hellip;">
+  <meta name="description" content="Local Database Sync First fetch the remote database to localdb via following command: 1
+$ heroku pg:pull DATABASE_URL mylocaldb --app python-weather- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +66,742 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/09/write-python-weather-app-on-heroku-4/">Write Python Weather APP on Heroku(4)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-09T22:50:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:50 pm</span></time>
+        
+         | <a href="/blog/2014/05/09/write-python-weather-app-on-heroku-4/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Local Database Sync</h3>
+
+<p>First fetch the remote database to localdb via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:pull DATABASE_URL mylocaldb --app  python-weather-app
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This command will pull down your database down and create a copy version locally. You can easily view all of the database via psql mylocaldb.</p>
+
+<p>As root, edit following files:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
+</span><span class='line'>/var/lib/postgres/data
+</span><span class='line'># vim postgresql.conf
+</span><span class='line'>listen_addresses = 'localhost'        # what IP address(es) to listen on;
+</span><span class='line'>                  # comma-separated list of addresses;
+</span><span class='line'>                  # defaults to 'localhost'; use '*' for all
+</span><span class='line'>                  # (change requires restart)
+</span><span class='line'>port = 5432               # (change requires restart)
+</span><span class='line'># vim pb_hba.conf
+</span><span class='line'># IPv4 local connections:
+</span><span class='line'>host    all             all             127.0.0.1/32            trust
+</span><span class='line'>host    all             all             127.0.0.1/32            md5
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After editing, save the file and restart the postgresql service.</p>
+
+<h3>Connecting to LocalDatabase</h3>
+
+<p>Following shows how to add/query the records. Now your environment could be totally debugged locally.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&gt;&gt;&gt; import psycopg2
+</span><span class='line'>&gt;&gt;&gt; psycopg2.connect(database="mylocaldb",user="Trusty",password="",host="127.0.0.1",port="5432")
+</span><span class='line'>&lt;connection object at 0x30f0cd0; dsn: 'dbname=mylocaldb user=Trusty password=xx host=127.0.0.1 port=5432', closed: 0&gt;
+</span><span class='line'>&gt;&gt;&gt; db_conn = 'postgresql+psycopg2://Trusty:@localhost/mylocaldb'
+</span><span class='line'>&gt;&gt;&gt; app = Flask(__name__) 
+</span><span class='line'>&gt;&gt;&gt; app.config['SQLALCHEMY_DATABASE_URI'] = db_conn
+</span><span class='line'>&gt;&gt;&gt; db = SQLAlchemy(app)
+</span><span class='line'>&gt;&gt;&gt; db.create_all()
+</span><span class='line'>&gt;&gt;&gt; class User(db.Model):
+</span><span class='line'>...     id = db.Column(db.Integer, primary_key=True)
+</span><span class='line'>...     name = db.Column(db.String(80))
+</span><span class='line'>...     email = db.Column(db.String(120), unique=True)
+</span><span class='line'>...     def __init__(self, name, email):
+</span><span class='line'>...         self.name = name
+</span><span class='line'>...         self.email = email
+</span><span class='line'>...     def __repr__(self):
+</span><span class='line'>...         return '&lt;Name %r&gt;' % self.name
+</span><span class='line'>... 
+</span><span class='line'>&gt;&gt;&gt; user = User('John Doe', 'john.doe@example.com')
+</span><span class='line'>&gt;&gt;&gt; all_users=User.query.all()
+</span><span class='line'>&gt;&gt;&gt; print all_users
+</span><span class='line'>[&lt;Name u'John Doe'&gt;]
+</span><span class='line'>&gt;&gt;&gt; user1 = User('Jim Green', 'jim.green@english.com')
+</span><span class='line'>&gt;&gt;&gt; db.session.add(user1)
+</span><span class='line'>&gt;&gt;&gt; db.session.commit()
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In genhtml.py we need to do corresponding changes in order to enable the local database.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/09/write-python-weather-app-on-heroku-3/">Write Python Weather APP on Heroku(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-09T19:12:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>7:12 pm</span></time>
+        
+         | <a href="/blog/2014/05/09/write-python-weather-app-on-heroku-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Database Introduction</h3>
+
+<h4>Heroku Postgres Installation</h4>
+
+<p>Before using postgres, we have to install this add-ons, we call this step &ldquo;attach Heroku POSTGRES to heroku application&rdquo;:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku addons
+</span><span class='line'>python-weather-app has no add-ons.
+</span><span class='line'>$ heroku addons:add heroku-postgresql:dev
+</span><span class='line'>Adding heroku-postgresql:dev on python-weather-app... done, v7 (free)
+</span><span class='line'>Attached as HEROKU_POSTGRESQL_OLIVE_URL
+</span><span class='line'>Database has been created and is available
+</span><span class='line'> ! This database is empty. If upgrading, you can transfer
+</span><span class='line'> ! data from another database with pgbackups:restore.
+</span><span class='line'>Use `heroku addons:docs heroku-postgresql` to view documentation.
+</span><span class='line'>$ heroku addons | grep POSTGRES
+</span><span class='line'>heroku-postgresql:dev  HEROKU_POSTGRESQL_OLIVE
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If you want to refer the documentation of heroku postgres, simply use following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku addons:docs heroku-postgresql
+</span><span class='line'>Opening heroku-postgresql docs... done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>A new browser window will be opened and you can view the help here.  <br/>
+View the configuration of heroku postgres via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:info
+</span><span class='line'>=== HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>Plan:        Dev
+</span><span class='line'>Status:      Available
+</span><span class='line'>Connections: 0
+</span><span class='line'>PG Version:  9.3.4
+</span><span class='line'>Created:     2014-05-09 11:25 UTC
+</span><span class='line'>Data Size:   6.4 MB
+</span><span class='line'>Tables:      0
+</span><span class='line'>Rows:        0/10000 (In compliance)
+</span><span class='line'>Fork/Follow: Unsupported
+</span><span class='line'>Rollback:    Unsupported
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>10000 rows means, if we use 24 rows per day, then around 1 year this database will be fulfilled. But anyway, at the very beginning developing, we won&rsquo;t consider the latter problem.  <br/>
+After you installed the postgre for around 5 minutes, you can use following commands for displaying your database:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:ps
+</span><span class='line'> pid | state | source | running_for | waiting | query 
+</span><span class='line'>-----+-------+--------+-------------+---------+-------
+</span><span class='line'>(0 rows)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you can connect to pg via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:psql
+</span><span class='line'>---&gt; Connecting to HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>psql (9.3.4)
+</span><span class='line'>SSL connection (cipher: DHE-RSA-AES256-SHA, bits: 256)
+</span><span class='line'>Type "help" for help.
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>What for next?</p>
+
+<h4>Local Postgres Installation</h4>
+
+<p>Install postgres via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacamn -S postgre
+</span><span class='line'>$ sudo -i -u postgres
+</span><span class='line'>[postgres@DashArch ~]$ initdb --locale en_US.UTF-8 -E UTF8 -D '/var/lib/postgres/data'
+</span><span class='line'># In another terminal, enable and start the service
+</span><span class='line'>$ sudo systemctl start postgresql
+</span><span class='line'>$ sudo systemctl enable postgresql
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now add current user into the postgres user:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[postgres@DashArch ~]$ createuser --interactive
+</span><span class='line'>Enter name of role to add: Trusty
+</span><span class='line'>Shall the new role be a superuser? (y/n) y
+</span><span class='line'># Now 'Trusty' as postgres user, can create the weatherData database. 
+</span><span class='line'>$ createdb weatherData
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Basic user of postgres:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ psql -d weatherData   
+</span><span class='line'>psql (9.3.4)
+</span><span class='line'>Type "help" for help.
+</span><span class='line'>
+</span><span class='line'>weatherData=# \help
+</span><span class='line'>......
+</span><span class='line'>weatherData=# \q
+</span><span class='line'>$ 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Connect Database In Python(Local Way)</h4>
+
+<p>Install the python packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install psycopg2
+</span><span class='line'>$ pip freeze 
+</span><span class='line'># Add the psycopg2 related line into the requirements.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>A simple example on how to connect Database and view the content of the database:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$ sudo -u postgres createuser jim
+</span><span class='line'>[Trusty@~]$ sudo -u postgres createdb testdb -O jim
+</span><span class='line'>[Trusty@~/code/herokuWeatherApp]$ source venv/bin/activate
+</span><span class='line'>(venv)[Trusty@~/code/herokuWeatherApp]$ python
+</span><span class='line'>Python 2.7.6 (default, Feb 26 2014, 12:07:17) 
+</span><span class='line'>[GCC 4.8.2 20140206 (prerelease)] on linux2
+</span><span class='line'>Type "help", "copyright", "credits" or "license" for more information.
+</span><span class='line'>&gt;&gt;&gt; import psycopg2
+</span><span class='line'>&gt;&gt;&gt; import sys
+</span><span class='line'>&gt;&gt;&gt; con = None
+</span><span class='line'>&gt;&gt;&gt; con = psycopg2.connect(database='testdb', user='jim')
+</span><span class='line'>&gt;&gt;&gt; cur = con.cursor()
+</span><span class='line'>&gt;&gt;&gt; cur.execute('SELECT version()')   
+</span><span class='line'>&gt;&gt;&gt; ver = cur.fetchone()
+</span><span class='line'>&gt;&gt;&gt; print ver
+</span><span class='line'>('PostgreSQL 9.3.4 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.2 20140206 (prerelease), 64-bit',)
+</span><span class='line'>&gt;&gt;&gt; con.close()
+</span><span class='line'>&gt;&gt;&gt; quit()
+</span><span class='line'>(venv)[Trusty@~/code/herokuWeatherApp]$ 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Connect Heroku Postgres</h4>
+
+<p>Now commit our modifications into heroku, and verify to see if we can really do some magic things with postgres:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git add .
+</span><span class='line'>$ git commit -m "commit for postgres"
+</span><span class='line'>$ git push heroku master
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install a new library:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install flask-sqlalchemy
+</span><span class='line'>$ pip freeze  # grep the line and add it into the requirement.txt
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Promoting the URL to DATABASE_URL:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:promote HEROKU_POSTGRESQL_OLIVE_URL
+</span><span class='line'>Promoting HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL) to DATABASE_URL... done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then Add the following lines into genhtml.py:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>from flask.ext.sqlalchemy import SQLAlchemy
+</span><span class='line'>app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+</span><span class='line'>db = SQLAlchemy(app)
+</span><span class='line'>
+</span><span class='line'>##############FenGe_Line####################
+</span><span class='line'>class User(db.Model):
+</span><span class='line'>    id = db.Column(db.Integer, primary_key=True)
+</span><span class='line'>    name = db.Column(db.String(80))
+</span><span class='line'>    email = db.Column(db.String(120), unique=True)
+</span><span class='line'>
+</span><span class='line'>    def __init__(self, name, email):
+</span><span class='line'>        self.name = name
+</span><span class='line'>        self.email = email
+</span><span class='line'>
+</span><span class='line'>    def __repr__(self):
+</span><span class='line'>        return '&lt;Name %r&gt;' % self.name
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Commit again and begin for verifying the database via CLI:  <br/>
+Create a python interactive command window via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&gt;&gt;&gt; from genhtml import db
+</span><span class='line'>&gt;&gt;&gt; db.create_all()
+</span><span class='line'>&gt;&gt;&gt; from genhtml import User
+</span><span class='line'>&gt;&gt;&gt; user = User('John Doe', 'john.doe@example.com')
+</span><span class='line'>&gt;&gt;&gt; db.session.add(user)
+</span><span class='line'>&gt;&gt;&gt; db.session.commit()
+</span><span class='line'>&gt;&gt;&gt; all_users =User.query.all()
+</span><span class='line'>&gt;&gt;&gt; print all_users
+</span><span class='line'>[&lt;Name u'John Doe'&gt;]
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can see 1 record has been inserted into the database:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~/code/herokuWeatherApp]$ heroku pg:info
+</span><span class='line'>=== HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>Plan:        Dev
+</span><span class='line'>Status:      Available
+</span><span class='line'>Connections: 2
+</span><span class='line'>PG Version:  9.3.4
+</span><span class='line'>Created:     2014-05-09 11:25 UTC
+</span><span class='line'>Data Size:   6.5 MB
+</span><span class='line'>Tables:      1
+</span><span class='line'>Rows:        1/10000 (In compliance)
+</span><span class='line'>Fork/Follow: Unsupported
+</span><span class='line'>Rollback:    Unsupported
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>How to see the inserted data?</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ heroku pg:psql
+</span><span class='line'>---&gt; Connecting to HEROKU_POSTGRESQL_OLIVE_URL (DATABASE_URL)
+</span><span class='line'>psql (9.3.4)
+</span><span class='line'>SSL connection (cipher: DHE-RSA-AES256-SHA, bits: 256)
+</span><span class='line'>Type "help" for help.
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; select current_database();
+</span><span class='line'> current_database 
+</span><span class='line'>------------------
+</span><span class='line'> d47ena4men35jn
+</span><span class='line'>(1 row)
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; \dt
+</span><span class='line'>           List of relations
+</span><span class='line'> Schema | Name | Type  |     Owner      
+</span><span class='line'>--------+------+-------+----------------
+</span><span class='line'> public | user | table | yjusdsrpwpplxp
+</span><span class='line'>(1 row)
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; \d user;
+</span><span class='line'>                                 Table "public.user"
+</span><span class='line'> Column |          Type          |                     Modifiers                     
+</span><span class='line'>--------+------------------------+---------------------------------------------------
+</span><span class='line'> id     | integer                | not null default nextval('user_id_seq'::regclass)
+</span><span class='line'> name   | character varying(80)  | 
+</span><span class='line'> email  | character varying(120) | 
+</span><span class='line'>Indexes:
+</span><span class='line'>    "user_pkey" PRIMARY KEY, btree (id)
+</span><span class='line'>    "user_email_key" UNIQUE CONSTRAINT, btree (email)
+</span><span class='line'>
+</span><span class='line'>d47ena4men35jn=&gt; SELECT * FROM public.user;
+</span><span class='line'> id |   name   |        email         
+</span><span class='line'>----+----------+----------------------
+</span><span class='line'>  1 | John Doe | john.doe@example.com
+</span><span class='line'>(1 row)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We can use python&rsquo;s interface for add/delete records, drop tables, etc.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/05/09/write-python-weather-app-on-heroku-2/">Write Python Weather APP on Heroku(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-05-09T15:19:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>3:19 pm</span></time>
+        
+         | <a href="/blog/2014/05/09/write-python-weather-app-on-heroku-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Get Current Weather Data</h3>
+
+<p>Now we begin to change our APP to a real funny staff. First we change the hello.py and begin to write our own &ldquo;genhtml.py&rdquo;</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mv hello.py genhtml.py
+</span><span class='line'>$ cat Procfile
+</span><span class='line'>web: gunicorn genhtml:app
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We know there is an python library which we could install from pip named &ldquo;pywapi&rdquo;, simply install it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>(venv2) $ pip install pywapi
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If your pip&rsquo;s version is 1.5.1, then notice you have to use following command for installing the pywapi:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>(venv2) $ pip install pywapi --allow-external pywapi --allow-unverified pywapi
+</span><span class='line'>Downloading/unpacking pywapi
+</span><span class='line'>  pywapi is potentially insecure and unverifiable.
+</span><span class='line'>  Downloading pywapi-0.3.8.tar.gz
+</span><span class='line'>  Running setup.py (path:/home/Trusty/code/herokuWeatherApp/venv/build/pywapi/setup.py) egg_info for package pywapi
+</span><span class='line'>    
+</span><span class='line'>Installing collected packages: pywapi
+</span><span class='line'>  Running setup.py install for pywapi
+</span><span class='line'>    
+</span><span class='line'>Successfully installed pywapi
+</span><span class='line'>Cleaning up...
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now change the genhtml.py to following content:</p>
+
+<figure class='code'><figcaption><span>genhtml.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="kn">import</span> <span class="nn">os</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span>
+</span><span class='line'>
+</span><span class='line'><span class="kn">import</span> <span class="nn">pywapi</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">string</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Generate the Nanjing Weather Data</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">genhtml</span><span class="p">():</span>
+</span><span class='line'>    <span class="n">Yahoo_Result</span> <span class="o">=</span> <span class="n">pywapi</span><span class="o">.</span><span class="n">get_weather_from_yahoo</span><span class="p">(</span><span class="s">&#39;CHXX0099&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">Current_Temp</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">lower</span><span class="p">(</span><span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;condition&#39;</span><span class="p">][</span><span class="s">&#39;temp&#39;</span><span class="p">])</span>
+</span><span class='line'>    <span class="n">Current_Humi</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">lower</span><span class="p">(</span><span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;atmosphere&#39;</span><span class="p">][</span><span class="s">&#39;humidity&#39;</span><span class="p">])</span>
+</span><span class='line'>    <span class="n">Tomorrow_Forecast</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+</span><span class='line'>    <span class="n">Twenty_Four_Hours</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+</span><span class='line'>    <span class="n">Fourty_Eight_Hours</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span>
+</span><span class='line'>    <span class="n">Seventy_Two_Hours</span> <span class="o">=</span> <span class="n">Yahoo_Result</span><span class="p">[</span><span class="s">&#39;forecasts&#39;</span><span class="p">][</span><span class="mi">3</span><span class="p">]</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">Current_Temp</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After modification, we use &ldquo;foreman start&rdquo; for previewing the result, we can see the webpage returns the current temperature of Nanjing, its value is 25, as in following picture:  <br/>
+<img src="/images/current_temp.jpg" alt="/images/current_temp.jpg" /></p>
+
+<p>This shows the pywapi could be work together with other components, we will continue for next step.</p>
+
+<h3>Deployment On Heroku</h3>
+
+<p>You need to change the requirement.txt file like following:</p>
+
+<figure class='code'><figcaption><span>genhtml.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='py'><span class='line'><span class="err">$</span> <span class="n">cat</span> <span class="n">requirements</span><span class="o">.</span><span class="n">txt</span>
+</span><span class='line'><span class="o">--</span><span class="n">allow</span><span class="o">-</span><span class="nb">all</span><span class="o">-</span><span class="n">external</span>
+</span><span class='line'><span class="o">--</span><span class="n">allow</span><span class="o">-</span><span class="n">unverified</span> <span class="n">pywapi</span>
+</span><span class='line'><span class="n">Flask</span><span class="o">==</span><span class="mf">0.10</span><span class="o">.</span><span class="mi">1</span>
+</span><span class='line'><span class="n">Jinja2</span><span class="o">==</span><span class="mf">2.7</span><span class="o">.</span><span class="mi">2</span>
+</span><span class='line'><span class="n">MarkupSafe</span><span class="o">==</span><span class="mf">0.23</span>
+</span><span class='line'><span class="n">Werkzeug</span><span class="o">==</span><span class="mf">0.9</span><span class="o">.</span><span class="mi">4</span>
+</span><span class='line'><span class="n">gunicorn</span><span class="o">==</span><span class="mf">18.0</span>
+</span><span class='line'><span class="n">itsdangerous</span><span class="o">==</span><span class="mf">0.24</span>
+</span><span class='line'><span class="n">pywapi</span><span class="o">==</span><span class="mf">0.3</span><span class="o">.</span><span class="mi">8</span>
+</span><span class='line'><span class="n">wsgiref</span><span class="o">==</span><span class="mf">0.1</span><span class="o">.</span><span class="mi">2</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then run &ldquo;git push heroku master&rdquo;, open your browser and visit <a href="http://python-weather-app.herokuapp.com/">http://python-weather-app.herokuapp.com/</a>, the output the same as in local.</p>
+
+<p>By now, we have created a very simple app on getting the current temperature of nanjing, next chapter we will use database for timely record the data.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1058,436 +1795,6 @@ So now you got conky looks like following:  <br/>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/04/26/customize-awesome-startup-application/">Customize Awesome Startup Application</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-04-26T08:21:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>8:21 am</span></time>
-        
-         | <a href="/blog/2014/04/26/customize-awesome-startup-application/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Let applications automatically start at boot will greatly save your time in configurating the system. Following is some tips on how to automatically start applications in awesome desktop environment.</p>
-
-<h3>Xinit Way</h3>
-
-<p>My startup configuration is listed as:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>export GTK_IM_MODULE=fcitx
-</span><span class='line'>export QT_IM_MODULE=fcitx
-</span><span class='line'>export XMODIFIERS="@im=fcitx"
-</span><span class='line'>exec awesome
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So the awesome environment will be started.</p>
-
-<h3>Awesome Way</h3>
-
-<p>Run only once in awesome desktop, via following configuration file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>function run_once(cmd)
-</span><span class='line'>  findme = cmd
-</span><span class='line'>  firstspace = cmd:find(" ")
-</span><span class='line'>  if firstspace then
-</span><span class='line'>    findme = cmd:sub(0, firstspace-1)
-</span><span class='line'>  end
-</span><span class='line'>  awful.util.spawn_with_shell("pgrep -u $USER -x " .. findme .. " &gt; /dev/null || (" .. cmd .. ")")
-</span><span class='line'>end
-</span><span class='line'>
-</span><span class='line'>run_once("udiskie -2 --tray")
-</span><span class='line'>run_once("wicd-client --tray")
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the code into ~/.config/awesome/rc.lua, then you can get the udiskie and wicd-client icon in the tray.</p>
-
-<h3>Change View Way</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#dualview
-</span><span class='line'>killall conky
-</span><span class='line'>xrandr --output LVDS1 --mode 1366x768
-</span><span class='line'>xrandr --newmode $(gtf 1920 1080 60 | grep Modeline | sed s/Modeline\ // | tr -d '"')
-</span><span class='line'>xrandr --addmode VGA1 1920x1080_60.00
-</span><span class='line'>xrandr --output VGA1 --mode 1920x1080_60.00 --right-of LVDS1
-</span><span class='line'>xscreensaver -nosplash &
-</span><span class='line'>xset -b
-</span><span class='line'>xmodmap -e "pointer = 3 2 1"
-</span><span class='line'>fcitx &
-</span><span class='line'>sleep 2
-</span><span class='line'>sudo whatpulse &
-</span><span class='line'>conky &
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Systemd Way</h3>
-
-<p>For example, we want to enable xampp.service on every start:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@DashArch system]# pwd
-</span><span class='line'>/etc/systemd/system
-</span><span class='line'>[root@DashArch system]# cat xampp.service
-</span><span class='line'>
-</span><span class='line'>[Unit]
-</span><span class='line'>Description=xampp for ArchLinux, locate in /opt/lampp
-</span><span class='line'>After=network.target
-</span><span class='line'>
-</span><span class='line'>[Service]
-</span><span class='line'>ExecStart=/opt/lampp/lampp start 
-</span><span class='line'>ExecStop=/opt/lampp/lampp stop
-</span><span class='line'>Type=forking
-</span><span class='line'>
-</span><span class='line'>[Install]
-</span><span class='line'>WantedBy=multi-user.target
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then we can start/stop the service, enable/disable the service via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>systemctl start xampp.service
-</span><span class='line'>systemctl stop xampp.service
-</span><span class='line'>systemctl enable xampp.service
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/04/25/qemu-emulated-kali/">Qemu Emulated Kali</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-04-25T10:35:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:35 am</span></time>
-        
-         | <a href="/blog/2014/04/25/qemu-emulated-kali/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Preparation</h3>
-
-<p>Create the image file:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img create -f qcow2 kali.qcow2 20G
-</span><span class='line'>Formatting 'kali.qcow2', fmt=qcow2 size=21474836480 encryption=off cluster_size=65536 lazy_refcounts=off 
-</span><span class='line'>$ ls -l -h
-</span><span class='line'>total 136K
-</span><span class='line'>-rw-r--r-- 1 Trusty root 193K Apr 25 10:34 kali.qcow2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Since I&rsquo;ve created the kali, ignore this article.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/04/23/deploy-xampp-on-archlinux/">Deploy XAMPP on ArchLinux</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-04-23T14:14:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2014</span></span> <span class='time'>2:14 pm</span></time>
-        
-         | <a href="/blog/2014/04/23/deploy-xampp-on-archlinux/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Installation</h3>
-
-<p>On ArchLinux, Install xampp via Yaourt:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>yaourt xampp
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After installation, you will find the default xampp located in &ldquo;/opt/lampp&rdquo;. Start/Stop/Restart the xampp via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>/opt/lampp/lampp start/stop/restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Adjustment</h3>
-
-<p>Enable the security via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>/opt/lampp/lampp security
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then you have to use username and password for accessing &ldquo;<a href="http://localhost">http://localhost</a>&rdquo;, the default username is lampp, password is what you selected.   <br/>
-If you want to add your own Directory, add following lines into &ldquo;/opt/lampp/etc/httpd.conf:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># Add our own Directory
-</span><span class='line'>#&lt;Directory "/yourDirectory/"&gt;
-</span><span class='line'>&lt;Directory "/home/Trusty/code/octo/heroku/Tomcat/public/"&gt;
-</span><span class='line'>    Options Indexes FollowSymLinks ExecCGI Includes
-</span><span class='line'>    AllowOverride All
-</span><span class='line'>    Require all granted
-</span><span class='line'>&lt;/Directory&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>To enable virtualhost, you have to uncomment following line in &ldquo;/opt/lampp/etc/httpd.conf:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># Virtual hosts
-</span><span class='line'>Include etc/extra/httpd-vhosts.conf
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then we should edit the <code>etc/extra/httpd-xampp.conf</code>, to change the security issue:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#
-</span><span class='line'># New XAMPP security concept
-</span><span class='line'>#
-</span><span class='line'>&lt;LocationMatch "^/(?i:(?:xampp|security|licenses|phpmyadmin|webalizer|server-status|server-info))"&gt;
-</span><span class='line'>  Order deny,allow
-</span><span class='line'>  Deny from all
-</span><span class='line'>  #Allow from ::1 127.0.0.0/8 \
-</span><span class='line'>  #   fc00::/7 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 \
-</span><span class='line'>  #   fe80::/10 169.254.0.0/16
-</span><span class='line'>  Allow from ::1 127.0.0.0/8
-</span><span class='line'>  Allow from all
-</span><span class='line'>  ErrorDocument 403 /error/XAMPP_FORBIDDEN.html.var
-</span><span class='line'>&lt;/LocationMatch&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add more vhosts, the definition is located at /opt/lampp/etc/extra/httpd-vhosts.conf:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>&lt;VirtualHost *:80&gt;
-</span><span class='line'>DocumentRoot /opt/lampp/htdocs
-</span><span class='line'>ServerName localhost
-</span><span class='line'>ServerAlias www.localhost
-</span><span class='line'>&lt;/VirtualHost&gt;
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>&lt;VirtualHost *:80&gt;
-</span><span class='line'>DocumentRoot "/home/Trusty/code/octo/heroku/Tomcat/public/"
-</span><span class='line'>ServerName localhost2
-</span><span class='line'>ServerAlias www.localhost2
-</span><span class='line'>&lt;Directory "/home/Trusty/code/octo/heroku/Tomcat/public/"&gt;
-</span><span class='line'>Order allow,deny
-</span><span class='line'>Allow from all
-</span><span class='line'>&lt;/Directory&gt;
-</span><span class='line'>&lt;/VirtualHost&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the definition of hostname in /etc/hosts:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>127.0.0.1    localhost2.localdomain  localhost2
-</span><span class='line'>127.0.0.1 localhosts # for blog using in XAMPP
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Configuration</h3>
-
-<p>Add the xampp into the startup procedure, in .xinitrc:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>sudo /opt/lampp/lampp start &
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then everytime the lampp will automatically start.</p>
-
-<h3>Add systemd startup</h3>
-
-<p>Configure the systemd startup script via following commands:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pwd
-</span><span class='line'>/etc/systemd/system
-</span><span class='line'>
-</span><span class='line'>$ cat xampp.service
-</span><span class='line'>[Unit]
-</span><span class='line'>Description=xampp for ArchLinux, locate in /opt/lampp
-</span><span class='line'>After=network.target
-</span><span class='line'>
-</span><span class='line'>[Service]
-</span><span class='line'>ExecStart=/opt/lampp/lampp start 
-</span><span class='line'>ExecStop=/opt/lampp/lampp stop
-</span><span class='line'>Type=forking
-</span><span class='line'>
-</span><span class='line'>[Install]
-</span><span class='line'>WantedBy=multi-user.target
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-Enable auto-start xampp.service by default:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># systemctl start xampp.service
-</span><span class='line'># systemctl enable xampp.service
-</span><span class='line'>ln -s '/etc/systemd/system/xampp.service' '/etc/systemd/system/multi-user.target.wants/xampp.service'
-</span><span class='line'># ps -ef | grep http
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/40">&larr; Older</a>
@@ -1505,23 +1812,23 @@ Enable auto-start xampp.service by default:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/02/26/tips-on-v-usb-and-arduino-2/">Tips on V-USB and Arduino(2)--用v-usb控制LED</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/02/26/tips-on-v-usb-and-arduino-1/">Tips on V-USB and Arduino(1)- USB Keyboard</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/02/25/openvswitch-bonding/">OpenVswitch Bonding</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/02/23/using-python-for-checking-imap-mailbox-unread-message/">Using Python for Checking Imap Mailbox Unread Message</a>
       </li>
     
       <li class="post">
         <a href="/blog/2016/02/23/playing-e-buddy/">Playing e-Buddy</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/02/19/mutt-configuration-on-do/">Mutt Configuration on DO</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/02/19/usb-cute-things/">USB Cute Things</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/02/15/hacking-steelseries-engine-3-usb-mouse-under-linux-2/">Hacking SteelSeries Engine 3 USB Mouse Under Linux(2)</a>
       </li>
     
   </ul>
