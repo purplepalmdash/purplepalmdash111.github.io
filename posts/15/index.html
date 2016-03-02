@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="For automatically deploying OpenStack, I use Chef for deployment, following records the steps for setting up the whole environment. Machine &hellip;">
+  <meta name="description" content="Following article records all of the steps for using chef for deploying OpenStack. Refers to: http://ehaselwanter.com/en/blog/2014/10/15/deploying- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,175 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/06/01/chef-for-deploying-openstack/">Chef for Deploying OpenStack</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-06-01T11:19:34+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2015</span></span> <span class='time'>11:19 am</span></time>
+        
+         | <a href="/blog/2015/06/01/chef-for-deploying-openstack/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Following article records all of the steps for using chef for deploying OpenStack.</p>
+
+<p>Refers to:  <br/>
+<a href="http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/">http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/</a></p>
+
+<h3>Change vbox files</h3>
+
+<p>Edit the Vagrantfile for bring up the vbox, then startup the machine, modify its content , save it.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim Vagrantfile
+</span><span class='line'>    # -*- mode: ruby -*-
+</span><span class='line'>    # vi: set ft=ruby :
+</span><span class='line'>    Vagrant::Config.run do |config|
+</span><span class='line'>    config.vm.box = "Trusy64"
+</span><span class='line'>    config.vm.box_url = "http://xxx.xxx.xxx.xxx/opscode_ubuntu-14.04_chef-provisionerless.box"
+</span><span class='line'>    config.vm.customize ["modifyvm", :id, "--memory", 1024]
+</span><span class='line'>    end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+Login to the running machine and modify its default repository from official to local repository.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant up
+</span><span class='line'>$ vagrant ssh
+</span><span class='line'>(YourVagrantMachine) $ sudo vim /etc/apt/sources.list
+</span><span class='line'>(YourVagrantMachine) $ sudo vim /etc/apt/apt.conf
+</span><span class='line'>(YourVagrantMachine) $ sudo apt-get update && sudo apt-get -y upgrade</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now save your modification to the vbox file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant package --base vagrant_default_1433130468275_38998
+</span><span class='line'>$ ls
+</span><span class='line'>package.box Vagrantfile</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Setup Chef Code</h3>
+
+<p>First install the vagrant plugins via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant plugin install vagrant-berkshelf
+</span><span class='line'>$ vagrant plugin install vagrant-chef-zero
+</span><span class='line'>$ vagrant plugin install vagrant-omnibus
+</span><span class='line'>$ vagrant plugin list</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Get the repository from github, modify the file <code>vagrant_linux.rb</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[xxxx@~/Code/Chef/MasterVersion]$ git clone https://github.com/stackforge/openstack-chef-repo.git
+</span><span class='line'>$ cd openstack-chef-repo
+</span><span class='line'>$ vim vagrant_linux.rb
+</span><span class='line'>  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_centos-7.1_chef-provisionerless.box'
+</span><span class='line'>  url 'http://xxx.xxx.xxx.xxx/opscode_centos-7.1_chef-provisionerless.box'
+</span><span class='line'>
+</span><span class='line'>  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_ubuntu-14.04_chef-provisionerless.box'
+</span><span class='line'>  url 'http://xxx.xxx.xxx.xxx/package.box'
+</span><span class='line'>
+</span><span class='line'>  'vm.box' =&gt; 'ubuntu14'</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Download all of the cookbooks, and modify the rubygems.org to Chinese mirror, Thanks for the fucking GreatFW!:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ chef exec rake berks_vendor
+</span><span class='line'>$ cp -r cookbooks cookbooks.back
+</span><span class='line'>$ cd cookbooks
+</span><span class='line'>$ find . -type f -exec sed -i -e 's/https:\/\/rubygems.org/http:\/\/mirrors.aliyun.com\/rubygems/g' {} \; </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Edit the ruby definition file for avoiding <code>Chef encountered an error attempting to load the node data for "controller"</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim ./aio-neutron.rb
+</span><span class='line'>machine 'controller' do
+</span><span class='line'>  add_machine_options vagrant_config: controller_config
+</span><span class='line'>+  chef_server( :chef_server_url =&gt; 'http://localhost:8889')
+</span><span class='line'>  role 'allinone-compute'
+</span><span class='line'>  role 'os-image-upload'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>One Cookbook needs to modify, because it will automatically use source from <code>rubygems.org</code>, Thanks again for the fucking GreatFW!:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd cookbooks
+</span><span class='line'>$ vim ./mysql2_chef_gem/libraries/provider_mysql2_chef_gem_mysql.rb
+</span><span class='line'>             options("--clear-sources --source http://mirrors.aliyun.com/rubygems/gems/mysql2-0.3.18.gem") 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now begin to provision via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ chef exec rake aio_neutron 2&gt;&1 | tee aio_neutron.txt</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After installation and configuration, you could visit following URL for your OpenStack:</p>
+
+<p><a href="https://127.0.0.1:9443">https://127.0.0.1:9443</a></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3531,282 +3700,6 @@ Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/05/20/setup-centos6-slash-7-local-repository/">Setup CentOS6/7 Local Repository</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-05-20T11:32:56+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:32 am</span></time>
-        
-         | <a href="/blog/2015/05/20/setup-centos6-slash-7-local-repository/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>For speeding up the deployment, I have to setup the local repository for CentOS6/7, following is the steps for setting up such two repositories.  <br/>
-The steps are followed by following URL:  <br/>
-<a href="https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror">https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror</a></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd /etc/yum.repos.d/
-</span><span class='line'># curl -O https://copr.fedoraproject.org/coprs/baurzhanm/mrepo/repo/epel-6/baurzhanm-mrepo-epel-6.repo
-</span><span class='line'># vim baurzhanm-mrepo-epel-6.repo
-</span><span class='line'># yum update
-</span><span class='line'># yum -y install screen lftp httpd mrepo
-</span><span class='line'># vim mrepo.conf
-</span><span class='line'>    ### Configuration file for mrepo
-</span><span class='line'>    
-</span><span class='line'>    ### The [main] section allows to override mrepo's default settings
-</span><span class='line'>    ### The mrepo-example.conf gives an overview of all the possible settings
-</span><span class='line'>    [main]
-</span><span class='line'>    srcdir = /var/mrepo
-</span><span class='line'>    wwwdir = /var/www/mrepo
-</span><span class='line'>    confdir = /etc/mrepo.conf.d
-</span><span class='line'>    arch = x86_64
-</span><span class='line'>    
-</span><span class='line'>    mailto = root@localhost
-</span><span class='line'>    smtp-server = localhost
-</span><span class='line'>    
-</span><span class='line'>    #rhnlogin = username:password
-</span><span class='line'>    
-</span><span class='line'>    ### Any other section is considered a definition for a distribution
-</span><span class='line'>    ### You can put distribution sections in /etc/mrepo.conf.d/
-</span><span class='line'>    ### Examples can be found in the documentation at:
-</span><span class='line'>    ###     /usr/share/doc/mrepo-0.8.9/dists/.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the configuration files for CentOS 6:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim  /etc/mrepo.conf.d/centos6.conf
-</span><span class='line'>[centos6]
-</span><span class='line'>name = CentOS $release ($arch)
-</span><span class='line'>release = 6
-</span><span class='line'>arch = x86_64
-</span><span class='line'>metadata = yum repomd
-</span><span class='line'>
-</span><span class='line'>#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-6.6-x86_64-bin-DVD?.iso
-</span><span class='line'>#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-</span><span class='line'>#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-</span><span class='line'>extras = http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/
-</span><span class='line'>epel = http://mirrors.aliyun.com/epel/$release/$arch/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add configuraiton files for CentOS 7:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim  /etc/mrepo.conf.d/centos7.conf
-</span><span class='line'>[centos7]
-</span><span class='line'>name = CentOS $release ($arch)
-</span><span class='line'>release = 7
-</span><span class='line'>arch = x86_64
-</span><span class='line'>metadata = yum repomd
-</span><span class='line'>
-</span><span class='line'>#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-7.0-1406-x86_64-DVD.iso
-</span><span class='line'>#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-</span><span class='line'>#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-</span><span class='line'>#epel = http://mirrors.aliyun.com/epel/$release/$arch/
-</span><span class='line'>extra=http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use following comands for initial sync, it will take a very~long~long~long time.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mrepo -g -u -vvv [centos6|centos7]</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After syncing, add definition into the apache&rsquo;s configuration:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vi /etc/httpd/conf.d/mrepo.conf
-</span><span class='line'>--- ADD ---
-</span><span class='line'>AddDescription "CentOS 6 for x86" centos6-i386
-</span><span class='line'>AddDescription "CentOS 6 for x86_64" centos6-x86_64
-</span><span class='line'>AddDescription "CentOS 7 for x86" centos7-i386
-</span><span class='line'>AddDescription "CentOS 7 for x86_64" centos7-x86_64
-</span><span class='line'>--- ADD ---
-</span><span class='line'># Add repofile for CentOS 6 mirror
-</span><span class='line'>cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos6-x86_64/CentOS-local-http.repo 
-</span><span class='line'>#
-</span><span class='line'># CentOS-local-http.repo
-</span><span class='line'>#
-</span><span class='line'> 
-</span><span class='line'>[0-base]
-</span><span class='line'>name=CentOS-local-base
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.os/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'> 
-</span><span class='line'>[0-updates]
-</span><span class='line'>name=CentOS-local-updates
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.updates/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'>EOF
-</span><span class='line'> 
-</span><span class='line'># Add repofile for CentOS 7 mirror
-</span><span class='line'>cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos7-x86_64/CentOS-local-http.repo 
-</span><span class='line'>#
-</span><span class='line'># CentOS-local-http.repo
-</span><span class='line'>#
-</span><span class='line'> 
-</span><span class='line'>[0-base]
-</span><span class='line'>name=CentOS-local-base
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.os/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'> 
-</span><span class='line'>[0-updates]
-</span><span class='line'>name=CentOS-local-updates
-</span><span class='line'>baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.updates/
-</span><span class='line'>gpgcheck=0
-</span><span class='line'>EOF
-</span><span class='line'> 
-</span><span class='line'># chkconfig httpd on
-</span><span class='line'># service httpd restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>mrepo for CentOS6.5</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root:/home/juju/mrepo]# cat /etc/mrepo.conf.d/centos6.5.conf  
-</span><span class='line'>### URL: http://www.centos.org/
-</span><span class='line'> 
-</span><span class='line'>[centos6.5]
-</span><span class='line'>name = CentOS $release ($arch)
-</span><span class='line'>release = 6.5
-</span><span class='line'>arch = x86_64
-</span><span class='line'>metadata = yum repomd
-</span><span class='line'>
-</span><span class='line'>os=http://vault.centos.org/$release/os/$arch/Packages/
-</span><span class='line'>updates=http://vault.centos.org/$release/updates/$arch/Packages/
-</span><span class='line'>extras=http://vault.centos.org/$release/extras/$arch/Packages/
-</span><span class='line'>centosplus=http://vault.centos.org/$release/centosplus/$arch/Packages/
-</span><span class='line'>fasttrack=http://vault.centos.org/$release/fasttrack/$arch/Packages/</span></code></pre></td></tr></table></div></figure>
-
-
-<p>sync the repository via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># mrepo -g -u -vvv centos6.5</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/16">&larr; Older</a>
@@ -3824,6 +3717,10 @@ The steps are followed by following URL:  <br/>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/02/conntrack-tools-usage/">Conntrack-tools Usage</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/">E-buddy消息提醒服务设计思路(1)</a>
       </li>
     
@@ -3837,10 +3734,6 @@ The steps are followed by following URL:  <br/>
     
       <li class="post">
         <a href="/blog/2016/02/26/tips-on-v-usb-and-arduino-2/">Tips on V-USB and Arduino(2)--用v-usb控制LED</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/02/26/tips-on-v-usb-and-arduino-1/">Tips on V-USB and Arduino(1)- USB Keyboard</a>
       </li>
     
   </ul>
