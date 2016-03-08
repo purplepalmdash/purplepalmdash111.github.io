@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Since the network environment is not good(In fact, very bad), because of the GFW, so I have to build the opencontrail packages in digitalOcean. &hellip;">
+  <meta name="description" content="Dockerfile Dockerfile is like Vagrantfile, for define the configuration of the docker container. The steps for creating the Dockerfile is listed as &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,1259 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/01/28/play-docker-3/">Play Docker(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-01-28T03:53:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>3:53 am</span></time>
+        
+         | <a href="/blog/2015/01/28/play-docker-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Dockerfile</h3>
+
+<p>Dockerfile is like Vagrantfile, for define the configuration of the docker container.  <br/>
+The steps for creating the Dockerfile is listed as following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir -p ~/Code
+</span><span class='line'>$ cd ~/Code && vim Dockerfile 
+</span><span class='line'>FROM ubuntu:13.04
+</span><span class='line'>MAINTAINER examples@docker.com
+</span><span class='line'>RUN echo "deb http://archive.ubuntu.com/ubuntu precise main universe" &gt; /etc/apt/sources.list
+</span><span class='line'>RUN apt-get update
+</span><span class='line'>RUN apt-get upgrade -y
+</span><span class='line'>RUN apt-get install -y openssh-server nginx  supervisor
+</span><span class='line'>RUN mkdir -p /var/run/sshd
+</span><span class='line'>RUN mkdir -p /var/log/supervisor
+</span><span class='line'>RUN echo "daemon off;"&gt;&gt;/etc/nginx/nginx.conf
+</span><span class='line'>COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+</span><span class='line'>EXPOSE 22 80
+</span><span class='line'>CMD ["/usr/bin/supervisord"]
+</span><span class='line'>$ vim supervisord.conf 
+</span><span class='line'>[supervisord]
+</span><span class='line'>nodaemon=true
+</span><span class='line'>[program:sshd]
+</span><span class='line'>command=/usr/sbin/sshd -D
+</span><span class='line'>
+</span><span class='line'>[program:nginx]
+</span><span class='line'>command=/usr/sbin/nginx
+</span><span class='line'>user=root
+</span><span class='line'>autostart=true
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now build the target image with following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker build -t test/supervisord .
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After build, we could use <code>sudo docker images</code> for examing the generated images. And use following command for start the sshd and nginx service:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -p 2222:22 -p 8080:80 -t -i test/supervisord
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now change the root password and you could directly <code>ssh root@127.0.0.1 -p 2222</code> or you could directly access <a href="http://1xx.xx.xx.xxx:8080">http://1xx.xx.xx.xxx:8080</a> for nginx webpages.</p>
+
+<h3>Fig</h3>
+
+<p>Fig is used for swiftly build up a container. You only need to add a fig.yml and specify some simple content, then it could easily assit you building up a container.  <br/>
+Install fig via following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget https://github.com/docker/fig/releases/download/1.0.1/fig-`uname -s`-`uname -m`
+</span><span class='line'>$ sudo mv fig-xxx-xxx /usr/bin/fig
+</span><span class='line'>$ sudo chmod 777 /usr/bin/fig
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Touch the definition files under a specified directory and then use fig for building the whole container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir ~/fig
+</span><span class='line'>$ ls
+</span><span class='line'>app.py  Dockerfile  fig.yml  requirements.txt
+</span><span class='line'>$ cat Dockerfile 
+</span><span class='line'>FROM python:2.7
+</span><span class='line'>ADD . /code
+</span><span class='line'>WORKDIR /code
+</span><span class='line'>RUN pip install -r requirements.txt
+</span><span class='line'>$ cat fig.yml 
+</span><span class='line'>web:
+</span><span class='line'>  build: .
+</span><span class='line'>  command: python app.py
+</span><span class='line'>  links:
+</span><span class='line'>   - db
+</span><span class='line'>  ports:
+</span><span class='line'>   - "8000:8000"
+</span><span class='line'>db:
+</span><span class='line'>  image: redis
+</span><span class='line'>$ cat requirements.txt 
+</span><span class='line'>flask
+</span><span class='line'>redis
+</span><span class='line'>$ cat app.py 
+</span><span class='line'>from flask import Flask
+</span><span class='line'>from redis import Redis
+</span><span class='line'>import os
+</span><span class='line'>app = Flask(__name__)
+</span><span class='line'>redis = Redis(host='redis', port=6379)
+</span><span class='line'>
+</span><span class='line'>@app.route('/')
+</span><span class='line'>def hello():
+</span><span class='line'>    redis.incr('hits')
+</span><span class='line'>    return 'Hello World! I have been seen %s times.' % redis.get('hits')
+</span><span class='line'>
+</span><span class='line'>if __name__ == "__main__":
+</span><span class='line'>    app.run(host="0.0.0.0", debug=True)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now use <code>sudo fig up</code> then you could let this web service run.</p>
+
+<p>Met some problems, will be do this at home.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/01/27/play-docker-2/">Play Docker(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-01-27T22:27:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:27 pm</span></time>
+        
+         | <a href="/blog/2015/01/27/play-docker-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Continue, but this time for further topics:</p>
+
+<h3>Export/Import</h3>
+
+<p>From <a href="https://registry.hub.docker.com/">https://registry.hub.docker.com/</a> to find more interesting images:  <br/>
+Use opensuse:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker pull opensuse
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>opensuse            latest              758c78b4040c        3 weeks ago         622.7 MB
+</span><span class='line'>opensuse            13.2                758c78b4040c        3 weeks ago         622.7 MB
+</span><span class='line'>opensuse            harlequin           758c78b4040c        3 weeks ago         622.7 MB
+</span><span class='line'>$ sudo docker run -i -t opensuse /bin/bash
+</span><span class='line'>:/ # yzpper in vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After installed commit the changes and verify:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -i -t install_vim_suse /bin/bash
+</span><span class='line'>:/ # which vim
+</span><span class='line'>/usr/bin/vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we export it to tar file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker ps
+</span><span class='line'>$ sudo docker export 7b594d048b0b&gt;~/opensuse_vim.tar
+</span><span class='line'>$ ls -l -h ~/opensuse_vim.tar
+</span><span class='line'>-rw-r--r--  1 Trusty root 704M Jan 27 22:39 opensuse_vim.tar
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Made changes after we exported the tar file.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo tar xvf opensuse_vim.tar
+</span><span class='line'>$ sudo touch ./root/I_Want_You_See_This_File
+</span><span class='line'>$ sudo rm -f opensuse_vim.tar
+</span><span class='line'>$ sudo tar cvf opensuse_vim_modified.tar ./*
+</span><span class='line'>$ ls -l -h *.tar
+</span><span class='line'>-rw-r--r-- 1 root root 704M Jan 27 22:45 opensuse_vim_modified.tar
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Import the tar file into the images:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo cat ./opensuse_vim_modified.tar | sudo docker import - Trusty/opensuse_vim_modified:v1.0
+</span><span class='line'>c18f7e43c4197a2a1a614a1ee91c6d8f0e06a6d7593ca94354303e3760e389a7
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY                   TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>Trusty/opensuse_vim_modified   v1.0                c18f7e43c419        47 seconds ago      724 MB
+</span><span class='line'>$ sudo docker run -i -t Trusty/opensuse_vim_modified:v1.0 /bin/bash
+</span><span class='line'>:/ # ls /root/
+</span><span class='line'>I_Want_You_See_This_File  bin
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we could see the modified files has been ported to our running containers.  <br/>
+Even you could docker import from remote url:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$sudo docker import http://example.com/exampleimage.tgz example/imagerepo
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Networking</h3>
+
+<h4>Run app inside the container</h4>
+
+<p>First pull the images <code>training/webapp</code> back:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker pull training/webapp
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>training/webapp     latest              31fa814ba25a        8 months ago        278.6 MB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Quickly enter the container and examine what&rsquo;s inside the pandora box:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -i -t training/webapp /bin/bash
+</span><span class='line'>root@f19ca7c18763:/opt/webapp# cat /etc/issue
+</span><span class='line'>Ubuntu 12.04.4 LTS \n \l
+</span><span class='line'>
+</span><span class='line'>root@f19ca7c18763:/opt/webapp# ls
+</span><span class='line'>Procfile  app.py  requirements.txt  tests.py
+</span><span class='line'>root@f19ca7c18763:/opt/webapp# cat app.py | more
+</span><span class='line'>import os
+</span><span class='line'>
+</span><span class='line'>from flask import Flask
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>It&rsquo;s a flask based webapp.  <br/>
+Manually run the app.py and use another terminal for testing it:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@f19ca7c18763:/opt/webapp# python app.py
+</span><span class='line'> * Running on http://0.0.0.0:5000/
+</span><span class='line'>$ sudo docker exec -it f19ca7c18763 /bin/bash
+</span><span class='line'>root@f19ca7c18763:/opt/webapp# which curl
+</span><span class='line'>/usr/bin/curl
+</span><span class='line'>root@f19ca7c18763:/opt/webapp# curl http://127.0.0.1:5000
+</span><span class='line'>Hello world!root@f19ca7c18763:/opt/webapp# 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When you use curl, you will see in the first terminal it will indicates the request has been solved.  <br/>
+Or you could directly request the page in host machine, via: <code>curl http://172.17.0.21:5000</code>, the result will be the same.</p>
+
+<h4>Expose to World</h4>
+
+<p>Randomly let our container map to host&rsquo;s port via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -d -P --name web training/webapp python app.py
+</span><span class='line'>8781cf98cc685ae37a9aa421a9d30f71c64f12fa8fc07b2e1d888f761089e528
+</span><span class='line'>$ sudo docker ps -l
+</span><span class='line'>CONTAINER ID        IMAGE                    COMMAND             CREATED             STATUS              PORTS                     NAMES
+</span><span class='line'>8781cf98cc68        training/webapp:latest   "python app.py"     6 seconds ago       Up 5 seconds        0.0.0.0:49153-&gt;5000/tcp   web                 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then on Internet, we could directly fetch the HelloWorld now.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>~% curl http://1xx.xxx.xx.xxx:49153
+</span><span class='line'>Hello world!%          
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Inspect the name of the running container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker inspect -f "" 8781cf98cc68
+</span><span class='line'>2015-01-28T04:25:38.768661692Z
+</span><span class='line'>$ sudo docker inspect -f "" 8781cf98cc68
+</span><span class='line'>7307
+</span><span class='line'>$ sudo docker inspect -f "" 8781cf98cc68
+</span><span class='line'>/web
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We got the name, then we could directly read the logs using this name:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker logs -f web
+</span><span class='line'> * Running on http://0.0.0.0:5000/
+</span><span class='line'>183.62.15.118 - - [28/Jan/2015 04:27:30] "GET / HTTP/1.1" 200 -
+</span><span class='line'>183.62.15.118 - - [28/Jan/2015 06:00:18] "GET / HTTP/1.1" 200 -
+</span><span class='line'>183.62.15.118 - - [28/Jan/2015 06:00:24] "GET / HTTP/1.1" 200 -
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using <code>-p</code> for specify the host port and container port mapping:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -d -p 5000:5000 --name web1 training/webapp python app.py
+</span><span class='line'>2a0692015ba776f7daa957906470178df1fd8d26439422cd4528d2e253bf3331
+</span><span class='line'>$ sudo docker ps
+</span><span class='line'>CONTAINER ID        IMAGE                    COMMAND             CREATED             STATUS              PORTS                    NAMES
+</span><span class='line'>2a0692015ba7        training/webapp:latest   "python app.py"     3 seconds ago       Up 3 seconds        0.0.0.0:5000-&gt;5000/tcp   web1 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The test could be curl the 5000 port of the remote machine, while the logs could be found using <code>-f web1</code>.  <br/>
+Examine the port mapping using following command:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -d -P --name web3 training/webapp python app.py
+</span><span class='line'>$ sudo docker port web3 5000
+</span><span class='line'>0.0.0.0:49154
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>-p</code> could be added as multiple ports, like:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -d -p 5000:5000 -p 3000:80 training/webapp python app.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Docker Container Linking</h3>
+
+<p>Pull back a new images and run it as daemon:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -d --name db training/postgres
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>training/postgres   latest              258105bea10d        7 months ago        364.5 MB
+</span><span class='line'>training/webapp     latest              31fa814ba25a        8 months ago        278.6 MB
+</span><span class='line'>$ sudo docker ps 
+</span><span class='line'>CONTAINER ID        IMAGE                      COMMAND                CREATED             STATUS              PORTS                     NAMES
+</span><span class='line'>ff6603d47552        training/postgres:latest   "su postgres -c '/us   14 seconds ago      Up 14 seconds       5432/tcp                  db                  
+</span><span class='line'>f94368f3d091        training/webapp:latest     "python app.py"        9 minutes ago       Up 9 minutes        0.0.0.0:49154-&gt;5000/tcp   web3                
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Remove the existing web3 container, and create a new one which links to container <code>db</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker rm -f f94368f3d091
+</span><span class='line'>f94368f3d091
+</span><span class='line'>$ sudo docker run -d -P --name web4 --link db:db training/webapp python app.py
+</span><span class='line'>0cf8f0adcb3d1728c61e33c0c9184213478a2a231ba525339a3049534f4ce4ef
+</span><span class='line'>$ sudo docker ps
+</span><span class='line'>CONTAINER ID        IMAGE                      COMMAND                CREATED             STATUS              PORTS                     NAMES
+</span><span class='line'>0cf8f0adcb3d        training/webapp:latest     "python app.py"        4 seconds ago       Up 3 seconds        0.0.0.0:49155-&gt;5000/tcp   web4                
+</span><span class='line'>ff6603d47552        training/postgres:latest   "su postgres -c '/us   2 minutes ago       Up 2 minutes        5432/tcp                  db  
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Examine the link infos when entering the container itself:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker exec -i -t 0cf8f0adcb3d  /bin/bash
+</span><span class='line'>root@0cf8f0adcb3d:/opt/webapp# env
+</span><span class='line'>HOSTNAME=0cf8f0adcb3d
+</span><span class='line'>DB_NAME=/web4/db
+</span><span class='line'>DB_PORT_5432_TCP_ADDR=172.17.0.26
+</span><span class='line'>DB_PORT=tcp://172.17.0.26:5432
+</span><span class='line'>DB_PORT_5432_TCP=tcp://172.17.0.26:5432
+</span><span class='line'>PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+</span><span class='line'>PWD=/opt/webapp
+</span><span class='line'>DB_PORT_5432_TCP_PORT=5432
+</span><span class='line'>SHLVL=1
+</span><span class='line'>HOME=/
+</span><span class='line'>DB_PORT_5432_TCP_PROTO=tcp
+</span><span class='line'>DB_ENV_PG_VERSION=9.3
+</span><span class='line'>_=/usr/bin/env
+</span><span class='line'>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use <code>ip address show</code> to examine the ip address.  <br/>
+Why they could be linked?  <br/>
+Also when you enter the web machine, cat its /etc/hosts, will see the db named:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@0cf8f0adcb3d:/opt/webapp# cat /etc/hosts
+</span><span class='line'>172.17.0.27   0cf8f0adcb3d
+</span><span class='line'>127.0.0.1 localhost
+</span><span class='line'>::1   localhost ip6-localhost ip6-loopback
+</span><span class='line'>fe00::0   ip6-localnet
+</span><span class='line'>ff00::0   ip6-mcastprefix
+</span><span class='line'>ff02::1   ip6-allnodes
+</span><span class='line'>ff02::2   ip6-allrouters
+</span><span class='line'>172.17.0.26   db
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Advance Networking</h3>
+
+<p>Secret of DNS/hostname/hosts:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@0cf8f0adcb3d:/opt/webapp# mount
+</span><span class='line'>/dev/vda1 on /etc/resolv.conf type ext4 (rw,relatime,data=ordered)
+</span><span class='line'>/dev/vda1 on /etc/hostname type ext4 (rw,relatime,data=ordered)
+</span><span class='line'>/dev/vda1 on /etc/hosts type ext4 (rw,relatime,data=ordered)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once the variables changes the container&rsquo;s corresponding name will also be changed.</p>
+
+<h4>Iptables</h4>
+
+<p>Container Visit WAN:  <br/>
+Use sysctl&rsquo;s <code>ip_forward</code>, check it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /proc//sys/net/ipv4/ip_forward
+</span><span class='line'>1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>1 means that we could forward our traffic flow from WAN to</p>
+
+<p>WAN visit Container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -d -p 5000:5000 --name web5 training/webapp python app.py
+</span><span class='line'>$ sudo iptables -t nat -nL
+</span><span class='line'>......
+</span><span class='line'>Chain DOCKER (2 references)
+</span><span class='line'>target     prot opt source               destination         
+</span><span class='line'>DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:49155 to:172.17.0.27:5000
+</span><span class='line'>DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:5000 to:172.17.0.28:5000
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The last one is added via our run command.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/01/27/play-docker-1/">Play Docker(1)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-01-27T20:39:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:39 pm</span></time>
+        
+         | <a href="/blog/2015/01/27/play-docker-1/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>For playing docker and prepare for my presentation, I wrote this series and try to record my tips on playing docker.</p>
+
+<h3>Background</h3>
+
+<p>I created a droplet on DigitalOcean.com, which is running CentOS 7, the memory is only 512M, with one core and 20G size disk, which means its caculation resource is pretty limited, so heavy tasks should be avoid, like building.  <br/>
+Since the memory is only 512M, I allocated 1G swapfile to the machine.  <br/>
+The usable disk is 17G now.</p>
+
+<h3>Docker Installation</h3>
+
+<p>Docker is already part of CentOS7, so install it directly via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y docker
+</span><span class='line'>$ which docker
+</span><span class='line'>/usr/bin/docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Start the service and make it default:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo service docker start
+</span><span class='line'>Redirecting to /bin/systemctl start  docker.service
+</span><span class='line'>$ sudo chkconfig docker on
+</span><span class='line'>Note: Forwarding request to 'systemctl enable docker.service'.
+</span><span class='line'>ln -s '/usr/lib/systemd/system/docker.service' '/etc/systemd/system/multi-user.target.wants/docker.service'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now even if you restart the machine, the service would be automatically started together with system boot.</p>
+
+<h3>First Instance</h3>
+
+<p>Pull the debian back:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker pull debian
+</span><span class='line'>Pulling repository debian
+</span><span class='line'>c90d655b99b2: Download complete 
+</span><span class='line'>511136ea3c5a: Download complete 
+</span><span class='line'>30d39e59ffe2: Download complete 
+</span><span class='line'>Status: Downloaded newer image for debian:latest
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>debian              wheezy              c90d655b99b2        8 hours ago         85.12 MB
+</span><span class='line'>debian              7                   c90d655b99b2        8 hours ago         85.12 MB
+</span><span class='line'>debian              7.8                 c90d655b99b2        8 hours ago         85.12 MB
+</span><span class='line'>debian              latest              c90d655b99b2        8 hours ago         85.12 MB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install the <code>lsb_release</code>, then run different tags, all of them are the same:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -i -t debian:7.8 /bin/bash
+</span><span class='line'>xxxxxxx # lsb_release -a 
+</span><span class='line'>No LSB modules are available.
+</span><span class='line'>Distributor ID:   Debian
+</span><span class='line'>Description:  Debian GNU/Linux 7.8 (wheezy)
+</span><span class='line'>Release:  7.8
+</span><span class='line'>Codename: wheezy
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Destroy Container</h3>
+
+<p>List all of the container via <code>sudo docker ps -a</code>, then destroy the container via <code>sudo docker rm xxxxxx</code> while xxxxxx is the container ID.  <br/>
+Play magic, one line for remove all of the containers:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker rm `sudo docker ps -a -q`
+</span><span class='line'>16d606046c24
+</span><span class='line'>65ceffcf4a7b
+</span><span class='line'>dfbc6d0fa051
+</span><span class='line'>1dd18dbf8b9c
+</span><span class='line'>66c931879c2c
+</span><span class='line'>$ sudo docker ps -a
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Remove The Images</h3>
+
+<p>One line for remove all of the ununsed images:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker images -q
+</span><span class='line'>c90d655b99b2
+</span><span class='line'>c90d655b99b2
+</span><span class='line'>c90d655b99b2
+</span><span class='line'>c90d655b99b2
+</span><span class='line'>$ sudo docker rmi `sudo docker images -q`
+</span><span class='line'>Untagged: debian:7
+</span><span class='line'>Untagged: debian:7.8
+</span><span class='line'>Untagged: debian:latest
+</span><span class='line'>Untagged: debian:wheezy
+</span><span class='line'>Deleted: c90d655b99b2ec5b7e94d38c87f92dce015c17a313caeaae0e980d9b9bed8444
+</span><span class='line'>Deleted: 30d39e59ffe287f29a41a3f8bd70734afc8728329e3289945cbdc5bbf07cd980
+</span><span class='line'>Deleted: 511136ea3c5a64f264b78b5433614aec563103b4d4702f3ba7d4d2698e22c158
+</span><span class='line'>Error response from daemon: No such image: c90d655b99b2
+</span><span class='line'>Error response from daemon: No such image: c90d655b99b2
+</span><span class='line'>Error response from daemon: No such image: c90d655b99b2
+</span><span class='line'>2015/01/27 21:14:01 Error: failed to remove one or more images
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>But it would be add a pipe like <code>sudo docker images -q | uniq</code></p>
+
+<h3>Connect To Existing Running Container</h3>
+
+<h4>Docker 1.3 Ways</h4>
+
+<p>From Docker 1.3, we could use <code>docker exec -it</code> for attaching to running container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -i -t centos /bin/bash
+</span><span class='line'>[root@1f9005d495c6 /]# 
+</span><span class='line'>$ sudo docker ps
+</span><span class='line'>[sudo] password for Trusty: 
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+</span><span class='line'>1f9005d495c6        centos:7            "/bin/bash"         8 minutes ago       Up 8 minutes                            sick_jones          
+</span><span class='line'>$ sudo docker exec -it 1f9005d495c6 /bin/bash
+</span><span class='line'>[root@1f9005d495c6 /]# 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>But the Container&rsquo;s lifecycle is controlled by the first instance, <code>docker exec</code> only attached to, this means if you exit the container, all of the <code>docker exec</code> tty will be shutdown.</p>
+
+<h4>Nsenter Ways</h4>
+
+<p>First use <code>docker inspect</code> for get the PID.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker ps 
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+</span><span class='line'>8337ea52cfd1        centos:7            "/bin/bash"         4 seconds ago       Up 4 seconds                            pensive_blackwell   
+</span><span class='line'>$ PID=$(sudo docker inspect --format  8337ea52cfd1)
+</span><span class='line'>$ echo $PID
+</span><span class='line'>3951
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use nsenter for enter the PID&rsquo;s namespace:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo nsenter --target $PID --mount --uts --ipc --net --pid
+</span><span class='line'>[root@8337ea52cfd1 /]#
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Lazy Wrap of Nsenter Ways</h4>
+
+<p>Just visit:   <br/>
+<a href="https://github.com/jpetazzo/nsenter">https://github.com/jpetazzo/nsenter</a>, download the docker-enter, and place it in the right place:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker ps 
+</span><span class='line'>[sudo] password for Trusty: 
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+</span><span class='line'>8337ea52cfd1        centos:7            "/bin/bash"         11 minutes ago      Up 11 minutes                           pensive_blackwell   
+</span><span class='line'>$ sudo docker-enter pensive_blackwell ls -la
+</span><span class='line'>...
+</span><span class='line'>$ sudo docker-enter 8337ea52cfd1 /bin/bash
+</span><span class='line'>[root@8337ea52cfd1 /]# 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Docker Attach</h4>
+
+<p>If you attach to the container, you must remember, better you use tmux holding the whole instance.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker ps
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+</span><span class='line'>057435c2f1cb        centos:7            "/bin/bash"         5 seconds ago       Up 4 seconds                            evil_kirch          
+</span><span class='line'>$ sudo docker attach 057435c2f1cb
+</span><span class='line'>[root@057435c2f1cb /]# ls
+</span><span class='line'>bin  dev  etc  home  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  selinux  srv  sys  tmp  usr  var
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once you quit from the &ldquo;attached&rdquo; tty, the origin tty will also quit.</p>
+
+<h3>More System Info</h3>
+
+<p>Use <code>docker info</code> to get more detailed system infos:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker info
+</span><span class='line'>Containers: 3
+</span><span class='line'>Images: 3
+</span><span class='line'>Storage Driver: devicemapper
+</span><span class='line'> Pool Name: docker-253:1-397799-pool
+</span><span class='line'> Pool Blocksize: 65.54 kB
+</span><span class='line'> Data file: /var/lib/docker/devicemapper/devicemapper/data
+</span><span class='line'> Metadata file: /var/lib/docker/devicemapper/devicemapper/metadata
+</span><span class='line'> Data Space Used: 563.1 MB
+</span><span class='line'> Data Space Total: 107.4 GB
+</span><span class='line'> Metadata Space Used: 1.069 MB
+</span><span class='line'> Metadata Space Total: 2.147 GB
+</span><span class='line'> Library Version: 1.02.84-RHEL7 (2014-03-26)
+</span><span class='line'>Execution Driver: native-0.2
+</span><span class='line'>Kernel Version: 3.10.0-123.8.1.el7.x86_64
+</span><span class='line'>Operating System: CentOS Linux 7 (Core)
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>centos              7                   8efe422e6104        3 weeks ago         224 MB
+</span><span class='line'>centos              centos7             8efe422e6104        3 weeks ago         224 MB
+</span><span class='line'>centos              latest              8efe422e6104        3 weeks ago         224 MB
+</span><span class='line'>$ sudo docker ps -a
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS                       PORTS               NAMES
+</span><span class='line'>057435c2f1cb        centos:7            "/bin/bash"         3 minutes ago       Exited (0) 54 seconds ago                        evil_kirch          
+</span><span class='line'>8337ea52cfd1        centos:7            "/bin/bash"         21 minutes ago      Exited (127) 4 minutes ago                       pensive_blackwell   
+</span><span class='line'>1f9005d495c6        centos:7            "/bin/bash"         34 minutes ago      Exited (0) 24 minutes ago                        sick_jones          
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Commit Changes</h3>
+
+<p>Install the vim in the running container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -i -t centos /bin/bash
+</span><span class='line'>[sudo] password for Trusty: 
+</span><span class='line'>[root@ea29113ba0e1 /]# which vim
+</span><span class='line'>/usr/bin/which: no vim in (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
+</span><span class='line'>[root@ea29113ba0e1 /]# yum install -y vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In another container, commit the changes:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker commit ea29113ba0e1 vim_installed
+</span><span class='line'>54cebb627e37600e81a832616eb3253af5dd26d0d248b9a9251e23bc8c93567d
+</span><span class='line'>$ sudo docker images
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>vim_installed       latest              54cebb627e37        12 seconds ago      362.6 MB
+</span><span class='line'>centos              latest              8efe422e6104        3 weeks ago         224 MB
+</span><span class='line'>centos              7                   8efe422e6104        3 weeks ago         224 MB
+</span><span class='line'>centos              centos7             8efe422e6104        3 weeks ago         224 MB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Next time if you want to use the vim installed images, simply run:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -it vim_installed /bin/bash
+</span><span class='line'>[root@4b76f0c7bc46 /]# which vim
+</span><span class='line'>/usr/bin/vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Job Controlling</h3>
+
+<p>Use environment variables for recording the running job:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ JOB=$(sudo docker run -d vim_installed /bin/sh -c "while true; do echo Hello World; sleep 1; done")
+</span><span class='line'>$ echo $JOB
+</span><span class='line'>5dcb0884d27077e84ef4fea7fc0b3e8151657e92e0c2d4d1e33f84483715dfb9
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Examine the log from the app&rsquo;s output:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker logs $JOB
+</span><span class='line'>$ sudo docker logs --follow $JOB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add &ndash;follow will continue to view the log output.  <br/>
+Stop the running container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker stop $JOB
+</span><span class='line'>5dcb0884d27077e84ef4fea7fc0b3e8151657e92e0c2d4d1e33f84483715dfb9
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Start the stopped container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker start $JOB
+</span><span class='line'>5dcb0884d27077e84ef4fea7fc0b3e8151657e92e0c2d4d1e33f84483715dfb9
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or Restart:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker restart $JOB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or kill:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker kill $JOB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Notice the kill exit code is -1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker ps
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+</span><span class='line'>$ sudo docker ps -a
+</span><span class='line'>CONTAINER ID        IMAGE                  COMMAND                CREATED             STATUS                        PORTS               NAMES
+</span><span class='line'>5dcb0884d270        vim_installed:latest   "/bin/sh -c 'while t   9 minutes ago       Exited (-1) 8 seconds ago                         focused_pike 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>sudo docker rm $JOB</code> will remove the job.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/01/26/using-new-do-system/">Using New DO System</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-01-26T23:05:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:05 pm</span></time>
+        
+         | <a href="/blog/2015/01/26/using-new-do-system/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Since the coreOS met some critical errors, I have to re-construct the DO System using CentOS. So I destroyed the old CoreOS machine, runs CentOS.</p>
+
+<h3>Configure</h3>
+
+<h3>Install packages</h3>
+
+<p>Update and install vim</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum update
+</span><span class='line'>$ yum install vim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Add Swap</h4>
+
+<p>512M is not enough for playing, enlarge the swapfile.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># dd if=/dev/zero of=/swapfile bs=1M count=1024
+</span><span class='line'># chmod 600 /swapfile
+</span><span class='line'># mkswap /swapfile
+</span><span class='line'>$ sudo vim /etc/systemd/system/swap.service
+</span><span class='line'> [Unit]  
+</span><span class='line'> Description=Turn on swap  
+</span><span class='line'> [Service]  
+</span><span class='line'> Type=oneshot  
+</span><span class='line'> Environment="SWAPFILE=/swapfile"
+</span><span class='line'> RemainAfterExit=true  
+</span><span class='line'> ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
+</span><span class='line'> ExecStart=/usr/bin/sh -c "/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> ExecStop=/usr/bin/sh -c "/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> ExecStopPost=/usr/bin/sh -c "/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)"  
+</span><span class='line'> [Install]  
+</span><span class='line'> WantedBy=multi-user.target 
+</span><span class='line'>$ sudo  systemctl enable /etc/systemd/system/swap.service  
+</span><span class='line'>$ sudo systemctl start swap  
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the swapfile is 1000MB, enough for doing various operations.</p>
+
+<h4>Add new user</h4>
+
+<p>Add new user and changes its password:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># useradd -m -g root -G root -s /bin/bash Trusty
+</span><span class='line'># passwd Trusty
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the sshd configuration, disable root login, and change the listening port.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vim /etc/ssh/sshd_config
+</span><span class='line'>port changes, 
+</span><span class='line'>PermitRootLogin no
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now reboot the system, you will got a safe DigitalOcean machine.</p>
+
+<h3>Build OpenContrail</h3>
+
+<p>The repo is the same as the above article, then we install other packages which needed for CengOS.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y libtool kernel-devel 
+</span><span class='line'>$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install epel via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+</span><span class='line'>$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install following packages from epel:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y --disablerepo="*" --enablerepo="epel" scons protobuf protobuf-devel protobuf-compiler 
+</span><span class='line'>$  sudo yum install -y python-lxml patch unzip flex bison gcc-c++ openssl-devel make wget python-setuptools
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So now you could run the whole compilation via <code>scons</code> under the ~/Code folder.   <br/>
+tips: tmux&rsquo;s q will quit ctrl+b mode.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -706,371 +1959,6 @@ SDN究竟要不要管物理交换机？  <br/>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/21/install-chrome-on-centos/">Install Chrome on CentOS</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-21T20:21:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>21</span><span class='date-suffix'>st</span>, <span class='date-year'>2015</span></span> <span class='time'>8:21 pm</span></time>
-        
-         | <a href="/blog/2015/01/21/install-chrome-on-centos/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Until now I failed in installing chrome on CentOS, for the libstdc++ version is too old in the machine, but record the steps here, later I will continue to work on this issue.</p>
-
-<h3>Repository Preparation</h3>
-
-<p>Add following file in to your <code>/etc/yum.repos.d</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>~% cat /etc/yum.repos.d/google-chrome.repo 
-</span><span class='line'>[google-chrome]
-</span><span class='line'>name=google-chrome
-</span><span class='line'>baseurl=http://dl.google.com/linux/chrome/rpm/stable/$basearch
-</span><span class='line'>enabled=1
-</span><span class='line'>gpgcheck=1
-</span><span class='line'>gpgkey=https://dl-ssl.google.com/linux/linux_signing_key.pub
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now install the chrome via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install google-chrome-stable
-</span><span class='line'>   Processing Dependency: libstdc++.so.6(GLIBCXX_3.4.15)(64bit) for package: google-chrome-stable-40.0.2214.91-1.x86_64
-</span><span class='line'>--&gt; Finished Dependency Resolution
-</span><span class='line'>Error: Package: google-chrome-stable-40.0.2214.91-1.x86_64 (google-chrome)
-</span><span class='line'>           Requires: libstdc++.so.6(GLIBCXX_3.4.15)(64bit)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The failure reason is because our libstdc++ version is too old.</p>
-
-<h3>Check Lib Version</h3>
-
-<p>View where is libstdc++:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ldconfig -p | grep stdc++
-</span><span class='line'>  libstdc++.so.6 (libc6,x86-64) =&gt; /usr/lib64/libstdc++.so.6
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Get the strings which contains LIBCXX in the libstdc++.so.6:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ strings /usr/lib64/libstdc++.so.6  | grep LIBCXX
-</span><span class='line'>GLIBCXX_3.4
-</span><span class='line'>GLIBCXX_3.4.1
-</span><span class='line'>GLIBCXX_3.4.2
-</span><span class='line'>GLIBCXX_3.4.3
-</span><span class='line'>GLIBCXX_3.4.4
-</span><span class='line'>GLIBCXX_3.4.5
-</span><span class='line'>GLIBCXX_3.4.6
-</span><span class='line'>GLIBCXX_3.4.7
-</span><span class='line'>GLIBCXX_3.4.8
-</span><span class='line'>GLIBCXX_3.4.9
-</span><span class='line'>GLIBCXX_3.4.10
-</span><span class='line'>GLIBCXX_3.4.11
-</span><span class='line'>GLIBCXX_3.4.12
-</span><span class='line'>GLIBCXX_3.4.13
-</span><span class='line'>GLIBCXX_FORCE_NEW
-</span><span class='line'>GLIBCXX_DEBUG_MESSAGE_LENGTH
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We could see the newest version of GLIBCXX is only 3.4.13, while chrome requuires 3.4.15. So the solution should be we install the newer version.</p>
-
-<h3>Upgrade GLIBCXX</h3>
-
-<p>TBD.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/21/using-imacros-for-automatically-access-mail-and-oa/">Using iMacros for Automatically Access Mail and OA</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-21T03:06:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>21</span><span class='date-suffix'>st</span>, <span class='date-year'>2015</span></span> <span class='time'>3:06 am</span></time>
-        
-         | <a href="/blog/2015/01/21/using-imacros-for-automatically-access-mail-and-oa/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>First we should install imacros from firefox&rsquo;s Add-Ons, after installation, we will restart the firefox and let it run.  <br/>
-Click the icon of imacros, the window will be available at the left side of the browser.   <br/>
-Rec-> Record for recording the steps  <br/>
-Then do what you want to do in browser.   <br/>
-Save the current macros into another name, next time if you want to re-do the operations, simply click this saved imacros, then everything is OK.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/20/trouble-shooting-on-building-awesome/">Trouble-Shooting on Building Awesome</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-20T21:18:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:18 pm</span></time>
-        
-         | <a href="/blog/2015/01/20/trouble-shooting-on-building-awesome/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>When building Awesome following the tutorial of following URL, I met following error:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>I installed xcb-proto, but libxcb all the same print "No package 'xcb-proto' found"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>So the trouble shooting should be done like following, first we found the directory which contains <code>xcb-proto.pc</code> via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd /usr/
-</span><span class='line'>$ find . -name "xcb-proto.pc"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The result indicates this file locates in the /usr/lib/pkgconfig.  <br/>
-Easily we add this directory into our <code>PKG_CONFIG_PATH</code>, via following commands:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now continue to do the configuration, everything will be OK. <br/>
-But we got the build error in <code>make</code>, like following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>/usr/bin/python ./c_client.py -p /usr/lib/python2.6/site-packages /usr/share/xcb/dri2.xml
-</span><span class='line'>Traceback (most recent call last):
-</span><span class='line'>  File "./c_client.py", line 1041, in &lt;module&gt;
-</span><span class='line'>    module.generate()
-</span><span class='line'>  File "/usr/lib/python2.6/site-packages/xcbgen/state.py", line 101, in generate
-</span><span class='line'>    item.out(name)
-</span><span class='line'>  File "./c_client.py", line 950, in c_request
-</span><span class='line'>    _c_accessors(self.reply, name + ('reply',), name)
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p> <br/>
-This may be python version error, change it to python2.7?  <br/>
-no. We just installed the libxcb-1.8.tar.bz2 for solving this problem.</p>
-
-<p>libxdg-basedir should be downloaded from following url:  <br/>
-<a href="http://nevill.ch/libxdg-basedir/downloads/">http://nevill.ch/libxdg-basedir/downloads/</a></p>
-
-<p>So many gaps , we need to do this:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://nevill.ch/libxdg-basedir/downloads/libxdg-basedir-latest.tar.gz
-</span><span class='line'># tar xzvf libxdg-basedir-latest.tar.gz 
-</span><span class='line'># cd libxdg-basedir-1.2.0/
-</span><span class='line'># ./configure --prefix=/usr
-</span><span class='line'># make && make install
-</span><span class='line'># yum install libpng
-</span><span class='line'># yum install libpng-devel
-</span><span class='line'># ./configure --prefix=/usr && make
-</span><span class='line'># yum install pixman pixman-devel
-</span><span class='line'># wget http://cairographics.org/snapshots/cairo-1.9.12.tar.gz
-</span><span class='line'># tar xzvf cairo-1.9.12.tar.gz 
-</span><span class='line'># cd cairo-1.9.12/
-</span><span class='line'># ./configure --prefix=/usr && make
-</span><span class='line'># make install
-</span><span class='line'># yum install glib2-devel
-</span><span class='line'># yum install gdk-pixbuf2-devel
-</span><span class='line'># yum install startup-notification startup-notification-devel readline readline-devel
-</span><span class='line'># wget http://xcb.freedesktop.org/dist/xcb-util-0.3.8.tar.gz
-</span><span class='line'># tar xzvf xcb-util-0.3.8.tar.gz 
-</span><span class='line'># cd xcb-util-0.3.8/
-</span><span class='line'># ./configure --prefix=/usr
-</span><span class='line'># make && make install
-</span><span class='line'># wget http://xcb.freedesktop.org/dist/xcb-util-cursor-0.1.0.tar.bz2
-</span><span class='line'># tar xjvf xcb-util-cursor-0.1.0.tar.bz2 
-</span><span class='line'># cd xcb-util-cursor-0.1.0/
-</span><span class='line'># ./configure --prefix=/usr && make && make install
-</span><span class='line'># wget http://xcb.freedesktop.org/dist/xcb-util-wm-0.4.0.tar.bz2
-</span><span class='line'># tar xjvf xcb-util-wm-0.4.0.tar.bz2 
-</span><span class='line'># cd xcb-util-wm-0.4.0/
-</span><span class='line'># ./configure --prefix=/usr && make && make install
-</span><span class='line'># firefox https://github.com/csyuschmjuh/cairo-xcb
-</span><span class='line'># cd cairo-xcb-master/
-</span><span class='line'>#  ./autogen.sh 
-</span><span class='line'>#  ./configure --prefix=/usr && make
-</span><span class='line'>#  make install
-</span><span class='line'>#  yum install lua-devel
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we could finally build awesome.  <br/>
-Faint, it failed, so need more investigation.     Later!!!!!!!</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/20/things-to-be-done-from-jan21-to-jan25/">Things to Be Done From Jan21 to Jan25</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-20T20:26:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>20</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:26 pm</span></time>
-        
-         | <a href="/blog/2015/01/20/things-to-be-done-from-jan21-to-jan25/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Things to be done in this week:  <br/>
-1. Installation documentation for OpenStack, but don&rsquo;t try it myself.   <br/>
-2. Documentation on Contrail.  <br/>
-3. Conceptions on SDN(Software Defined Networking).  <br/>
-4. Books on SDN/PLATFORMs.  <br/>
-5. Enable the CoreOS Access via SurfacePro.  <br/>
-6. Guangzhou Weather/PM2.5/PM10. <br/>
-7. To enable the key-map on MAC?  <br/>
-8. Build awesome on CentOS, and let it to be my default WM.</p>
-
-<p>If there are more things to be added, type it following.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/25">&larr; Older</a>
@@ -1088,6 +1976,14 @@ Faint, it failed, so need more investigation.     Later!!!!!!!</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-4/">Tips on V-USB and Arduino(4)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/05/ba-wan-ebuddy-3/">把玩ebuddy(3)</a>
       </li>
     
@@ -1097,14 +1993,6 @@ Faint, it failed, so need more investigation.     Later!!!!!!!</p>
     
       <li class="post">
         <a href="/blog/2016/03/02/conntrack-tools-usage/">Conntrack-tools Usage</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/">E-buddy消息提醒服务设计思路(1)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/01/ba-wan-e-buddy/">把玩e-Buddy</a>
       </li>
     
   </ul>

@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Embedded | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/embedded/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-05T22:40:31+08:00</updated>
+  <updated>2016-03-08T08:43:01+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,278 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on V-USB and Arduino(5)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/07/tips-on-v-usb-and-arduino-5/"/>
+    <updated>2016-03-07T21:52:47+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/07/tips-on-v-usb-and-arduino-5</id>
+    <content type="html"><![CDATA[<p>这一节将添加一个LED到已有的方案中. 这个LED将使用11口, 通过<code>./set-led new</code>来设
+置状态.</p>
+
+<h3>连线</h3>
+
+<p>新加一个LED如图:</p>
+
+<p><img src="/images/2016_03_07_21_52_18_683x513.jpg" alt="/images/2016_03_07_21_52_18_683x513.jpg" /></p>
+
+<p>仅仅添加了一个LED + 220欧电阻.</p>
+
+<h3>代码修改</h3>
+
+<h4>requests.h</h4>
+
+<p>添加新的request定义:</p>
+
+<pre><code class="diff">diff --git a/requests.h b/requests.h
+index 90275f5..b354a73 100644
+--- a/requests.h
++++ b/requests.h
+@@ -32,4 +32,6 @@
+
+ #define CUSTOM_RQ_BLINK    3
+
++#define CUSTOM_RQ_NEWLED    4
++
+</code></pre>
+
+<h4>hid_custom_rq.h</h4>
+
+<p>添加新的管脚, 和对<code>CUSTOM_RQ_NEWLED</code>的处理代码:</p>
+
+<pre><code class="diff">diff --git a/hid_custom_rq.h b/hid_custom_rq.h
+index f5509e4..b5411cf 100644
+--- a/hid_custom_rq.h
++++ b/hid_custom_rq.h
+@@ -13,6 +13,7 @@ class hid_custom_rqDevice {
+   hid_custom_rqDevice () {
+     usbInit();
+     ledPin = 13;        // pin 13 as default ledPin
++    newledPin = 11;    // pin 11 as newledPin
+   }
+
+   void poll() {
+@@ -20,6 +21,7 @@ class hid_custom_rqDevice {
+   }
+
+   unsigned int ledPin;  
++  unsigned int newledPin;  
+ };
+
+ hid_custom_rqDevice hid_custom_rq = hid_custom_rqDevice();
+@@ -99,6 +101,14 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
+             usbMsgPtr = dataBuffer;         /* tell the driver which data to
+return */
+             return 1;                       /* tell the driver to send 1 byte
+*/
+         }
++       /* Added for newly added LED */
++       else if(rq-&gt;bRequest == CUSTOM_RQ_NEWLED){
++            if(rq-&gt;wValue.bytes[0] &amp; 1){    /* set new LED */
++                digitalWrite(hid_custom_rq.newledPin, HIGH);
++            }else{                          /* clear new LED */
++                digitalWrite(hid_custom_rq.newledPin, LOW);
++            }
++       }
+     }
+</code></pre>
+
+<h4>set-led.c</h4>
+
+<p>这个文件中,添加了两条新命令,分别为<code>./set-led newledon</code>和<code>./set-led newledoff</code>用于点亮/
+熄灭新加的LED.</p>
+
+<pre><code>diff --git a/examples/hid_custom_rq_demo/commandline/set-led.c b/examples/hid_custom_rq_demo/commandline/set-led.c
+index 44d39f9..a306eca 100644
+--- a/examples/hid_custom_rq_demo/commandline/set-led.c
++++ b/examples/hid_custom_rq_demo/commandline/set-led.c
+@@ -91,12 +91,19 @@ buffer[3] = 0;
+         }else{
+             printf("LED is %s\n", buffer[0] ? "on" : "off");
+         }
+-    }else if((isOn = (strcasecmp(argv[1], "on") == 0)) || strcasecmp(argv[1], "off") == 0){
++    }
++    else if((isOn = (strcasecmp(argv[1], "on") == 0)) || strcasecmp(argv[1], "off") == 0){
+         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_SET_STATUS, isOn, 0, buffer, 0, 5000);
+         if(cnt &lt; 0){
+             fprintf(stderr, "USB error: %s\n", usb_strerror());
+         }
+     }
++    else if((isOn = (strcasecmp(argv[1], "newledon") == 0)) || strcasecmp(argv[1], "newledoff") == 0){
++        cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_NEWLED, isOn, 0, buffer, 0, 5000);
++        if(cnt &lt; 0){
++            fprintf(stderr, "USB error: %s\n", usb_strerror());
++        }
++    }
+
+ else if(strcasecmp(argv[1], "onoff") == 0){ /* Test custom on/off */
+</code></pre>
+
+<h4>hid_custom_rq_demo.ped</h4>
+
+<p>因为新添加了硬件,ped文件同样需要更新.</p>
+
+<pre><code>diff --git a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
+index 77e3912..6d98151 100644
+--- a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
++++ b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
+@@ -1,10 +1,13 @@
+ #include &lt;hid_custom_rq.h&gt;
+
+ const int ledPin = 13;
++const int newledPin = 11;
+
+ void setup() {
+   hid_custom_rq.ledPin = ledPin;
+   pinMode(hid_custom_rq.ledPin, OUTPUT);
++  hid_custom_rq.newledPin = newledPin;
++  pinMode(hid_custom_rq.newledPin, OUTPUT);
+ }
+
+ void loop() {
+</code></pre>
+
+<h3>验证</h3>
+
+<p>写入新编译的Arduino固件, 并新编译<code>set-led</code>程序, 即可看到新增的LED被点亮/熄灭.</p>
+
+<p>效果如图:</p>
+
+<p><img src="/images/70584386.jpg" alt="/images/70584386.jpg" /></p>
+
+<h3>延伸</h3>
+
+<p>既然点亮了LED, 其他各种设备就不在话下了. 引入一个舵机,或者步进电机, 就可以实现
+e-buddy人偶的提醒功能.</p>
+
+<p>当然我们可以想得更妙, 例如,用蓝牙或者WIFI来替代USB传输. 这样可以做到更远距离.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on V-USB and Arduino(4)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/07/tips-on-v-usb-and-arduino-4/"/>
+    <updated>2016-03-07T21:07:53+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/07/tips-on-v-usb-and-arduino-4</id>
+    <content type="html"><![CDATA[<p>前面把玩了一下ebuddy, 回去想了一下, 觉得基于v-usb和arduino来实现
+一个自己的ebuddy也不是特别难的事情.</p>
+
+<h3>思路</h3>
+
+<p>还是参考:</p>
+
+<p><a href="http://coopermaa2nd.blogspot.tw/2011/10/v-usb-examples-for-arduino.html">V-USB examples for Arduino</a></p>
+
+<p>以<code>hid_custom_rq</code>项目来改. 例子里已经实现了Arduino板载的LED亮/灭. 我们只需要在
+原例上修改, 添加自定义命令和硬件即可.</p>
+
+<h3>代码</h3>
+
+<p>示例代码我做完后放到了github上, 可以通过以下命令获得:</p>
+
+<pre><code>$ git clone git@github.com:purplepalmdash/arduino-usb-led.git
+</code></pre>
+
+<h3>主要修改</h3>
+
+<h4>request.h</h4>
+
+<p>这个头文件被USB固件和主机所共享, 定义了USB的request number数字, request number
+被用于主机和设备之间的通信.</p>
+
+<p>添加:</p>
+
+<pre><code>#define CUSTOM_RQ_BLINK    3
+</code></pre>
+
+<h4>hid_custom_rq.h</h4>
+
+<p>这个文件是Arduino板上固件程序中对各种来自主机的request信息的响应, 或者说, 消息
+处理函数.</p>
+
+<p>针对上面在<code>requst.h</code>文件中添加的消息, 我们需要在<code>usbFunctionSetup()</code>函数中添加
+对应的消息处理代码, 为简单起见, 直接添加在函数的入口处就好.</p>
+
+<pre><code class="c">
+usbMsgLen_t usbFunctionSetup(uchar data[8])
+{
+    usbRequest_t    *rq = (usbRequest_t *)((void *)data);    
+
++    if(rq-&gt;bRequest == CUSTOM_RQ_BLINK){ /* blink -- used for blink the LED */
++            /* First set the led pin to high  */
++             unsigned char i = 6;
++             while(i &gt;= 1)
++             {
++             digitalWrite(hid_custom_rq.ledPin, HIGH);
++             delay(1000);
++             digitalWrite(hid_custom_rq.ledPin, LOW);
++             delay(1000);
++             i--;
++             }
++    }
+
+    if((rq-&gt;bmRequestType &amp; USBRQ_TYPE_MASK) == USBRQ_TYPE_VENDOR){
+        if(rq-&gt;bRequest == CUSTOM_RQ_SET_STATUS){
+</code></pre>
+
+<p>上面添加的代码, 在监测到<code>CUSTOM_RQ_BLINK</code>消息后, 会将led闪烁6次.</p>
+
+<h4>set-led.c</h4>
+
+<p><code>set-led.c</code>文件用于编译出主机端程序, 编译出来的程序将接受用户输入, 将对应的输
+入发送给USB设备.</p>
+
+<p>在<code>set-led.c</code>文件中我们添加一条命令,用于发送<code>CUSTOM_RQ_BLINK</code>消息:</p>
+
+<pre><code class="c">$ vim examples/hid_custom_rq_demo/commandline/set-led.c
+int main(int argc, char **argv)
+{
+
+//.......
+
++ else if(strcasecmp(argv[1], "blink") == 0){ /* set blink goes here */
++         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_BLINK, 0, 0, buffer, 0, 5000);
++         if(cnt &lt; 0){
++             fprintf(stderr, "USB error: %s\n", usb_strerror());
++         }
++ }
+
+//.......
+
+}
+</code></pre>
+
+<h3>验证</h3>
+
+<p>将代码拷贝到Arduino IDE的<code>libraries</code>目录下:</p>
+
+<pre><code>$ pwd
+/media/y/arduino/1.0.5/libraries/hid_custom_rq
+</code></pre>
+
+<p>IDE菜单里的<code>File -&gt; Examples -&gt; hid_custom_rq</code>下将出现<code>hid_custom_rq_demo</code>, 点
+击, 开始编译. 编译完以后, 上传到Arduino板.</p>
+
+<p>按
+<a href="http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/">http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/</a>
+设置并检查Arduino连线.</p>
+
+<p>现在拔掉Arduino串口的USB线, 插上我们新加的USB连线, 而后运行以下验证例程:</p>
+
+<pre><code>➜  hid_custom_rq git:(master) cd examples/hid_custom_rq_demo/commandline 
+➜  commandline git:(master) ./set-led blink
+USB error: Connection timed out
+</code></pre>
+
+<p>出现USB error是因为在板子上的服务例程中耗费了太多时间. 问题不大. 每次运行
+<code>./set-led blink</code>命令将使得板子上13口的led闪烁6次.</p>
+
+<p>做到这里, 我们已经能模拟出ebuddy的心脏灯光效果了. 通过编写不同的request消息,发
+送给Arduino板子即可.</p>
+
+<p>下面将研究添加一个新的LED灯, 等同于ebuddy的头灯.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[把玩ebuddy(2)]]></title>
@@ -354,141 +626,6 @@ done
 </code></pre>
 
 <p>以上的脚本就可以直接将e-buddy的头像置为红色，且一直闪烁。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on V-USB and Arduino(3)--Others]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/02/29/tips-on-v-usb-and-arduino-3-others/"/>
-    <updated>2016-02-29T11:50:09+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/02/29/tips-on-v-usb-and-arduino-3-others</id>
-    <content type="html"><![CDATA[<h3>连线/电路</h3>
-
-<p>不需要对电路做任何修改，仅替换arduino里的程序即可。</p>
-
-<h3>代码</h3>
-
-<p>代码如下:</p>
-
-<pre><code>hid_custom_rq/
-hid_data/
-hid_mouse/
-</code></pre>
-
-<p>编译方法和上面一样。</p>
-
-<p>值得注意的是, 这三个设备都是实现了HID设备，可以做到即插即用。</p>
-
-<p><code>hid_data</code>的用法：</p>
-
-<p>读取/写入例子:</p>
-
-<pre><code>➜  commandline ./hidtool read
-0x01 0x02 0x03 0x04 0x05 0x06 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-➜  commandline ./hidtool write 0x34 0x54 0x20 0x1f
-➜  commandline ./hidtool read
-0x34 0x54 0x20 0x1f 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
-</code></pre>
-
-<h3>custom_class延伸</h3>
-
-<p>连线LED 11，修改代码后即可控制11 GPIO口的LED亮灭</p>
-
-<p>custom_class_demo.pde:</p>
-
-<pre><code>const int ledPin = 11;
-</code></pre>
-
-<p>custom_class.h:</p>
-
-<pre><code>class custom_classDevice {
- public:
-  custom_classDevice() {
-    usbInit();
-    ledPin = 11;        // pin 11 as default ledPin
-  }
-</code></pre>
-
-<p>而后连接一个220欧电阻+LED到ARDUINO的PIN 11上，即可通过USB控制LED亮灭。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on V-USB and Arduino(2)--用v-usb控制LED]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/"/>
-    <updated>2016-02-26T17:07:20+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2</id>
-    <content type="html"><![CDATA[<h3>参考</h3>
-
-<p>参考链接如下(需翻墙):</p>
-
-<p><a href="http://coopermaa2nd.blogspot.tw/2011/10/v-usb-examples-for-arduino.html">V-USB examples for Arduino</a></p>
-
-<h3>连线图</h3>
-
-<p>链接里的连线图如下:</p>
-
-<p><img src="/images/image_thumb1354.png" alt="/images/image_thumb1354.png" /></p>
-
-<p>这个图我想了很久，对比上一节里键盘的连线图对比，发现D+/D-的连线刚好是反过来的。此外就是
-D-上加了一个上拉电阻， 电阻值为1.5K， 这个其实没关系，在我们的例子中，用到2.2K，是因为
-我们用的参考电压是5V的。</p>
-
-<p>对上一章我们的连线图进行修改，得出的连线图如下:</p>
-
-<p><img src="/images/2016_02_29_10_52_38_769x625.jpg" alt="/images/2016_02_29_10_52_38_769x625.jpg" /></p>
-
-<p>电路图如下:</p>
-
-<p><img src="/images/2016_02_29_10_53_49_720x702.jpg" alt="/images/2016_02_29_10_53_49_720x702.jpg" /></p>
-
-<p>上一章用到的开关可以不用拆除。</p>
-
-<p>值得注意的是，2.2K的上拉电阻接到了5V输入。</p>
-
-<h3>代码</h3>
-
-<p>下载Windows版0022 Arduino，编译原帖中pde文件并上传，修改
-hardware/arduino/cores/arduino/wiring.c里的:</p>
-
-<pre><code>SIGNAL(TIMER0_OVF_vect) 
-{
-++++++   sei()
-......
-}
-</code></pre>
-
-<p>客户端程序编译:</p>
-
-<pre><code>➜  pwd
-......../custom_class/examples/custom_class_demo/commandline
-➜  make clean
-rm -f *.o set-led
-➜  make
-</code></pre>
-
-<p>使用<code>./set-led</code>即可，编译前需要修改头文件:</p>
-
-<pre><code>$ vim set-led.c
-//#include "../firmware/requests.h"   /* custom request numbers */
-//#include "../firmware/usbconfig.h"  /* device's VID/PID and names */
-#include "../../../requests.h"   /* custom request numbers */
-#include "../../../usbconfig.h"  /* device's VID/PID and names */
-</code></pre>
 ]]></content>
   </entry>
   

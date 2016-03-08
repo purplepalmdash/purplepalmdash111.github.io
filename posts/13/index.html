@@ -9,16 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="First edit your kickstart file, add following line before the end of your kickstart: 1
-2
-3
-4
-5
-6
-7
-8
-[root@z_WHServer kickstarts]# pwd
-/var/lib/ &hellip;">
+  <meta name="description" content="Create Networking In XenCenter Create the networking under the XenCenter UI&rsquo;s tab &ldquo;Networking&rdquo;. Networking Setting Enable the ip &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -74,6 +65,1292 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/06/add-private-nat-networking-in-xenserver/">Add Private NAT Networking in XenServer</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-07-06T11:42:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:42 am</span></time>
+        
+         | <a href="/blog/2015/07/06/add-private-nat-networking-in-xenserver/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Create Networking In XenCenter</h3>
+
+<p>Create the networking under the XenCenter UI&rsquo;s tab &ldquo;Networking&rdquo;.</p>
+
+<h3>Networking Setting</h3>
+
+<p>Enable the ip forward:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/sysctl.conf
+</span><span class='line'>net.ipv4.ip_forward = 1
+</span><span class='line'># sysctl -p 
+</span><span class='line'># cat /proc/sys/net/ipv4/ip_forward 
+</span><span class='line'>1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use iptables for forwarding the network flow:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># iptables -A FORWARD --in-interface xapi0 -j ACCEPT
+</span><span class='line'># iptables --table nat -A POSTROUTING --out-interface eth0 -j MASQUERADE</span></code></pre></td></tr></table></div></figure>
+
+
+<p>But this didn&rsquo;t bring up the internal networking, after discussing with college, edit the file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@xenserver-WolfHunter ~]# cat /etc/sysconfig/iptables
+</span><span class='line'>+++++  *nat
+</span><span class='line'>+++++  :PREROUTING ACCEPT [7019:539216]
+</span><span class='line'>+++++  :INPUT ACCEPT [77:3825]
+</span><span class='line'>+++++  :OUTPUT ACCEPT [104:6495]
+</span><span class='line'>+++++  :POSTROUTING ACCEPT [53:3228]
+</span><span class='line'>+++++  -A POSTROUTING -o xenbr0 -j MASQUERADE
+</span><span class='line'>+++++  COMMIT
+</span><span class='line'>*filter
+</span><span class='line'>:INPUT ACCEPT [0:0]
+</span><span class='line'>:FORWARD ACCEPT [0:0]
+</span><span class='line'>:OUTPUT ACCEPT [0:0]
+</span><span class='line'>:RH-Firewall-1-INPUT - [0:0]
+</span><span class='line'>-A INPUT -j RH-Firewall-1-INPUT
+</span><span class='line'>++++ -A FORWARD -i xapi0 -j ACCEPT
+</span><span class='line'>-A FORWARD -j RH-Firewall-1-INPUT
+</span><span class='line'>-A RH-Firewall-1-INPUT -i lo -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -p icmp --icmp-type any -j ACCEPT
+</span><span class='line'># DHCP for host internal networks (CA-6996)
+</span><span class='line'>-A RH-Firewall-1-INPUT -p udp -m udp --dport 67 --in-interface xenapi -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+</span><span class='line'># Linux HA hearbeat (CA-9394)
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m udp -p udp --dport 694 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 22 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 80 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 443 -j ACCEPT
+</span><span class='line'>-A RH-Firewall-1-INPUT -j REJECT --reject-with icmp-host-prohibited
+</span><span class='line'>COMMIT
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Restart XenServer and waiting for verification.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/">Install CloudStack All-In-One on Ubuntu14.04</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-07-05T16:08:59+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:08 pm</span></time>
+        
+         | <a href="/blog/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Refers to:   <br/>
+<a href="http://www.greenhills.co.uk/2015/02/23/cloudstack-4.4-single-server-on-ubuntu-14.04.1-with-kvm.html">http://www.greenhills.co.uk/2015/02/23/cloudstack-4.4-single-server-on-ubuntu-14.04.1-with-kvm.html</a></p>
+
+<h3>Preparation For Packages</h3>
+
+<p>Install reprepro:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install -y reprepro</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /srv/reprepro
+</span><span class='line'>root@DebServer:/srv/reprepro# ls
+</span><span class='line'>conf  db  dists  incoming  indices  lists  logs  pool  project  tmp
+</span><span class='line'>root@DebServer:/srv/reprepro# ls conf/
+</span><span class='line'>distributions  incomming  updates  uploaders
+</span><span class='line'>root@DebServer:/srv/reprepro# cat conf/distributions 
+</span><span class='line'>Origin: Alveonet
+</span><span class='line'>Label: Alveonet
+</span><span class='line'>Suite: trusty
+</span><span class='line'>Codename: trusty
+</span><span class='line'>Version: 14.04
+</span><span class='line'>Architectures: i386 amd64 source
+</span><span class='line'>Components: main cloudstack43 cloudstack44 cloudstack45 cloudstack
+</span><span class='line'>Description: Alveonet specific (or backported) packages
+</span><span class='line'>#SignWith: dash1982
+</span><span class='line'>DebOverride: ../indices/override.trusty.main
+</span><span class='line'>UDebOverride: ../indices/override.tursy.main.debian-installer
+</span><span class='line'>DscOverride: ../indices/override.trusty.main.src
+</span><span class='line'>DebIndices: Packages Release . .gz .bz2
+</span><span class='line'>UDebIndices: Packages . .gz .bz2
+</span><span class='line'>DscIndices: Sources Release .gz .bz2
+</span><span class='line'>Contents: . .gz .bz2
+</span><span class='line'>Update: - cloudstack45 cloudstack43 cloudstack44
+</span><span class='line'>Log: packages.alveonet.org.log
+</span><span class='line'>root@DebServer:/srv/reprepro# cat conf/incomming 
+</span><span class='line'>Name: default
+</span><span class='line'>IncomingDir: incoming
+</span><span class='line'>TempDir: tmp
+</span><span class='line'>Allow: trusty trusty-backports
+</span><span class='line'>Cleanup: on_deny on_error
+</span><span class='line'>root@DebServer:/srv/reprepro# cat conf/updates 
+</span><span class='line'>Name: cloudstack44
+</span><span class='line'>Method: http://cloudstack.apt-get.eu/ubuntu
+</span><span class='line'>#VerifyRelease: 86C278E3
+</span><span class='line'>Suite: trusty
+</span><span class='line'>Architectures: amd64
+</span><span class='line'>GetInRelease: no
+</span><span class='line'>#Components: 4.3&gt;main
+</span><span class='line'>Components: 4.4&gt;cloudstack44
+</span><span class='line'>
+</span><span class='line'># Name: cloudstack44
+</span><span class='line'># Method: http://cloudstack.apt-get.eu/ubuntu
+</span><span class='line'># #VerifyRelease: 86C278E3
+</span><span class='line'># Suite: trusty
+</span><span class='line'># Architectures: amd64
+</span><span class='line'># GetInRelease: no
+</span><span class='line'># #Components: 4.3&gt;main
+</span><span class='line'># Components: 4.4&gt;main
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>Name: cloudstack45
+</span><span class='line'>Method: http://cloudstack.apt-get.eu/ubuntu
+</span><span class='line'>#VerifyRelease: 86C278E3
+</span><span class='line'>Suite: trusty
+</span><span class='line'>Architectures: amd64
+</span><span class='line'>GetInRelease: no
+</span><span class='line'>#Components: 4.3&gt;main
+</span><span class='line'>Components: 4.5&gt;cloudstack45
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>Name: cloudstack43
+</span><span class='line'>Method: http://cloudstack.apt-get.eu/ubuntu
+</span><span class='line'>#VerifyRelease: 86C278E3
+</span><span class='line'>Suite: trusty
+</span><span class='line'>Architectures: amd64
+</span><span class='line'>GetInRelease: no
+</span><span class='line'>#Components: 4.3&gt;main
+</span><span class='line'>Components: 4.3&gt;cloudstack43
+</span><span class='line'>root@DebServer:/srv/reprepro# cat conf/uploaders 
+</span><span class='line'>allow * by unsigned
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'># reprepro -Vb /srv/reprepro export
+</span><span class='line'># reprepro update
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>By doing this you could make a local reprepro created repository.</p>
+
+<p>TBD</p>
+
+<h3>Installation Steps</h3>
+
+<h4>System Preparation</h4>
+
+<p>First install Ubuntu14.04, I use Cobbler Server&rsquo;s PXE Installation.</p>
+
+<p>Change the Root Permit login under <code>/etc/ssh/sshd_config</code> and restart the ssh service.</p>
+
+<p>Change the IP Address to 10.10.10.2 via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Ubuntu-14:~# cat /etc/network/interfaces
+</span><span class='line'># The loopback network interface
+</span><span class='line'>auto lo
+</span><span class='line'>iface lo inet loopback
+</span><span class='line'>
+</span><span class='line'># The primary network interface
+</span><span class='line'>auto eth0
+</span><span class='line'>iface eth0 inet static
+</span><span class='line'>address 10.10.10.2
+</span><span class='line'>netmask 255.255.255.0
+</span><span class='line'>gateway 10.10.10.1
+</span><span class='line'>dns-nameservers 180.76.76.76</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Relogin to the system, and begin to install the packages.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vi /etc/apt/source.list
+</span><span class='line'>deb http://192.168.1.111 amd64/
+</span><span class='line'>deb http://192.168.1.111/reprepro/      trusty  cloudstack44
+</span><span class='line'># apt-get update && apt-get install vim</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I use 192.168.1.111 because I cached all of the required packages in this server, thus it could speed-up the deployment.</p>
+
+<h4>Server Configuration</h4>
+
+<p>Configure the Server&rsquo;s hostname:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Ubuntu-14:~# cat /etc/hostname 
+</span><span class='line'>CS
+</span><span class='line'>root@Ubuntu-14:~# cat /etc/hosts
+</span><span class='line'>127.0.0.1       localhost
+</span><span class='line'>10.10.0.2       CS
+</span><span class='line'>127.0.1.1       CS.CSDomain     CS
+</span><span class='line'>
+</span><span class='line'>root@Ubuntu-14:~# reboot
+</span><span class='line'># hostname --fqdn
+</span><span class='line'>CS</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now configure the NTP via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get purge ntp
+</span><span class='line'># apt-get install openntpd</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Configure the Network:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install bridge-utils
+</span><span class='line'># cat /etc/network/interfaces
+</span><span class='line'>    
+</span><span class='line'>    # The loopback network interface
+</span><span class='line'>    auto lo
+</span><span class='line'>    iface lo inet loopback
+</span><span class='line'>    
+</span><span class='line'>    # The primary network interface
+</span><span class='line'>    auto eth0
+</span><span class='line'>    iface eth0 inet manual
+</span><span class='line'>    
+</span><span class='line'>    
+</span><span class='line'>    auto cloudbr0
+</span><span class='line'>    iface cloudbr0 inet static
+</span><span class='line'>            address 10.10.10.2
+</span><span class='line'>            netmask 255.255.255.0
+</span><span class='line'>            gateway 10.10.10.1
+</span><span class='line'>            dns-nameservers 180.76.76.76
+</span><span class='line'>            bridge-ports eth0
+</span><span class='line'>            bridge_fd 5
+</span><span class='line'>            bridge_stp off
+</span><span class='line'>            bridge_maxwait 1
+</span><span class='line'>    
+</span><span class='line'>    # Private network
+</span><span class='line'>    auto cloudbr1
+</span><span class='line'>    iface cloudbr1 inet manual
+</span><span class='line'>            bridge_ports none
+</span><span class='line'>            bridge_fd 5
+</span><span class='line'>            bridge_stp off
+</span><span class='line'>            bridge_maxwait 1
+</span><span class='line'># reboot</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the Network Bridge is configured.</p>
+
+<h4>CloudStack Installation</h4>
+
+<p>Since all of the packages are cached into LAN environment, simply type following command for installing:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install cloudstack-management</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then Install the database server:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install mysql-server
+</span><span class='line'># vim /etc/mysql/conf.d/cloudstack.cnf
+</span><span class='line'>[mysqld]
+</span><span class='line'>innodb_rollback_on_timeout=1
+</span><span class='line'>innodb_lock_wait_timeout=600
+</span><span class='line'>max_connections=350
+</span><span class='line'>log-bin=mysql-bin
+</span><span class='line'>binlog-format = 'ROW'
+</span><span class='line'>root@CS:~# service mysql restart
+</span><span class='line'>root@CS:~# cloudstack-setup-databases cloud:engine@localhost --deploy-as=root:engine -e file -m mymskey44 -k mydbkey00</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>NFS Storage Preparation</h4>
+
+<p>Add export directory:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /export/primary /export/secondary
+</span><span class='line'># apt-get install nfs-kernel-server
+</span><span class='line'># vim /etc/exports
+</span><span class='line'>/export  *(rw,async,no_root_squash,no_subtree_check)
+</span><span class='line'># cp /etc/default/nfs-common /etc/default/nfs-common.orig
+</span><span class='line'># sed -i '/NEED_STATD=/ a NEED_STATD=yes' /etc/default/nfs-common
+</span><span class='line'># sed -i '/STATDOPTS=/ a STATDOPTS="--port 662 --outgoing-port 2020"' /etc/default/nfs-common
+</span><span class='line'># diff -du /etc/default/nfs-common.orig /etc/default/nfs-common
+</span><span class='line'>
+</span><span class='line'>root@CS:~# cat /etc/modprobe.d/lockd.conf 
+</span><span class='line'>options lockd nlm_udpport=32769 nlm_tcpport=32803
+</span><span class='line'>root@CS:~# service nfs-kernel-server restart
+</span><span class='line'>root@CS:~# showmount -e 127.0.0.1
+</span><span class='line'>Export list for 127.0.0.1:
+</span><span class='line'>/export *</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Mount it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@CS:~# mkdir -p /mnt/primary /mnt/secondary
+</span><span class='line'>root@CS:~# tail -2 /etc/fstab
+</span><span class='line'>10.10.10.2:/export/primary   /mnt/primary    nfs rsize=8192,wsize=8192,timeo=14,intr,vers=3,noauto  0   2
+</span><span class='line'>10.10.10.2:/export/secondary /mnt/secondary  nfs rsize=8192,wsize=8192,timeo=14,intr,vers=3,noauto  0   2
+</span><span class='line'>root@CS:~# mount /mnt/primary/
+</span><span class='line'>root@CS:~# mount /mnt/secondary/
+</span><span class='line'>root@CS:~# mount | tail -2
+</span><span class='line'>10.10.10.2:/export/primary on /mnt/primary type nfs (rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3,addr=10.10.10.2)
+</span><span class='line'>10.10.10.2:/export/secondary on /mnt/secondary type nfs (rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3,addr=10.10.10.2)</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Cloudstack Agent Installation</h4>
+
+<p>Install it via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@CS:~# apt-get install cloudstack-agent
+</span><span class='line'>root@CS:~# cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.orig
+</span><span class='line'>root@CS:~# sed -i '/#listen_tls = 0/ a listen_tls = 0' /etc/libvirt/libvirtd.conf
+</span><span class='line'>root@CS:~# sed -i '/#listen_tcp = 1/ a listen_tcp = 1' /etc/libvirt/libvirtd.conf
+</span><span class='line'>root@CS:~# sed -i '/#tcp_port = "16509"/ a tcp_port = "16509"' /etc/libvirt/libvirtd.conf
+</span><span class='line'>root@CS:~# sed -i '/#auth_tcp = "sasl"/ a auth_tcp = "none"' /etc/libvirt/libvirtd.conf
+</span><span class='line'>root@CS:~# diff -du /etc/libvirt/libvirtd.conf.orig /etc/libvirt/libvirtd.conf
+</span><span class='line'>root@CS:~# cp /etc/default/libvirt-bin /etc/default/libvirt-bin.orig
+</span><span class='line'>root@CS:~# sed -i -e 's/libvirtd_opts="-d"/libvirtd_opts="-d -l"/' /etc/default/libvirt-bin
+</span><span class='line'>root@CS:~# service libvirt-bin restart
+</span><span class='line'>root@CS:~# cp /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.orig
+</span><span class='line'>root@CS:~# sed -i '/#vnc_listen = "0.0.0.0"/ a vnc_listen = "0.0.0.0"' /etc/libvirt/qemu.conf
+</span><span class='line'>root@CS:~# diff -du /etc/libvirt/qemu.conf.orig /etc/libvirt/qemu.conf
+</span><span class='line'>root@CS:~# service libvirt-bin restart
+</span><span class='line'>root@CS:~# ln -s /etc/apparmor.d/usr.sbin.libvirtd /etc/apparmor.d/disable/
+</span><span class='line'>root@CS:~# ln -s /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper /etc/apparmor.d/disable/
+</span><span class='line'>root@CS:~# apparmor_parser -R /etc/apparmor.d/usr.sbin.libvirtd
+</span><span class='line'>root@CS:~# apparmor_parser -R /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper
+</span><span class='line'>root@CS:~# service libvirt-bin restart</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Configure FireWall</h4>
+
+<p>Open the following ports:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@CS:~# ufw allow proto tcp from any to any port 22
+</span><span class='line'>Rules updated
+</span><span class='line'>Rules updated (v6)
+</span><span class='line'>root@CS:~# ufw allow proto tcp from any to any port 1798
+</span><span class='line'>Rules updated
+</span><span class='line'>Rules updated (v6)
+</span><span class='line'>root@CS:~# ufw allow proto tcp from any to any port 16509
+</span><span class='line'>Rules updated
+</span><span class='line'>Rules updated (v6)
+</span><span class='line'>root@CS:~# ufw allow proto tcp from any to any port 5900:6100
+</span><span class='line'>Rules updated
+</span><span class='line'>Rules updated (v6)
+</span><span class='line'>root@CS:~# ufw allow proto tcp from any to any port 49152:49216
+</span><span class='line'>Rules updated
+</span><span class='line'>Rules updated (v6)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now restart and verify the NFS working.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@CS:~# rpcinfo -u 10.10.10.2 mount
+</span><span class='line'>program 100005 version 1 ready and waiting
+</span><span class='line'>program 100005 version 2 ready and waiting
+</span><span class='line'>program 100005 version 3 ready and waiting
+</span><span class='line'>root@CS:~# showmount -e 10.10.10.2
+</span><span class='line'>Export list for 10.10.10.2:
+</span><span class='line'>/export *
+</span><span class='line'>root@CS:~# mount /mnt/primary/
+</span><span class='line'>root@CS:~# mount /mnt/secondary/</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Added the System Template:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@CS:~# /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /mnt/secondary -u http://192.168.1.111/systemvm64template-4.4.1-7-kvm.qcow2.bz2  -h kvm -F
+</span><span class='line'>......
+</span><span class='line'>Successfully installed system VM template  to /mnt/secondary/template/tmpl/1/3/</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Cloudstack</h3>
+
+<p>First manually start the services:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>service cloudstack-management status
+</span><span class='line'>service cloudstack-agent status
+</span><span class='line'>service tomcat6 status
+</span><span class='line'>
+</span><span class='line'>service cloudstack-management stop
+</span><span class='line'>service tomcat6 stop
+</span><span class='line'>service cloudstack-agent stop
+</span><span class='line'>ps -efl | grep java
+</span><span class='line'>
+</span><span class='line'>service cloudstack-management start
+</span><span class='line'>service cloudstack-management status
+</span><span class='line'>service cloudstack-agent start
+</span><span class='line'>service cloudstack-agent status</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now setup the UI via visiting <code>http://10.10.10.2:8080/client</code>, usename/password: admin/password:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Choose "Continue with basic installation". This will start a wizard that will walk through the configuration. You will need to adjust the network values for your environment, and make sure you use appropiate, free, ranges.
+</span><span class='line'>
+</span><span class='line'>Add a new zone named "zone1", DNS1 10.10.10.1 and Internal DNS 10.10.10.1.
+</span><span class='line'>Add a new pod named "pod1", gateway 10.10.10.1, netmask 255.255.255.0, IP range 10.10.10.160-10.10.10.169.
+</span><span class='line'>Add a guest network, gateway 10.10.10.1, netmask 255.255.255.0, IP range 10.10.10.170-192.168.77.230.
+</span><span class='line'>Add a cluster named cluster1, Hypervisor KVM.
+</span><span class='line'>Add a host. Host Name "CS", user root, passsword for the root linux user.
+</span><span class='line'>Add primary storage: name primary1, protocol NFS, Scope Cluster, server 10.10.10.10, path /export/primary.
+</span><span class='line'>Add secondary storage: NFS server 10.10.10.10, path /export/secondary.
+</span><span class='line'>Hit Launch and pray.
+</span><span class='line'>This should go through a sequence of setup.</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now you could enjoy the cloudstack all-in-one</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File for Ubuntu1404 in CobblerServer</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-07-04T14:57:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>4</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>2:57 pm</span></time>
+        
+         | <a href="/blog/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Proseed File</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>d-i time/zone string Asia/Shanghai
+</span><span class='line'>
+</span><span class='line'># Setup the installation source
+</span><span class='line'>d-i mirror/country string manual
+</span><span class='line'>d-i mirror/http/hostname string $http_server
+</span><span class='line'>#d-i mirror/http/directory string $install_source_directory
+</span><span class='line'>d-i mirror/http/directory string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
+</span><span class='line'>d-i mirror/http/proxy string
+</span><span class='line'>d-i apt-setup/security_host string $http_server
+</span><span class='line'>d-i apt-setup/security_path string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Local Repository</h3>
+
+<p>In one installed machine, do following for getting the repository of all of the installed packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install dselect
+</span><span class='line'>$ dpkg --get-selections | grep -v deinstall&gt;InstalledPackage.txt
+</span><span class='line'>$ awk {'print $1'} InstalledPackage.txt | xargs apt-get download</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Use nginx for sharing the repository:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y nginx
+</span><span class='line'>$ sudo vim /etc/nginx/site-enabled/default
+</span><span class='line'>server {
+</span><span class='line'>        listen 80 default_server;
+</span><span class='line'>        listen [::]:80 default_server ipv6only=on;
+</span><span class='line'>
+</span><span class='line'>        root /var/www/html;
+</span><span class='line'>        index index.html index.htm;
+</span><span class='line'>
+</span><span class='line'>        # Make site accessible from http://localhost/
+</span><span class='line'>        server_name localhost;
+</span><span class='line'>
+</span><span class='line'>        location / {
+</span><span class='line'>                # First attempt to serve request as file, then
+</span><span class='line'>                # as directory, then fall back to displaying a 404.
+</span><span class='line'>                try_files $uri $uri/ =404;
+</span><span class='line'>                autoindex on;
+</span><span class='line'>                # Uncomment to enable naxsi on this location
+</span><span class='line'>$ sudo service nginx restart</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now generate the repository server:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir -p /var/www/html/amd64
+</span><span class='line'>$ mv /root/Code/*.deb /var/www/html/amd64
+</span><span class='line'>$ cd /var/www/html/
+</span><span class='line'>$ dpkg-scanpackages amd64/ | gzip -9c &gt; amd64/Packages.gz
+</span><span class='line'>$ mv /root/Code/InstalledPackage.txt /var/www/html</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Use Local Repository</h3>
+
+<p>Change the repoisoty setting:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@Ubuntu-14:~# cat /etc/apt/sources.list
+</span><span class='line'>deb http://192.168.1.111 amd64/
+</span><span class='line'>root@Ubuntu-14:~# apt-get update &&  apt-get install -y dselect
+</span><span class='line'>root@Ubuntu-14:~# dselect update
+</span><span class='line'>root@Ubuntu-14:~# wget http://192.168.1.11/InstalledPackage.txt
+</span><span class='line'>root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt && apt-get -u dselect-upgrade </span></code></pre></td></tr></table></div></figure>
+
+
+<p>After updating, you have the same system as your server.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/03/try-raid0-installation-on-ubuntu/">Try Raid0 Installation on Ubuntu</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-07-03T10:58:55+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2015</span></span> <span class='time'>10:58 am</span></time>
+        
+         | <a href="/blog/2015/07/03/try-raid0-installation-on-ubuntu/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Preparation</h3>
+
+<p>Prepare the disks:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root:/home/juju/img]# mkdir Raid0
+</span><span class='line'>[root:/home/juju/img]# cd Raid0/
+</span><span class='line'>[root:/home/juju/img/Raid0]# ls
+</span><span class='line'>[root:/home/juju/img/Raid0]# qemu-img create -f qcow2 disk0.qcow2 10G
+</span><span class='line'>Formatting 'disk0.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 
+</span><span class='line'>[root:/home/juju/img/Raid0]# qemu-img create -f qcow2 disk1.qcow2 10G
+</span><span class='line'>Formatting 'disk1.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 
+</span><span class='line'>[root:/home/juju/img/Raid0]# qemu-img create -f qcow2 disk2.qcow2 10G
+</span><span class='line'>Formatting 'disk2.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 </span></code></pre></td></tr></table></div></figure>
+
+
+<p>Prepare the Virtual Machine:  <br/>
+<img src="/images/2015_07_03_11_06_03_658x441.jpg" alt="/images/2015_07_03_11_06_03_658x441.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_06_57_556x325.jpg" alt="/images/2015_07_03_11_06_57_556x325.jpg" /></p>
+
+<h3>Partition</h3>
+
+<p><img src="/images/2015_07_03_11_12_18_615x311.jpg" alt="/images/2015_07_03_11_12_18_615x311.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_15_30_476x216.jpg" alt="/images/2015_07_03_11_15_30_476x216.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_15_36_384x205.jpg" alt="/images/2015_07_03_11_15_36_384x205.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_18_30_499x265.jpg" alt="/images/2015_07_03_11_18_30_499x265.jpg" /></p>
+
+<h3>Raid</h3>
+
+<p>Configure the Software Raid0:</p>
+
+<p><img src="/images/2015_07_03_11_19_31_441x260.jpg" alt="/images/2015_07_03_11_19_31_441x260.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_20_41_655x244.jpg" alt="/images/2015_07_03_11_20_41_655x244.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_22_43_728x243.jpg" alt="/images/2015_07_03_11_22_43_728x243.jpg" /></p>
+
+<p>After Configuration of SoftRaid1, the screen displayed like:</p>
+
+<p><img src="/images/2015_07_03_11_28_28_687x457.jpg" alt="/images/2015_07_03_11_28_28_687x457.jpg" /></p>
+
+<p>Continue to install.</p>
+
+<h3>Verify Raid.</h3>
+
+<p>Use df and fdisk to verify the partition information:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>clouder@UbuntuRaid1:~$ df -h
+</span><span class='line'>Filesystem      Size  Used Avail Use% Mounted on
+</span><span class='line'>/dev/md0        9.3G  870M  7.9G  10% /
+</span><span class='line'>none            4.0K     0  4.0K   0% /sys/fs/cgroup
+</span><span class='line'>udev            235M  4.0K  235M   1% /dev
+</span><span class='line'>tmpfs            50M  440K   49M   1% /run
+</span><span class='line'>none            5.0M     0  5.0M   0% /run/lock
+</span><span class='line'>none            246M     0  246M   0% /run/shm
+</span><span class='line'>none            100M     0  100M   0% /run/user
+</span><span class='line'>clouder@UbuntuRaid1:~$ sudo fdisk -l
+</span><span class='line'>[sudo] password for clouder: 
+</span><span class='line'>
+</span><span class='line'>Disk /dev/vda: 10.7 GB, 10737418240 bytes
+</span><span class='line'>255 heads, 63 sectors/track, 1305 cylinders, total 20971520 sectors
+</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
+</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
+</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
+</span><span class='line'>Disk identifier: 0x00035942
+</span><span class='line'>
+</span><span class='line'>   Device Boot      Start         End      Blocks   Id  System
+</span><span class='line'>/dev/vda1   *        2048    19922943     9960448   fd  Linux raid autodetect
+</span><span class='line'>/dev/vda2        19924990    20969471      522241    5  Extended
+</span><span class='line'>/dev/vda5        19924992    20969471      522240   fd  Linux raid autodetect
+</span><span class='line'>
+</span><span class='line'>Disk /dev/vdb: 10.7 GB, 10737418240 bytes
+</span><span class='line'>255 heads, 63 sectors/track, 1305 cylinders, total 20971520 sectors
+</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
+</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
+</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
+</span><span class='line'>Disk identifier: 0x000715e9
+</span><span class='line'>
+</span><span class='line'>   Device Boot      Start         End      Blocks   Id  System
+</span><span class='line'>/dev/vdb1   *        2048    19922943     9960448   fd  Linux raid autodetect
+</span><span class='line'>/dev/vdb2        19924990    20969471      522241    5  Extended
+</span><span class='line'>/dev/vdb5        19924992    20969471      522240   fd  Linux raid autodetect
+</span><span class='line'>
+</span><span class='line'>Disk /dev/md0: 10.2 GB, 10190979072 bytes
+</span><span class='line'>2 heads, 4 sectors/track, 2488032 cylinders, total 19904256 sectors
+</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
+</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
+</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
+</span><span class='line'>Disk identifier: 0x00000000
+</span><span class='line'>
+</span><span class='line'>Disk /dev/md0 doesn't contain a valid partition table
+</span><span class='line'>
+</span><span class='line'>Disk /dev/md1: 534 MB, 534446080 bytes
+</span><span class='line'>2 heads, 4 sectors/track, 130480 cylinders, total 1043840 sectors
+</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
+</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
+</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
+</span><span class='line'>Disk identifier: 0x00000000
+</span><span class='line'>
+</span><span class='line'>Disk /dev/md1 doesn't contain a valid partition table</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Verify the raid status:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@UbuntuRaid1:/etc/initramfs-tools/conf.d# cat /proc/mdstat 
+</span><span class='line'>Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+</span><span class='line'>md1 : active raid1 vda5[0] vdb5[1]
+</span><span class='line'>      521920 blocks super 1.2 [2/2] [UU]
+</span><span class='line'>      
+</span><span class='line'>md0 : active raid1 vda1[0] vdb1[1]
+</span><span class='line'>      9952128 blocks super 1.2 [2/2] [UU]
+</span><span class='line'>      
+</span><span class='line'>unused devices: &lt;none&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Query the status of SoftRaid1:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@UbuntuRaid1:/etc/initramfs-tools/conf.d# sudo mdadm --query --detail /dev/md0
+</span><span class='line'>/dev/md0:
+</span><span class='line'>        Version : 1.2
+</span><span class='line'>  Creation Time : Fri Jul  3 11:24:46 2015
+</span><span class='line'>     Raid Level : raid1
+</span><span class='line'>     Array Size : 9952128 (9.49 GiB 10.19 GB)
+</span><span class='line'>  Used Dev Size : 9952128 (9.49 GiB 10.19 GB)
+</span><span class='line'>   Raid Devices : 2
+</span><span class='line'>  Total Devices : 2
+</span><span class='line'>    Persistence : Superblock is persistent
+</span><span class='line'>
+</span><span class='line'>    Update Time : Fri Jul  3 11:46:19 2015
+</span><span class='line'>          State : clean 
+</span><span class='line'> Active Devices : 2
+</span><span class='line'>Working Devices : 2
+</span><span class='line'> Failed Devices : 0
+</span><span class='line'>  Spare Devices : 0
+</span><span class='line'>
+</span><span class='line'>           Name : UbuntuRaid1:0  (local to host UbuntuRaid1)
+</span><span class='line'>           UUID : bc091921:c198c219:7162e35c:bfff3c4e
+</span><span class='line'>         Events : 19
+</span><span class='line'>
+</span><span class='line'>    Number   Major   Minor   RaidDevice State
+</span><span class='line'>       0     253        1        0      active sync   /dev/vda1
+</span><span class='line'>       1     253       17        1      active sync   /dev/vdb1</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Remove One Disk</h3>
+
+<p>Remove one, and see if it could be startup.</p>
+
+<p>Result:  <br/>
+Done, it could start into the system.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>clouder@UbuntuRaid1:~$ cat /proc/mdstat 
+</span><span class='line'>Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+</span><span class='line'>md1 : active (auto-read-only) raid1 vda5[1]
+</span><span class='line'>      521920 blocks super 1.2 [2/1] [_U]
+</span><span class='line'>      
+</span><span class='line'>md0 : active raid1 vda1[1]
+</span><span class='line'>      9952128 blocks super 1.2 [2/1] [_U]
+</span><span class='line'>      
+</span><span class='line'>unused devices: &lt;none&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Add A New Empty Disk</h3>
+
+<p>Add a new disk into the system, and first partition.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo fdisk -l 
+</span><span class='line'>
+</span><span class='line'>Disk /dev/vdb: 10.7 GB, 10737418240 bytes
+</span><span class='line'>16 heads, 63 sectors/track, 20805 cylinders, total 20971520 sectors
+</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
+</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
+</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
+</span><span class='line'>Disk identifier: 0x00000000
+</span><span class='line'>
+</span><span class='line'>Disk /dev/vdb doesn't contain a valid partition table</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Clone the partition table from the vda to the newly added partion:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo sfdisk -d /dev/vda &gt; vda.desc
+</span><span class='line'>$ cat vda.desc 
+</span><span class='line'>$ sudo sfdisk /dev/vdb&lt;./vda.desc</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now Add the new disk for usage:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>clouder@UbuntuRaid1:~$ cat /proc/mdstat 
+</span><span class='line'>Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+</span><span class='line'>md1 : active (auto-read-only) raid1 vda5[1]
+</span><span class='line'>      521920 blocks super 1.2 [2/1] [_U]
+</span><span class='line'>      
+</span><span class='line'>md0 : active raid1 vda1[1]
+</span><span class='line'>      9952128 blocks super 1.2 [2/1] [_U]
+</span><span class='line'>      
+</span><span class='line'>unused devices: &lt;none&gt;
+</span><span class='line'>clouder@UbuntuRaid1:~$ sudo mdadm --manage /dev/md0 --add /dev/vdb1
+</span><span class='line'>mdadm: added /dev/vdb1
+</span><span class='line'>clouder@UbuntuRaid1:~$ sudo mdadm --manage /dev/md1 --add /dev/vdb5
+</span><span class='line'>mdadm: added /dev/vdb5
+</span><span class='line'>clouder@UbuntuRaid1:~$ cat /proc/mdstat 
+</span><span class='line'>Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+</span><span class='line'>md1 : active raid1 vdb5[2] vda5[1]
+</span><span class='line'>      521920 blocks super 1.2 [2/1] [_U]
+</span><span class='line'>        resync=DELAYED
+</span><span class='line'>      
+</span><span class='line'>md0 : active raid1 vdb1[2] vda1[1]
+</span><span class='line'>      9952128 blocks super 1.2 [2/1] [_U]
+</span><span class='line'>      [===&gt;.................]  recovery = 16.6% (1662144/9952128) finish=1.8min speed=75552K/sec
+</span><span class='line'>      
+</span><span class='line'>unused devices: &lt;none&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Known Bugs</h3>
+
+<p>Error and Solution:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>error:  Diskfilter writes are not supported
+</span><span class='line'>
+</span><span class='line'>Edit :/etc/grub.d/10_linux
+</span><span class='line'>
+</span><span class='line'>Replace 'quick_boot="1"' with 'quick_boot="0"'
+</span><span class='line'>
+</span><span class='line'>Then :
+</span><span class='line'>
+</span><span class='line'>sudo update-grub
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2211,401 +3488,6 @@ First update Cobbler: ?</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/06/19/wh-worktips-5/">WH Worktips(5)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-06-19T15:29:56+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>19</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>3:29 pm</span></time>
-        
-         | <a href="/blog/2015/06/19/wh-worktips-5/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>This worktips will enable the visibility for ansible deployed nodes.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@z_WHServer Code]# cd ansible-tower-setup-2.1.5/
-</span><span class='line'>[root@z_WHServer ansible-tower-setup-2.1.5]# ls
-</span><span class='line'>ansible.cfg  configure  group_vars  host_vars  README.md  roles  setup.sh  site.yml</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Later I will finish this. But remember the tutorial pdf works well.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/06/19/wh-worktips-4/">WH Worktips(4)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-06-19T11:32:04+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>19</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:32 am</span></time>
-        
-         | <a href="/blog/2015/06/19/wh-worktips-4/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>A Whole Deployment</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ pwd
-</span><span class='line'>/home/juju/img/WolfHunter/WH
-</span><span class='line'>$ qemu-img create -f qcow2 z_Node113.qcow2 100G
-</span><span class='line'>$ </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Create Virtual Machine:</p>
-
-<p><img src="/images/2015_06_19_11_39_45_474x366.jpg" alt="/images/2015_06_19_11_39_45_474x366.jpg" /></p>
-
-<p>Memory:</p>
-
-<p><img src="/images/2015_06_19_11_40_51_477x363.jpg" alt="/images/2015_06_19_11_40_51_477x363.jpg" /></p>
-
-<p><img src="/images/2015_06_19_11_41_58_482x369.jpg" alt="/images/2015_06_19_11_41_58_482x369.jpg" /></p>
-
-<p>Click <code>Customize configuration before install</code>:</p>
-
-<p>VirtIO Disk 1:</p>
-
-<p><img src="/images/2015_06_19_11_43_22_478x309.jpg" alt="/images/2015_06_19_11_43_22_478x309.jpg" /></p>
-
-<p>Virtual Network Interface:</p>
-
-<p><img src="/images/2015_06_19_11_44_12_553x205.jpg" alt="/images/2015_06_19_11_44_12_553x205.jpg" /></p>
-
-<p>Notice the mac address is <code>52:54:00:9a:73:1a</code>.</p>
-
-<h3>Cobbler Customization</h3>
-
-<p>Define the node:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@z_WHServer ~]#  cobbler system add --name=node113 --profile=CentOS-6.5-x86_64 --mac=52:54:00:9a:73:1a --interface=eth0 --ip-address=10.47.58.113 --hostname=node113 --gateway=10.47.58.1 --dns-name=node113</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Begin Installation</h3>
-
-<p><img src="/images/2015_06_19_11_49_09_685x401.jpg" alt="/images/2015_06_19_11_49_09_685x401.jpg" /></p>
-
-<h3>Configure</h3>
-
-<p>Notice the ssh failed to 112 because we poweroff this node.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ssh-keyscan 10.47.58.113&gt;&gt;/root/.ssh/known_hosts 
-</span><span class='line'># 10.47.58.113 SSH-2.0-OpenSSH_5.3
-</span><span class='line'>
-</span><span class='line'># cd /root/Code/Ansible
-</span><span class='line'># ansible-playbook ssh-addkey.yml --ask-pass
-</span><span class='line'>SSH password: 
-</span><span class='line'>
-</span><span class='line'>PLAY [all] ******************************************************************** 
-</span><span class='line'>
-</span><span class='line'>TASK: [install ssh key] ******************************************************* 
-</span><span class='line'>changed: [10.47.58.113]
-</span><span class='line'>fatal: [10.47.58.112] =&gt; SSH Error: ssh: connect to host 10.47.58.112 port 22: Connection timed out
-</span><span class='line'>    while connecting to 10.47.58.112:22
-</span><span class='line'>It is sometimes useful to re-run the command using -vvvv, which prints SSH debug output to help diagnose the issue.
-</span><span class='line'>
-</span><span class='line'>PLAY RECAP ******************************************************************** 
-</span><span class='line'>           to retry, use: --limit @/root/ssh-addkey.retry
-</span><span class='line'>
-</span><span class='line'>10.47.58.112               : ok=0    changed=0    unreachable=1    failed=0   
-</span><span class='line'>10.47.58.113               : ok=1    changed=1    unreachable=0    failed=0  </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ansible all -m shell -a "uptime"
-</span><span class='line'>10.47.58.113 | success | rc=0 &gt;&gt;
-</span><span class='line'> 04:32:21 up 32 min,  3 users,  load average: 0.00, 0.00, 0.00
-</span><span class='line'>
-</span><span class='line'>10.47.58.112 | FAILED =&gt; SSH Error: ssh: connect to host 10.47.58.112 port 22: No route to host
-</span><span class='line'>    while connecting to 10.47.58.112:22
-</span><span class='line'>It is sometimes useful to re-run the command using -vvvv, which prints SSH debug output to help diagnose the issue.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Deployed via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cd /root/Code/Ansible/CloudStack-Ansible-Playbook
-</span><span class='line'># ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=base
-</span><span class='line'># ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=mysql
-</span><span class='line'># ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=mysql3306
-</span><span class='line'># ansible-playbook -i /root/Code/Ansible/hosts --limit=node113 ./cloudstack.yml --tags=csmanagement -vvvv</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could enjoy a new node&rsquo;s ansible deployment.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/06/18/use-virtualenv-for-downloading-pip-packages/">Use VirtualEnv for Downloading PIP Packages</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-06-18T20:56:30+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:56 pm</span></time>
-        
-         | <a href="/blog/2015/06/18/use-virtualenv-for-downloading-pip-packages/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In order to use offline installation of pip, I tried following steps for retrieving the packages.</p>
-
-<h3>Fetch Packages</h3>
-
-<p>First install virtualenv packages on CentOS7.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install -y python-virtualenv
-</span><span class='line'>$ virtualenv venv
-</span><span class='line'>New python executable in venv/bin/python
-</span><span class='line'>Installing Setuptools..............................................................................................................................................................................................................................done.
-</span><span class='line'>Installing Pip.....................................................................................................................................................................................................................................................................................................................................done.
-</span><span class='line'>$ ls venv
-</span><span class='line'>bin  include  lib  lib64
-</span><span class='line'>$ source venv/bin/activate
-</span><span class='line'>(venv)$      
-</span><span class='line'>(venv)$ pip install --download-cache=/home/dash/pipcache cloudmonkey
-</span><span class='line'>(venv)$ ls pipcache/
-</span><span class='line'>https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fa%2Fargcomplete%2Fargcomplete-0.8.9.tar.gz
-</span><span class='line'>https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fa%2Fargcomplete%2Fargcomplete-0.8.9.tar.gz.content-type
-</span><span class='line'>https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fc%2Fcloudmonkey%2Fcloudmonkey-5.3.1-0.tar.gz
-</span><span class='line'>https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2Fc%2Fcloudmonkey%2Fcloudmonkey-5.3.1-0.tar.gz.content-type
-</span><span class='line'>https%3A%2F%2Fpypi.python.org%2Fpackages%2Fsource%2FP%2FPrettyTable%2Fprettytable-0.7.2.tar.bz2
-</span><span class='line'>......
-</span><span class='line'>(venv)$ mkdir ~/pipcache2
-</span><span class='line'>(venv)$ pip install cloudmonkey --download=/home/dash/pipcache2
-</span><span class='line'>(venv)$ ls pipcache2
-</span><span class='line'>argcomplete-0.8.9.tar.gz    Pygments-2.0.2.tar.gz
-</span><span class='line'>cloudmonkey-5.3.1-0.tar.gz  requests-2.7.0.tar.gz
-</span><span class='line'>prettytable-0.7.2.tar.bz2</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Use Packages</h3>
-
-<p>In order to use packages, we did following things.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ scp xxx@xxx.xxx.xxx.xx:/home/xxx/pipcache2.tar.gz ./
-</span><span class='line'>$ tar xzvf pipcache2.tar.gz 
-</span><span class='line'>$ pip install --no-index --find-links ~/pipcache2 cloudmonkey</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now the package has been installed. enjoy them.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/06/18/wh-worktips-3/">WH Worktips(3)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-06-18T15:50:11+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>3:50 pm</span></time>
-        
-         | <a href="/blog/2015/06/18/wh-worktips-3/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Prepare Packages</h3>
-
-<h4>System Pacakges</h4>
-
-<p>Since CentOS6.5 already deprecated, we need to use <code>http://vault.centos.org/6.5/</code> for download the packages.  <br/>
-Or we could remove all of the repo definition files except the cobbler deployed one.</p>
-
-<p>We need python-pip for usage. Download it via yum firstly to the directory.</p>
-
-<p>Download the following packages, these packages may have problems because I downloaded them from the latest repository.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum install yum-plugin-downloadonly
-</span><span class='line'>$ yum install --downloadonly --downloaddir=/root/Code/repo/ python-pip
-</span><span class='line'>$ yum install --downloadonly --downloaddir=/root/Code/repo/ nethogs
-</span><span class='line'>$ yum reinstall --downloadonly --downloaddir=/root/Code/repo/ java7
-</span><span class='line'>$ yum reinstall --downloadonly --downloaddir=/root/Code/repo/ mysql-devel
-</span><span class='line'>$ yum install --downloadonly --downloaddir=/root/Code/repo/ java-1.7.0-openjdk-devel
-</span><span class='line'>$ yum install --downloadonly --downloaddir=/root/Code/repo/ mysql-server
-</span><span class='line'>$ yum install --downloadonly --downloaddir=/root/Code/repo/ mysql-devel
-</span><span class='line'>[root@z_WHServer repo]# ls
-</span><span class='line'>python-pip-1.3.1-4.el6.noarch.rpm
-</span><span class='line'>....</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Cloudstack Packages</h4>
-
-<p>Download all of the cloudstack packages from <code>http://cloudstack.apt-get.eu/rhel/4.4/</code>, and put them into a directory, run <code>createrepo</code> for generating the repodata.</p>
-
-<h4>PIP Packages</h4>
-
-<p>Manually create the offline installation resources.</p>
-
-<h3>Deployment</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=base
-</span><span class='line'>#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=mysql
-</span><span class='line'>#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=mysql3306
-</span><span class='line'>#  ansible-playbook -i /root/Code/Ansible/hosts --limit=node112 ./cloudstack.yml --tags=csmanagement -vvvv</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-There may be some problems in deployment in <code>/etc/hosts</code>, so manually add itself to the hostname:  <br/>
-!!! node112 !!!</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@node112 yum.repos.d]# cat /etc/hosts
-</span><span class='line'>127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
-</span><span class='line'>::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-</span><span class='line'>10.47.58.112    node112</span></code></pre></td></tr></table></div></figure>
-
-
-<p>From now on, you could visit the management server via:</p>
-
-<p><a href="http://10.47.58.112:8080/client/">http://10.47.58.112:8080/client/</a></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/14">&larr; Older</a>
@@ -2623,6 +3505,14 @@ There may be some problems in deployment in <code>/etc/hosts</code>, so manually
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-4/">Tips on V-USB and Arduino(4)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/05/ba-wan-ebuddy-3/">把玩ebuddy(3)</a>
       </li>
     
@@ -2632,14 +3522,6 @@ There may be some problems in deployment in <code>/etc/hosts</code>, so manually
     
       <li class="post">
         <a href="/blog/2016/03/02/conntrack-tools-usage/">Conntrack-tools Usage</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/">E-buddy消息提醒服务设计思路(1)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/01/ba-wan-e-buddy/">把玩e-Buddy</a>
       </li>
     
   </ul>
