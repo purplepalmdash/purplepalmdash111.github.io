@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-08T08:43:01+08:00</updated>
+  <updated>2016-03-10T14:40:50+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,247 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[配置Qemu的VDE网络]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/"/>
+    <updated>2016-03-10T14:18:43+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo</id>
+    <content type="html"><![CDATA[<p>为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
+，DHCP获得IP地址，从而得到网络连接， 以下是步骤。</p>
+
+<h3>安装VDE</h3>
+
+<p>ArchLinux下安装命令为<code>sudo pacman -S vde2</code>.</p>
+
+<h3>配置</h3>
+
+<p>贴出配置文件如下, 摘录自ArchLinux的Wiki. 值得注意的是，在Systemd的配置文件中，需要先把
+tun驱动装载上，才能使得VDE启动成功。</p>
+
+<p>配置qemu网络环境配置脚本:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>vim /etc/systemd/scripts/qemu-network-env
+</span><span class='line'><span class="c">#!/bin/sh</span>
+</span><span class='line'><span class="c"># QEMU/VDE network environment preparation script</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The IP configuration for the tap device that will be used for</span>
+</span><span class='line'><span class="c"># the virtual machine network:</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">TAP_DEV</span><span class="o">=</span>tap0
+</span><span class='line'><span class="nv">TAP_IP</span><span class="o">=</span>10.33.34.254
+</span><span class='line'><span class="nv">TAP_MASK</span><span class="o">=</span>24
+</span><span class='line'><span class="nv">TAP_NETWORK</span><span class="o">=</span>10.33.34.0
+</span><span class='line'>
+</span><span class='line'><span class="c"># Host interface</span>
+</span><span class='line'><span class="nv">NIC</span><span class="o">=</span>enp2s0
+</span><span class='line'>
+</span><span class='line'><span class="k">case</span> <span class="s2">&quot;$1&quot;</span> in
+</span><span class='line'>  start<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> -n <span class="s2">&quot;Starting VDE network for QEMU: &quot;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># If you want tun kernel module to be loaded by script uncomment here</span>
+</span><span class='line'>        modprobe tun 2&gt;/dev/null
+</span><span class='line'>        <span class="c"># Wait for the module to be loaded</span>
+</span><span class='line'>        <span class="k">while</span> ! lsmod <span class="p">|</span> grep -q <span class="s2">&quot;^tun&quot;</span><span class="p">;</span> <span class="k">do</span> <span class="nb">echo</span> <span class="s2">&quot;Waiting for tun device&quot;</span><span class="p">;</span> sleep 1<span class="p">;</span> <span class="k">done</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Start tap switch</span>
+</span><span class='line'>        vde_switch -tap <span class="s2">&quot;$TAP_DEV&quot;</span> -daemon -mod <span class="m">660</span> -group users
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Bring tap interface up</span>
+</span><span class='line'>        ip address add <span class="s2">&quot;$TAP_IP&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> dev <span class="s2">&quot;$TAP_DEV&quot;</span>
+</span><span class='line'>        ip link <span class="nb">set</span> <span class="s2">&quot;$TAP_DEV&quot;</span> up
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Start IP Forwarding</span>
+</span><span class='line'>        <span class="nb">echo</span> <span class="s2">&quot;1&quot;</span> &gt; /proc/sys/net/ipv4/ip_forward
+</span><span class='line'>        iptables -t nat -A POSTROUTING -s <span class="s2">&quot;$TAP_NETWORK&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> -o <span class="s2">&quot;$NIC&quot;</span> -j MASQUERADE
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  stop<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> -n <span class="s2">&quot;Stopping VDE network for QEMU: &quot;</span>
+</span><span class='line'>        <span class="c"># Delete the NAT rules</span>
+</span><span class='line'>        iptables -t nat -D POSTROUTING <span class="s2">&quot;$TAP_NETWORK&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> -o <span class="s2">&quot;$NIC&quot;</span> -j MASQUERADE
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Bring tap interface down</span>
+</span><span class='line'>        ip link <span class="nb">set</span> <span class="s2">&quot;$TAP_DEV&quot;</span> down
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Kill VDE switch</span>
+</span><span class='line'>        pgrep -f vde_switch <span class="p">|</span> xargs <span class="nb">kill</span> -TERM
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  restart<span class="p">|</span>reload<span class="o">)</span>
+</span><span class='line'>        <span class="nv">$0</span> stop
+</span><span class='line'>        sleep 1
+</span><span class='line'>        <span class="nv">$0</span> start
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  *<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> <span class="s2">&quot;Usage: $0 {start|stop|restart|reload}&quot;</span>
+</span><span class='line'>        <span class="nb">exit </span>1
+</span><span class='line'><span class="k">esac</span>
+</span><span class='line'><span class="nb">exit </span>0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+配置symtemd服务:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>vim /etc/systemd/system/qemu-network-env.service
+</span><span class='line'><span class="o">[</span>Unit<span class="o">]</span>
+</span><span class='line'><span class="nv">Description</span><span class="o">=</span>Manage VDE Switch
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>Service<span class="o">]</span>
+</span><span class='line'><span class="nv">Type</span><span class="o">=</span>oneshot
+</span><span class='line'><span class="nv">ExecStart</span><span class="o">=</span>/etc/systemd/scripts/qemu-network-env start
+</span><span class='line'><span class="nv">ExecStop</span><span class="o">=</span>/etc/systemd/scripts/qemu-network-env stop
+</span><span class='line'><span class="nv">RemainAfterExit</span><span class="o">=</span>yes
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>Install<span class="o">]</span>
+</span><span class='line'><span class="nv">WantedBy</span><span class="o">=</span>multi-user.target
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使能服务，并重新启动机器:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo systemctl <span class="nb">enable </span>qemu-network-env.service
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>配置DHCPD</h3>
+
+<p>需要配置dhcpd以使得在<code>10.33.34.0/24</code>网段提供DHCP服务：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo vim /etc/dhcpd.conf
+</span><span class='line'>
+</span><span class='line'>subnet
+</span><span class='line'>10.33.34.0 netmask 255.255.255.0 <span class="o">{</span>
+</span><span class='line'><span class="c"># --- default gateway</span>
+</span><span class='line'>option routers
+</span><span class='line'>10.33.34.254<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Netmask</span>
+</span><span class='line'>option subnet-mask
+</span><span class='line'>255.255.255.0<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Broadcast Address</span>
+</span><span class='line'>option broadcast-address
+</span><span class='line'>10.33.34.255<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Domain name servers, tells the clients which DNS servers to use.</span>
+</span><span class='line'>option domain-name-servers
+</span><span class='line'>223.5.5.5,180.76.76.76<span class="p">;</span>
+</span><span class='line'>option <span class="nb">time</span>-offset 0<span class="p">;</span>
+</span><span class='line'>range 10.33.34.2 10.33.34.253<span class="p">;</span>
+</span><span class='line'>default-lease-time 1209600<span class="p">;</span>
+</span><span class='line'>max-lease-time 1814400<span class="p">;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>修改完dhcpd的配置后， 重新启动dhcpd服务:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo systemctl restart dhcpd4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>启动虚拟机</h3>
+
+<p>启动虚拟机，并使其使用我们刚才添加的vde网络:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo qemu-system-x86_64 -net nic -net vde -hda ./test1.qcow2 -m <span class="m">2048</span> --enable-kvm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。    <br/>
+如果使用普通用户，会出错， To be solved.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on V-USB and Arduino(5)]]></title>
@@ -6169,313 +6410,6 @@ lastest development kernel via:</p>
 </pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://www.kraxel.org/cgit/qemu</span></code></pre></td></tr></table></div></figure>
 
 
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Read Digest on KVM]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/01/26/read-digest-on-kvm/"/>
-    <updated>2016-01-26T09:12:26+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/01/26/read-digest-on-kvm</id>
-    <content type="html"><![CDATA[<h3>Some Words</h3>
-
-<p>VMM: (Virtual Machine Monitor)   <br/>
-VMX: (Virtual Machine eXtensions):  instructions on processors with x86 virtualization.</p>
-
-<p>Virtualization software:  is most often used to emulate a complete computer system in
-order to allow a guest operating system to be run, for example allowing Linux to run as
-a guest on top of a PC that is natively running a Microsoft Windows operating system
-(or the inverse, running Windows as a guest on Linux).</p>
-
-<p>CPU Ring:   <br/>
-<a href="https://en.wikipedia.org/wiki/Protection_ring">https://en.wikipedia.org/wiki/Protection_ring</a></p>
-
-<p><img src="http://purplepalmdash.github.io/images/300px-Priv_rings.svg.png" alt="/images/300px-Priv_rings.svg.png" /></p>
-
-<p>VT-d, I/O Hardware Virtualization.   <br/>
-VT-c, Networking Hardware Virtualization.</p>
-
-<h3>Host kickstart file</h3>
-
-<p>Add following installation packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>%packages
-</span><span class='line'>@virtualization
-</span><span class='line'>@Base
-</span><span class='line'>@Core
-</span><span class='line'>@additional-devel
-</span><span class='line'>@base
-</span><span class='line'>@large-systems
-</span><span class='line'>@storage-client-iscsi
-</span><span class='line'>@systgem-management-snmp
-</span><span class='line'>@virtualization
-</span><span class='line'>@virtualization-client
-</span><span class='line'>@virtualization-platform
-</span><span class='line'>@virtualization-tools
-</span><span class='line'>%end</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Mouse On Windows Virtual Machine</h3>
-
-<p>Add twice the usb mouse:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>&lt;input type='tablet' bus='usb'</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>NUMA</h3>
-
-<p>Install the numa configuration tools via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-cache search numactl
-</span><span class='line'>numactl - NUMA scheduling and memory placement tool
-</span><span class='line'># apt-get -y install numactl</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Command: <code>numactl --hardware</code>, <code>numastat</code>, <code>numastat -c qemu-kvm</code>.</p>
-
-<p>Check the numa banlancing policy via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /proc/sys/kernel/numa_balancing
-</span><span class='line'>0</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>echo 1</code> for open the auto balancing.</p>
-
-<p>KSM, could merge the same memory page, even in different NUMA node.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /sys/kernel/mm/ksm/merge_across_nodes 
-</span><span class='line'>1</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>CPU Binding</h3>
-
-<p>Use <code>virsh vcpuinfo xx</code> for displaying the VCPU/CPU corresponding relationship.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>virsh # emulatorpin 79
-</span><span class='line'>emulator: CPU Affinity
-</span><span class='line'>----------------------------------
-</span><span class='line'>       *: 0-7</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>Change it dynamically:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>virsh # emulatorpin 79 0-3 --live
-</span><span class='line'>
-</span><span class='line'>virsh # emulatorpin 79
-</span><span class='line'>emulator: CPU Affinity
-</span><span class='line'>----------------------------------
-</span><span class='line'>       *: 0-3</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could check the result via <code>virsh dumpxml xxx</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>  &lt;vcpu placement='static'&gt;4&lt;/vcpu&gt;
-</span><span class='line'>  &lt;cputune&gt;
-</span><span class='line'>    &lt;emulatorpin cpuset='0-3'/&gt;
-</span><span class='line'>  &lt;/cputune&gt;</span></code></pre></td></tr></table></div></figure>
-
-
-<p>1-1 binding using virsh:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># virsh vcpupin 79 0 0    
-</span><span class='line'># virsh vcpupin 79 1 1
-</span><span class='line'># virsh vcpupin 79 2 2
-</span><span class='line'># virsh vcpupin 79 3 3
-</span><span class='line'># virsh dumpxml 79 | more
-</span><span class='line'>  &lt;cputune&gt;
-</span><span class='line'>    &lt;vcpupin vcpu='0' cpuset='0'/&gt;
-</span><span class='line'>    &lt;vcpupin vcpu='1' cpuset='1'/&gt;
-</span><span class='line'>    &lt;vcpupin vcpu='2' cpuset='2'/&gt;
-</span><span class='line'>    &lt;vcpupin vcpu='3' cpuset='3'/&gt;</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now view the vcpuinfo via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># virsh vcpuinfo 79
-</span><span class='line'>VCPU:           0
-</span><span class='line'>CPU:            0
-</span><span class='line'>State:          running
-</span><span class='line'>CPU time:       9.2s
-</span><span class='line'>CPU Affinity:   y-------</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>CPU Hot-Plug-in</h3>
-
-<p>The cpu configuration info is listed as:</p>
-
-<p><img src="http://purplepalmdash.github.io/images/2016_01_26_10_54_29_285x127.jpg" alt="/images/2016_01_26_10_54_29_285x127.jpg" /></p>
-
-<p>View the CPU infos via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /proc/interrupts 
-</span><span class='line'>           CPU0       CPU1       </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the CPUs to 3:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>virsh # setvcpus 80 3 --live</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now in the vm the result should be(or detect it via <code>cat /proc/cpuinfo</code>) :</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /proc/interrupts 
-</span><span class='line'>           CPU0       CPU1       CPU2  </span></code></pre></td></tr></table></div></figure>
-
-
-<h3>CPU Working Mode</h3>
-
-<p>If we select the pass-through, then the cpuinfo should be:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># virsh dumpxml xxxxx
-</span><span class='line'>  &lt;cpu mode='host-passthrough'&gt;
-</span><span class='line'>  &lt;/cpu&gt;
-</span><span class='line'># cat /proc/cpuinfo
-</span><span class='line'>processor       : 1
-</span><span class='line'>vendor_id       : GenuineIntel
-</span><span class='line'>cpu family      : 6
-</span><span class='line'>model           : 58
-</span><span class='line'>model name      : Intel(R) Core(TM) i7-3770 CPU @ 3.40GHz</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If we select the host-model, will choose the most similar:  <br/>
-Or If we choose <code>Copy host cpu mode</code>, like following:  <br/>
-<img src="http://purplepalmdash.github.io/images/2016_01_26_11_07_32_299x274.jpg" alt="/images/2016_01_26_11_07_32_299x274.jpg" /></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># cat /proc/cpuinfo
-</span><span class='line'>....
-</span><span class='line'>processor       : 1
-</span><span class='line'>vendor_id       : GenuineIntel
-</span><span class='line'>cpu family      : 6
-</span><span class='line'>model           : 42
-</span><span class='line'>model name      : Intel Xeon E312xx (Sandy Bridge)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Memory Balloon</h3>
-
-<p>Change the memory balloon to 1024 or 4096 via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># virsh qemu-monitor-command PerfTune --hmp --cmd balloon 1024
-</span><span class='line'># virsh qemu-monitor-command PerfTune --hmp --cmd info balloon
-</span><span class='line'>balloon: actual=1024
-</span><span class='line'># virsh qemu-monitor-command PerfTune --hmp --cmd balloon 4096</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Memory Limitation</h3>
-
-<p>Make configuration of the memory via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>virsh memtune PerfTune --hard-limit xxxxx --config
-</span><span class='line'>virsh memtune PerfTune --soft-limit xxxxx --config
-</span><span class='line'>virsh memtune PerfTune --swap-hard-limit xxxxx --config
-</span><span class='line'>virsh memtune PerfTune --min_guarantee xxxxx --config</span></code></pre></td></tr></table></div></figure>
-
-
-<p>&ndash;config, write to configuration xml
-&ndash;live, lively write
-&ndash;current ?</p>
-
-<h3>HugePage</h3>
-
-<p>Enable hugepage via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># grep -i huge /proc/meminfo 
-</span><span class='line'>AnonHugePages:  12820480 kB
-</span><span class='line'>HugePages_Total:       0
-</span><span class='line'>HugePages_Free:        0
-</span><span class='line'>HugePages_Rsvd:        0
-</span><span class='line'>HugePages_Surp:        0
-</span><span class='line'>Hugepagesize:       2048 kB</span></code></pre></td></tr></table></div></figure>
 
 ]]></content>
   </entry>

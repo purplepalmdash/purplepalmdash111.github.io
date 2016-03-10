@@ -1,0 +1,449 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>配置Qemu的VDE网络 - Dash</title>
+  <meta name="author" content="Dash">
+
+  
+  <meta name="description" content="为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
+，DHCP获得IP地址，从而得到网络连接， 以下是步骤。 安装VDE ArchLinux下安装命令为sudo pacman -S vde2. 配置 贴出配置文件如下, 摘录自ArchLinux的Wiki &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/purplepalmdash/atom.xml" rel="alternate" title="Dash" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="//fonts.googleapis.com/js/jquery/1.9.1/jquery.min.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="./javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body    class="collapse-sidebar sidebar-footer" >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Dash</a></h1>
+  
+    <h2>Get busy living, or get busy dying.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/purplepalmdash/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:purplepalmdash.github.io" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">配置Qemu的VDE网络</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-03-10T14:18:43+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>2:18 pm</span></time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
+，DHCP获得IP地址，从而得到网络连接， 以下是步骤。</p>
+
+<h3>安装VDE</h3>
+
+<p>ArchLinux下安装命令为<code>sudo pacman -S vde2</code>.</p>
+
+<h3>配置</h3>
+
+<p>贴出配置文件如下, 摘录自ArchLinux的Wiki. 值得注意的是，在Systemd的配置文件中，需要先把
+tun驱动装载上，才能使得VDE启动成功。</p>
+
+<p>配置qemu网络环境配置脚本:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>vim /etc/systemd/scripts/qemu-network-env
+</span><span class='line'><span class="c">#!/bin/sh</span>
+</span><span class='line'><span class="c"># QEMU/VDE network environment preparation script</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The IP configuration for the tap device that will be used for</span>
+</span><span class='line'><span class="c"># the virtual machine network:</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">TAP_DEV</span><span class="o">=</span>tap0
+</span><span class='line'><span class="nv">TAP_IP</span><span class="o">=</span>10.33.34.254
+</span><span class='line'><span class="nv">TAP_MASK</span><span class="o">=</span>24
+</span><span class='line'><span class="nv">TAP_NETWORK</span><span class="o">=</span>10.33.34.0
+</span><span class='line'>
+</span><span class='line'><span class="c"># Host interface</span>
+</span><span class='line'><span class="nv">NIC</span><span class="o">=</span>enp2s0
+</span><span class='line'>
+</span><span class='line'><span class="k">case</span> <span class="s2">&quot;$1&quot;</span> in
+</span><span class='line'>  start<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> -n <span class="s2">&quot;Starting VDE network for QEMU: &quot;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># If you want tun kernel module to be loaded by script uncomment here</span>
+</span><span class='line'>        modprobe tun 2&gt;/dev/null
+</span><span class='line'>        <span class="c"># Wait for the module to be loaded</span>
+</span><span class='line'>        <span class="k">while</span> ! lsmod <span class="p">|</span> grep -q <span class="s2">&quot;^tun&quot;</span><span class="p">;</span> <span class="k">do</span> <span class="nb">echo</span> <span class="s2">&quot;Waiting for tun device&quot;</span><span class="p">;</span> sleep 1<span class="p">;</span> <span class="k">done</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Start tap switch</span>
+</span><span class='line'>        vde_switch -tap <span class="s2">&quot;$TAP_DEV&quot;</span> -daemon -mod <span class="m">660</span> -group users
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Bring tap interface up</span>
+</span><span class='line'>        ip address add <span class="s2">&quot;$TAP_IP&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> dev <span class="s2">&quot;$TAP_DEV&quot;</span>
+</span><span class='line'>        ip link <span class="nb">set</span> <span class="s2">&quot;$TAP_DEV&quot;</span> up
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Start IP Forwarding</span>
+</span><span class='line'>        <span class="nb">echo</span> <span class="s2">&quot;1&quot;</span> &gt; /proc/sys/net/ipv4/ip_forward
+</span><span class='line'>        iptables -t nat -A POSTROUTING -s <span class="s2">&quot;$TAP_NETWORK&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> -o <span class="s2">&quot;$NIC&quot;</span> -j MASQUERADE
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  stop<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> -n <span class="s2">&quot;Stopping VDE network for QEMU: &quot;</span>
+</span><span class='line'>        <span class="c"># Delete the NAT rules</span>
+</span><span class='line'>        iptables -t nat -D POSTROUTING <span class="s2">&quot;$TAP_NETWORK&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> -o <span class="s2">&quot;$NIC&quot;</span> -j MASQUERADE
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Bring tap interface down</span>
+</span><span class='line'>        ip link <span class="nb">set</span> <span class="s2">&quot;$TAP_DEV&quot;</span> down
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Kill VDE switch</span>
+</span><span class='line'>        pgrep -f vde_switch <span class="p">|</span> xargs <span class="nb">kill</span> -TERM
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  restart<span class="p">|</span>reload<span class="o">)</span>
+</span><span class='line'>        <span class="nv">$0</span> stop
+</span><span class='line'>        sleep 1
+</span><span class='line'>        <span class="nv">$0</span> start
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  *<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> <span class="s2">&quot;Usage: $0 {start|stop|restart|reload}&quot;</span>
+</span><span class='line'>        <span class="nb">exit </span>1
+</span><span class='line'><span class="k">esac</span>
+</span><span class='line'><span class="nb">exit </span>0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+配置symtemd服务:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>vim /etc/systemd/system/qemu-network-env.service
+</span><span class='line'><span class="o">[</span>Unit<span class="o">]</span>
+</span><span class='line'><span class="nv">Description</span><span class="o">=</span>Manage VDE Switch
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>Service<span class="o">]</span>
+</span><span class='line'><span class="nv">Type</span><span class="o">=</span>oneshot
+</span><span class='line'><span class="nv">ExecStart</span><span class="o">=</span>/etc/systemd/scripts/qemu-network-env start
+</span><span class='line'><span class="nv">ExecStop</span><span class="o">=</span>/etc/systemd/scripts/qemu-network-env stop
+</span><span class='line'><span class="nv">RemainAfterExit</span><span class="o">=</span>yes
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>Install<span class="o">]</span>
+</span><span class='line'><span class="nv">WantedBy</span><span class="o">=</span>multi-user.target
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使能服务，并重新启动机器:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo systemctl <span class="nb">enable </span>qemu-network-env.service
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>配置DHCPD</h3>
+
+<p>需要配置dhcpd以使得在<code>10.33.34.0/24</code>网段提供DHCP服务：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo vim /etc/dhcpd.conf
+</span><span class='line'>
+</span><span class='line'>subnet
+</span><span class='line'>10.33.34.0 netmask 255.255.255.0 <span class="o">{</span>
+</span><span class='line'><span class="c"># --- default gateway</span>
+</span><span class='line'>option routers
+</span><span class='line'>10.33.34.254<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Netmask</span>
+</span><span class='line'>option subnet-mask
+</span><span class='line'>255.255.255.0<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Broadcast Address</span>
+</span><span class='line'>option broadcast-address
+</span><span class='line'>10.33.34.255<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Domain name servers, tells the clients which DNS servers to use.</span>
+</span><span class='line'>option domain-name-servers
+</span><span class='line'>223.5.5.5,180.76.76.76<span class="p">;</span>
+</span><span class='line'>option <span class="nb">time</span>-offset 0<span class="p">;</span>
+</span><span class='line'>range 10.33.34.2 10.33.34.253<span class="p">;</span>
+</span><span class='line'>default-lease-time 1209600<span class="p">;</span>
+</span><span class='line'>max-lease-time 1814400<span class="p">;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>修改完dhcpd的配置后， 重新启动dhcpd服务:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo systemctl restart dhcpd4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>启动虚拟机</h3>
+
+<p>启动虚拟机，并使其使用我们刚才添加的vde网络:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo qemu-system-x86_64 -net nic -net vde -hda ./test1.qcow2 -m <span class="m">2048</span> --enable-kvm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。    <br/>
+如果使用普通用户，会出错， To be solved.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Dash</span></span>
+
+           
+
+
+
+
+<time class='entry-date' datetime='2016-03-10T14:18:43+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>2:18 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/linux/'>linux</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <br />
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2016/03/07/tips-on-v-usb-and-arduino-5/" title="Previous Post: Tips on V-USB and Arduino(5)">&laquo; Tips on V-USB and Arduino(5)</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/">配置Qemu的VDE网络</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-4/">Tips on V-USB and Arduino(4)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/05/ba-wan-ebuddy-3/">把玩ebuddy(3)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/03/ba-wan-ebuddy-2/">把玩ebuddy(2)</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2016 - Dash -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'dashsagittariussglory';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/';
+        var disqus_url = 'http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
