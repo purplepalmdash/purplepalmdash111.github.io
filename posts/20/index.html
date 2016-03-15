@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="安装Identity服务 首先创建keystone所需数据库: 1
+  <meta name="description" content="这里将配置计算节点。计算节点我们使用了一台2G内存的虚拟机，并使用了嵌套虚拟化，可以通过lscpu来看到CPU的VMX/VT-X标志都已经被下发到虚拟机中。 数据库准备 使用下列命令来创建nova所需数据库: 1
 2
 3
 4
@@ -26,15 +26,7 @@
 15
 16
 17
-18
-19
-20
-21
-22
-23
-24
-root@JunoController:~# mysql -u root -p
-Enter password &hellip;">
+18 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -90,6 +82,829 @@ Enter password &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/">安装Icehouse@Ubuntu14.04(4)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-13T17:34:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:34 pm</span></time>
+        
+         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>这里将配置计算节点。计算节点我们使用了一台2G内存的虚拟机，并使用了嵌套虚拟化，可以通过<code>lscpu</code>来看到CPU的VMX/VT-X标志都已经被下发到虚拟机中。</p>
+
+<h3>数据库准备</h3>
+
+<p>使用下列命令来创建nova所需数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 35
+</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE nova;
+</span><span class='line'>Query OK, 1 row affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'xxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY 'xxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>nova用户</h3>
+
+<p>创建nova用户:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# source ~/openstack/admin-openrc.sh
+</span><span class='line'>root@JunoController:~# keystone user-create --name nova --pass xxxx
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |                                  |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | 845c22d1a781458a8b28ba54534b73dd |
+</span><span class='line'>|   name   |               nova               |
+</span><span class='line'>| username |               nova               |
+</span><span class='line'>+----------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>制定nova属于service tenant, 并赋予admin权限:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-role-add --user nova --tenant service --role admin
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在keystone注册nova:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name nova --type compute --description "OpenStack Compute"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |        OpenStack Compute         |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 8733caba0b9742a39ee9ac53ad4d8e27 |
+</span><span class='line'>|     name    |               nova               |
+</span><span class='line'>|     type    |             compute              |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在keystone注册nova end-point:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ compute / {print $2}') --publicurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --internalurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --adminurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --region regionOne
+</span><span class='line'>+-------------+-------------------------------------------+
+</span><span class='line'>|   Property  |                   Value                   |
+</span><span class='line'>+-------------+-------------------------------------------+
+</span><span class='line'>|   adminurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
+</span><span class='line'>|      id     |      d16c91bfacf2474ebee36314535a146f     |
+</span><span class='line'>| internalurl | http://10.17.17.211:8774/v2/%(tenant_id)s |
+</span><span class='line'>|  publicurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
+</span><span class='line'>|    region   |                 regionOne                 |
+</span><span class='line'>|  service_id |      8733caba0b9742a39ee9ac53ad4d8e27     |
+</span><span class='line'>+-------------+-------------------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Compute服务安装</h3>
+
+<h4>Controller节点配置</h4>
+
+<p>在Controller节点上，安装以下包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get -y install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置nova所需的配置文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/nova/nova.conf
+</span><span class='line'>[database]
+</span><span class='line'>connection = mysql://nova:xxxxx@10.17.17.211/nova
+</span><span class='line'>
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>....
+</span><span class='line'>rpc_backend = rabbit
+</span><span class='line'>rabbit_host = 10.17.17.211
+</span><span class='line'>rabbit_password = xxxxxx
+</span><span class='line'>my_ip=10.17.17.211
+</span><span class='line'>vncserver_listen = 0.0.0.0
+</span><span class='line'>vncserver_proxyclient_address = 10.17.17.211
+</span><span class='line'>auth_strategy = keystone 
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>auth_uri = http://10.17.17.211:5000
+</span><span class='line'>auth_host = 10.17.17.211
+</span><span class='line'>auth_port = 35357
+</span><span class='line'>auth_protocol = http
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = nova
+</span><span class='line'>admin_password = xxxx
+</span><span class='line'>[glance]
+</span><span class='line'>host=10.17.17.211
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>删除sqlite3数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# rm /var/lib/nova/nova.sqlite 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建数据库：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# su -s /bin/sh -c "nova-manage db sync" nova
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启服务，使用nova检查本机可用镜像情况:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service nova-api restart
+</span><span class='line'>root@JunoController:~# service nova-cert restart
+</span><span class='line'>root@JunoController:~#  service nova-consoleauth restart
+</span><span class='line'>root@JunoController:~# service nova-scheduler restart
+</span><span class='line'>root@JunoController:~# service nova-conductor restart
+</span><span class='line'>root@JunoController:~# service nova-novncproxy restart
+</span><span class='line'>root@JunoController:~# nova image-list
+</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
+</span><span class='line'>| ID                                   | Name                | Status | Server |
+</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
+</span><span class='line'>| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | ACTIVE |        |
+</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Compute节点安装</h4>
+
+<p>安装下列包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~#  apt-get -y install nova-compute sysfsutils
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# vim /etc/nova/nova.conf 
+</span><span class='line'>[DEFAULT]
+</span><span class='line'>......
+</span><span class='line'>auth_strategy = keystone
+</span><span class='line'>rpc_backend = rabbit
+</span><span class='line'>rabbit_host = 10.17.17.211
+</span><span class='line'>rabbit_password = xxxx
+</span><span class='line'>my_ip = 10.17.17.213
+</span><span class='line'>vnc_enabled = True
+</span><span class='line'>vncserver_listen = 0.0.0.0
+</span><span class='line'>vncserver_proxyclient_address = 10.17.17.213
+</span><span class='line'>novncproxy_base_url = http://10.17.17.211:6080/vnc_auto.html
+</span><span class='line'>glance_host = 10.17.17.211
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>auth_uri = http://10.17.17.211:5000
+</span><span class='line'>auth_host = 10.17.17.211
+</span><span class='line'>auth_port = 35357
+</span><span class='line'>auth_protocol = http
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = nova
+</span><span class='line'>admin_password = xxxx
+</span><span class='line'>
+</span><span class='line'>[database]
+</span><span class='line'>#The SQLAlchemy connection string used to connect to the database
+</span><span class='line'>connection = mysql://nova:xxxx@10.17.17.211/nova
+</span><span class='line'>[glance]
+</span><span class='line'>host=10.17.17.211
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>看cpu硬件是否支持硬件加速:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# egrep -c '(vmx|svm)' /proc/cpuinfo
+</span><span class='line'>2
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果支持加速，则配置nova-compute.conf为:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# cat /etc/nova/nova-compute.conf
+</span><span class='line'>[libvirt]
+</span><span class='line'>virt_type=kvm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>删除不需要的nova.sqlite文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# rm -f /var/lib/nova/nova.sqlite 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重起nova服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# service nova-compute restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>验证</h3>
+
+<p>在控制节点上,列出所有的service:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# nova service-list
+</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
+</span><span class='line'>| Binary           | Host           | Zone     | Status  | State | Updated_at                 | Disabled Reason |
+</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
+</span><span class='line'>| nova-cert        | JunoController | internal | enabled | up    | 2015-04-13T10:16:10.000000 | -               |
+</span><span class='line'>| nova-consoleauth | JunoController | internal | enabled | up    | 2015-04-13T10:16:12.000000 | -               |
+</span><span class='line'>| nova-scheduler   | JunoController | internal | enabled | up    | 2015-04-13T10:16:05.000000 | -               |
+</span><span class='line'>| nova-conductor   | JunoController | internal | enabled | up    | 2015-04-13T10:16:08.000000 | -               |
+</span><span class='line'>| nova-compute     | JunoCompute    | nova     | enabled | up    | 2015-04-13T10:16:09.000000 | -               |
+</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>现在compute节点已经配置完了，接下来可以配置网络节点。配置完网络节点后，就可以启动虚拟机了。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/">安装Icehouse@Ubuntu14.04(3)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-13T16:54:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>4:54 pm</span></time>
+        
+         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Image Service 用于提供给用户用于快速启动虚拟机的镜像文件，这样的服务称为glance服务。</p>
+
+<h3>Glance服务数据库设定</h3>
+
+<p>在mysql中创建glance数据库:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  mysql -u root -p
+</span><span class='line'>Enter password: 
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 33
+</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE glance;
+</span><span class='line'>Query OK, 1 row affected (0.01 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxx'
+</span><span class='line'>    -&gt; ;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxx';
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [(none)]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>创建Glance的user/role/tenant权限</h3>
+
+<p>用admin的权限，创建以下权限：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~#  source ~/openstack/admin-openrc.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建glance用户:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-create --name glance --pass engine
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>| Property |              Value               |
+</span><span class='line'>+----------+----------------------------------+
+</span><span class='line'>|  email   |                                  |
+</span><span class='line'>| enabled  |               True               |
+</span><span class='line'>|    id    | c706febbcc8843fb97383c9fdfba6214 |
+</span><span class='line'>|   name   |              glance              |
+</span><span class='line'>| username |              glance              |
+</span><span class='line'>+----------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>用户glance属于admin角色，使用service tanant:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>keystone user-role-add --user glance --tenant service --role admin
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在keystone注册glance服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name glance --type image --description "OpenStack Image Service"
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>| description |     OpenStack Image Service      |
+</span><span class='line'>|   enabled   |               True               |
+</span><span class='line'>|      id     | 3d52d2992b9f423eb9868304e4405fab |
+</span><span class='line'>|     name    |              glance              |
+</span><span class='line'>|     type    |              image               |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在keystone创建服务的end-point:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://10.17.17.211:9292 --internalurl http://10.17.17.211:9292 --adminurl http://10.17.17.211:9292 --region regionOne
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   Property  |              Value               |
+</span><span class='line'>+-------------+----------------------------------+
+</span><span class='line'>|   adminurl  |     http://10.17.17.211:9292     |
+</span><span class='line'>|      id     | f44400bebc07408d8e0f4e70a0d18475 |
+</span><span class='line'>| internalurl |     http://10.17.17.211:9292     |
+</span><span class='line'>|  publicurl  |     http://10.17.17.211:9292     |
+</span><span class='line'>|    region   |            regionOne             |
+</span><span class='line'>|  service_id | 3d52d2992b9f423eb9868304e4405fab |
+</span><span class='line'>+-------------+----------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>安装Glance服务</h3>
+
+<p>安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>apt-get -y install glance python-glanceclient
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/glance/glance-api.conf
+</span><span class='line'>[database]
+</span><span class='line'># sqlite_db = /var/lib/glance/glance.sqlite
+</span><span class='line'>backend = sqlalchemy
+</span><span class='line'>connection = mysql://glance:engine@10.17.17.211/glance
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>auth_uri = http://10.17.17.211:5000
+</span><span class='line'>auth_host = 10.17.17.211
+</span><span class='line'>auth_port = 35357
+</span><span class='line'>auth_protocol = http
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = engine
+</span><span class='line'>#  vim /etc/glance/glance-registry.conf
+</span><span class='line'>[database]
+</span><span class='line'># The file name to use with SQLite (string value)
+</span><span class='line'>#sqlite_db = /var/lib/glance/glance.sqlite
+</span><span class='line'>backend = sqlalchemy
+</span><span class='line'>connection = mysql://glance:engine@10.17.17.211/glance
+</span><span class='line'>
+</span><span class='line'>[keystone_authtoken]
+</span><span class='line'>auth_uri = http://10.17.17.211:5000
+</span><span class='line'>auth_host = 10.17.17.211
+</span><span class='line'>auth_port = 35357
+</span><span class='line'>auth_protocol = http
+</span><span class='line'>admin_tenant_name = service
+</span><span class='line'>admin_user = glance
+</span><span class='line'>admin_password = engine
+</span><span class='line'># rm -f /var/lib/glance/glance.sqlite
+</span><span class='line'># su -s /bin/sh -c "glance-manage db_sync" glance
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这里会碰到一个问题，解决方案如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# su -s /bin/sh -c "glance-manage db_sync" glance
+</span><span class='line'>2015-04-13 17:20:22.637 9455 CRITICAL glance [-] ValueError: Tables "migrate_version" have non utf8 collation, please make sure all tables are CHARSET=utf8
+</span><span class='line'>
+</span><span class='line'>root@JunoController:~# mysql -u root -p glance
+</span><span class='line'>Enter password: 
+</span><span class='line'>Reading table information for completion of table and column names
+</span><span class='line'>You can turn off this feature to get a quicker startup with -A
+</span><span class='line'>
+</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
+</span><span class='line'>Your MariaDB connection id is 29
+</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+</span><span class='line'>
+</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+</span><span class='line'>
+</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+</span><span class='line'>
+</span><span class='line'>MariaDB [glance]&gt; alter table migrate_version convert to character set utf8 collate utf8_unicode_ci;
+</span><span class='line'>Query OK, 1 row affected (0.09 sec)                
+</span><span class='line'>Records: 1  Duplicates: 0  Warnings: 0
+</span><span class='line'>
+</span><span class='line'>MariaDB [glance]&gt; flush privileges;
+</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
+</span><span class='line'>
+</span><span class='line'>MariaDB [glance]&gt; quit;
+</span><span class='line'>Bye
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重启服务，</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service glance-registry restart
+</span><span class='line'>root@JunoController:~# service glance-api restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>验证Glance服务</h3>
+
+<p>首先下载镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget http://cdn.download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建Glance可见镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># glance image-create --name "cirros-0.3.3-x86_64" --file cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
+</span><span class='line'>[=============================&gt;] 100%
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| Property         | Value                                |
+</span><span class='line'>+------------------+--------------------------------------+
+</span><span class='line'>| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
+</span><span class='line'>| container_format | bare                                 |
+</span><span class='line'>| created_at       | 2015-04-13T09:27:54                  |
+</span><span class='line'>| deleted          | False                                |
+</span><span class='line'>| deleted_at       | None                                 |
+</span><span class='line'>| disk_format      | qcow2                                |
+</span><span class='line'>| id               | 68f14900-8b25-4329-ad56-8fbd497c6812 |
+</span><span class='line'>| is_public        | True                                 |
+</span><span class='line'>| min_disk         | 0                                    |
+</span><span class='line'>| min_ram          | 0                                    |
+</span><span class='line'>| name             | cirros-0.3.3-x86_64                  |
+</span><span class='line'>| owner            | ea1f0a6b15dc4796958f087c38756ed1     |
+</span><span class='line'>| protected        | False                                |
+</span><span class='line'>| size             | 13200896                             |
+</span><span class='line'>| status           | active                               |
+</span><span class='line'>| updated_at       | 2015-04-13T09:27:54                  |
+</span><span class='line'>| virtual_size     | None                                 |
+</span><span class='line'>+------------------+--------------------------------------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>检查镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# ls /var/lib/glance/images/
+</span><span class='line'>68f14900-8b25-4329-ad56-8fbd497c6812
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>列出可用镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# glance image-list
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span><span class='line'>| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
+</span><span class='line'>+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>好了，现在glance服务可以使用了，接下来将创建compute节点和网络节点。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2126,321 +2941,6 @@ We should add following configuration under the configure.yaml of the .juju/:</p
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/23/using-juju-for-deploying-opencontrail/">Using Juju for Deploying OpenContrail</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-23T11:37:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2015</span></span> <span class='time'>11:37 am</span></time>
-        
-         | <a href="/blog/2015/03/23/using-juju-for-deploying-opencontrail/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Preparation</h3>
-
-<p>First we have to create 4 images which will hold our own opearating system.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> 1016  qemu-img create -f qcow2 OpenContrail0.qcow2 40G
-</span><span class='line'> 1017  qemu-img create -f qcow2 OpenContrail1.qcow2 40G
-</span><span class='line'> 1018  qemu-img create -f qcow2 OpenContrail3.qcow2 40G
-</span><span class='line'> 1019  qemu-img create -f qcow2 OpenContrail2.qcow2 40G
-</span><span class='line'> 1020  ls
-</span><span class='line'> 1021  history
-</span><span class='line'># pwd
-</span><span class='line'>/home/juju/img/OpenContrail
-</span><span class='line'># qemu-img create -f qcow2 OpenContrail0.qcow2 40G
-</span><span class='line'># qemu-img create -f qcow2 OpenContrail1.qcow2 40G
-</span><span class='line'># qemu-img create -f qcow2 OpenContrail3.qcow2 40G
-</span><span class='line'># qemu-img create -f qcow2 OpenContrail2.qcow2 40G
-</span><span class='line'># ls
-</span><span class='line'>OpenContrail0.qcow2  OpenContrail1.qcow2  OpenContrail2.qcow2  OpenContrail3.qcow2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Second, we create the four nodes in the virt-manager, each of them have 3G Memory, and have the cpu copied. Their network deployed to the newly added isolated network. <br/>
-<img src="/images/2015_03_23_11_55_12_711x170.jpg" alt="/images/2015_03_23_11_55_12_711x170.jpg" />  <br/>
-After commission, the status should be &ldquo;ready&rdquo;.</p>
-
-<h3>Juju</h3>
-
-<p>Copy the new environment named OpenContrail:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat ~/.juju/environments.yaml 
-</span><span class='line'># This file has been generated by juju quickstart v2.0.1
-</span><span class='line'># at 2015-03-19 06:36:40 UTC.
-</span><span class='line'>
-</span><span class='line'>default: maas
-</span><span class='line'>environments:
-</span><span class='line'>  maas:
-</span><span class='line'>    admin-secret: xxxx
-</span><span class='line'>    default-series: trusty
-</span><span class='line'>    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
-</span><span class='line'>    maas-server: http://10.17.17.200/MAAS
-</span><span class='line'>    type: maas
-</span><span class='line'>  OpenContrail:
-</span><span class='line'>    admin-secret: xxxx
-</span><span class='line'>    default-series: trusty
-</span><span class='line'>    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
-</span><span class='line'>    maas-server: http://10.17.17.200/MAAS
-</span><span class='line'>    type: maas
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-Then <code>juju switch</code> and examine you are currently operate at OpenContrail via <code>juju switch -l</code>, the result should be OpenContrail. <br/>
-Bootstrap the environment via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints="mem=3G"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-Use <code>juju show-log</code> will display the logs for juju.</p>
-
-<p>Deploy from local repository:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ export JUJU_REPOSITORY=/home/Trusty/Code/deployOpenContrail/contrail-deployer/charms
-</span><span class='line'>$ juju deploy --to 0 juju-gui
-</span><span class='line'>$ juju deploy --to lxc:0 mysql
-</span><span class='line'>$ juju deploy --to lxc:0 keystone
-</span><span class='line'>$ juju deploy --to lxc:0 nova-cloud-controller
-</span><span class='line'>$ juju deploy --to lxc:0 glance
-</span><span class='line'>$ juju deploy --to lxc:0 rabbitmq-server
-</span><span class='line'>$ juju deploy --to lxc:0 openstack-Trustyboard
-</span><span class='line'>$ juju deploy --to lxc:0 cinder 
-</span><span class='line'>$ juju deploy --to lxc:0 neutron-api
-</span><span class='line'>$ juju deploy --to lxc:0 quantum-gateway
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>HomeWorking</h3>
-
-<p>First I created the local charm repository, and then start deploying.   <br/>
-Problem is lxc template download is too time-wasting, thus I have to manually download the images and let it run as if the cache image is available.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# du -hs *
-</span><span class='line'>178M    ubuntu-14.04-server-cloudimg-amd64-root.tar.gz
-</span><span class='line'>root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# pwd
-</span><span class='line'>/var/cache/lxc/cloud-trusty
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use local repository for deploying other version&rsquo;s container, then run a cassandra:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms local:precise/cassandra
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/03/23/deploy-local-service-using-juju/">Deploy Local Service Using Juju</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-03-23T09:11:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2015</span></span> <span class='time'>9:11 am</span></time>
-        
-         | <a href="/blog/2015/03/23/deploy-local-service-using-juju/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since the OpenContrail deploy is using local deployment, that means, directly deploy to local machine. But the lab lack of the environment of the local ubuntu based machine, so I want to deploy a service to local first, then transform the whole project from local deployment to MAAS deployment. <br/>
-In a Ubuntu14.04 machine, do following steps.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo add-apt-repository ppa:juju/stable 
-</span><span class='line'>$ sudo vim /etc/apt/source.list
-</span><span class='line'># This is for juju
-</span><span class='line'>deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-</span><span class='line'>deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-</span><span class='line'>$ sudo apt-get install juju juju-core juju-local juju-quickstart
-</span><span class='line'>$ sudo apt-get install charm-tools
-</span><span class='line'>$ sudo apt-get install uvtool-libvirt uvtool
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Configure the juju for using local:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/juju/plugins.git ~/.juju-plugins
-</span><span class='line'>$ vim ~/.zshrc
-</span><span class='line'># Add juju_plugins to global path
-</span><span class='line'>PATH=$PATH:$HOME/.juju-plugin
-</span><span class='line'>$ source ~/.zshrc
-</span><span class='line'>$ juju init
-</span><span class='line'>$ vim ~/.juju/environments.yaml
-</span><span class='line'>local:
-</span><span class='line'> type: local
-</span><span class='line'>
-</span><span class='line'> # &lt;Commented Section&gt;
-</span><span class='line'>
-</span><span class='line'> # The default series to deploy the state-server and charms on.
-</span><span class='line'> #
-</span><span class='line'> default-series: precise
-</span><span class='line'> #
-</span><span class='line'> ## ** add these lines to support KVM and LXC deployment **
-</span><span class='line'> lxc-use-clone: true
-</span><span class='line'> container: kvm
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Start the machine via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ juju bootstrap --debug
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Add the machines via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$  juju set-constraints mem=512M
-</span><span class='line'>[Trusty@~]$  juju add-machine --constraints "root-disk=16G mem=1G"
-</span><span class='line'>created machine 1
-</span><span class='line'>[Trusty@~]$ juju status
-</span><span class='line'>environment: local
-</span><span class='line'>machines:
-</span><span class='line'>  "0":
-</span><span class='line'>    agent-state: started
-</span><span class='line'>    agent-version: 1.21.3.1
-</span><span class='line'>    dns-name: localhost
-</span><span class='line'>    instance-id: localhost
-</span><span class='line'>    series: trusty
-</span><span class='line'>    state-server-member-status: has-vote
-</span><span class='line'>  "1":
-</span><span class='line'>    instance-id: pending
-</span><span class='line'>    series: precise
-</span><span class='line'>services: {}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>After a long wait, it will boot a machine which have 1G and 1 Core, and let it running.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/21">&larr; Older</a>
@@ -2458,6 +2958,14 @@ In a Ubuntu14.04 machine, do following steps.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/15/ba-wan-ebuddy-4/">把玩ebuddy(4)</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/">使用squid缓存所有rpm/deb安装包</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/13/yong-vagrantguan-li-libvirt/">用Vagrant管理libvirt</a>
       </li>
     
@@ -2467,14 +2975,6 @@ In a Ubuntu14.04 machine, do following steps.</p>
     
       <li class="post">
         <a href="/blog/2016/03/11/tips-on-w5100/">Tips on W5100</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/">配置Qemu的VDE网络</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
       </li>
     
   </ul>
