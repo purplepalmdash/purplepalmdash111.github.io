@@ -172,6 +172,35 @@
 </span><span class='line'> sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{.backup,}</span></code></pre></td></tr></table></div></figure>
 
 
+<h3>导入box</h3>
+
+<p>用packer编译出来的box文件默认工作在virtualbox下,我们需要用一个插件将其转换为
+libvirt可用的box:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#  vagrant plugin install vagrant-mutate
+</span><span class='line'># vagrant mutate ubuntu-14.04.virtualbox.box libvirt
+</span><span class='line'>Extracting box file to a temporary directory.
+</span><span class='line'>Converting ubuntu-14.04.virtualbox from virtualbox to libvirt.
+</span><span class='line'>    (100.00/100%)
+</span><span class='line'>Cleaning up temporary files.
+</span><span class='line'>The box ubuntu-14.04.virtualbox (libvirt) is now ready to use.
+</span><span class='line'># cd /root/.vagrant.d/boxes/
+</span><span class='line'># mv ubuntu-14.04.virtualbox/ trusty64
+</span><span class='line'># vagrant box list
+</span><span class='line'>trusty64 (libvirt, 0)</span></code></pre></td></tr></table></div></figure>
+
+
 <h3>检查安装的box</h3>
 
 <p>可以通过以下命令检查已经安装好的box:</p>
@@ -184,7 +213,126 @@
 </span><span class='line'>ubuntu1404    (virtualbox, 0)</span></code></pre></td></tr></table></div></figure>
 
 
+<h3>配置Vagrantfile</h3>
+
+<p>以下是一个例子:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># -*- mode: ruby -*-
+</span><span class='line'># vi: set ft=ruby :
+</span><span class='line'>Vagrant.configure(2) do |config|
+</span><span class='line'>
+</span><span class='line'>  config.vm.box = "trusty64"
+</span><span class='line'>  # vagrant issues #1673..fixes hang with configure_networks
+</span><span class='line'>  config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
+</span><span class='line'>  config.vm.provider :libvirt do |domain|
+</span><span class='line'>    domain.memory = 256
+</span><span class='line'>    domain.nested = true
+</span><span class='line'>  end
+</span><span class='line'>
+</span><span class='line'># Private network using virtual network switching
+</span><span class='line'>  config.vm.define :vm1 do |vm1|
+</span><span class='line'>    vm1.vm.network :private_network, :ip =&gt; "192.168.56.11"
+</span><span class='line'>  end
+</span><span class='line'>
+</span><span class='line'>  config.vm.define :vm2 do |vm2|
+</span><span class='line'>    vm2.vm.network :private_network, :ip =&gt; "192.168.56.12"
+</span><span class='line'>  end
+</span><span class='line'>
+</span><span class='line'>  # Private network. Point to Point between 2 Guest OS using a TCP tunnel
+</span><span class='line'>  # Guest 1
+</span><span class='line'>  #config.vm.define :test_vm1 do |test_vm1|
+</span><span class='line'>  #  test_vm1.vm.network :private_network,
+</span><span class='line'>  #    :libvirt__tunnel_type =&gt; 'server',
+</span><span class='line'>  #    # default is 127.0.0.1 if omitted
+</span><span class='line'>  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
+</span><span class='line'>  #    :libvirt__tunnel_port =&gt; '11111'
+</span><span class='line'>
+</span><span class='line'>  # Guest 2
+</span><span class='line'>  #config.vm.define :test_vm2 do |test_vm2|
+</span><span class='line'>  #  test_vm2.vm.network :private_network,
+</span><span class='line'>  #    :libvirt__tunnel_type =&gt; 'client',
+</span><span class='line'>  #    # default is 127.0.0.1 if omitted
+</span><span class='line'>  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
+</span><span class='line'>  #    :libvirt__tunnel_port =&gt; '11111'
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'>  # Public Network
+</span><span class='line'>  config.vm.define :vm1 do |vm1|
+</span><span class='line'>    vm1.vm.network :public_network,
+</span><span class='line'>      :dev =&gt; "virbr0",
+</span><span class='line'>      :mode =&gt; "bridge",
+</span><span class='line'>      :type =&gt; "bridge"
+</span><span class='line'>  end
+</span><span class='line'>end
+</span></code></pre></td></tr></table></div></figure>
+
+
 <h3>启动虚拟机</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vagrant up --provider=libvirt</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动时会出现以下问题, 解决方案为:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant up --provider=libvirt
+</span><span class='line'>....
+</span><span class='line'>Missing required arguments: libvirt_uri
+</span><span class='line'>.....
+</span><span class='line'>$ vagrant plugin install --plugin-version 0.0.3 fog-libvirt</span></code></pre></td></tr></table></div></figure>
+
 </div>
 
 

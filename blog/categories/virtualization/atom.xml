@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-15T20:17:04+08:00</updated>
+  <updated>2016-03-15T22:47:17+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -71,6 +71,24 @@ $ vagrant box add ./ubuntu-trusty.box --name "trusty64"
  sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{.backup,}
 </code></pre>
 
+<h3>导入box</h3>
+
+<p>用packer编译出来的box文件默认工作在virtualbox下,我们需要用一个插件将其转换为
+libvirt可用的box:</p>
+
+<pre><code>#  vagrant plugin install vagrant-mutate
+# vagrant mutate ubuntu-14.04.virtualbox.box libvirt
+Extracting box file to a temporary directory.
+Converting ubuntu-14.04.virtualbox from virtualbox to libvirt.
+    (100.00/100%)
+Cleaning up temporary files.
+The box ubuntu-14.04.virtualbox (libvirt) is now ready to use.
+# cd /root/.vagrant.d/boxes/
+# mv ubuntu-14.04.virtualbox/ trusty64
+# vagrant box list
+trusty64 (libvirt, 0)
+</code></pre>
+
 <h3>检查安装的box</h3>
 
 <p>可以通过以下命令检查已经安装好的box:</p>
@@ -80,7 +98,72 @@ trusty64    (libvirt, 0)
 ubuntu1404  (virtualbox, 0)
 </code></pre>
 
+<h3>配置Vagrantfile</h3>
+
+<p>以下是一个例子:</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "trusty64"
+  # vagrant issues #1673..fixes hang with configure_networks
+  config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
+  config.vm.provider :libvirt do |domain|
+    domain.memory = 256
+    domain.nested = true
+  end
+
+# Private network using virtual network switching
+  config.vm.define :vm1 do |vm1|
+    vm1.vm.network :private_network, :ip =&gt; "192.168.56.11"
+  end
+
+  config.vm.define :vm2 do |vm2|
+    vm2.vm.network :private_network, :ip =&gt; "192.168.56.12"
+  end
+
+  # Private network. Point to Point between 2 Guest OS using a TCP tunnel
+  # Guest 1
+  #config.vm.define :test_vm1 do |test_vm1|
+  #  test_vm1.vm.network :private_network,
+  #    :libvirt__tunnel_type =&gt; 'server',
+  #    # default is 127.0.0.1 if omitted
+  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
+  #    :libvirt__tunnel_port =&gt; '11111'
+
+  # Guest 2
+  #config.vm.define :test_vm2 do |test_vm2|
+  #  test_vm2.vm.network :private_network,
+  #    :libvirt__tunnel_type =&gt; 'client',
+  #    # default is 127.0.0.1 if omitted
+  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
+  #    :libvirt__tunnel_port =&gt; '11111'
+
+
+  # Public Network
+  config.vm.define :vm1 do |vm1|
+    vm1.vm.network :public_network,
+      :dev =&gt; "virbr0",
+      :mode =&gt; "bridge",
+      :type =&gt; "bridge"
+  end
+end
+</code></pre>
+
 <h3>启动虚拟机</h3>
+
+<pre><code># vagrant up --provider=libvirt
+</code></pre>
+
+<p>启动时会出现以下问题, 解决方案为:</p>
+
+<pre><code>$ vagrant up --provider=libvirt
+....
+Missing required arguments: libvirt_uri
+.....
+$ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
+</code></pre>
 ]]></content>
   </entry>
   
