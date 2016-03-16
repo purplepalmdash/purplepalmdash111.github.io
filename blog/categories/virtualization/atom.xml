@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-15T22:47:17+08:00</updated>
+  <updated>2016-03-16T12:48:04+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,144 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Vagrant-libvirt Playing]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/16/vagrant-libvirt-playing/"/>
+    <updated>2016-03-16T10:31:53+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/16/vagrant-libvirt-playing</id>
+    <content type="html"><![CDATA[<p>最终目的是用vagrant实现CloudStack+Xenserver的自动化部署。</p>
+
+<h3>CentOS6.7 box Creating</h3>
+
+<p>用packer生成CentOS6.7 amd64的镜像，这个镜像默认是virtualbox兼容的，用vagrant-mutate插件
+将其转换为libvirt可用的box镜像:</p>
+
+<pre><code># vagrant mutate centos-6.7.virtualbox.box libvirt
+# cd /root/.vagrant.d/boxes
+# ls
+centos-6.7.virtualbox  trusty64
+# mv centos-6.7.virtualbox/ centos6764
+# vagrant box list
+centos6764 (libvirt, 0)
+trusty64   (libvirt, 0)
+</code></pre>
+
+<p>创建Vagrantfile文件启动一个实验性质的虚拟机：</p>
+
+<pre><code># pwd
+/media/opensusue/dash/Code/Vagrant/CentOS2New
+# ls
+Vagrantfile  Vagrantfile~
+# cat Vagrantfile
+    # -*- mode: ruby -*-
+    # vi: set ft=ruby :
+    Vagrant.configure(2) do |config|
+      # The most common configuration options are documented and commented below.
+      # For a complete reference, please see the online documentation at
+      # https://docs.vagrantup.com.
+
+      config.vm.box = "centos6764"
+      # vagrant issues #1673..fixes hang with configure_networks
+      config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
+      config.vm.provider :libvirt do |domain|
+        domain.memory = 512
+        domain.nested = true
+      end
+
+      config.vm.define :centosnew do |centosnew|
+        centosnew.vm.network :private_network, :ip =&gt; "192.168.88.2"
+      end
+
+    end
+# vagrant up
+</code></pre>
+
+<p><code>vagrant up</code>以后，一个名为<code>CentOS2New_centosnew</code>的虚拟机将被创建， 命名规则为当前文件夹
+名+定义的vm名称。</p>
+
+<p>虚拟机启动完毕后，检查状态并登录到该机器:</p>
+
+<pre><code># vagrant status
+Current machine states:
+
+centosnew                 running (libvirt)
+
+The Libvirt domain is running. To stop this machine, you can run
+`vagrant halt`. To destroy the machine, you can run `vagrant destroy`.
+# vagrant ssh centosnew
+Last login: Wed Mar 16 02:31:18 2016 from 192.168.121.1
+[vagrant@localhost ~]$
+</code></pre>
+
+<p>我们可以检查网卡状态，是否设置为我们需要设置的地址<code>192.168.88.2</code>.</p>
+
+<h3>更多定制化参数</h3>
+
+<h4>嵌套虚拟化</h4>
+
+<p>未知原因，我在CentOS6上检查嵌套虚拟化总是提示有问题，所以以下的验证是在Ubuntu系统上验证
+的。</p>
+
+<p>我们在上面的配置文件里制定了nested选项为true, 现在登录进去检查一下嵌套虚拟化是否加载成
+功:</p>
+
+<pre><code>vagrant@vagrant:~$ lsmod | grep kvm
+kvm_intel             143590  0 
+kvm                   452043  1 kvm_intel
+vagrant@vagrant:~$ modinfo kvm_intel | grep nested
+parm:           nested:bool
+vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
+N
+vagrant@vagrant:~$ sudo modprobe -r kvm_intel
+vagrant@vagrant:~$ sudo modprobe kvm_intel nested=1
+vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
+Y
+</code></pre>
+
+<p>改变nested选项为false后，验证步骤如下:</p>
+
+<pre><code>$ cat /sys/module/kvm_intel/parameters/nested
+N
+</code></pre>
+
+<p>值得注意的是，在虚拟机中，仍然可以通过<code>modprobe kvm_intel nested=1</code>来打开nested选项。</p>
+
+<h4>CPU Passthrough</h4>
+
+<p>指定参数为<code>domain.cpu_mode = 'host-passthrough'</code>:</p>
+
+<pre><code>  config.vm.provider :libvirt do |domain|
+    domain.memory = 512
+    domain.nested = false
+    #domain.cpu_mode = 'host-passthrough'
+  end
+</code></pre>
+
+<p>未指定时:</p>
+
+<pre><code>vagrant@vagrant:~$ cat /proc/cpuinfo  | grep -i "model name"
+model name  : Intel Core i7 9xx (Nehalem Class Core i7)
+</code></pre>
+
+<p>指定后:</p>
+
+<pre><code>[vagrant@localhost ~]$ cat /proc/cpuinfo | grep -i "model name"
+model name  : Intel(R) Core(TM) i3 CPU         540  @ 3.07GHz
+</code></pre>
+
+<h4>指定hostname</h4>
+
+<p>安装cloudstack时hostname是必要条件之一， Vagrantfile中可以指定vm的hostname:</p>
+
+<pre><code>  config.vm.define "centosnew" do |centosnew|
+    centosnew.vm.hostname = "centosnew.example.com"
+  end
+</code></pre>
+
+<p>启动虚拟机后可以通过<code>hostname</code>和<code>hostname --fqdn</code>来检查结果。</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[用Vagrant管理libvirt]]></title>
@@ -475,194 +613,6 @@ $ service cloudstack-agent restart
 添加完毕后, enable zone后, 下载模板, 注意不要选择HVM的选项.</p>
 
 <p>到这里就可以开始创建实例了.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Install CloudStack Mgmt Server on CentOS7]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/01/11/install-cloudstack-mgmt-server-on-centos7/"/>
-    <updated>2016-01-11T15:03:38+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/01/11/install-cloudstack-mgmt-server-on-centos7</id>
-    <content type="html"><![CDATA[<h3>Steps</h3>
-
-<p>Disable selinux:</p>
-
-<pre><code># setenforce permissive
-# vim /etc/selinux/config 
-SELINUX=permissive
-</code></pre>
-
-<p>Edit the hostname and hosts file:</p>
-
-<pre><code>[root@csman ~]# cat /etc/hostname 
-csman
-[root@csman ~]# cat /etc/hosts
-127.0.0.1 localhost localhost.cstack.local
-192.168.56.12 csman.cstack.local csman
-192.168.56.101 xenserver.cstack.local xenserver
-</code></pre>
-
-<p>Enable the ntp server:</p>
-
-<pre><code># yum install -y ntp
-# chkconfig ntpd on
-# service ntpd start
-</code></pre>
-
-<p>Configure the nfs sharing:</p>
-
-<pre><code># mkdir /exports
-# mkdir -p /exports/primary
-# mkdir -p /exports/secondary
-# chmod 777 -R /exports
-# echo "/exports/primary 10.10.100.0/24(rw,async,no_root_squash)" &gt; /etc/exports
-# echo "/exports/secondary 10.10.101.0/24(rw,async,no_root_squash)" &gt;&gt; /etc/exports
-# exportfs -a
-</code></pre>
-
-<p>Configure the nfs ruls:</p>
-
-<pre><code># sed -i -e '/#MOUNTD_NFS_V3="no"/ c\MOUNTD_NFS_V3="yes"' -e '/#RQUOTAD_PORT=875/ c\RQUOTAD_PORT=875' -e '/#LOCKD_TCPPORT=32803/ c\LOCKD_TCPPORT=32803' -e '/#LOCKD_UDPPORT=32769/ c\LOCKD_UDPPORT=32769' -e '/#MOUNTD_PORT=892/ c\MOUNTD_PORT=892' -e '/#STATD_PORT=662/ c\STATD_PORT=662' -e '/#STATD_OUTGOING_PORT=2020/ c\STATD_OUTGOING_PORT=2020' /etc/sysconfig/nfs
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 111 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 111 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 2049 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 2049 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 2020 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 32803 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 32769 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 892 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 892 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 875 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 875 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 662 -j ACCEPT" /etc/sysconfig/iptables
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p udp -m udp --dport 662 -j ACCEPT" /etc/sysconfig/iptables
-# service iptables restart
-# chkconfig nfs on
-# service nfs restart
-</code></pre>
-
-<p>Install the packages:</p>
-
-<pre><code># yum install -y cloudstack-management
-# yum -y install mariadb-server mariadb
-</code></pre>
-
-<p>Configure the mariadb:</p>
-
-<pre><code># sed -i -e '/datadir/ a\innodb_rollback_on_timeout=1' -e '/datadir/ a\innodb_lock_wait_timeout=600' -e '/datadir/ a\max_connections=350' -e '/datadir/ a\log-bin=mysql-bin' -e "/datadir/ a\binlog-format = 'ROW'" -e "/datadir/ a\bind-address = 0.0.0.0" /etc/my.cnf
-# systemctl enable mariadb
-# systemctl start mariadb
-# systemctl start mariadb.service
-# mysql_secure_installation
-</code></pre>
-
-<p>Setup the privileges:</p>
-
-<pre><code>[root@csman system]# mysql -u root -pengine123
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
-MariaDB [(none)]&gt; quit
-</code></pre>
-
-<p>Setup the management database and setup the managment server:</p>
-
-<pre><code># cloudstack-setup-databases cloud:&lt;password&gt;@127.0.0.1 --deploy-as=root:&lt;password&gt;
-# cloudstack-setup-management --tomcat7
-# service cloudstack-management start
-# /bin/systemctl enable  cloudstack-management.service
-</code></pre>
-
-<p>Nginx:</p>
-
-<pre><code># echo "[nginx]
-name=nginx repo
-baseurl=http://nginx.org/packages/centos/\$releasever/\$basearch/
-gpgcheck=0
-enabled=1" &gt; /etc/yum.repos.d/nginx.repo
-# yum install nginx -y
-# cd /usr/share/nginx/html
-# wget -nc http://download.cloud.com/templates/builtin/centos56-x86_64.vhd.bz2
-# sed -i -e "/:OUTPUT/ a\-A INPUT -p tcp -m tcp --dport 80 -j ACCEPT" /etc/sysconfig/iptables
-# service iptables restart
-</code></pre>
-
-<p>vhd-utils:</p>
-
-<pre><code># cd /usr/share/cloudstack-common/scripts/vm/hypervisor/xenserver/
-# wget http://download.cloud.com.s3.amazonaws.com/tools/vhd-util
-# chmod 755 /usr/share/cloudstack-common/scripts/vm/hypervisor/xenserver/vhd-util
-</code></pre>
-
-<p>SystemVM Template:</p>
-
-<pre><code># /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /exports/secondary -u http://xxxxxxxxxxxxx -h xenserver -F
-</code></pre>
-
-<p>CloudStack usage server:</p>
-
-<pre><code># yum install cloudstack-usage -y
-# service cloudstack-usage start
-</code></pre>
-
-<p>Mysql related:</p>
-
-<pre><code># mysql -p&lt;password&gt; cloud -e \ "INSERT INTO cloud.configuration (category, instance, component, name, value, description) VALUES ('Advanced', 'DEFAULT', 'management-server', 'xen.check.hvm', 'false', 'Shoud we allow only the XenServers support HVM');"
-</code></pre>
-
-<h3>If KVM</h3>
-
-<p>Install bridge-utils:</p>
-
-<pre><code># yum install -y bridge-utils
-</code></pre>
-
-<p>Edit the bridge connections:</p>
-
-<pre><code># cat /etc/sysconfig/network-scripts/ifcfg-eth0 
-DEVICE="eth0"
-ONBOOT="yes"
-BOOTPROTO=none
-NM_CONTROLLED="no"
-BRIDGE="cloudbr0"
-TYPE=Ethernet
-# cat /etc/sysconfig/network-scripts/ifcfg-cloudbr0
-DEVICE="cloudbr0"
-ONBOOT="yes"
-NM_CONTROLLED=yes
-TYPE="Bridge"
-BOOTPROTO=static
-IPADDR=10.47.58.11
-NETMASK=255.255.255.0
-GATEWAY=10.47.58.1
-DNS1=223.5.5.5
-DEFROUTE=yes
-</code></pre>
-
-<h3>Building 4.5.2/4.5.1 For CentOS 7</h3>
-
-<p>Key-Step:</p>
-
-<p><a href="http://zooi.widodh.nl/cloudstack/build-dep/cloud-manageontap.jar">http://zooi.widodh.nl/cloudstack/build-dep/cloud-manageontap.jar</a></p>
-
-<h3>CentOS7 Isuse On CloudStack4.5.2</h3>
-
-<p>Could not start the service of cloudstack-management, then you should manually add one
-line in definition of the service file:</p>
-
-<pre><code>[root@csmgmt ~]# vim /usr/lib/systemd/system/cloudstack-management.service
-[Service]
-+ PermissionsStartOnly=true
-[root@csmgmt ~]# systemctl daemon-reload
-[root@csmgmt ~]# service cloudstack-management start
-Redirecting to /bin/systemctl start  cloudstack-management.service
-[root@csmgmt ~]# netstat -anp | grep 8080
-tcp6       0      0 :::8080                 :::*                    LISTEN
-5665/java  
-</code></pre>
-
-<p>Another issue:</p>
-
-<pre><code>Could not load org.apache.commons.pool.impl.CursorableLinkedList$Cursor
-</code></pre>
 ]]></content>
   </entry>
   
