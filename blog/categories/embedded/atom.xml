@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Embedded | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/embedded/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-16T12:48:04+08:00</updated>
+  <updated>2016-03-17T13:16:47+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,70 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on 5050RGB(2)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/17/tips-on-5050rgb-2/"/>
+    <updated>2016-03-17T13:09:12+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/17/tips-on-5050rgb-2</id>
+    <content type="html"><![CDATA[<p>上次的5050RGB模块损坏后, 我又从淘宝买了一块. 价格不贵,4块钱不到. 卖家的资料上
+这么写着:</p>
+
+<p><img src="/images/2016_03_17_13_08_03_532x306.jpg" alt="/images/2016_03_17_13_08_03_532x306.jpg" /></p>
+
+<p>瞅着还挺OK的,不就是Arduino板5V电压外接,然后用三个GPIO口来控制嘛. 接线完毕后发
+现怎么也点不亮.</p>
+
+<p>于是用万用表Debug, 发现公共端应该是接GND, 三个控制端需要电平置为高才可以点亮对
+应的颜色.</p>
+
+<p>于是正确的连线和示例代码如下:</p>
+
+<pre><code class="C">// V-VCC 5V   R-9   B-10  G-11
+#define LEDR 9
+#define LEDB 10
+#define LEDG 11
+
+void clear()
+{
+  analogWrite(LEDR,0);
+  analogWrite(LEDB,0);
+  analogWrite(LEDG,0);  //off
+}
+
+
+void setup()
+{
+  pinMode(LEDG,OUTPUT);
+  pinMode(LEDB,OUTPUT);
+  pinMode(LEDR,OUTPUT);
+}
+
+void loop()
+{
+  clear();
+  // Red
+  analogWrite(LEDR,255);
+  delay(1000);
+  clear();
+  // Green
+  analogWrite(LEDG,255);
+  delay(1000);
+  clear();
+  // Blue
+  analogWrite(LEDB,255);
+  delay(1000);
+  // White
+  analogWrite(LEDB,255);
+  analogWrite(LEDG,255);
+  analogWrite(LEDR,255);
+  delay(2000);
+}
+</code></pre>
+
+<p>编译并上传代码到Arduino板子上, LED将呈现成红色->绿色->蓝色->白色的渐变.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on 5050RGB]]></title>
@@ -406,95 +470,6 @@ USB error: Connection timed out
 送给Arduino板子即可.</p>
 
 <p>下面将研究添加一个新的LED灯, 等同于ebuddy的头灯.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[把玩ebuddy(2)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/03/ba-wan-ebuddy-2/"/>
-    <updated>2016-03-03T10:15:43+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/03/ba-wan-ebuddy-2</id>
-    <content type="html"><![CDATA[<h3>ArchLinux配置过程</h3>
-
-<p>因为ArchLinux默认python版本为python3, 使用python2激活e-buddy人偶:</p>
-
-<pre><code>$ sudo pacman -S python2-pip
-$ sudo pip2 install pyusb
-$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
-$ sudo python2 ~/Code/ebuddy/pybuddy-dx/pybuddyDX.py
-$ sudo netstat -anp | grep 8888
-udp        0      0 127.0.0.1:8888          0.0.0.0:*                           14635/python2 
-</code></pre>
-
-<p>接下来就是往<code>127.0.0.1:8888</code>发送指令控制人偶的干活了。具体的指令可以见上一篇文章。</p>
-
-<h3>定期检查邮件控制人偶</h3>
-
-<p>先安装用于检查imap服务端状态的python模块:</p>
-
-<pre><code>$ sudo pip2 install imapclient
-</code></pre>
-
-<p>检查邮件的脚本如下, 该脚本检查163邮箱的IMAP服务器，如果有新邮件，人偶的头就会出现颜色渐
-变，否则，则显示绿灯闪烁:</p>
-
-<pre><code>#!/usr/bin/env python
-import imaplib 
-from imapclient import IMAPClient
-import time
-import subprocess
-import thread
-
-DEBUG = True
-
-HOSTNAME = 'imap.163.com'
-USERNAME = 'XXXXXXXX'
-PASSWORD = 'XXXXXXXX'
-MAILBOX = 'Inbox'
-newmails = 0
-
-NEWMAIL_OFFSET = 0   # my unread messages never goes to zero, yours might
-MAIL_CHECK_FREQ = 60 # check mail every 60 seconds
-
-# Define a function for checking email
-def check_mail( threadName):
-    while True:
-        # Login into the imap server and check the numbers for the new mail.
-        server = IMAPClient(HOSTNAME, use_uid=True, ssl=True)
-        server.login(USERNAME, PASSWORD)
-        if DEBUG:
-            print('Logging in as ' + USERNAME)
-            select_info = server.select_folder(MAILBOX)
-            print('%d messages in INBOX' % select_info['EXISTS'])
-
-        folder_status = server.folder_status(MAILBOX, 'UNSEEN')
-        global newmails
-        newmails = int(folder_status['UNSEEN'])
-
-        if DEBUG:
-            print "You have", newmails, "new emails!"
-        time.sleep(MAIL_CHECK_FREQ)
-
-def loop():
-
-    if newmails &gt; NEWMAIL_OFFSET:
-        bashCommand = 'echo 12 &gt; /dev/udp/127.0.0.1/8888'
-        output = subprocess.check_output(['bash','-c', bashCommand])
-        time.sleep(8)
-    else:
-        bashCommand = 'echo 08 &gt; /dev/udp/127.0.0.1/8888'
-        output = subprocess.check_output(['bash','-c', bashCommand])
-        time.sleep(5)
-
-if __name__ == '__main__':
-    try:
-        print 'Press Ctrl-C to quit.'
-        thread.start_new_thread( check_mail, ("Thread-1", ) )
-        while True:
-            loop()
-    finally:
-        print "finally comes here!"
-</code></pre>
 ]]></content>
   </entry>
   
