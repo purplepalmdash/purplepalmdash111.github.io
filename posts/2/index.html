@@ -9,18 +9,8 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="这一节将添加一个LED到已有的方案中. 这个LED将使用11口, 通过./set-led new来设
-置状态. 连线 新加一个LED如图: 仅仅添加了一个LED + 220欧电阻. 代码修改 requests.h 添加新的request定义: 1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-diff &hellip;">
+  <meta name="description" content="为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
+，DHCP获得IP地址，从而得到网络连接， 以下是步骤。 安装VDE ArchLinux下安装命令为sudo pacman -S vde2. 配置 贴出配置文件如下, 摘录自ArchLinux的Wiki &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -76,6 +66,269 @@ diff &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/">配置Qemu的VDE网络</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-03-10T14:18:43+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>2:18 pm</span></time>
+        
+         | <a href="/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
+，DHCP获得IP地址，从而得到网络连接， 以下是步骤。</p>
+
+<h3>安装VDE</h3>
+
+<p>ArchLinux下安装命令为<code>sudo pacman -S vde2</code>.</p>
+
+<h3>配置</h3>
+
+<p>贴出配置文件如下, 摘录自ArchLinux的Wiki. 值得注意的是，在Systemd的配置文件中，需要先把
+tun驱动装载上，才能使得VDE启动成功。</p>
+
+<p>配置qemu网络环境配置脚本:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>vim /etc/systemd/scripts/qemu-network-env
+</span><span class='line'><span class="c">#!/bin/sh</span>
+</span><span class='line'><span class="c"># QEMU/VDE network environment preparation script</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The IP configuration for the tap device that will be used for</span>
+</span><span class='line'><span class="c"># the virtual machine network:</span>
+</span><span class='line'>
+</span><span class='line'><span class="nv">TAP_DEV</span><span class="o">=</span>tap0
+</span><span class='line'><span class="nv">TAP_IP</span><span class="o">=</span>10.33.34.254
+</span><span class='line'><span class="nv">TAP_MASK</span><span class="o">=</span>24
+</span><span class='line'><span class="nv">TAP_NETWORK</span><span class="o">=</span>10.33.34.0
+</span><span class='line'>
+</span><span class='line'><span class="c"># Host interface</span>
+</span><span class='line'><span class="nv">NIC</span><span class="o">=</span>enp2s0
+</span><span class='line'>
+</span><span class='line'><span class="k">case</span> <span class="s2">&quot;$1&quot;</span> in
+</span><span class='line'>  start<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> -n <span class="s2">&quot;Starting VDE network for QEMU: &quot;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># If you want tun kernel module to be loaded by script uncomment here</span>
+</span><span class='line'>        modprobe tun 2&gt;/dev/null
+</span><span class='line'>        <span class="c"># Wait for the module to be loaded</span>
+</span><span class='line'>        <span class="k">while</span> ! lsmod <span class="p">|</span> grep -q <span class="s2">&quot;^tun&quot;</span><span class="p">;</span> <span class="k">do</span> <span class="nb">echo</span> <span class="s2">&quot;Waiting for tun device&quot;</span><span class="p">;</span> sleep 1<span class="p">;</span> <span class="k">done</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Start tap switch</span>
+</span><span class='line'>        vde_switch -tap <span class="s2">&quot;$TAP_DEV&quot;</span> -daemon -mod <span class="m">660</span> -group users
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Bring tap interface up</span>
+</span><span class='line'>        ip address add <span class="s2">&quot;$TAP_IP&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> dev <span class="s2">&quot;$TAP_DEV&quot;</span>
+</span><span class='line'>        ip link <span class="nb">set</span> <span class="s2">&quot;$TAP_DEV&quot;</span> up
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Start IP Forwarding</span>
+</span><span class='line'>        <span class="nb">echo</span> <span class="s2">&quot;1&quot;</span> &gt; /proc/sys/net/ipv4/ip_forward
+</span><span class='line'>        iptables -t nat -A POSTROUTING -s <span class="s2">&quot;$TAP_NETWORK&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> -o <span class="s2">&quot;$NIC&quot;</span> -j MASQUERADE
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  stop<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> -n <span class="s2">&quot;Stopping VDE network for QEMU: &quot;</span>
+</span><span class='line'>        <span class="c"># Delete the NAT rules</span>
+</span><span class='line'>        iptables -t nat -D POSTROUTING <span class="s2">&quot;$TAP_NETWORK&quot;</span>/<span class="s2">&quot;$TAP_MASK&quot;</span> -o <span class="s2">&quot;$NIC&quot;</span> -j MASQUERADE
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Bring tap interface down</span>
+</span><span class='line'>        ip link <span class="nb">set</span> <span class="s2">&quot;$TAP_DEV&quot;</span> down
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Kill VDE switch</span>
+</span><span class='line'>        pgrep -f vde_switch <span class="p">|</span> xargs <span class="nb">kill</span> -TERM
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  restart<span class="p">|</span>reload<span class="o">)</span>
+</span><span class='line'>        <span class="nv">$0</span> stop
+</span><span class='line'>        sleep 1
+</span><span class='line'>        <span class="nv">$0</span> start
+</span><span class='line'>        <span class="p">;;</span>
+</span><span class='line'>  *<span class="o">)</span>
+</span><span class='line'>        <span class="nb">echo</span> <span class="s2">&quot;Usage: $0 {start|stop|restart|reload}&quot;</span>
+</span><span class='line'>        <span class="nb">exit </span>1
+</span><span class='line'><span class="k">esac</span>
+</span><span class='line'><span class="nb">exit </span>0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+配置symtemd服务:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>vim /etc/systemd/system/qemu-network-env.service
+</span><span class='line'><span class="o">[</span>Unit<span class="o">]</span>
+</span><span class='line'><span class="nv">Description</span><span class="o">=</span>Manage VDE Switch
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>Service<span class="o">]</span>
+</span><span class='line'><span class="nv">Type</span><span class="o">=</span>oneshot
+</span><span class='line'><span class="nv">ExecStart</span><span class="o">=</span>/etc/systemd/scripts/qemu-network-env start
+</span><span class='line'><span class="nv">ExecStop</span><span class="o">=</span>/etc/systemd/scripts/qemu-network-env stop
+</span><span class='line'><span class="nv">RemainAfterExit</span><span class="o">=</span>yes
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>Install<span class="o">]</span>
+</span><span class='line'><span class="nv">WantedBy</span><span class="o">=</span>multi-user.target
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使能服务，并重新启动机器:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo systemctl <span class="nb">enable </span>qemu-network-env.service
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>配置DHCPD</h3>
+
+<p>需要配置dhcpd以使得在<code>10.33.34.0/24</code>网段提供DHCP服务：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo vim /etc/dhcpd.conf
+</span><span class='line'>
+</span><span class='line'>subnet
+</span><span class='line'>10.33.34.0 netmask 255.255.255.0 <span class="o">{</span>
+</span><span class='line'><span class="c"># --- default gateway</span>
+</span><span class='line'>option routers
+</span><span class='line'>10.33.34.254<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Netmask</span>
+</span><span class='line'>option subnet-mask
+</span><span class='line'>255.255.255.0<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Broadcast Address</span>
+</span><span class='line'>option broadcast-address
+</span><span class='line'>10.33.34.255<span class="p">;</span>
+</span><span class='line'><span class="c"># --- Domain name servers, tells the clients which DNS servers to use.</span>
+</span><span class='line'>option domain-name-servers
+</span><span class='line'>223.5.5.5,180.76.76.76<span class="p">;</span>
+</span><span class='line'>option <span class="nb">time</span>-offset 0<span class="p">;</span>
+</span><span class='line'>range 10.33.34.2 10.33.34.253<span class="p">;</span>
+</span><span class='line'>default-lease-time 1209600<span class="p">;</span>
+</span><span class='line'>max-lease-time 1814400<span class="p">;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>修改完dhcpd的配置后， 重新启动dhcpd服务:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo systemctl restart dhcpd4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>启动虚拟机</h3>
+
+<p>启动虚拟机，并使其使用我们刚才添加的vde网络:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo qemu-system-x86_64 -net nic -net vde -hda ./test1.qcow2 -m <span class="m">2048</span> --enable-kvm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。    <br/>
+如果使用普通用户，会出错， To be solved.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1636,97 +1889,6 @@ hardware/arduino/cores/arduino/wiring.c里的:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/02/26/tips-on-v-usb-and-arduino-1/">Tips on V-USB and Arduino(1)- USB Keyboard</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-02-26T16:55:10+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>4:55 pm</span></time>
-        
-         | <a href="/blog/2016/02/26/tips-on-v-usb-and-arduino-1/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>参考</h3>
-
-<p>主要参考了:</p>
-
-<p><a href="http://www.geek-workshop.com/thread-1137-1-1.html">Arduino学习笔记A11 - Arduino模拟电脑键盘（基于AVR-USB的USB-HID设备）</a></p>
-
-<h3>电路图</h3>
-
-<p>安装Fritzing后，可以绘制出面包板连线图和电路图:</p>
-
-<p><img src="/images/2016_02_26_16_57_48_761x613.jpg" alt="/images/2016_02_26_16_57_48_761x613.jpg" /></p>
-
-<p>电路图:</p>
-
-<p><img src="/images/2016_02_26_17_00_04_668x679.jpg" alt="/images/2016_02_26_17_00_04_668x679.jpg" /></p>
-
-<p>注意事项:</p>
-
-<p>电阻换成100欧也可以，原帖中是68欧电阻。  <br/>
-注意齐纳二极管的极性，带有色条的一端是负极。</p>
-
-<h3>代码</h3>
-
-<p>值得注意的配置如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#define USB_CFG_IOPORTNAME D
-</span><span class='line'>  
-</span><span class='line'>USB输入输出引脚使用AVR单片机的PORTD，如果改成B就是使用PORTB
-</span><span class='line'>#define USB_CFG_DMINUS_BIT 4
-</span><span class='line'>  
-</span><span class='line'>USB的D-接PORTD的第四位PD4，对应Arduino D4
-</span><span class='line'>#define USB_CFG_DPLUS_BIT  2
-</span><span class='line'>  
-</span><span class='line'>USB的D+接PORTD的第二位PD2，对应Arduino D2
-</span><span class='line'>#define USB_CFG_PULLUP_IOPORTNAME D
-</span><span class='line'>  
-</span><span class='line'>USB上拉引脚使用AVR单片机的PORTD，如果改成B就是使用PORTB
-</span><span class='line'>#define USB_CFG_PULLUP_BIT  5
-</span><span class='line'>  
-</span><span class='line'>USB的上拉电阻接PORTD的第五位PD5，对应Arduino  D5</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在Arduino1.0.5上编译/配置都没有问题，最好在0022～1.05的版本范围内进行实验。</p>
-
-<p>首先通过USBasp线写入编译后的程序，而后换上我们添加的USB线缆后，点击按键，每次即可输出
-<code>hello world</code>字符串。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/3">&larr; Older</a>
@@ -1744,6 +1906,10 @@ hardware/arduino/cores/arduino/wiring.c里的:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/24/cloudstackqie-huan-guan-li-duan-kou/">XenServer6.2切换管理端口</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/23/setup-vagrant-libvirt-env-on-ubuntu15-dot-04/">Setup Vagrant-libvirt Env on Ubuntu15.04</a>
       </li>
     
@@ -1757,10 +1923,6 @@ hardware/arduino/cores/arduino/wiring.c里的:</p>
     
       <li class="post">
         <a href="/blog/2016/03/16/vagrant-libvirt-playing/">Vagrant-libvirt Playing</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/15/ba-wan-ebuddy-4/">把玩ebuddy(4)</a>
       </li>
     
   </ul>
