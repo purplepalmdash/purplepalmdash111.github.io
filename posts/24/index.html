@@ -9,13 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Dependencies Install the following packages to make scons getting through: 1
-2
-3
-4
-5
-6
-$ sudo apt-get install -y scons git python-lxml wget gcc patch &hellip;">
+  <meta name="description" content="In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -71,6 +65,436 @@ $ sudo apt-get install -y scons git python-lxml wget gcc patch &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/02/13/libvirt-on-opensuse/">Libvirt on OpenSuse</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-02-13T03:48:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>3:48 am</span></time>
+        
+         | <a href="/blog/2015/02/13/libvirt-on-opensuse/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested virtualization is not OK. So that&rsquo;s why I have to try libvirt.</p>
+
+<h3>Installation</h3>
+
+<p>Install the virt-manager related software via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo zypper install kvm libvirt libvirt-python qemu virt-manager
+</span><span class='line'>$ sudo zypper in patterns-openSUSE-kvm_server
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now if you directly call virt-manager you will got the following hint:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> error: authentication failed: Authorization requires authentication but no agent is available.
+</span><span class='line'>    error: failed to connect to the hypervisor
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or if you run <code>virsh -c qemu:///system</code> you will got the same hint message.   <br/>
+Solution is we have to enable the polkit service, add following script:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /usr/bin/polkitexec
+</span><span class='line'>#! /bin/bash
+</span><span class='line'>
+</span><span class='line'>prg=$1
+</span><span class='line'>
+</span><span class='line'>[ "$prg" ] || exec echo "missing argument"
+</span><span class='line'>[ -x "$prg" ] || which $prg &&gt;/dev/null || exec echo "program not found: $1"
+</span><span class='line'>
+</span><span class='line'>shift
+</span><span class='line'>args=$*
+</span><span class='line'>
+</span><span class='line'>[ `id -u` -eq 0 ] && exec $prg $args
+</span><span class='line'>
+</span><span class='line'>uname -m | grep -q 64 && lib=/usr/lib64 || lib=/usr/lib
+</span><span class='line'>
+</span><span class='line'>if [ "$DESKTOP_SESSION" = "kde" ]; then 
+</span><span class='line'>        pga=polkit-kde-authentication-agent-1
+</span><span class='line'>        lpga=/usr/$lib/kde4/libexec/$pka
+</span><span class='line'>else
+</span><span class='line'>        pga=polkit-gnome-authentication-agent-1
+</span><span class='line'>        lpga=/usr/lib/$pga
+</span><span class='line'>fi
+</span><span class='line'>
+</span><span class='line'>case $DESKTOP_SESSION in
+</span><span class='line'>        gnome|gnome-shell|cinnamon*) exec $prg $args ;;
+</span><span class='line'>        *) ps nc -C $pga &&gt;/dev/null && exec $prg $args || { [ ! -x $lpga ] && exec echo "program not found: $lpga" || $lpga & $prg $args ;} ;;
+</span><span class='line'>esac
+</span><span class='line'>$ sudo chmod 777 /sur/bin/polkitexec
+</span><span class='line'>$ vim ~/.zshrc
+</span><span class='line'># Wrap virt-manager with polkitexec. 
+</span><span class='line'>alias virt-manager='polkitexec virt-manager'
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the virt-manager could be run correctly.</p>
+
+<h3>Trouble-Shooting</h3>
+
+<p>If you met following error, add root to your kvm.conf is OK.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>Could not access KVM kernel module: Permission denied
+</span><span class='line'>failed to initialize KVM: Permission denied
+</span><span class='line'>No accelerator found!
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>First change the priviledge:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#chown root:kvm /dev/kvm
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then modify the /etc/libvirt/qemu.conf:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#user="root"
+</span><span class='line'>user="root"
+</span><span class='line'>#group="root"
+</span><span class='line'>group="root"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Restart the libvirtd and restart the virt-manager:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#service libvirtd restart
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now continue to install OpenContrail.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/02/10/build-opencontrail-on-centos7-local/">Build OpenContrail on CentOS7(Local)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-02-10T05:06:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:06 am</span></time>
+        
+         | <a href="/blog/2015/02/10/build-opencontrail-on-centos7-local/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Fresh steps.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum update
+</span><span class='line'>$ sudo yum install vim
+</span><span class='line'>$ sudo yum install net-tools
+</span><span class='line'>$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
+</span><span class='line'>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+</span><span class='line'>$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
+</span><span class='line'>$ sudo yum install -y --disablerepo="*" --enablerepo="epel" scons protobuf protobuf-devel protobuf-compiler 
+</span><span class='line'>$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>As root, Add repositories:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget -q -O - http://www.atomicorp.com/installers/atomic | sh
+</span><span class='line'># yum update
+</span><span class='line'># yum install dpkg dpkg-devel
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Missing fakeroot, so can&rsquo;t be continue.</p>
+
+<p>Change back to CentOS 6.6.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install vim net-tools
+</span><span class='line'>$ wget https://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+</span><span class='line'>$ sudo rpm -ivh epel-release-6-8.noarch.rpm 
+</span><span class='line'>$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
+</span><span class='line'>$ sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
+</span><span class='line'>$ yum install -y --disablerepo="*" --enablerepo="epel" scons protobuf protobuf-devel protobuf-compiler  bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel xz
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install git:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
+</span><span class='line'>$ wget https://www.kernel.org/pub/software/scm/git/git-1.9.4.tar.gz
+</span><span class='line'>$ sudo yum install expat-devel tar
+</span><span class='line'>$ make prefix=/usr install
+</span><span class='line'>$ which git
+</span><span class='line'>git version 1.9.4
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using repo sync:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ repo init -u git@github.com:Juniper/contrail-vnc
+</span><span class='line'>$ repo sync
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install argparse:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum install python-argparse
+</span><span class='line'>$ declare -x USER="root"
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We should upgrade some packages to let python could fetch back the packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://ftp.gnu.org/gnu/autoconf/autoconf-latest.tar.gz
+</span><span class='line'>$ tar xzvf autoconf-latest.tar.gz
+</span><span class='line'>$ cd autoconf-2.69/
+</span><span class='line'>$ ./configure --prefix=/usr && make && sudo make install
+</span><span class='line'>$ sudo yum install libtool
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Fetch the 3rd_party packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ python third_party/fetch_package.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then tar and export it to the host machine.</p>
+
+<p>When Building, we have to install libipfix:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://sourceforge.net/projects/libipfix/files/libipfix/libipfix_110209.tgz/download
+</span><span class='line'>$ # build it.   
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Enable the epel repository and install dpkg and dpkg-devel:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo sed -i -e 's/enabled=0/enabled=1/' /etc/yum.repos.d/epel.repo
+</span><span class='line'>$ sudo yum update && sudo yum install -y dpkg dpkg-devel
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/02/09/play-docker-6-using-docker-for-building/">Play Docker(6) -- Using Docker for Building</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-02-09T23:16:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:16 pm</span></time>
+        
+         | <a href="/blog/2015/02/09/play-docker-6-using-docker-for-building/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>The steps is for Ubuntu12.04, the purpose of this documentation is for swiftly get the source code and fetch it to local repository.</p>
+
+<h3>Preparation</h3>
+
+<p>Pull back the Ubuntu12.04:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker pull ubuntu12.04
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then run into the ubuntu12.04 via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -it ubuntu12.04 /bin/bash
+</span><span class='line'>root@7b30cc924bb0:~ #
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install following packages in Ubuntu 12.04 container:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install python-software-properties
+</span><span class='line'># apt-get install curl
+</span><span class='line'># curl https://storage.googleapis.com/git-repo-downloads/repo &gt; /bin/repo
+</span><span class='line'># chmod 777 /bin/repo
+</span><span class='line'># apt-get update
+</span><span class='line'># apt-get install python-pip
+</span><span class='line'># apt-get install git
+</span><span class='line'># git config --global user.email kkkttt@gmail.com
+</span><span class='line'># git config --global user.name kkkttt
+</span><span class='line'># ssh -T git@github.com
+</span><span class='line'># repo init -u git@github.com:Juniper/contrail-vnc
+</span><span class='line'># repo sync
+</span><span class='line'># declare -x USER="root"
+</span><span class='line'># apt-get install python-lxml autoconf bzip2 libtool unzip wget 
+</span><span class='line'># python third_party/fetch_packages.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install nginx:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+</span><span class='line'>$ sudo rpm -ivh nginx
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change nginx&rsquo;s listenning directory to <code>/var/www/</code>, tar the directory and put it under this folder, then use firefox for downloading it.</p>
+
+<h3>Compile Local</h3>
+
+<p>Referes to :   <br/>
+<a href="http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/">http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/</a>  <br/>
+Plus:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libglib2.0-dev libglib2.0
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -682,511 +1106,6 @@ More and more.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/30/speed-up-the-wp-website-in-tianchao/">Speed-Up the WP Website in TianChao</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-30T23:09:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:09 pm</span></time>
-        
-         | <a href="/blog/2015/01/30/speed-up-the-wp-website-in-tianchao/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since our Great Fire Wall forbidden the google, thus all of the google related service becomes available in china, this leads to access to wordpress based website which uses google online fonts pretty slow. Following is how to speedup your website without too many changes:   <br/>
-First go to your website&rsquo;s folder, find the files which calls <code>fonts.googleapis.com</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ grep -i "fonts.googleapis.com" ./ -r
-</span><span class='line'>./wp-content/themes/twentytwelve/functions.php:       $font_url = add_query_arg( $query_args, "$protocol://fonts.googleapis.com/css" );
-</span><span class='line'>./wp-content/themes/twentyfifteen/functions.php:      ), '//fonts.googleapis.com/css' );
-</span><span class='line'>./wp-content/themes/twentyfourteen/functions.php:     $font_url = add_query_arg( 'family', urlencode( 'Lato:300,400,700,900,300italic,400italic,700italic' ), "//fonts.googleapis.com/css" );
-</span><span class='line'>./wp-content/themes/tdpersona/functions.php:  wp_enqueue_style( 'tdpersona-googlefonts', '//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700' );
-</span><span class='line'>./wp-content/themes/twentythirteen/functions.php:     $fonts_url = add_query_arg( $query_args, "//fonts.googleapis.com/css" );
-</span><span class='line'>./wp-includes/script-loader.php:      $open_sans_font_url = "//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,300,400,600&subset=$subsets";
-</span><span class='line'>./wp-includes/js/tinymce/plugins/compat3x/css/dialog.css:@import url(//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,300,400,600&subset=latin-ext,latin);
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Replace all of the <code>fonts.googleapis.com</code> with <code>fonts.useso.com</code>, this could be done via scripts. <br/>
-After modification, your website will be much more faster than before.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/29/play-docker-4/">Play Docker(4)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-29T22:41:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>10:41 pm</span></time>
-        
-         | <a href="/blog/2015/01/29/play-docker-4/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Fig(Continue)</h3>
-
-<p>Met some problems in last article, so this part will continue to work on Fig, the correct configuration files are listed as following:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls
-</span><span class='line'>app.py  Dockerfile  fig.yml  requirements.txt
-</span><span class='line'>$ cat Dockerfile 
-</span><span class='line'>FROM python:2.7
-</span><span class='line'>ADD . /code
-</span><span class='line'>WORKDIR /code
-</span><span class='line'>RUN pip install -r requirements.txt
-</span><span class='line'>$ cat fig.yml 
-</span><span class='line'>web:
-</span><span class='line'>  build: .
-</span><span class='line'>  command: python app.py
-</span><span class='line'>  ports:
-</span><span class='line'>   - "5000:5000"
-</span><span class='line'>  volumes:
-</span><span class='line'>   - .:/code
-</span><span class='line'>  links:
-</span><span class='line'>   - redis
-</span><span class='line'>redis:
-</span><span class='line'>  image: redis
-</span><span class='line'>$ cat requirements.txt 
-</span><span class='line'>flask
-</span><span class='line'>redis
-</span><span class='line'>$ cat app.py 
-</span><span class='line'>from flask import Flask
-</span><span class='line'>from redis import Redis
-</span><span class='line'>import os
-</span><span class='line'>app = Flask(__name__)
-</span><span class='line'>redis = Redis(host='redis', port=6379)
-</span><span class='line'>
-</span><span class='line'>@app.route('/')
-</span><span class='line'>def hello():
-</span><span class='line'>    redis.incr('hits')
-</span><span class='line'>    return 'Hello World! I have been seen %s times.' % redis.get('hits')
-</span><span class='line'>
-</span><span class='line'>if __name__ == "__main__":
-</span><span class='line'>    app.run(host="0.0.0.0", debug=True)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>via <code>fig up</code> you could quickly build this app and let it run.  <br/>
-When it running, you could use <code>fig ps</code> for viewing the running instance:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo fig ps
-</span><span class='line'>      Name             Command             State              Ports       
-</span><span class='line'>-------------------------------------------------------------------------
-</span><span class='line'>figtest_redis_1    /entrypoint.sh     Up                 6379/tcp         
-</span><span class='line'>                   redis-server                                           
-</span><span class='line'>figtest_web_1      python app.py      Up                 0.0.0.0:5000-&gt;50 
-</span><span class='line'>                                                         00/tcp    
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use <code>sudo fig run web env</code> you could view all of the variables of the running instance web, or change web into redis then displaying the variables of redis.  <br/>
-Use <code>sudo fig stop</code> to stop all of the running instance.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo fig stop
-</span><span class='line'>Stopping figtest_web_1...
-</span><span class='line'>Stopping figtest_redis_1...
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Use <code>sudo fig run web env</code> for displaying all of the variables of running <code>web</code>.</p>
-
-<h3>Create Django</h3>
-
-<p>Configuration files:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat Dockerfile 
-</span><span class='line'>FROM python:2.7
-</span><span class='line'>ENV PYTHONUNBUFFERED 1
-</span><span class='line'>RUN mkdir /code
-</span><span class='line'>WORKDIR /code
-</span><span class='line'>ADD requirements.txt /code/
-</span><span class='line'>RUN pip install -r requirements.txt
-</span><span class='line'>ADD . /code/
-</span><span class='line'>
-</span><span class='line'>$ cat fig.yml 
-</span><span class='line'>db:
-</span><span class='line'>  image: postgres
-</span><span class='line'>web:
-</span><span class='line'>  build: .
-</span><span class='line'>  command: python manage.py runserver 0.0.0.0:8000
-</span><span class='line'>  volumes:
-</span><span class='line'>    - .:/code
-</span><span class='line'>  ports:
-</span><span class='line'>    - "8000:8000"
-</span><span class='line'>  links:
-</span><span class='line'>    - db
-</span><span class='line'>
-</span><span class='line'>$ cat requirements.txt 
-</span><span class='line'>Django
-</span><span class='line'>psycopg2
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Via <code>sudo  fig run web django-admin.py startproject figexample .</code>  <br/>
-This means, first fig will create the image, then use this image for running <code>django-admin.py startproject figexample</code>,
-Examine via different methods:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker ps
-</span><span class='line'>CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
-</span><span class='line'>1abcafc5bd59        postgres:9          "/docker-entrypoint.   4 minutes ago       Up 3 minutes        5432/tcp            django_db_1         
-</span><span class='line'>741b0e375c73        postgres:9          "/docker-entrypoint.   4 minutes ago       Up 4 minutes        5432/tcp            Django_db_1         
-</span><span class='line'>[Trusty@DashCentOS django]$ sudo fig ps
-</span><span class='line'>   Name                  Command               State    Ports   
-</span><span class='line'>---------------------------------------------------------------
-</span><span class='line'>django_db_1   /docker-entrypoint.sh postgres   Up      5432/tcp 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change the configuration file of the django project:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim figexample/settings.py
-</span><span class='line'>
-</span><span class='line'>DATABASES = {
-</span><span class='line'>    'default': {
-</span><span class='line'>        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-</span><span class='line'>        'NAME': 'postgres',
-</span><span class='line'>        'USER': 'postgres',
-</span><span class='line'>        'HOST': 'db',
-</span><span class='line'>        'PORT': 5432,
-</span><span class='line'>    }
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Save the file and run <code>sudo fig up</code>, this time your django project connects to the right postgresql server.  <br/>
-Examine the running containers:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo fig ps
-</span><span class='line'>      Name             Command             State              Ports       
-</span><span class='line'>-------------------------------------------------------------------------
-</span><span class='line'>django_db_1        /docker-           Up                 5432/tcp         
-</span><span class='line'>                   entrypoint.sh                                          
-</span><span class='line'>                   postgres                                               
-</span><span class='line'>django_web_1       python manage.py   Up                 0.0.0.0:8000-&gt;80 
-</span><span class='line'>                   runserver ...                         00/tcp           
-</span><span class='line'>$ sudo docker ps
-</span><span class='line'>CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                    NAMES
-</span><span class='line'>d3c3c8bb6d0e        django_web:latest   "python manage.py ru   4 minutes ago       Up 4 minutes        0.0.0.0:8000-&gt;8000/tcp   django_web_1        
-</span><span class='line'>3f7b61fdd09e        postgres:9          "/docker-entrypoint.   4 minutes ago       Up 4 minutes        5432/tcp                 django_db_1        
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Run ASP</h3>
-
-<p>Refers to:  <br/>
-<a href="http://dockerone.com/article/164">http://dockerone.com/article/164</a>  <br/>
-The steps are listed as:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/aspnet/Home.git
-</span><span class='line'>$ cd Home/
-</span><span class='line'>$ cd samples/HelloWeb/
-</span><span class='line'>$ vim Dockerfile
-</span><span class='line'>FROM microsoft/aspnet
-</span><span class='line'>
-</span><span class='line'>COPY . /app
-</span><span class='line'>WORKDIR /app
-</span><span class='line'>RUN ["kpm", "restore"]
-</span><span class='line'>
-</span><span class='line'>EXPOSE 5004
-</span><span class='line'>ENTRYPOINT ["k", "kestrel"]
-</span><span class='line'>$ sudo docker build -t myapp .
-</span><span class='line'>$ sudo docker images
-</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-</span><span class='line'>myapp               latest              6c0d622049ea        2 hours ago         492 MB
-</span><span class='line'>microsoft/aspnet    latest              1e67fe2f5a59        13 days ago         465.3 MB
-</span><span class='line'>$ sudo docker run -t -d -p 80:5004 myapp
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Open your browser and visit <code>http://xxx.xx.xx.xxx:80</code> and you could found the asp based app runs.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/01/29/build-specified-version-of-opencontrail/">Build Specified Version of OpenContrail</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-01-29T20:50:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>8:50 pm</span></time>
-        
-         | <a href="/blog/2015/01/29/build-specified-version-of-opencontrail/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Since the default building of OpenContrail is master branch, while the installation deb file named like <code>contrail-install-packages_1.21-74~havana_all.deb</code>, this gap need to be filled via building.</p>
-
-<h3>View Different Branches</h3>
-
-<p>Repo hold all of the versions locally, simply view them via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
-</span><span class='line'>/root/Code/OpenContrail/.repo/manifests
-</span><span class='line'># git branch -a | cut -d / -f 3
-</span><span class='line'>* default
-</span><span class='line'>master -&gt; origin
-</span><span class='line'>R1.04
-</span><span class='line'>R1.05
-</span><span class='line'>R1.06
-</span><span class='line'>R1.06c1
-</span><span class='line'>R1.10
-</span><span class='line'>R1.30
-</span><span class='line'>R2.0
-</span><span class='line'>R2.1
-</span><span class='line'>gh-pages
-</span><span class='line'>master
-</span><span class='line'>opserver
-</span><span class='line'>rajreddy_doc_update
-</span><span class='line'>rajreddy_doc_update2
-</span><span class='line'>rajreddy_webui_third
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>While these branches doesn&rsquo;t contains <code>1.21</code>, why?</p>
-
-<h3>Specify Different Tag</h3>
-
-<p>In git admined project, tag is frequently be used, thus we could fetch the code via specified tag.  <br/>
-Repo need to run following command to enable all of the sub-project syncs to specified tag, following I use <code>v1.21</code> tag for syncing.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ repo forall -c 'git checkout v1.21`
-</span><span class='line'>$ repo sync
-</span><span class='line'>$ python third_party/fetch_package.py && scons && make -f packages.make
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Need a long time for checking the generated packages.    <br/>
-Problem:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>dpkg-source: error: syntax error in contrail/debian/control at line 33: block
-</span><span class='line'>lacks the 'Package' field
-</span><span class='line'>dpkg-buildpackage: error: dpkg-source --before-build contrail gave error exit
-</span><span class='line'>status 25
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>when running <code>make -f packages.make</code>, it will failed, just remove the line before <code>packages</code> it will be OK.</p>
-
-<h3>Specify Different Branch</h3>
-
-<p>Specify the branch of:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>repo init -b android-2.3_r1 ; repo sync
-</span><span class='line'>repo init -b R2.20
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/25">&larr; Older</a>
@@ -1204,23 +1123,23 @@ Problem:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/29/tips-on-shrinking-vhd-file/">Tips on Shrinking VHD File</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/29/monitoring-xenserver/">Monitoring XenServer</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/29/use-debmirror-for-setup-local-repository/">Use Debmirror for Setup Local Repository</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/27/tips-on-nodemcu/">Tips on NodeMCU</a>
       </li>
     
       <li class="post">
         <a href="/blog/2016/03/24/cloudstackqie-huan-guan-li-duan-kou/">XenServer6.2切换管理端口</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/23/setup-vagrant-libvirt-env-on-ubuntu15-dot-04/">Setup Vagrant-libvirt Env on Ubuntu15.04</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/21/use-vagrant-to-manage-xenserver/">Use Vagrant to Manage XenServer</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/17/tips-on-5050rgb-2/">Tips on 5050RGB(2)</a>
       </li>
     
   </ul>

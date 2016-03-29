@@ -9,7 +9,9 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="For I have a CentOS host machine on DO, I started to build a SS server which could make use of the freedom network in DO, following is the steps. &hellip;">
+  <meta name="description" content="We just continue to use MAAS for deploying cluster. Images Install following packages for enable local installation repository: 1
+2
+$ sudo apt-get &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +67,294 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/12/maas-deploy-2/">MAAS Deploy(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-12T18:43:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>6:43 pm</span></time>
+        
+         | <a href="/blog/2015/03/12/maas-deploy-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>We just continue to use MAAS for deploying cluster.</p>
+
+<h3>Images</h3>
+
+<p>Install following packages for enable local installation repository:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install simplestreams ubuntu-cloudimage-keyring apache2
+</span><span class='line'>$ sudo apt-get install iptraf nethogs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Run following commands for importing the images of mass from official repository to local webserver.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@MassTestOnUbuntu1404:~# sstream-mirror --keyring=/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg http://maas.ubuntu.com/images/ephemeral-v2/daily/ /var/www/html/maas/images/ephemeral-v2/daily 'arch=amd64' 'subarch~(generic|hwe-t)' 'release~(trusty|precise)' --max=1
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If you have the pre-downloaded packages, simply de-compress it to the corresponding directory.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@MassTestOnUbuntu1404:/var/www/html/maas/images# mv ephemeral-v2/ ephemeral-v2.back
+</span><span class='line'>root@MassTestOnUbuntu1404:/var/www/html/maas/images# tar xjvf /home/Trusty/ephemeral-v2.tar.bz2  -C ./
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After de-compression, your local image service could be detected via visit following webpage:  <br/>
+<a href="http://10.17.17.202/maas/images/ephemeral-v2/daily/streams/v1/index.sjson">http://10.17.17.202/maas/images/ephemeral-v2/daily/streams/v1/index.sjson</a></p>
+
+<p>Visit following webpage, then edit the default gateway and the DNS server:  <br/>
+<a href="http://10.17.17.202/MAAS/networks/maas-eth0/edit/">http://10.17.17.202/MAAS/networks/maas-eth0/edit/</a>  <br/>
+Default GateWay:   10.17.17.1  <br/>
+DNS Servers: 114.114.114.114   <br/>
+Then <code>Save Network</code> can let you save your network configuration.</p>
+
+<p>Click Configuration Button, and update the <code>Ubuntu -&gt; Main archive (required)</code> from:  <br/>
+<a href="http://archive.ubuntu.com/ubuntu">http://archive.ubuntu.com/ubuntu</a>   <br/>
+to:  <br/>
+<a href="http://mirrors.aliyun.com/ubuntu/">http://mirrors.aliyun.com/ubuntu/</a>  <br/>
+This repository enable the installed system for retrieving the install packages, use aliyun we could get much more faster speed.</p>
+
+<p>Change the <code>Boot Images -&gt; Sync URL (required)</code> from:  <br/>
+<a href="http://maas.ubuntu.com/images/ephemeral-v2/releases/">http://maas.ubuntu.com/images/ephemeral-v2/releases/</a>  <br/>
+to   <br/>
+<a href="http://10.17.17.202/maas/images/ephemeral-v2/daily/">http://10.17.17.202/maas/images/ephemeral-v2/daily/</a> <br/>
+This will enable the Boot Images Sync URLs, use local repository will greatly improve the bootup speed.</p>
+
+<p>Now build the Images like following images:  <br/>
+<img src="/images/2015_03_12_19_23_06_942x396.jpg" alt="/images/2015_03_12_19_23_06_942x396.jpg" /></p>
+
+<p>After a while, your Boot Image will be ready.</p>
+
+<h3>Add Maas Ssh Key</h3>
+
+<p>Do following steps for generate the ssh key pairs for user maas:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mkdir /home/maas
+</span><span class='line'>$ sudo chown maas:maas /home/maas/
+</span><span class='line'>$ sudo chsh maas
+</span><span class='line'>Changing the login shell for maas
+</span><span class='line'>Enter the new value, or press ENTER for the default
+</span><span class='line'>        Login Shell [/bin/false]: /bin/bash
+</span><span class='line'>Trusty@MassTestOnUbuntu1404:~$ sudo su - maas
+</span><span class='line'>maas@MassTestOnUbuntu1404:~$ ssh-keygen 
+</span><span class='line'>Generating public/private rsa key pair.
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After these steps, copy the /home/maas/.ssh/id_rsa.pub to your clipboard, then copy it under:  <br/>
+<a href="http://10.17.17.202/MAAS/account/prefs/sshkey/add/">http://10.17.17.202/MAAS/account/prefs/sshkey/add/</a> <br/>
+Now the ssh-key has been added into your MAAS system.</p>
+
+<p>You could also copy the api key of your maas, later we will use it.  <br/>
+Mine is:   <code>ntQBr8QTPgeTyfYuMq:HGKFChwM65QXtABNS4:SK7bnuGNDN7fLB9k7HNspYLch4kc6RLs</code></p>
+
+<p>Now the maas controller is ready, next step is create the virtual machine and let it be managed by controller.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/11/maas-deploy-1/">MAAS Deploy(1)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-11T07:11:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>7:11 am</span></time>
+        
+         | <a href="/blog/2015/03/11/maas-deploy-1/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This deploy series will record every steps that I deploy OpenStack on Ubuntu based server.</p>
+
+<h3>Network Configuration</h3>
+
+<p>I want to deploy the MAAS environment in a seperated network, thus I have to create the new network in virt-manager via following steps: <br/>
+First, double-click localhost(QEMU), this will pop-up the configuration of the virt-manager.   <br/>
+Second, in the Virtual Networks, click &ldquo;+&rdquo;, name it, change its ip range addresses to <code>10.17.17.0/24</code>, de-select <code>Enable DHCPv4</code>, In the last window, select &ldquo;Forwarding to phsical network&rdquo;, select the bridge interface that you have in your physical machine.   <br/>
+By this two steps you will have the isolated NAT networks.</p>
+
+<p>Possible problems, I met in my ArchLinux:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>First :
+</span><span class='line'>Cannot start Virtual Network: "out of memory"
+</span><span class='line'>
+</span><span class='line'>Solved via:    
+</span><span class='line'>$ sudo pacman -S ebtables
+</span><span class='line'>$ sudo systemctl restart libvirtd
+</span><span class='line'>
+</span><span class='line'>Error creating virtual network: Cannot check dnsmasq binary /sbin/dnsmasq: No such file or directory
+</span><span class='line'>$ sudo pacman -S dnsmasq
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Mass Controller Machine Installation</h3>
+
+<p>In virt-manager, create a new virtual machine, which takes around 1.5G Memory and 2 Cores, 40G memory. The network we used is the one we created in last step, this will create the maas controller in this isolated network, thus every newly-created nodes will start-up from this controller.</p>
+
+<p>Start install this machine, you won&rsquo;t have the auto-configured ip address, so you should manually specify the IP Address for this controller machine, mine use <code>10.17.17.202</code>.</p>
+
+<h3>Mass Controller Configuration</h3>
+
+<p>First add maas testing repository to the existing apt configuration files, Make sure you have added following 2 lines at the end of the file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo add-apt-repository  ppa:maas-maintainers/maas-test
+</span><span class='line'>$ sudo vim /etc/apt/sources.list
+</span><span class='line'>deb http://ppa.launchpad.net/maas-maintainers/testing/ubuntu trusty main 
+</span><span class='line'>deb-src http://ppa.launchpad.net/maas-maintainers/testing/ubuntu trusty main 
+</span><span class='line'>$ sudo apt-get update
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+The maas-test is located at:  <br/>
+<a href="https://launchpad.net/~maas-maintainers/+archive/ubuntu/maas-test?field.series_filter=trusty">https://launchpad.net/~maas-maintainers/+archive/ubuntu/maas-test?field.series_filter=trusty</a></p>
+
+<p>Now install following packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install ssh nano iptraf htop wget lynx dnsutils maas maas-dhcp maas-dns git build-essential
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Met hashsum missing, solved via following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo rm -fR /var/lib/apt/lists/*  
+</span><span class='line'>$ sudo mkdir /var/lib/apt/lists/partial  
+</span><span class='line'>$ sudo bash
+</span><span class='line'>$ proxychains4 apt-get update
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>After installation, you will got MAAS installed, so open your browser and visit <code>http://10.17.17.202/MAAS</code>, you will get a hint that you have to run following commands for making MAAS service really avaiable:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo maas-region-admin createsuperuser
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The configuration above should input the username/password, and also your email address, etc. After inputing all of this, visit <code>http://10.17.17.202/MAAS</code> again, now you got the MAAS configuration webpages.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/08/enable-bluetooth-playing/">Enable Bluetooth Playing</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-03-08T21:36:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>9:36 pm</span></time>
+        
+         | <a href="/blog/2015/03/08/enable-bluetooth-playing/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>First scan the bluetooth adapter via <code>lsusb</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ lsusb
+</span><span class='line'>Bus 005 Device 002: ID 0a12:0001 Cambridge Silicon Radio, Ltd Bluetooth Dongle (HCI mode)
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install packages and configure bluetooth:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install bluetooth
+</span><span class='line'>$ sudo apt-get install bluez-utils
+</span><span class='line'>$ sudo apt-get install blueman
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then setup the bluetooth headset in blueman&rsquo;s graphical interface.  <br/>
+The more detailed steps are available at:  <br/>
+<a href="http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/">http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/</a></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1302,436 +1592,6 @@ But while in the host machine, you will add following iptables rules:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/02/13/libvirt-on-opensuse/">Libvirt on OpenSuse</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-02-13T03:48:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>3:48 am</span></time>
-        
-         | <a href="/blog/2015/02/13/libvirt-on-opensuse/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested virtualization is not OK. So that&rsquo;s why I have to try libvirt.</p>
-
-<h3>Installation</h3>
-
-<p>Install the virt-manager related software via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo zypper install kvm libvirt libvirt-python qemu virt-manager
-</span><span class='line'>$ sudo zypper in patterns-openSUSE-kvm_server
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now if you directly call virt-manager you will got the following hint:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> error: authentication failed: Authorization requires authentication but no agent is available.
-</span><span class='line'>    error: failed to connect to the hypervisor
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Or if you run <code>virsh -c qemu:///system</code> you will got the same hint message.   <br/>
-Solution is we have to enable the polkit service, add following script:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /usr/bin/polkitexec
-</span><span class='line'>#! /bin/bash
-</span><span class='line'>
-</span><span class='line'>prg=$1
-</span><span class='line'>
-</span><span class='line'>[ "$prg" ] || exec echo "missing argument"
-</span><span class='line'>[ -x "$prg" ] || which $prg &&gt;/dev/null || exec echo "program not found: $1"
-</span><span class='line'>
-</span><span class='line'>shift
-</span><span class='line'>args=$*
-</span><span class='line'>
-</span><span class='line'>[ `id -u` -eq 0 ] && exec $prg $args
-</span><span class='line'>
-</span><span class='line'>uname -m | grep -q 64 && lib=/usr/lib64 || lib=/usr/lib
-</span><span class='line'>
-</span><span class='line'>if [ "$DESKTOP_SESSION" = "kde" ]; then 
-</span><span class='line'>        pga=polkit-kde-authentication-agent-1
-</span><span class='line'>        lpga=/usr/$lib/kde4/libexec/$pka
-</span><span class='line'>else
-</span><span class='line'>        pga=polkit-gnome-authentication-agent-1
-</span><span class='line'>        lpga=/usr/lib/$pga
-</span><span class='line'>fi
-</span><span class='line'>
-</span><span class='line'>case $DESKTOP_SESSION in
-</span><span class='line'>        gnome|gnome-shell|cinnamon*) exec $prg $args ;;
-</span><span class='line'>        *) ps nc -C $pga &&gt;/dev/null && exec $prg $args || { [ ! -x $lpga ] && exec echo "program not found: $lpga" || $lpga & $prg $args ;} ;;
-</span><span class='line'>esac
-</span><span class='line'>$ sudo chmod 777 /sur/bin/polkitexec
-</span><span class='line'>$ vim ~/.zshrc
-</span><span class='line'># Wrap virt-manager with polkitexec. 
-</span><span class='line'>alias virt-manager='polkitexec virt-manager'
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now the virt-manager could be run correctly.</p>
-
-<h3>Trouble-Shooting</h3>
-
-<p>If you met following error, add root to your kvm.conf is OK.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Could not access KVM kernel module: Permission denied
-</span><span class='line'>failed to initialize KVM: Permission denied
-</span><span class='line'>No accelerator found!
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>First change the priviledge:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#chown root:kvm /dev/kvm
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then modify the /etc/libvirt/qemu.conf:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#user="root"
-</span><span class='line'>user="root"
-</span><span class='line'>#group="root"
-</span><span class='line'>group="root"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Restart the libvirtd and restart the virt-manager:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#service libvirtd restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now continue to install OpenContrail.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/02/10/build-opencontrail-on-centos7-local/">Build OpenContrail on CentOS7(Local)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-02-10T05:06:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:06 am</span></time>
-        
-         | <a href="/blog/2015/02/10/build-opencontrail-on-centos7-local/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Fresh steps.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum update
-</span><span class='line'>$ sudo yum install vim
-</span><span class='line'>$ sudo yum install net-tools
-</span><span class='line'>$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
-</span><span class='line'>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
-</span><span class='line'>$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
-</span><span class='line'>$ sudo yum install -y --disablerepo="*" --enablerepo="epel" scons protobuf protobuf-devel protobuf-compiler 
-</span><span class='line'>$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>As root, Add repositories:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># wget -q -O - http://www.atomicorp.com/installers/atomic | sh
-</span><span class='line'># yum update
-</span><span class='line'># yum install dpkg dpkg-devel
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Missing fakeroot, so can&rsquo;t be continue.</p>
-
-<p>Change back to CentOS 6.6.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo yum install vim net-tools
-</span><span class='line'>$ wget https://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
-</span><span class='line'>$ sudo rpm -ivh epel-release-6-8.noarch.rpm 
-</span><span class='line'>$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
-</span><span class='line'>$ sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
-</span><span class='line'>$ yum install -y --disablerepo="*" --enablerepo="epel" scons protobuf protobuf-devel protobuf-compiler  bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel xz
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install git:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
-</span><span class='line'>$ wget https://www.kernel.org/pub/software/scm/git/git-1.9.4.tar.gz
-</span><span class='line'>$ sudo yum install expat-devel tar
-</span><span class='line'>$ make prefix=/usr install
-</span><span class='line'>$ which git
-</span><span class='line'>git version 1.9.4
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using repo sync:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ repo init -u git@github.com:Juniper/contrail-vnc
-</span><span class='line'>$ repo sync
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install argparse:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ yum install python-argparse
-</span><span class='line'>$ declare -x USER="root"
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We should upgrade some packages to let python could fetch back the packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://ftp.gnu.org/gnu/autoconf/autoconf-latest.tar.gz
-</span><span class='line'>$ tar xzvf autoconf-latest.tar.gz
-</span><span class='line'>$ cd autoconf-2.69/
-</span><span class='line'>$ ./configure --prefix=/usr && make && sudo make install
-</span><span class='line'>$ sudo yum install libtool
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Fetch the 3rd_party packages:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ python third_party/fetch_package.py
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then tar and export it to the host machine.</p>
-
-<p>When Building, we have to install libipfix:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://sourceforge.net/projects/libipfix/files/libipfix/libipfix_110209.tgz/download
-</span><span class='line'>$ # build it.   
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the epel repository and install dpkg and dpkg-devel:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo sed -i -e 's/enabled=0/enabled=1/' /etc/yum.repos.d/epel.repo
-</span><span class='line'>$ sudo yum update && sudo yum install -y dpkg dpkg-devel
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/02/09/play-docker-6-using-docker-for-building/">Play Docker(6) -- Using Docker for Building</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-02-09T23:16:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>11:16 pm</span></time>
-        
-         | <a href="/blog/2015/02/09/play-docker-6-using-docker-for-building/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>The steps is for Ubuntu12.04, the purpose of this documentation is for swiftly get the source code and fetch it to local repository.</p>
-
-<h3>Preparation</h3>
-
-<p>Pull back the Ubuntu12.04:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker pull ubuntu12.04
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then run into the ubuntu12.04 via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo docker run -it ubuntu12.04 /bin/bash
-</span><span class='line'>root@7b30cc924bb0:~ #
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install following packages in Ubuntu 12.04 container:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># apt-get install python-software-properties
-</span><span class='line'># apt-get install curl
-</span><span class='line'># curl https://storage.googleapis.com/git-repo-downloads/repo &gt; /bin/repo
-</span><span class='line'># chmod 777 /bin/repo
-</span><span class='line'># apt-get update
-</span><span class='line'># apt-get install python-pip
-</span><span class='line'># apt-get install git
-</span><span class='line'># git config --global user.email kkkttt@gmail.com
-</span><span class='line'># git config --global user.name kkkttt
-</span><span class='line'># ssh -T git@github.com
-</span><span class='line'># repo init -u git@github.com:Juniper/contrail-vnc
-</span><span class='line'># repo sync
-</span><span class='line'># declare -x USER="root"
-</span><span class='line'># apt-get install python-lxml autoconf bzip2 libtool unzip wget 
-</span><span class='line'># python third_party/fetch_packages.py
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install nginx:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
-</span><span class='line'>$ sudo rpm -ivh nginx
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Change nginx&rsquo;s listenning directory to <code>/var/www/</code>, tar the directory and put it under this folder, then use firefox for downloading it.</p>
-
-<h3>Compile Local</h3>
-
-<p>Referes to :   <br/>
-<a href="http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/">http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/</a>  <br/>
-Plus:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install libglib2.0-dev libglib2.0
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/24">&larr; Older</a>
@@ -1749,23 +1609,23 @@ Plus:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/03/29/tips-on-shrinking-vhd-file/">Tips on Shrinking VHD File</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/29/monitoring-xenserver/">Monitoring XenServer</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/03/29/use-debmirror-for-setup-local-repository/">Use Debmirror for Setup Local Repository</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/27/tips-on-nodemcu/">Tips on NodeMCU</a>
       </li>
     
       <li class="post">
         <a href="/blog/2016/03/24/cloudstackqie-huan-guan-li-duan-kou/">XenServer6.2切换管理端口</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/23/setup-vagrant-libvirt-env-on-ubuntu15-dot-04/">Setup Vagrant-libvirt Env on Ubuntu15.04</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/21/use-vagrant-to-manage-xenserver/">Use Vagrant to Manage XenServer</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/17/tips-on-5050rgb-2/">Tips on 5050RGB(2)</a>
       </li>
     
   </ul>
