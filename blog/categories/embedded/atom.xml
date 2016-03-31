@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Embedded | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/embedded/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-29T19:00:57+08:00</updated>
+  <updated>2016-03-31T22:02:07+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,109 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[NodeMCU and 1602I2C]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/31/nodemcu-and-1602i2c/"/>
+    <updated>2016-03-31T21:34:42+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/31/nodemcu-and-1602i2c</id>
+    <content type="html"><![CDATA[<p>最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
+验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
+用来做一个WIFI显示屏.</p>
+
+<p>今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, 如下图所示,这里简单记录
+一下制作过程.</p>
+
+<p><img src="/images/1009950725.jpg" alt="/images/1009950725.jpg" /></p>
+
+<p><img src="/images/1162591797.jpg" alt="/images/1162591797.jpg" /></p>
+
+<h3>连线图</h3>
+
+<p>1602 I2C上有四个口,分别是GND/VCC/SDA/SCL.  <br/>
+GND自然不用多说,连接NodeMCU上的GND即可.  <br/>
+VCC我们使用5V输入,在NodeMCU上则是VIN口. 在下图里我用红色做了标注. <br/>
+SDA接GPIO0, SDC接GPIO2,在图中我用橙色做了标识.</p>
+
+<p><img src="/images/2016_03_31_21_46_54_644x477.jpg" alt="/images/2016_03_31_21_46_54_644x477.jpg" /></p>
+
+<h3>软件准备</h3>
+
+<p>我这里参考了
+<a href="http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/">http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/</a>
+上的实例, 所以用ESPlorer来写入1602的库文件. ESPlorer的下载地址在:</p>
+
+<p><a href="http://esp8266.ru/esplorer/#download">http://esp8266.ru/esplorer/#download</a></p>
+
+<p>如果你使用的是ArchLinux的话,一行命令就够了:</p>
+
+<pre><code>$ yaourt esplorer
+</code></pre>
+
+<p>如果你运行上述网址上的示例, 故事的结尾你会获得一个Hallo的显示,以及跑马灯式的显
+示效果.</p>
+
+<h3>CPU Load Program</h3>
+
+<p>先上代码, 用Python写的, 如果你看过上面的示例程序就会明白, 往串口写入1602的lua
+脚本,就能获得对应的显示效果,那么以下的Python代码就是每分钟读取CPU的负载值, 将
+它封装在一个字符串中发送到NodeMCU连接的串口.</p>
+
+<pre><code class="python">import psutil
+import serial
+import time
+
+
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = '/dev/ttyUSB0'
+ser.open()
+## Todo, to check if the port is opened.
+
+# Really talks to the i2c LCD.
+
+# Setup the wiring
+ser.write(b'i2c.setup(0, 4, 3, i2c.SLOW)\r\n')
+
+# dofile, load the lcd library
+ser.write(b'lcd = dofile("lcd1602.lua")()\r\n')
+
+# Now Refresh the LCD. 
+ser.write(b'lcd.clear()\r\n')
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    ser.write(b'lcd.clear()\r\n')
+    currentPer = str(psutil.cpu_percent()).encode('ascii')
+    # Format oneLine
+    ser.write(b'lcd.put(lcd.locate(0, 5), "CPU Load")\r\n')
+    oneLine = b'lcd.put(lcd.locate(1, 6), "' + currentPer + b'")\r\n'
+    # Write oneLine
+    ser.write(oneLine)
+    time.sleep(1)
+</code></pre>
+
+<p>代码运行的前提条件是,在ArchLinux上,安装pyserial库和psutil库:</p>
+
+<pre><code>$ sudo pacman -S python-psutil
+$ sudo pacman -S python-pyserial
+</code></pre>
+
+<p>而后,运行<code>sudo python WriteLoadToLCD.py</code>.</p>
+
+<p>好了,你的系统CPU使用率已经显示在1602 LCD上了,每分钟更新一次. 当然你也可以将显示
+值从CPU使用率换成内存占用率,或是CPU温度,或是PM2.5的值等等. 你要做的就是构建自
+己的数据<code>CurrentPer</code>和写入的格式<code>oneLine</code>.</p>
+
+<p>通过串口发送数据, 通过NodeMCU驱动1602, 这功能对NodeMCU而言太小儿科了,所以接下
+来我会继续做一个WIFI驱动的LCD.</p>
+
+<p>e</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on NodeMCU]]></title>
@@ -416,153 +519,6 @@ char server[] = "www.bigiot.net";
 </code></pre>
 
 <p>连线改为了3, 即A3口以后,上报数据成功.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on V-USB and Arduino(5)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/07/tips-on-v-usb-and-arduino-5/"/>
-    <updated>2016-03-07T21:52:47+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/07/tips-on-v-usb-and-arduino-5</id>
-    <content type="html"><![CDATA[<p>这一节将添加一个LED到已有的方案中. 这个LED将使用11口, 通过<code>./set-led new</code>来设
-置状态.</p>
-
-<h3>连线</h3>
-
-<p>新加一个LED如图:</p>
-
-<p><img src="/images/2016_03_07_21_52_18_683x513.jpg" alt="/images/2016_03_07_21_52_18_683x513.jpg" /></p>
-
-<p>仅仅添加了一个LED + 220欧电阻.</p>
-
-<h3>代码修改</h3>
-
-<h4>requests.h</h4>
-
-<p>添加新的request定义:</p>
-
-<pre><code class="diff">diff --git a/requests.h b/requests.h
-index 90275f5..b354a73 100644
---- a/requests.h
-+++ b/requests.h
-@@ -32,4 +32,6 @@
-
- #define CUSTOM_RQ_BLINK    3
-
-+#define CUSTOM_RQ_NEWLED    4
-+
-</code></pre>
-
-<h4>hid_custom_rq.h</h4>
-
-<p>添加新的管脚, 和对<code>CUSTOM_RQ_NEWLED</code>的处理代码:</p>
-
-<pre><code class="diff">diff --git a/hid_custom_rq.h b/hid_custom_rq.h
-index f5509e4..b5411cf 100644
---- a/hid_custom_rq.h
-+++ b/hid_custom_rq.h
-@@ -13,6 +13,7 @@ class hid_custom_rqDevice {
-   hid_custom_rqDevice () {
-     usbInit();
-     ledPin = 13;        // pin 13 as default ledPin
-+    newledPin = 11;    // pin 11 as newledPin
-   }
-
-   void poll() {
-@@ -20,6 +21,7 @@ class hid_custom_rqDevice {
-   }
-
-   unsigned int ledPin;  
-+  unsigned int newledPin;  
- };
-
- hid_custom_rqDevice hid_custom_rq = hid_custom_rqDevice();
-@@ -99,6 +101,14 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
-             usbMsgPtr = dataBuffer;         /* tell the driver which data to
-return */
-             return 1;                       /* tell the driver to send 1 byte
-*/
-         }
-+       /* Added for newly added LED */
-+       else if(rq-&gt;bRequest == CUSTOM_RQ_NEWLED){
-+            if(rq-&gt;wValue.bytes[0] &amp; 1){    /* set new LED */
-+                digitalWrite(hid_custom_rq.newledPin, HIGH);
-+            }else{                          /* clear new LED */
-+                digitalWrite(hid_custom_rq.newledPin, LOW);
-+            }
-+       }
-     }
-</code></pre>
-
-<h4>set-led.c</h4>
-
-<p>这个文件中,添加了两条新命令,分别为<code>./set-led newledon</code>和<code>./set-led newledoff</code>用于点亮/
-熄灭新加的LED.</p>
-
-<pre><code>diff --git a/examples/hid_custom_rq_demo/commandline/set-led.c b/examples/hid_custom_rq_demo/commandline/set-led.c
-index 44d39f9..a306eca 100644
---- a/examples/hid_custom_rq_demo/commandline/set-led.c
-+++ b/examples/hid_custom_rq_demo/commandline/set-led.c
-@@ -91,12 +91,19 @@ buffer[3] = 0;
-         }else{
-             printf("LED is %s\n", buffer[0] ? "on" : "off");
-         }
--    }else if((isOn = (strcasecmp(argv[1], "on") == 0)) || strcasecmp(argv[1], "off") == 0){
-+    }
-+    else if((isOn = (strcasecmp(argv[1], "on") == 0)) || strcasecmp(argv[1], "off") == 0){
-         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_SET_STATUS, isOn, 0, buffer, 0, 5000);
-         if(cnt &lt; 0){
-             fprintf(stderr, "USB error: %s\n", usb_strerror());
-         }
-     }
-+    else if((isOn = (strcasecmp(argv[1], "newledon") == 0)) || strcasecmp(argv[1], "newledoff") == 0){
-+        cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_NEWLED, isOn, 0, buffer, 0, 5000);
-+        if(cnt &lt; 0){
-+            fprintf(stderr, "USB error: %s\n", usb_strerror());
-+        }
-+    }
-
- else if(strcasecmp(argv[1], "onoff") == 0){ /* Test custom on/off */
-</code></pre>
-
-<h4>hid_custom_rq_demo.ped</h4>
-
-<p>因为新添加了硬件,ped文件同样需要更新.</p>
-
-<pre><code>diff --git a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-index 77e3912..6d98151 100644
---- a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-+++ b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-@@ -1,10 +1,13 @@
- #include &lt;hid_custom_rq.h&gt;
-
- const int ledPin = 13;
-+const int newledPin = 11;
-
- void setup() {
-   hid_custom_rq.ledPin = ledPin;
-   pinMode(hid_custom_rq.ledPin, OUTPUT);
-+  hid_custom_rq.newledPin = newledPin;
-+  pinMode(hid_custom_rq.newledPin, OUTPUT);
- }
-
- void loop() {
-</code></pre>
-
-<h3>验证</h3>
-
-<p>写入新编译的Arduino固件, 并新编译<code>set-led</code>程序, 即可看到新增的LED被点亮/熄灭.</p>
-
-<p>效果如图:</p>
-
-<p><img src="/images/70584386.jpg" alt="/images/70584386.jpg" /></p>
-
-<h3>延伸</h3>
-
-<p>既然点亮了LED, 其他各种设备就不在话下了. 引入一个舵机,或者步进电机, 就可以实现
-e-buddy人偶的提醒功能.</p>
-
-<p>当然我们可以想得更妙, 例如,用蓝牙或者WIFI来替代USB传输. 这样可以做到更远距离.</p>
 ]]></content>
   </entry>
   

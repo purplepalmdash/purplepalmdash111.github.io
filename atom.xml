@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-03-29T19:00:57+08:00</updated>
+  <updated>2016-03-31T22:02:07+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,150 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[NodeMCU and 1602I2C]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/03/31/nodemcu-and-1602i2c/"/>
+    <updated>2016-03-31T21:34:42+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/03/31/nodemcu-and-1602i2c</id>
+    <content type="html"><![CDATA[<p>最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
+验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
+用来做一个WIFI显示屏.</p>
+
+<p>今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, 如下图所示,这里简单记录
+一下制作过程.</p>
+
+<p><img src="http://purplepalmdash.github.io/images/1009950725.jpg" alt="/images/1009950725.jpg" /></p>
+
+<p><img src="http://purplepalmdash.github.io/images/1162591797.jpg" alt="/images/1162591797.jpg" /></p>
+
+<h3>连线图</h3>
+
+<p>1602 I2C上有四个口,分别是GND/VCC/SDA/SCL.  <br/>
+GND自然不用多说,连接NodeMCU上的GND即可.  <br/>
+VCC我们使用5V输入,在NodeMCU上则是VIN口. 在下图里我用红色做了标注. <br/>
+SDA接GPIO0, SDC接GPIO2,在图中我用橙色做了标识.</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_03_31_21_46_54_644x477.jpg" alt="/images/2016_03_31_21_46_54_644x477.jpg" /></p>
+
+<h3>软件准备</h3>
+
+<p>我这里参考了
+<a href="http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/">http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/</a>
+上的实例, 所以用ESPlorer来写入1602的库文件. ESPlorer的下载地址在:</p>
+
+<p><a href="http://esp8266.ru/esplorer/#download">http://esp8266.ru/esplorer/#download</a></p>
+
+<p>如果你使用的是ArchLinux的话,一行命令就够了:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt esplorer</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+如果你运行上述网址上的示例, 故事的结尾你会获得一个Hallo的显示,以及跑马灯式的显
+示效果.</p>
+
+<h3>CPU Load Program</h3>
+
+<p>先上代码, 用Python写的, 如果你看过上面的示例程序就会明白, 往串口写入1602的lua
+脚本,就能获得对应的显示效果,那么以下的Python代码就是每分钟读取CPU的负载值, 将
+它封装在一个字符串中发送到NodeMCU连接的串口.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">psutil</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">serial</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">time</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Setup the Serial Port and open it. </span>
+</span><span class='line'><span class="n">ser</span> <span class="o">=</span> <span class="n">serial</span><span class="o">.</span><span class="n">Serial</span><span class="p">()</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">baudrate</span> <span class="o">=</span> <span class="mi">9600</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="s">&#39;/dev/ttyUSB0&#39;</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+</span><span class='line'><span class="c">## Todo, to check if the port is opened.</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Really talks to the i2c LCD.</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Setup the wiring</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;i2c.setup(0, 4, 3, i2c.SLOW)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># dofile, load the lcd library</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd = dofile(&quot;lcd1602.lua&quot;)()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Now Refresh the LCD. </span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.clear()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Fetching the percentage per 1 second</span>
+</span><span class='line'><span class="c"># Todo, change the while true into CTRL+C stopped. </span>
+</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+</span><span class='line'>    <span class="c"># Get current percentage</span>
+</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.clear()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">currentPer</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">psutil</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">())</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;ascii&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="c"># Format oneLine</span>
+</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(0, 5), &quot;CPU Load&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">oneLine</span> <span class="o">=</span> <span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(1, 6), &quot;&#39;</span> <span class="o">+</span> <span class="n">currentPer</span> <span class="o">+</span> <span class="n">b</span><span class="s">&#39;&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span>
+</span><span class='line'>    <span class="c"># Write oneLine</span>
+</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">oneLine</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>代码运行的前提条件是,在ArchLinux上,安装pyserial库和psutil库:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="err">$</span> <span class="n">sudo</span> <span class="n">pacman</span> <span class="o">-</span><span class="n">S</span> <span class="n">python</span><span class="o">-</span><span class="n">psutil</span>
+</span><span class='line'><span class="err">$</span> <span class="n">sudo</span> <span class="n">pacman</span> <span class="o">-</span><span class="n">S</span> <span class="n">python</span><span class="o">-</span><span class="n">pyserial</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而后,运行<code>sudo python WriteLoadToLCD.py</code>.</p>
+
+<p>好了,你的系统CPU使用率已经显示在1602 LCD上了,每分钟更新一次. 当然你也可以将显示
+值从CPU使用率换成内存占用率,或是CPU温度,或是PM2.5的值等等. 你要做的就是构建自
+己的数据<code>CurrentPer</code>和写入的格式<code>oneLine</code>.</p>
+
+<p>通过串口发送数据, 通过NodeMCU驱动1602, 这功能对NodeMCU而言太小儿科了,所以接下
+来我会继续做一个WIFI驱动的LCD.</p>
+
+<p>e</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on Shrinking VHD File]]></title>
@@ -3343,37 +3487,6 @@ e-buddy人偶的提醒功能.</p>
 </span><span class='line'>        print "finally comes here!"</span></code></pre></td></tr></table></div></figure>
 
 
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Conntrack-tools Usage]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/02/conntrack-tools-usage/"/>
-    <updated>2016-03-02T17:30:31+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/02/conntrack-tools-usage</id>
-    <content type="html"><![CDATA[<h3>参考</h3>
-
-<p><a href="https://blogs.it.ox.ac.uk/networks/2014/09/30/linux-and-eduroam-nat-logging-perl-and-regular-expressions/">https://blogs.it.ox.ac.uk/networks/2014/09/30/linux-and-eduroam-nat-logging-perl-and-regular-expressions/</a></p>
-
-<h3>安装</h3>
-
-<p>ArchLinux下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S conntrack-tools</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>使用</h3>
-
-<p>记录新建/销毁连接数至文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo touch /var/log/conntrack-data.log
-</span><span class='line'>$ sudo chmod 777 /var/log/conntrack-data.log
-</span><span class='line'>$ sudo conntrack -E -eNEW,DESTROY --src-nat -otimestamp,extended --buffer-size=104857600 &gt; /var/log/conntrack-data.log</span></code></pre></td></tr></table></div></figure>
 
 ]]></content>
   </entry>
