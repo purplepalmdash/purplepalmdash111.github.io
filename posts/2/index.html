@@ -9,9 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="总结了一下ebuddy的玩法，最近加了点玩法，就是用ebuddy作为Bash运行脚本后的提示部件。譬如
-，当完成了某个编译任务后，用ebuddy来告知任务的运行成功。 1
-$ Task A ; NOTIFY EBUDDY /bin/ebuddy 创建一个/bin/ebuddy的文件，内容如下: 1 &hellip;">
+  <meta name="description" content="最终目的是用vagrant实现CloudStack+Xenserver的自动化部署。 CentOS6.7 box Creating 用packer生成CentOS6.7 amd64的镜像，这个镜像默认是virtualbox兼容的，用vagrant-mutate插件 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +65,248 @@ $ Task A ; NOTIFY EBUDDY /bin/ebuddy 创建一个/bin/ebuddy的文件，内容�
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/03/16/vagrant-libvirt-playing/">Vagrant-libvirt Playing</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-03-16T10:31:53+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>16</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>10:31 am</span></time>
+        
+         | <a href="/blog/2016/03/16/vagrant-libvirt-playing/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>最终目的是用vagrant实现CloudStack+Xenserver的自动化部署。</p>
+
+<h3>CentOS6.7 box Creating</h3>
+
+<p>用packer生成CentOS6.7 amd64的镜像，这个镜像默认是virtualbox兼容的，用vagrant-mutate插件
+将其转换为libvirt可用的box镜像:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vagrant mutate centos-6.7.virtualbox.box libvirt
+</span><span class='line'># cd /root/.vagrant.d/boxes
+</span><span class='line'># ls
+</span><span class='line'>centos-6.7.virtualbox  trusty64
+</span><span class='line'># mv centos-6.7.virtualbox/ centos6764
+</span><span class='line'># vagrant box list
+</span><span class='line'>centos6764 (libvirt, 0)
+</span><span class='line'>trusty64   (libvirt, 0)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建Vagrantfile文件启动一个实验性质的虚拟机：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
+</span><span class='line'>/media/opensusue/dash/Code/Vagrant/CentOS2New
+</span><span class='line'># ls
+</span><span class='line'>Vagrantfile  Vagrantfile~
+</span><span class='line'># cat Vagrantfile
+</span><span class='line'>    # -*- mode: ruby -*-
+</span><span class='line'>    # vi: set ft=ruby :
+</span><span class='line'>    Vagrant.configure(2) do |config|
+</span><span class='line'>      # The most common configuration options are documented and commented below.
+</span><span class='line'>      # For a complete reference, please see the online documentation at
+</span><span class='line'>      # https://docs.vagrantup.com.
+</span><span class='line'>    
+</span><span class='line'>      config.vm.box = "centos6764"
+</span><span class='line'>      # vagrant issues #1673..fixes hang with configure_networks
+</span><span class='line'>      config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
+</span><span class='line'>      config.vm.provider :libvirt do |domain|
+</span><span class='line'>        domain.memory = 512
+</span><span class='line'>        domain.nested = true
+</span><span class='line'>      end
+</span><span class='line'>    
+</span><span class='line'>      config.vm.define :centosnew do |centosnew|
+</span><span class='line'>        centosnew.vm.network :private_network, :ip =&gt; "192.168.88.2"
+</span><span class='line'>      end
+</span><span class='line'>    
+</span><span class='line'>    end
+</span><span class='line'># vagrant up</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>vagrant up</code>以后，一个名为<code>CentOS2New_centosnew</code>的虚拟机将被创建， 命名规则为当前文件夹
+名+定义的vm名称。</p>
+
+<p>虚拟机启动完毕后，检查状态并登录到该机器:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vagrant status
+</span><span class='line'>Current machine states:
+</span><span class='line'>
+</span><span class='line'>centosnew                 running (libvirt)
+</span><span class='line'>
+</span><span class='line'>The Libvirt domain is running. To stop this machine, you can run
+</span><span class='line'>`vagrant halt`. To destroy the machine, you can run `vagrant destroy`.
+</span><span class='line'># vagrant ssh centosnew
+</span><span class='line'>Last login: Wed Mar 16 02:31:18 2016 from 192.168.121.1
+</span><span class='line'>[vagrant@localhost ~]$</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>我们可以检查网卡状态，是否设置为我们需要设置的地址<code>192.168.88.2</code>.</p>
+
+<h3>更多定制化参数</h3>
+
+<h4>嵌套虚拟化</h4>
+
+<p>未知原因，我在CentOS6上检查嵌套虚拟化总是提示有问题，所以以下的验证是在Ubuntu系统上验证
+的。</p>
+
+<p>我们在上面的配置文件里制定了nested选项为true, 现在登录进去检查一下嵌套虚拟化是否加载成
+功:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vagrant@vagrant:~$ lsmod | grep kvm
+</span><span class='line'>kvm_intel             143590  0 
+</span><span class='line'>kvm                   452043  1 kvm_intel
+</span><span class='line'>vagrant@vagrant:~$ modinfo kvm_intel | grep nested
+</span><span class='line'>parm:           nested:bool
+</span><span class='line'>vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
+</span><span class='line'>N
+</span><span class='line'>vagrant@vagrant:~$ sudo modprobe -r kvm_intel
+</span><span class='line'>vagrant@vagrant:~$ sudo modprobe kvm_intel nested=1
+</span><span class='line'>vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
+</span><span class='line'>Y</span></code></pre></td></tr></table></div></figure>
+
+
+<p>改变nested选项为false后，验证步骤如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /sys/module/kvm_intel/parameters/nested
+</span><span class='line'>N</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+值得注意的是，在虚拟机中，仍然可以通过<code>modprobe kvm_intel nested=1</code>来打开nested选项。</p>
+
+<h4>CPU Passthrough</h4>
+
+<p>指定参数为<code>domain.cpu_mode = 'host-passthrough'</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>  config.vm.provider :libvirt do |domain|
+</span><span class='line'>    domain.memory = 512
+</span><span class='line'>    domain.nested = false
+</span><span class='line'>    #domain.cpu_mode = 'host-passthrough'
+</span><span class='line'>  end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>未指定时:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>vagrant@vagrant:~$ cat /proc/cpuinfo  | grep -i "model name"
+</span><span class='line'>model name    : Intel Core i7 9xx (Nehalem Class Core i7)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>指定后:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[vagrant@localhost ~]$ cat /proc/cpuinfo | grep -i "model name"
+</span><span class='line'>model name    : Intel(R) Core(TM) i3 CPU         540  @ 3.07GHz</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>指定hostname</h4>
+
+<p>安装cloudstack时hostname是必要条件之一， Vagrantfile中可以指定vm的hostname:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>  config.vm.define "centosnew" do |centosnew|
+</span><span class='line'>    centosnew.vm.hostname = "centosnew.example.com"
+</span><span class='line'>  end</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动虚拟机后可以通过<code>hostname</code>和<code>hostname --fqdn</code>来检查结果。</p>
+
+<h3>快照</h3>
+
+<p>通过sahara来实现libvirt机器的快照:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant plugin install sahara</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在验证系统时，可以进入vagrant的sandbox模式，验证成功后才正式提交。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1779,182 +2019,6 @@ e-buddy人偶的提醒功能.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/03/ba-wan-ebuddy-2/">把玩ebuddy(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-03T10:15:43+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2016</span></span> <span class='time'>10:15 am</span></time>
-        
-         | <a href="/blog/2016/03/03/ba-wan-ebuddy-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>ArchLinux配置过程</h3>
-
-<p>因为ArchLinux默认python版本为python3, 使用python2激活e-buddy人偶:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S python2-pip
-</span><span class='line'>$ sudo pip2 install pyusb
-</span><span class='line'>$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
-</span><span class='line'>$ sudo python2 ~/Code/ebuddy/pybuddy-dx/pybuddyDX.py
-</span><span class='line'>$ sudo netstat -anp | grep 8888
-</span><span class='line'>udp        0      0 127.0.0.1:8888          0.0.0.0:*                           14635/python2 </span></code></pre></td></tr></table></div></figure>
-
-
-<p>接下来就是往<code>127.0.0.1:8888</code>发送指令控制人偶的干活了。具体的指令可以见上一篇文章。</p>
-
-<h3>定期检查邮件控制人偶</h3>
-
-<p>先安装用于检查imap服务端状态的python模块:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pip2 install imapclient</span></code></pre></td></tr></table></div></figure>
-
-
-<p>检查邮件的脚本如下, 该脚本检查163邮箱的IMAP服务器，如果有新邮件，人偶的头就会出现颜色渐
-变，否则，则显示绿灯闪烁:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#!/usr/bin/env python
-</span><span class='line'>import imaplib 
-</span><span class='line'>from imapclient import IMAPClient
-</span><span class='line'>import time
-</span><span class='line'>import subprocess
-</span><span class='line'>import thread
-</span><span class='line'>
-</span><span class='line'>DEBUG = True
-</span><span class='line'> 
-</span><span class='line'>HOSTNAME = 'imap.163.com'
-</span><span class='line'>USERNAME = 'XXXXXXXX'
-</span><span class='line'>PASSWORD = 'XXXXXXXX'
-</span><span class='line'>MAILBOX = 'Inbox'
-</span><span class='line'>newmails = 0
-</span><span class='line'> 
-</span><span class='line'>NEWMAIL_OFFSET = 0   # my unread messages never goes to zero, yours might
-</span><span class='line'>MAIL_CHECK_FREQ = 60 # check mail every 60 seconds
-</span><span class='line'>
-</span><span class='line'># Define a function for checking email
-</span><span class='line'>def check_mail( threadName):
-</span><span class='line'>    while True:
-</span><span class='line'>        # Login into the imap server and check the numbers for the new mail.
-</span><span class='line'>        server = IMAPClient(HOSTNAME, use_uid=True, ssl=True)
-</span><span class='line'>        server.login(USERNAME, PASSWORD)
-</span><span class='line'>        if DEBUG:
-</span><span class='line'>            print('Logging in as ' + USERNAME)
-</span><span class='line'>            select_info = server.select_folder(MAILBOX)
-</span><span class='line'>            print('%d messages in INBOX' % select_info['EXISTS'])
-</span><span class='line'>
-</span><span class='line'>        folder_status = server.folder_status(MAILBOX, 'UNSEEN')
-</span><span class='line'>        global newmails
-</span><span class='line'>        newmails = int(folder_status['UNSEEN'])
-</span><span class='line'>
-</span><span class='line'>        if DEBUG:
-</span><span class='line'>            print "You have", newmails, "new emails!"
-</span><span class='line'>        time.sleep(MAIL_CHECK_FREQ)
-</span><span class='line'>
-</span><span class='line'>def loop():
-</span><span class='line'> 
-</span><span class='line'>    if newmails &gt; NEWMAIL_OFFSET:
-</span><span class='line'>        bashCommand = 'echo 12 &gt; /dev/udp/127.0.0.1/8888'
-</span><span class='line'>        output = subprocess.check_output(['bash','-c', bashCommand])
-</span><span class='line'>        time.sleep(8)
-</span><span class='line'>    else:
-</span><span class='line'>        bashCommand = 'echo 08 &gt; /dev/udp/127.0.0.1/8888'
-</span><span class='line'>        output = subprocess.check_output(['bash','-c', bashCommand])
-</span><span class='line'>        time.sleep(5)
-</span><span class='line'> 
-</span><span class='line'>if __name__ == '__main__':
-</span><span class='line'>    try:
-</span><span class='line'>        print 'Press Ctrl-C to quit.'
-</span><span class='line'>        thread.start_new_thread( check_mail, ("Thread-1", ) )
-</span><span class='line'>        while True:
-</span><span class='line'>            loop()
-</span><span class='line'>    finally:
-</span><span class='line'>        print "finally comes here!"</span></code></pre></td></tr></table></div></figure>
-
-
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/3">&larr; Older</a>
@@ -1972,6 +2036,10 @@ e-buddy人偶的提醒功能.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/04/01/nodemcu-and-1602i2c-1/">NodeMCU and 1602I2C(1)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/03/31/nodemcu-and-1602i2c/">NodeMCU and 1602I2C</a>
       </li>
     
@@ -1985,10 +2053,6 @@ e-buddy人偶的提醒功能.</p>
     
       <li class="post">
         <a href="/blog/2016/03/29/use-debmirror-for-setup-local-repository/">Use Debmirror for Setup Local Repository</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/27/tips-on-nodemcu/">Tips on NodeMCU</a>
       </li>
     
   </ul>
