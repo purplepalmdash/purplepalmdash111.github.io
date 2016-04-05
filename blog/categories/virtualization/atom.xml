@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-04-01T19:23:53+08:00</updated>
+  <updated>2016-04-05T20:32:44+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,76 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Extend Vagrant's Disk]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/05/extend-vagrants-disk/"/>
+    <updated>2016-04-05T15:30:35+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/05/extend-vagrants-disk</id>
+    <content type="html"><![CDATA[<p>In Vagrantfile, edit the following definition:</p>
+
+<pre><code>  config.vm.provider "virtualbox" do |vb|
+  #   # Display the VirtualBox GUI when booting the machine
+  #   vb.gui = true
+  #
+  #   # Customize the amount of memory on the VM:
+    vb.memory = "1024"
+    file_to_disk = File.realpath( "." ).to_s + "/disk.vdi"
+    if ARGV[0] == "up" &amp;&amp; ! File.exist?(file_to_disk) 
+      puts "Creating 5GB disk #{file_to_disk}."
+      vb.customize [
+        'createhd', 
+        '--filename', file_to_disk, 
+        '--format', 'VDI', 
+        '--size', 5000 * 1024 # 5 GB
+        ] 
+      vb.customize [
+        'storageattach', :id, 
+        '--storagectl', 'SATA', 
+        '--port', 1, '--device', 0, 
+        '--type', 'hdd', '--medium', 
+        file_to_disk
+        ]
+    end
+    #config.vm.provision "shell", path: "scripts/add_new_disk.sh"
+  end
+  config.vm.provision "shell", path: "scripts/add_new_disk.sh"
+</code></pre>
+
+<p>The <code>add_new_disk.sh</code> should be written like following:</p>
+
+<pre><code>set -e
+set -x
+
+if [ -f /etc/disk_added_date ]
+then
+   echo "disk already added so exiting."
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/sdb &lt;&lt;EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/sdb1
+vgextend VolGroup /dev/sdb1
+lvextend /dev/VolGroup/lv_root
+resize2fs /dev/VolGroup/lv_root
+
+date &gt; /etc/disk_added_date
+</code></pre>
+
+<p>Notice: this won&rsquo;t fit for Ubuntu Snappy Core.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Tips on Shrinking VHD File]]></title>
@@ -185,272 +255,6 @@ $ vagrant plugin install vagrant-libvirt
 $ vagrant plugin install vagrant-mutate
 $ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
 </code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Use Vagrant to Manage XenServer]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/21/use-vagrant-to-manage-xenserver/"/>
-    <updated>2016-03-21T14:20:09+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/21/use-vagrant-to-manage-xenserver</id>
-    <content type="html"><![CDATA[<h3>Building Templates</h3>
-
-<p>Build XenServer 6.2 Template is pretty easy, simply do following:</p>
-
-<pre><code>$ git clone  https://github.com/imduffy15/packer-xenserver.git
-$ cd packer-xenserver
-$ packer build template.iso
-</code></pre>
-
-<p>After building, check the following box file available under the directory:</p>
-
-<pre><code>$ ls -l -h XenServer.box 
--rw-rw-r-- 1 dash dash 708M  3月 21 14:41 XenServer.box
-</code></pre>
-
-<h3>Import box File</h3>
-
-<p>Import the generated box file via:</p>
-
-<pre><code>$ vagrant box add XenServer.box --name "XenServer62"
-$ vagrant box list | grep XenServer62
-XenServer62        (virtualbox, 0)
-</code></pre>
-
-<h3>Start the Virtualbox XenServer</h3>
-
-<pre><code>$ mkdir XenServer62
-$ cd XenServer62 
-$ vim Vagrantfile
-Vagrant.configure(2) do |config|
-
-    # disable mounting of vagrant folder as its not supported on xenserver
-    config.vm.synced_folder ".", "/vagrant", disabled: true
-
-    # disable checking for vbguest versions as its not supported on xenserver
-    if Vagrant.has_plugin?("vagrant-vbguest")
-      config.vbguest.auto_update = false
-    end
-
-    config.vm.provider "virtualbox" do |v|
-      v.customize ["modifyvm", :id, "--memory", 2048]
-      v.customize [ "modifyvm", :id, "--nicpromisc2", "allow-all" ]
-    end
-
-    config.vm.define :csagent do |csagent|
-      csagent.vm.box = "XenServer62"
-    end
-
-end
-$ vagrant up
-</code></pre>
-
-<h3>XenServer In libvirt</h3>
-
-<p>We want to use XenServer under libvirt(kvm), thus we have to do following changes:</p>
-
-<p>First startup the virtualbox vagrant environment of XenServer, then login to the
-localhost(127.0.0.1) as root:</p>
-
-<pre><code>$ vagrant ssh csagent
-[vagrant@localhost ~]$ ssh root@127.0.0.1
-[root@localhost ~]# ifconfig | grep eth0 | grep HWaddr
-eth0      Link encap:Ethernet  HWaddr 08:00:27:49:A4:92  
-[root@localhost etc]# ifconfig -a | grep eth1
-eth1      Link encap:Ethernet  HWaddr 08:00:27:9D:8C:71 
-</code></pre>
-
-<p>Get the Hardware Address(eth0/eth1) via ifconfig, we need them in the following
-operations.</p>
-
-<p>Now remove the udev items of <code>eth0</code>, <code>eth1</code> in <code>/etc/udev/rules.d/60-net.rules</code>:</p>
-
-<pre><code># vi /etc/udev/rules.d/60-net.rules
-    # Rules generated from static configuration and last boot data
-    #SUBSYSTEM=="net" KERNEL=="eth*" SYSFS{address}=="08:00:27:49:a4:92" ID=="0000:00:03.0" NAME="eth0"
-    #SUBSYSTEM=="net" KERNEL=="eth*" SYSFS{address}=="08:00:27:9d:8c:71" ID=="0000:00:08.0" NAME="eth1"
-</code></pre>
-
-<p>Remove the dynamic rules of the interface renaming:</p>
-
-<pre><code># vim /etc/sysconfig/network-scripts/interface-rename-data/dynamic-rules.json 
-    # Automatically adjusted file.  Do not edit unless you are certain you know how to
-    {
-        "lastboot": [
-            - [
-            -     "08:00:27:49:a4:92",
-            -     "0000:00:03.0",
-            -     "eth0"
-            - ],
-            - [
-            -     "08:00:27:9d:8c:71",
-            -     "0000:00:08.0",
-            -     "eth1"
-            - ]
-        ],
-        "old": []
-    }
-</code></pre>
-
-<p>Should looks like this:</p>
-
-<pre><code># cat /etc/sysconfig/network-scripts/interface-rename-data/dynamic-rules.json 
-    # Automatically adjusted file.  Do not edit unless you are certain you know how to
-    {
-        "lastboot": [
-        ], 
-        "old": []
-    }
-</code></pre>
-
-<p>Now add the static rules for the XenServer:</p>
-
-<pre><code>$
-08:00:27:9D:8C:71 
-</code></pre>
-
-<p>Get the Hardware Address(eth0/eth1) via ifconfig, we need them in the following
-operations.</p>
-
-<p>Now remove the udev items of <code>eth0</code>, <code>eth1</code> in <code>/etc/udev/rules.d/60-net.rules</code>:</p>
-
-<pre><code># vi /etc/udev/rules.d/60-net.rules
-    # Rules generated from static configuration and last boot data
-    #SUBSYSTEM=="net" KERNEL=="eth*" SYSFS{address}=="08:00:27:49:a4:92" ID=="0000:00:03.0" NAME="eth0"
-    #SUBSYSTEM=="net" KERNEL=="eth*" SYSFS{address}=="08:00:27:9d:8c:71" ID=="0000:00:08.0" NAME="eth1"
-</code></pre>
-
-<p>Remove the dynamic rules of the interface renaming:</p>
-
-<pre><code># vim /etc/sysconfig/network-scripts/interface-rename-data/dynamic-rules.json 
-    # Automatically adjusted file.  Do not edit unless you are certain you know how to
-    {
-        "lastboot": [
-            - [
-            -     "08:00:27:49:a4:92",
-            -     "0000:00:03.0",
-            -     "eth0"
-            - ],
-            - [
-            -     "08:00:27:9d:8c:71",
-            -     "0000:00:08.0",
-            -     "eth1"
-            - ]
-        ],
-        "old": []
-    }
-</code></pre>
-
-<p>Should looks like this:</p>
-
-<pre><code># vim  /etc/sysconfig/network-scripts/interface-rename-data/static-rules.conf 
-eth0:mac = "08:00:27:49:A4:92"
-eth1:mac = "08:00:27:9D:8C:71"
-</code></pre>
-
-<p>Define xenbr0 and eth0 bridging configuration:</p>
-
-<pre><code># vim /etc/sysconfig/network-scripts/ifcfg-xenbr0 
-DEVICE=xenbr0
-TYPE=Bridge
-ONBOOT=yes
-NM_CONTROLLED=yes
-BOOTPROTO=dhcp
-# vim  /etc/sysconfig/network-scripts/ifcfg-eth0 
-DEVICE=eth0
-TYPE=Ethernet
-ONBOOT=yes
-NM_CONTROLLED=yes
-BOOTPROTO=none
-BRIDGE=xenbr0
-</code></pre>
-
-<p>Now shutdown the Virtualbox Based XenServer VM via:</p>
-
-<pre><code>[root@localhost network-scripts]# shutdown -h now
-</code></pre>
-
-<h3>Package for Libvirt</h3>
-
-<p>Package the modified vbox file and export to libvirt via following steps:</p>
-
-<p>Verify the env is down:</p>
-
-<pre><code>$ vagrant status
-Current machine states:
-
-csagent                   poweroff (virtualbox)
-</code></pre>
-
-<p>Package the modified vm:</p>
-
-<pre><code>$ vagrant package
-==&gt; csagent: Clearing any previously set forwarded ports...
-==&gt; csagent: Exporting VM...
-==&gt; csagent: Compressing package to: /home/dash/Code/Vagrant/XenServer62/package.box
-$ ls
-package.box  Vagrantfile  Vagrantfile~
-</code></pre>
-
-<p>Mutate to libvirt box:</p>
-
-<pre><code>$ vagrant mutate package.box libvirt
-Extracting box file to a temporary directory.
-Converting package from virtualbox to libvirt.
-    (100.00/100%)
-Cleaning up temporary files.
-The box package (libvirt) is now ready to use.
-$ cd ~/.vagrant.d/boxes 
-$ vagrant box list
-XenServer62        (virtualbox, 0)
-XenServer62        (libvirt, 0)
-</code></pre>
-
-<h3>Start the libvirt XenServer</h3>
-
-<p>Edit the Vagrantfile like following:</p>
-
-<pre><code># vim Vagrantfile
-Vagrant.configure(2) do |config|
-
-  # vagrant issues #1673..fixes hang with configure_networks
-  config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
-  config.ssh.username = 'vagrant'
-  config.ssh.password = 'vagrant'
-  config.ssh.insert_key = 'true'
-  config.vm.provider :libvirt do |domain|
-    domain.nic_model_type = 'e1000'
-    domain.memory = 384
-    domain.nested = true
-    domain.cpu_mode = 'host-passthrough'
-  end
-
-
-  # csagent node.
-  # Add one networking, modify hostname, define memory, CPU cores.
-  config.vm.define :csagent do |csagent|
-    csagent.vm.box = "XenServer62"
-    csagent.vm.hostname = CLOUDSTACK_AGENT_HOSTNAME
-    csagent.vm.network :private_network, :ip =&gt; CLOUDSTACK_AGENT_IP, :mac =&gt; "08:00:27:9D:8C:71"
-    # Disable mounting of vagrant folder as it's not supported on xenserver
-    csagent.vm.synced_folder ".", "/vagrant", disabled: true
-    csagent.vm.provider :libvirt do |domain|
-      domain.memory = 8192
-      domain.cpus = 4
-      domain.nested = true
-      domain.cpu_mode = 'host-passthrough'
-      domain.nic_model_type = 'e1000'
-      domain.management_network_mac = "08:00:27:49:A4:92"
-    end
-  end
-
-end
-</code></pre>
-
-<p>Start the Vagrant machine via: <code>vagrant up --provider=libvirt</code>.</p>
-
-<p>The result shows XenServer are now running under libvirt:  <br/>
-<img src="/images/2016_03_21_16_10_44_643x284.jpg" alt="/images/2016_03_21_16_10_44_643x284.jpg" /></p>
 ]]></content>
   </entry>
   

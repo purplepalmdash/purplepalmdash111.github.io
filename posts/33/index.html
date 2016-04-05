@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Prerequisite You have a tftp server and NFS server configured, in my environment these 2 server runs on ArchLinux, ip address is 10.0.0.221, while &hellip;">
+  <meta name="description" content="Cheetsheet For Using NFS Following configuration use the 192.168.1.221&rsquo;s tftp server and 192.168.1.11&rsquo;s nfs server, why I use different &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,220 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/04/openwrt-on-bbb-2/">OpenWRT on BBB(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-04T16:54:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>4</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:54 pm</span></time>
+        
+         | <a href="/blog/2014/11/04/openwrt-on-bbb-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Cheetsheet For Using NFS</h3>
+
+<p>Following configuration use the 192.168.1.221&rsquo;s tftp server and 192.168.1.11&rsquo;s nfs server, why I use different nfs server because 192.168.1.11 runs ubuntu and could reached by nfs client easily.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>setenv ipaddr 192.168.1.16
+</span><span class='line'>setenv serverip 192.168.1.221
+</span><span class='line'>tftpboot ${fdtaddr} am335x-boneblack.dtb
+</span><span class='line'>tftpboot ${kloadaddr} uImage
+</span><span class='line'>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.11:/srv/nfs4/BBBrootfs ip=192.168.1.1 rootwait
+</span><span class='line'>bootm ${kloadaddr} - ${fdtaddr}
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>How to start more services</h3>
+
+<p>Current we only got following output:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>procd: - init -
+</span><span class='line'>//.......
+</span><span class='line'>procd: - init complete -
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>From the Kernel Source code we know the init startup sequence:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cd /media/y/embedded/BBB/svnco/trunk/build_dir/target-arm_cortex-a9+vfpv3_uClibc-0.9.33.2_eabi/linux-omap/linux-3.14.4
+</span><span class='line'>$ cd init
+</span><span class='line'>$ vim main.c
+</span><span class='line'>if (!try_to_run_init_process("/etc/preinit") ||
+</span><span class='line'>      !try_to_run_init_process("/sbin/init") ||
+</span><span class='line'>      !try_to_run_init_process("/etc/init") ||
+</span><span class='line'>      !try_to_run_init_process("/bin/init") ||
+</span><span class='line'>      !try_to_run_init_process("/bin/sh"))
+</span><span class='line'>      return 0;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The preinit is called by <code>/etc/preinit</code>, while in this file, we found:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>for pi_source_file in /lib/preinit/*; do
+</span><span class='line'>        . $pi_source_file
+</span><span class='line'>done
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This means all of the preinit script is listed under NFS Server&rsquo;s /lib/preinit/ folder.</p>
+
+<p>Add our own preinit startup file:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@TrustyArch preinit]# ls
+</span><span class='line'>02_default_set_state  30_failsafe_wait             70_initramfs_test  90_init_console~
+</span><span class='line'>10_indicate_failsafe  40_run_failsafe_hook         80_mount_root      99_10_failsafe_login
+</span><span class='line'>10_indicate_preinit   50_indicate_regular_preinit  90_init_console    99_10_run_init
+</span><span class='line'>[root@TrustyArch preinit]# vim 90_init_console
+</span><span class='line'>#!/bin/sh
+</span><span class='line'># Copyright (C) 2006-2010 OpenWrt.org
+</span><span class='line'># Copyright (C) 2010 Vertical Communications
+</span><span class='line'>
+</span><span class='line'>init_console() {
+</span><span class='line'>    preinit_echo "Called 90_init_console here!"
+</span><span class='line'>    if [ "$pi_suppress_stderr" = "y" ]; then
+</span><span class='line'>        exec &lt;$M0 &gt;$M1 2&gt;&0
+</span><span class='line'>    else 
+</span><span class='line'>        exec &lt;$M0 &gt;$M1 2&gt;$M2
+</span><span class='line'>    fi
+</span><span class='line'>}
+</span><span class='line'>
+</span><span class='line'>boot_hook_add preinit_essential init_console
+</span><span class='line'>[root@TrustyArch preinit]# chmod 777 90_init_console
+</span><span class='line'>[root@TrustyArch preinit]# rm -f 90_init_console~ 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now restart the BBB, to see if really take effects.   <br/>
+Also add a new file named 50_choose_console, with the setted M0 and M1, you could get your console.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat 50_choose_console
+</span><span class='line'>#!/bin/sh
+</span><span class='line'># Copyright (C) 2006-2010 OpenWrt.org
+</span><span class='line'># Copyright (C) 2010 Vertical Communications
+</span><span class='line'>
+</span><span class='line'>choose_console() {
+</span><span class='line'>    # the shell really doesn't like having stdin/out closed
+</span><span class='line'>    # that's why we use /dev/pty/m0 and m1 (or equivalent) as replacement
+</span><span class='line'>    # for /dev/console if there's no serial console available
+</span><span class='line'>
+</span><span class='line'>    if grep -q devfs /proc/filesystems; then
+</span><span class='line'>        M0=/dev/pty/m0
+</span><span class='line'>        M1=/dev/pty/m1
+</span><span class='line'>        M2=/dev/pty/m1
+</span><span class='line'>    elif [ -x /sbin/hotplug2 ]; then
+</span><span class='line'>        M0=/dev/ptmx
+</span><span class='line'>        M1=/dev/ptmx
+</span><span class='line'>        M2=/dev/ptmx
+</span><span class='line'>    elif [ -x /sbin/udevd ]; then
+</span><span class='line'>        M0=/dev/pty/ptmx
+</span><span class='line'>        M1=/dev/pty/ptmx
+</span><span class='line'>        M2=/dev/pty/ptmx
+</span><span class='line'>    fi
+</span><span class='line'>    dd if=/dev/console of=/dev/null bs=1 count=0 &gt;/dev/null 2&gt;/dev/null && {
+</span><span class='line'>        M0=/dev/console
+</span><span class='line'>        M1=/dev/console
+</span><span class='line'>        M2=/dev/console    
+</span><span class='line'>    }
+</span><span class='line'>}
+</span><span class='line'>
+</span><span class='line'>boot_hook_add preinit_essential choose_console
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>But I still cannot get the terminal.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3269,479 +3483,6 @@ Solution: copy all of the dynamic library from the cross-compiler to the root fi
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/25/linux2-dot-6-32-for-utu2440-5/">Linux2.6.32 for Utu2440(5)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-25T17:05:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>25</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>5:05 pm</span></time>
-        
-         | <a href="/blog/2014/10/25/linux2-dot-6-32-for-utu2440-5/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In this chapter we will continue to migrate driver on LCD, first we want to get the LCD information.</p>
-
-<h3>LCD Info</h3>
-
-<p>From the LCD we could see &ldquo;LTV350QV-F0E&rdquo;, Search it on google and we know it&rsquo;s  <code>SAMSUNG TFT 3.5-inch 320*240 LTV350QV-F0E lcd panel</code>.   <br/>
-Its datasheet could be downloaded from:  <br/>
-<a href="http://www.datasheet-pdf.com/datasheet-html/L/T/V/LTV350QV-F0E_Samsung.pdf.html">http://www.datasheet-pdf.com/datasheet-html/L/T/V/LTV350QV-F0E_Samsung.pdf.html</a></p>
-
-<p>TFT means （Thin Film Transistor）.  <br/>
-Beware, the kernel we should choose is <code>uImage_T1_F0E_320x240_ts</code>, because we bought the Package 1 of the development board, they shipped us with Samsung screen .</p>
-
-<h3>Code Modification</h3>
-
-<p>Kernel configuration modification:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Device Drivers ---&gt;
-</span><span class='line'>  Graphics support ---&gt;
-</span><span class='line'>      &lt;*&gt; Support for frame buffer devices
-</span><span class='line'>          Support for buffer devices ---&gt;
-</span><span class='line'>              &lt;*&gt; S3C2410 LCD framebuffer support
-</span><span class='line'>      Backlight & LCD device sipport ---&gt;
-</span><span class='line'>          &lt;*&gt;Lowlevel LCD controls
-</span><span class='line'>      Display device support ---&gt;
-</span><span class='line'>          &lt;*&gt; Display panel/monitor support
-</span><span class='line'>      Console display driver support ---&gt;
-</span><span class='line'>          &lt;*&gt; Framebuffer Console support
-</span><span class='line'>          [*] Framebuffer Console Rotation
-</span><span class='line'>          [*] Select compiled-in fonts
-</span><span class='line'>          [*] VGA 8x8 font
-</span><span class='line'>          [*] VGA 8x16 font
-</span><span class='line'>          [*] Mini 4x6 font
-</span><span class='line'>          [*] Sparc console 8x16 font
-</span><span class='line'>      [*] Bootup logo ---&gt;
-</span><span class='line'>          --- Bootup logo
-</span><span class='line'>          [*] Standard 224-color Linux logo
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>arch/arm/mach-s3c2440/mach-smdk2440.c:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>static struct s3c2410fb_display smdk2440_lcd_cfg __initdata = {
-</span><span class='line'> 
-</span><span class='line'>        .lcdcon5        = S3C2410_LCDCON5_FRM565 |
-</span><span class='line'>                          S3C2410_LCDCON5_INVVCLK |
-</span><span class='line'>                          S3C2410_LCDCON5_INVVLINE |
-</span><span class='line'>                          S3C2410_LCDCON5_INVVFRAME |
-</span><span class='line'>                        // S3C2410_LCDCON5_PWREN |
-</span><span class='line'>                          S3C2410_LCDCON5_HWSWP,
-</span><span class='line'> 
-</span><span class='line'>        .type           = S3C2410_LCDCON1_TFT,
-</span><span class='line'> 
-</span><span class='line'>        .width          = 320,    // 240,
-</span><span class='line'>        .height         = 240,    //320,
-</span><span class='line'> 
-</span><span class='line'>        .pixclock       = 100000,   //HCLK/10   166667,
-</span><span class='line'>        .xres           = 320,    //240,
-</span><span class='line'>        .yres           = 240,    //320,
-</span><span class='line'>        .bpp            = 16,
-</span><span class='line'>        .left_margin    = 17,     //HFPD+1     20,
-</span><span class='line'>        .right_margin   = 17,     //HBPD+1     8,
-</span><span class='line'>        .hsync_len      = 13,     //HSPW+1     4,
-</span><span class='line'>        .upper_margin   = 5,      //VBPD+1     8,
-</span><span class='line'>        .lower_margin   = 5,      //VFPD+1     7,
-</span><span class='line'>        .vsync_len      = 9,      //VSPW+1     4,
-</span><span class='line'>};
-</span><span class='line'>
-</span><span class='line'>static struct s3c2410fb_mach_info smdk2440_fb_info __initdata = {
-</span><span class='line'>        .displays       = &smdk2440_lcd_cfg,
-</span><span class='line'>        .num_displays   =  1, 
-</span><span class='line'>        .default_display = 0,
-</span><span class='line'> //#if 0
-</span><span class='line'>       
-</span><span class='line'>        .gpccon         = 0xaaaa56a9,    //0xaa940659,
-</span><span class='line'>        .gpccon_mask    = 0xffffffff,
-</span><span class='line'>        .gpcup          = 0xffffffff,    //0x0000ffff,
-</span><span class='line'>        .gpcup_mask     = 0xffffffff,
-</span><span class='line'>        .gpdcon         = 0xaaaaaaaa,    //0xaa84aaa0,
-</span><span class='line'>        .gpdcon_mask    = 0xffffffff,
-</span><span class='line'>        .gpdup          = 0xffffffff,    //0x0000faff,
-</span><span class='line'>        .gpdup_mask     = 0xffffffff,
-</span><span class='line'>//#endif 
-</span><span class='line'>        .lpcsel         = 0,     //((0xCE6) & ~7) | 1&lt;&lt;4,
-</span><span class='line'>};
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Enable the lcd:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>static struct platform_device *smdk2410_devices[] __initdata = {
-</span><span class='line'>&s3c_device_usb,
-</span><span class='line'>&s3c_device_lcd, 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>arch/arm/mach-s3c2410/include/mach/regs-lcd.h:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#define S3C2410_LCDCON1_MMODE (0&lt;&lt;7)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>drivers/video/s3c2410fb.c, after around line 52:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-<span class='line-number'>85</span>
-<span class='line-number'>86</span>
-<span class='line-number'>87</span>
-<span class='line-number'>88</span>
-<span class='line-number'>89</span>
-<span class='line-number'>90</span>
-<span class='line-number'>91</span>
-<span class='line-number'>92</span>
-<span class='line-number'>93</span>
-<span class='line-number'>94</span>
-<span class='line-number'>95</span>
-<span class='line-number'>96</span>
-<span class='line-number'>97</span>
-<span class='line-number'>98</span>
-<span class='line-number'>99</span>
-<span class='line-number'>100</span>
-<span class='line-number'>101</span>
-<span class='line-number'>102</span>
-<span class='line-number'>103</span>
-<span class='line-number'>104</span>
-<span class='line-number'>105</span>
-<span class='line-number'>106</span>
-<span class='line-number'>107</span>
-<span class='line-number'>108</span>
-<span class='line-number'>109</span>
-<span class='line-number'>110</span>
-<span class='line-number'>111</span>
-<span class='line-number'>112</span>
-<span class='line-number'>113</span>
-<span class='line-number'>114</span>
-<span class='line-number'>115</span>
-<span class='line-number'>116</span>
-<span class='line-number'>117</span>
-<span class='line-number'>118</span>
-<span class='line-number'>119</span>
-<span class='line-number'>120</span>
-<span class='line-number'>121</span>
-<span class='line-number'>122</span>
-<span class='line-number'>123</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>//LTV350QV_FOE_V0.0
-</span><span class='line'> static void LTV350QV_Short_Delay(u_char time)
-</span><span class='line'> {
-</span><span class='line'>  ndelay(150);
-</span><span class='line'> }
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>#define LTV350QV_FOE 0x1d //device ID
-</span><span class='line'>typedef struct _LTV350qv_spi_data_{
-</span><span class='line'>unsigned char Device_ID; //ID of the device
-</span><span class='line'>unsigned int Index; //index of register
-</span><span class='line'>unsigned long Structure; //structure to be writed
-</span><span class='line'>}LTV350QV_SPI_Data;
-</span><span class='line'>//micro for LTV350QV_FOE
-</span><span class='line'>#define CS_H __raw_writel(__raw_readl(S3C2410_GPCDAT) |(1&lt;&lt; 8),S3C2410_GPCDAT)//MAKE_HIGH(LTV350QV_CS)
-</span><span class='line'>#define CS_L __raw_writel(__raw_readl(S3C2410_GPCDAT)&~(1&lt;&lt; 8),S3C2410_GPCDAT)//MAKE_LOW(LTV350QV_CS)
-</span><span class='line'>#define SCLK_H __raw_writel(__raw_readl(S3C2410_GPCDAT) |(1&lt;&lt; 9),S3C2410_GPCDAT)//MAKE_HIGH(LTV350QV_SCL)
-</span><span class='line'>#define SCLK_L __raw_writel(__raw_readl(S3C2410_GPCDAT)&~(1&lt;&lt; 9),S3C2410_GPCDAT)//MAKE_LOW(LTV350QV_SCL)
-</span><span class='line'>#define SDI_H __raw_writel(__raw_readl(S3C2410_GPCDAT) |(1&lt;&lt;10),S3C2410_GPCDAT)//MAKE_HIGH(LTV350QV_SDI)
-</span><span class='line'>#define SDI_L __raw_writel(__raw_readl(S3C2410_GPCDAT)&~(1&lt;&lt;10),S3C2410_GPCDAT)//MAKE_LOW(LTV350QV_SDI)
-</span><span class='line'>#define RST_H __raw_writel(__raw_readl(S3C2410_GPDDAT) |(1&lt;&lt; 0),S3C2410_GPDDAT)//MAKE_HIGH(LTV350QV_RST)
-</span><span class='line'>#define RST_L __raw_writel(__raw_readl(S3C2410_GPDDAT)&~(1&lt;&lt; 0),S3C2410_GPDDAT)//MAKE_LOW(LTV350QV_RST)
-</span><span class='line'>//
-</span><span class='line'>static void LTV350QV_Register_Write(LTV350QV_SPI_Data regdata)
-</span><span class='line'>{
-</span><span class='line'>u_char i,temp1;
-</span><span class='line'>u_int temp2;
-</span><span class='line'>u_long temp3;
-</span><span class='line'>unsigned long flags;
-</span><span class='line'>//write index
-</span><span class='line'>temp1=regdata.Device_ID&lt;&lt;2 | 0&lt;&lt;1 | 0&lt;&lt;0; //register index
-</span><span class='line'>temp2=regdata.Index;
-</span><span class='line'>temp3=(temp1&lt;&lt;24) | (temp2&lt;&lt;8);
-</span><span class='line'>local_irq_save(flags);
-</span><span class='line'>CS_L;
-</span><span class='line'>LTV350QV_Short_Delay(1);
-</span><span class='line'>for(i=0;i&lt;24;i++)
-</span><span class='line'>{
-</span><span class='line'>SCLK_L;
-</span><span class='line'>if(temp3 & (1&lt;&lt;(31-i)) ) //if is H
-</span><span class='line'>SDI_H;
-</span><span class='line'>else
-</span><span class='line'>SDI_L;
-</span><span class='line'>LTV350QV_Short_Delay(1); //setup time
-</span><span class='line'>SCLK_H;
-</span><span class='line'>LTV350QV_Short_Delay(1); //hold time
-</span><span class='line'>}
-</span><span class='line'>CS_H;
-</span><span class='line'>LTV350QV_Short_Delay(5);
-</span><span class='line'>//write instruction
-</span><span class='line'>temp1=regdata.Device_ID&lt;&lt;2 | 1&lt;&lt;1 | 0&lt;&lt;0; //instruction
-</span><span class='line'>temp2=regdata.Structure;
-</span><span class='line'>temp3=(temp1&lt;&lt;24) | (temp2&lt;&lt;8);
-</span><span class='line'>CS_L;
-</span><span class='line'>LTV350QV_Short_Delay(1);
-</span><span class='line'>for(i=0;i&lt;24;i++)
-</span><span class='line'>{
-</span><span class='line'>SCLK_L;
-</span><span class='line'>if(temp3 & (1&lt;&lt;(31-i)) ) //if is H
-</span><span class='line'>SDI_H;
-</span><span class='line'>else
-</span><span class='line'>SDI_L;
-</span><span class='line'>LTV350QV_Short_Delay(1);
-</span><span class='line'>SCLK_H;
-</span><span class='line'>LTV350QV_Short_Delay(1);
-</span><span class='line'>}
-</span><span class='line'>CS_H;
-</span><span class='line'>local_irq_restore(flags);
-</span><span class='line'>}
-</span><span class='line'> 
-</span><span class='line'>static void LTV350QV_Write(u_int index, u_int regdata)
-</span><span class='line'>{
-</span><span class='line'>LTV350QV_SPI_Data WriteData;
-</span><span class='line'>WriteData.Device_ID = LTV350QV_FOE;
-</span><span class='line'>WriteData.Index = index;
-</span><span class='line'>WriteData.Structure = regdata;
-</span><span class='line'>LTV350QV_Register_Write(WriteData);
-</span><span class='line'>}
-</span><span class='line'> 
-</span><span class='line'>static void LTV350QV_Power_ON(void)
-</span><span class='line'>{
-</span><span class='line'>LTV350QV_Write( 9, 0x0000);
-</span><span class='line'>mdelay(150);
-</span><span class='line'>LTV350QV_Write( 9, 0x4000);
-</span><span class='line'>LTV350QV_Write(10, 0x2000);
-</span><span class='line'>LTV350QV_Write( 9, 0x4055);
-</span><span class='line'>mdelay(550);
-</span><span class='line'>LTV350QV_Write( 1, 0x409d);
-</span><span class='line'>LTV350QV_Write( 2, 0x0204);
-</span><span class='line'>LTV350QV_Write( 3, 0x0100);
-</span><span class='line'>LTV350QV_Write( 4, 0x3000);
-</span><span class='line'>LTV350QV_Write( 5, 0x4003);
-</span><span class='line'>LTV350QV_Write( 6, 0x000a);
-</span><span class='line'>LTV350QV_Write( 7, 0x0021);
-</span><span class='line'>LTV350QV_Write( 8, 0x0c00);
-</span><span class='line'>LTV350QV_Write(10, 0x0103);
-</span><span class='line'>LTV350QV_Write(11, 0x0301);
-</span><span class='line'>LTV350QV_Write(12, 0x1f0f);
-</span><span class='line'>LTV350QV_Write(13, 0x1f0f);
-</span><span class='line'>LTV350QV_Write(14, 0x0707);
-</span><span class='line'>LTV350QV_Write(15, 0x0307);
-</span><span class='line'>LTV350QV_Write(16, 0x0707);
-</span><span class='line'>LTV350QV_Write(17, 0x0000);
-</span><span class='line'>LTV350QV_Write(18, 0x0004);
-</span><span class='line'>LTV350QV_Write(19, 0x0000);
-</span><span class='line'>mdelay(200);
-</span><span class='line'>LTV350QV_Write( 9, 0x4a55);
-</span><span class='line'>LTV350QV_Write( 5, 0x5003);
-</span><span class='line'>}
-</span><span class='line'> 
-</span><span class='line'> 
-</span><span class='line'>static void s3c2440fb_init_ltv350qv(void)
-</span><span class='line'>{
-</span><span class='line'>__raw_writel(0xaa9556a9, S3C2410_GPCCON); //Initialize VD[7:0],LCDVF[2:0],VM,VFRAME,VLINE,VCLK,LEND
-</span><span class='line'>//LCDVF[0],[1],[2]---output;VD[0],[1],[2]----output.
-</span><span class='line'>__raw_writel(0xffffffff, S3C2410_GPCUP); // Disable Pull-up register
-</span><span class='line'>LTV350QV_Power_ON() ; //init LCD model
-</span><span class='line'>__raw_writel(0xaaaaaaaa, S3C2410_GPDCON);
-</span><span class='line'>__raw_writel(0xffffffff, S3C2410_GPDUP);
-</span><span class='line'>// __raw_writel(3, S3C2410_LCDINTMSK); // MASK LCD Sub Interrupt
-</span><span class='line'>// __raw_writel(0, S3C2410_TPAL); // Disable Temp Palette
-</span><span class='line'>// __raw_writel(0, S3C2410_LPCSEL); // Disable LPC3600
-</span><span class='line'>}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Then add following sentense before the &ldquo;return 0&rdquo; of <code>static int s3c2410fb_init_registers(struct fb_info *info)</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>s3c2440fb_init_ltv350qv();
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now recompile the kernel, you will see framebuffer OK.</p>
-
-<p>Comment all of the function content of drivers/char/vt.c blank_screen_t(unsigned long dummy), this will disable the LCD&rsquo;s display from closing.</p>
-
-<h3>Directly boot from tftp</h3>
-
-<p>Avoiding flash into the nand.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>
-</span><span class='line'>&gt;tftp 30000000 uImage
-</span><span class='line'>dm9000 i/o: 0x18000300, id: 0x90000a46 
-</span><span class='line'>&gt; bootm
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/34">&larr; Older</a>
@@ -3759,6 +3500,10 @@ Beware, the kernel we should choose is <code>uImage_T1_F0E_320x240_ts</code>, be
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/04/05/extend-vagrants-disk/">Extend Vagrant's Disk</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/04/01/nodemcu-and-1602i2c-1/">NodeMCU and 1602I2C(1)</a>
       </li>
     
@@ -3772,10 +3517,6 @@ Beware, the kernel we should choose is <code>uImage_T1_F0E_320x240_ts</code>, be
     
       <li class="post">
         <a href="/blog/2016/03/29/monitoring-xenserver/">Monitoring XenServer</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/29/use-debmirror-for-setup-local-repository/">Use Debmirror for Setup Local Repository</a>
       </li>
     
   </ul>
