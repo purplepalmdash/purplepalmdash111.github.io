@@ -9,9 +9,8 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="早上起来刷微信, 觉得网页版微信的提示信息大可用ebuddy来响应. 说干就干,以下是解
-决方案. gnotifier 写作时,我的firefox版本是44.0.2, 需要安装gnotifier这个插件,从而把firefox的提示
-消息转为系统提示信息, 下载地址在: https://addons &hellip;">
+  <meta name="description" content="前面把玩了一下ebuddy, 回去想了一下, 觉得基于v-usb和arduino来实现
+一个自己的ebuddy也不是特别难的事情. 思路 还是参考: V-USB examples for Arduino 以hid_custom_rq项目来改. 例子里已经实现了Arduino板载的LED亮/灭. &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +66,200 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-4/">Tips on V-USB and Arduino(4)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-03-07T21:07:53+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>7</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>9:07 pm</span></time>
+        
+         | <a href="/blog/2016/03/07/tips-on-v-usb-and-arduino-4/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>前面把玩了一下ebuddy, 回去想了一下, 觉得基于v-usb和arduino来实现
+一个自己的ebuddy也不是特别难的事情.</p>
+
+<h3>思路</h3>
+
+<p>还是参考:</p>
+
+<p><a href="http://coopermaa2nd.blogspot.tw/2011/10/v-usb-examples-for-arduino.html">V-USB examples for Arduino</a></p>
+
+<p>以<code>hid_custom_rq</code>项目来改. 例子里已经实现了Arduino板载的LED亮/灭. 我们只需要在
+原例上修改, 添加自定义命令和硬件即可.</p>
+
+<h3>代码</h3>
+
+<p>示例代码我做完后放到了github上, 可以通过以下命令获得:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone git@github.com:purplepalmdash/arduino-usb-led.git</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>主要修改</h3>
+
+<h4>request.h</h4>
+
+<p>这个头文件被USB固件和主机所共享, 定义了USB的request number数字, request number
+被用于主机和设备之间的通信.</p>
+
+<p>添加:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#define CUSTOM_RQ_BLINK    3</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>hid_custom_rq.h</h4>
+
+<p>这个文件是Arduino板上固件程序中对各种来自主机的request信息的响应, 或者说, 消息
+处理函数.</p>
+
+<p>针对上面在<code>requst.h</code>文件中添加的消息, 我们需要在<code>usbFunctionSetup()</code>函数中添加
+对应的消息处理代码, 为简单起见, 直接添加在函数的入口处就好.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">usbMsgLen_t</span> <span class="nf">usbFunctionSetup</span><span class="p">(</span><span class="n">uchar</span> <span class="n">data</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">usbRequest_t</span>    <span class="o">*</span><span class="n">rq</span> <span class="o">=</span> <span class="p">(</span><span class="n">usbRequest_t</span> <span class="o">*</span><span class="p">)((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">data</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">+</span>    <span class="k">if</span><span class="p">(</span><span class="n">rq</span><span class="o">-&gt;</span><span class="n">bRequest</span> <span class="o">==</span> <span class="n">CUSTOM_RQ_BLINK</span><span class="p">){</span> <span class="cm">/* blink -- used for blink the LED */</span>
+</span><span class='line'><span class="o">+</span>            <span class="cm">/* First set the led pin to high  */</span>
+</span><span class='line'><span class="o">+</span>             <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">6</span><span class="p">;</span>
+</span><span class='line'><span class="o">+</span>             <span class="k">while</span><span class="p">(</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'><span class="o">+</span>             <span class="p">{</span>
+</span><span class='line'><span class="o">+</span>             <span class="n">digitalWrite</span><span class="p">(</span><span class="n">hid_custom_rq</span><span class="p">.</span><span class="n">ledPin</span><span class="p">,</span> <span class="n">HIGH</span><span class="p">);</span>
+</span><span class='line'><span class="o">+</span>             <span class="n">delay</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>
+</span><span class='line'><span class="o">+</span>             <span class="n">digitalWrite</span><span class="p">(</span><span class="n">hid_custom_rq</span><span class="p">.</span><span class="n">ledPin</span><span class="p">,</span> <span class="n">LOW</span><span class="p">);</span>
+</span><span class='line'><span class="o">+</span>             <span class="n">delay</span><span class="p">(</span><span class="mi">1000</span><span class="p">);</span>
+</span><span class='line'><span class="o">+</span>             <span class="n">i</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'><span class="o">+</span>             <span class="p">}</span>
+</span><span class='line'><span class="o">+</span>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span><span class="p">((</span><span class="n">rq</span><span class="o">-&gt;</span><span class="n">bmRequestType</span> <span class="o">&amp;</span> <span class="n">USBRQ_TYPE_MASK</span><span class="p">)</span> <span class="o">==</span> <span class="n">USBRQ_TYPE_VENDOR</span><span class="p">){</span>
+</span><span class='line'>        <span class="k">if</span><span class="p">(</span><span class="n">rq</span><span class="o">-&gt;</span><span class="n">bRequest</span> <span class="o">==</span> <span class="n">CUSTOM_RQ_SET_STATUS</span><span class="p">){</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>上面添加的代码, 在监测到<code>CUSTOM_RQ_BLINK</code>消息后, 会将led闪烁6次.</p>
+
+<h4>set-led.c</h4>
+
+<p><code>set-led.c</code>文件用于编译出主机端程序, 编译出来的程序将接受用户输入, 将对应的输
+入发送给USB设备.</p>
+
+<p>在<code>set-led.c</code>文件中我们添加一条命令,用于发送<code>CUSTOM_RQ_BLINK</code>消息:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">vim</span> <span class="n">examples</span><span class="o">/</span><span class="n">hid_custom_rq_demo</span><span class="o">/</span><span class="n">commandline</span><span class="o">/</span><span class="n">set</span><span class="o">-</span><span class="n">led</span><span class="p">.</span><span class="n">c</span>
+</span><span class='line'><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">//.......</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">+</span> <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&quot;blink&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">){</span> <span class="cm">/* set blink goes here */</span>
+</span><span class='line'><span class="o">+</span>         <span class="n">cnt</span> <span class="o">=</span> <span class="n">usb_control_msg</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="n">USB_TYPE_VENDOR</span> <span class="o">|</span> <span class="n">USB_RECIP_DEVICE</span> <span class="o">|</span> <span class="n">USB_ENDPOINT_OUT</span><span class="p">,</span> <span class="n">CUSTOM_RQ_BLINK</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5000</span><span class="p">);</span>
+</span><span class='line'><span class="o">+</span>         <span class="k">if</span><span class="p">(</span><span class="n">cnt</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">){</span>
+</span><span class='line'><span class="o">+</span>             <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;USB error: %s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">usb_strerror</span><span class="p">());</span>
+</span><span class='line'><span class="o">+</span>         <span class="p">}</span>
+</span><span class='line'><span class="o">+</span> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">//.......</span>
+</span><span class='line'>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>验证</h3>
+
+<p>将代码拷贝到Arduino IDE的<code>libraries</code>目录下:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">$</span> <span class="n">pwd</span>
+</span><span class='line'><span class="o">/</span><span class="n">media</span><span class="o">/</span><span class="n">y</span><span class="o">/</span><span class="n">arduino</span><span class="o">/</span><span class="mf">1.0.5</span><span class="o">/</span><span class="n">libraries</span><span class="o">/</span><span class="n">hid_custom_rq</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>IDE菜单里的<code>File -&gt; Examples -&gt; hid_custom_rq</code>下将出现<code>hid_custom_rq_demo</code>, 点
+击, 开始编译. 编译完以后, 上传到Arduino板.</p>
+
+<p>按
+<a href="http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/">http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/</a>
+设置并检查Arduino连线.</p>
+
+<p>现在拔掉Arduino串口的USB线, 插上我们新加的USB连线, 而后运行以下验证例程:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="err">➜</span>  <span class="n">hid_custom_rq</span> <span class="nl">git</span><span class="p">:(</span><span class="n">master</span><span class="p">)</span> <span class="n">cd</span> <span class="n">examples</span><span class="o">/</span><span class="n">hid_custom_rq_demo</span><span class="o">/</span><span class="n">commandline</span>
+</span><span class='line'><span class="err">➜</span>  <span class="n">commandline</span> <span class="nl">git</span><span class="p">:(</span><span class="n">master</span><span class="p">)</span> <span class="p">.</span><span class="o">/</span><span class="n">set</span><span class="o">-</span><span class="n">led</span> <span class="n">blink</span>
+</span><span class='line'><span class="n">USB</span> <span class="nl">error</span><span class="p">:</span> <span class="n">Connection</span> <span class="n">timed</span> <span class="n">out</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>出现USB error是因为在板子上的服务例程中耗费了太多时间. 问题不大. 每次运行
+<code>./set-led blink</code>命令将使得板子上13口的led闪烁6次.</p>
+
+<p>做到这里, 我们已经能模拟出ebuddy的心脏灯光效果了. 通过编写不同的request消息,发
+送给Arduino板子即可.</p>
+
+<p>下面将研究添加一个新的LED灯, 等同于ebuddy的头灯.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1457,80 +1650,6 @@ hardware/arduino/cores/arduino/wiring.c里的:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/02/23/using-python-for-checking-imap-mailbox-unread-message/">Using Python for Checking Imap Mailbox Unread Message</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-02-23T19:52:57+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2016</span></span> <span class='time'>7:52 pm</span></time>
-        
-         | <a href="/blog/2016/02/23/using-python-for-checking-imap-mailbox-unread-message/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Just paste some python scripts:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>&gt;&gt;&gt; import imaplib
-</span><span class='line'>&gt;&gt;&gt; obj=imaplib.IMAP4_SSL('imap.163.com','993')
-</span><span class='line'>&gt;&gt;&gt; obj.login('XXXXX','XXXXXXXX')
-</span><span class='line'>('OK', [b'LOGIN completed'])
-</span><span class='line'>&gt;&gt;&gt; obj.select()
-</span><span class='line'>('OK', [b'49'])
-</span><span class='line'>&gt;&gt;&gt; obj.search(None,'Unseen')
-</span><span class='line'>('OK', [b''])
-</span><span class='line'>&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-</span><span class='line'>0
-</span><span class='line'>&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-</span><span class='line'>1
-</span><span class='line'>&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-</span><span class='line'>2
-</span><span class='line'>&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-</span><span class='line'>2
-</span><span class='line'>&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-</span><span class='line'>1
-</span><span class='line'>&gt;&gt;&gt; </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using the unread counts, you could easily interact with some other programs,
-for example shining LEDs.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/4">&larr; Older</a>
@@ -1548,6 +1667,10 @@ for example shining LEDs.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/04/06/tips-on-setup-eclipse-che/">Tips on Setup Eclipse CHE</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/04/05/extend-vagrants-disk/">Extend Vagrant's Disk</a>
       </li>
     
@@ -1561,10 +1684,6 @@ for example shining LEDs.</p>
     
       <li class="post">
         <a href="/blog/2016/03/29/tips-on-shrinking-vhd-file/">Tips on Shrinking VHD File</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/29/monitoring-xenserver/">Monitoring XenServer</a>
       </li>
     
   </ul>
