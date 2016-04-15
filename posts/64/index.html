@@ -9,7 +9,13 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="安装完ArchLinux后，发现网卡无法从路由器通过dhcp得到地址，ArchLinux的dhcp客户端是dhcpcd,默认配置文件。路由器型号是TP-link WR340G v5, 2010年入手的。 手动调用dhcpcd时候发现LOG里有NAK消息爆出。 翻了下Arch的论坛， &hellip;">
+  <meta name="description" content="1. 安装Qemu ArchLinux的仓库里包含有qemu已编译好的包: 1
+2
+3
+4
+5
+$ pacman -Ss qemu
+extra/qemu 1.4.2-2 [installed] A generic and open source processor emulator which &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +71,350 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/07/07/qemukuai-su-shang-shou/">Qemu快速上手</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-07-07T15:19:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>7</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>3:19 pm</span></time>
+        
+         | <a href="/blog/2013/07/07/qemukuai-su-shang-shou/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>1. 安装Qemu</p>
+
+<p>ArchLinux的仓库里包含有qemu已编译好的包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -Ss qemu
+</span><span class='line'>extra/qemu 1.4.2-2 [installed]
+</span><span class='line'>    A generic and open source processor emulator which achieves a good \
+</span><span class='line'>emulation speed by using dynamic translation.
+</span><span class='line'>$ pacman -S qemu</span></code></pre></td></tr></table></div></figure>
+
+
+<p>会根据默认配置安装好几乎所有平台支持的Qemu.</p>
+
+<p>或者你可以手动下载源码包进行编译:官方下载地址在<a href="http://wiki.qemu.org/Download">http://wiki.qemu.org/Download</a></p>
+
+<p>安装完qemu后运行qemu-system-i386, 如果弹出窗口，则说明qemu安装正确。</p>
+
+<p>2. 创建新虚拟机磁盘镜像</p>
+
+<p>创建虚拟机的第一步是创建一个新的磁盘镜像，qemu提供了对多种磁盘镜像格式的支持，如raw、qcow2、qed、vdi等，qemu-img的帮助里介绍qcow2是最多才多艺(Versatile)的格式，支持压缩、加密等功能，还能最大程度节省磁盘空间。我们选择它来做磁盘镜像(Virtualbox可以直接读取qcow2格式的虚拟机镜像)。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-img create -f qcow2 ubuntu.qcow2 16G
+</span><span class='line'>Formatting 'ubuntu.qcow2', fmt=qcow2 size=17179869184 encryption=off \
+</span><span class='line'>cluster_size=65536 lazy_refcounts=off </span></code></pre></td></tr></table></div></figure>
+
+
+<p>3. 启动并安装虚拟机:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-i386 -hda ubuntu.qcow2 -boot d -cdrom \
+</span><span class='line'>./ubuntu-13.04-desktop-i386.iso -m 1024 -enable-kvm</span></code></pre></td></tr></table></div></figure>
+
+
+<p>-boot d代表优先从光驱启动，对应的选项有a, b (软驱 1 和 2), c (硬盘优先), d (光盘优先), n-p(支持Etherboot的网卡1-4).</p>
+
+<p>安装ubuntu的步骤很直观，这里就不用篇幅描述了。安装完毕后，使用下列命令启动安装好的虚拟机镜像</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-i386 -hda ubuntu.qcow2 -m 1024 -enable-kvm</span></code></pre></td></tr></table></div></figure>
+
+
+<p>4. 配置虚拟机网络：</p>
+
+<p>4.1 使用桥接网络</p>
+
+<p>这种方法需要改动系统配置，使用bridge-utils来创建虚拟网卡和实际网卡之间的桥接。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -Ss bridge-utils
+</span><span class='line'>core/bridge-utils 1.5-2
+</span><span class='line'>    Utilities for configuring the Linux ethernet bridge
+</span><span class='line'>$ pacman -S bridge-utils</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建桥接设备(br0)</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ modprobe bridge
+</span><span class='line'>$ brctl addbr br0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>出现add bridge failed: Package not installed时的解决方法：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ brctl addbr br0
+</span><span class='line'>add bridge failed: Package not installed
+</span><span class='line'># 查看kernel中关于bridge配置选项
+</span><span class='line'>$ zcat /proc/config.gz | grep CONFIG_BRIDGE=
+</span><span class='line'>CONFIG_BRIDGE=m
+</span><span class='line'># 查看是否存在ko文件
+</span><span class='line'>$ ls /usr/lib/modules/`uname -r`/kernel/net/bridge
+</span><span class='line'>bridge.ko.gz  netfilter
+</span><span class='line'># 加载bridge内核模块
+</span><span class='line'>$ modprobe bridge
+</span><span class='line'># 检查内核模块是否被加载
+</span><span class='line'>$ lsmod | grep ^bridge
+</span><span class='line'>bridge                 93187  0 </span></code></pre></td></tr></table></div></figure>
+
+
+<p>若modprobe bridge后lsmod看不到bridge模块，有可能是因为更新完系统安装到新的kernel version后没有重启，ArchLinux是一个非常激进的发行版，内核往往几天一升级，习惯休眠或长期不关机的用户可能会碰到这个问题。</p>
+
+<p>检查bridge网络</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ brctl show br0
+</span><span class='line'>bridge name   bridge id       STP enabled interfaces
+</span><span class='line'>br0       8000.000000000000   no</span></code></pre></td></tr></table></div></figure>
+
+
+<p>关于STP:
+Spanning Tree Protocol (STP) is a Layer 2 protocol that runs on bridges and
+switches. The specification for STP is IEEE 802.1D. The main purpose of STP is
+to ensure that you do not create loops when you have redundant paths in your
+network. Loops are deadly to a network.
+生成树协议运行于bridge或交换机上，主要目的为确保在存在冗余路径时网络中不会生成回路，回路会造成网络的死循环。</p>
+
+<p>用下列命令查看网口信息, 或者ifconfig -a直接查看也可:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ifconfig -s | awk '{print $1}' | grep -v "Iface\|lo"
+</span><span class='line'>enp0s25</span></code></pre></td></tr></table></div></figure>
+
+
+<p>将enp0s25加入到br0</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ /sbin/ifconfig enp0s25 down
+</span><span class='line'>$ /sbin/ifconfig enp0s25 0.0.0.0 promisc up
+</span><span class='line'>$ brctl addif br0 enp0s25
+</span><span class='line'>$ dhcpcd br0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>查看bridge端口信息,发现enp0s25已经被加入了br0：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ brctl show br0
+</span><span class='line'>bridge name   bridge id       STP enabled interfaces
+</span><span class='line'>br0       8000.c8cbb8b48913   no      enp0s25</span></code></pre></td></tr></table></div></figure>
+
+
+<p>有关bridge网络的dhcp相关配置，可以参考<a href="http://Tomcat.no-ip.biz/blog/2013/07/07/archlinuxwang-luo-pei-zhi-wen-ti/">ArchLinux网络配置问题</a>。</p>
+
+<p>创建qemu启动脚本:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim /etc/qemu-ifup
+</span><span class='line'>#!/bin/sh
+</span><span class='line'>  
+</span><span class='line'>echo "Executing /etc/qemu-ifup"
+</span><span class='line'>echo "Bringing up $1 for bridged mode..."
+</span><span class='line'>sudo /usr/bin/ip link set $1 up promisc on
+</span><span class='line'>echo "Adding $1 to br0..."
+</span><span class='line'>sudo /usr/bin/brctl addif br0 $1
+</span><span class='line'>sleep 2</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改脚本权限：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ chmod 750 /etc/qemu-ifup 
+</span><span class='line'>$ chown -R root /etc/qemu-ifup 
+</span><span class='line'>$ chgrp kvm /etc/qemu-ifup </span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建qemu结束脚本</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim /etc/qemu-ifdown
+</span><span class='line'>#!/bin/sh
+</span><span class='line'> 
+</span><span class='line'>echo "Executing /etc/qemu-ifdown"
+</span><span class='line'>sudo /usr/bin/ip link set $1 down
+</span><span class='line'>sudo /usr/bin/brctl delif br0 $1
+</span><span class='line'>sudo /usr/bin/ip link delete dev $1</span></code></pre></td></tr></table></div></figure>
+
+
+<p>更改脚本权限:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ chmod 750 /etc/qemu-ifdown 
+</span><span class='line'>$ chown -R root /etc/qemu-ifdown 
+</span><span class='line'>$ chgrp kvm /etc/qemu-ifdown </span></code></pre></td></tr></table></div></figure>
+
+
+<p>添加当前用户到kvm用户组并在visudo中开放对应命令的权限：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ usermod -a -G kvm Trusty
+</span><span class='line'>$ visudo
+</span><span class='line'>Cmnd_Alias      QEMU=/usr/bin/ip,/usr/bin/modprobe,/usr/bin/brctl
+</span><span class='line'>%kvm     ALL=NOPASSWD: QEMU</span></code></pre></td></tr></table></div></figure>
+
+
+<p>建立run-qemu文件，并添加到系统路径中.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim /bin/run-qemu
+</span><span class='line'>#!/bin/bash
+</span><span class='line'>USERID=`whoami`
+</span><span class='line'>precreationg=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+</span><span class='line'>sudo /usr/bin/ip tuntap add user $USERID mode tap
+</span><span class='line'>postcreation=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+</span><span class='line'>IFACE=$(comm -13 &lt;(echo "$precreationg") &lt;(echo "$postcreation"))
+</span><span class='line'>
+</span><span class='line'># This line creates a random mac address. The downside is the dhcp server will
+</span><span class='line'>assign a different ip each time
+</span><span class='line'>printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM & 0xff)) $(( $RANDOM &
+</span><span class='line'>0xff )) $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff ))
+</span><span class='line'># Instead, uncomment and edit this line to set an static mac address. The
+</span><span class='line'>benefit is that the dhcp server will assign the same ip.
+</span><span class='line'># macaddr='52:54:be:36:42:a9'
+</span><span class='line'>  
+</span><span class='line'>qemu-system-i386 -enable-kvm -net nic,macaddr=$macaddr -net tap,ifname="$IFACE"
+</span><span class='line'>$*
+</span><span class='line'>  
+</span><span class='line'>sudo ip link set dev $IFACE down &&gt; /dev/null
+</span><span class='line'>sudo ip tuntap del $IFACE mode tap &&gt; /dev/null 
+</span><span class='line'>$ sudo chmod a+w /bin/run-qemu</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使用下列命令来运行qemu</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ /bin/run-qemu -hda ./ubuntu.qcow2 -m 1024 -vga std</span></code></pre></td></tr></table></div></figure>
+
+
+<p>运行多个run-qemu实例后的网络信息如下：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ifconfig -s
+</span><span class='line'>Iface      MTU    RX-OK RX-ERR RX-DRP RX-OVR    TX-OK TX-ERR TX-DRP TX-OVR Flg
+</span><span class='line'>br0       1500    70676      0      0 0         64334      0      0      0 BMRU
+</span><span class='line'>enp0s25   1500   103814      0      0 0         75661      0      0      0 BMPRU
+</span><span class='line'>lo       65536      983      0      0 0           983      0      0      0 LRU
+</span><span class='line'>tap0      1500        3      0      0 0            11      0      0      0 BMPRU
+</span><span class='line'>tap1      1500        3      0      0 0            11      0      0      0 BMPRU</span></code></pre></td></tr></table></div></figure>
+
+
+<p>4.2 使用VDE(Virtual Distrubuted Ethernet)创建Qemu网络，这种方法无需改变系统配置。</p>
+
+<p>有关VDE的配置可以参考前面写过的<a href="http://Tomcat.no-ip.biz/blog/2013/07/04/zai-centosshang-an-zhuang-ji-yu-qemude-xu-ni-ji/">在CentOS上安装基于Qemu的虚拟机</a>一文。</p>
+
+<p>值得注意的是, vdeswitch和slirpvde都可以在ArchLinux的软件库中找到:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -Ss vde
+</span><span class='line'>extra/vde2 2.3.2-4 [installed]
+</span><span class='line'>    Virtual Distributed Ethernet for emulators like qemu</span></code></pre></td></tr></table></div></figure>
+
+
+<p>使用VDE创建的网络对外是不可见的，它使用由slirpvde分配的dhcp地址，通常以10.0.0开头，VDE配置的网络也可以在VirtualBox中看到，VirtualBox中关于NAT的网络配置就是基于VDE的。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -920,6 +1270,10 @@ int main(void)
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/04/15/moving-docker-repository-position/">Moving Docker Repository Position</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/04/06/tips-on-setup-eclipse-che/">Tips on Setup Eclipse CHE</a>
       </li>
     
@@ -933,10 +1287,6 @@ int main(void)
     
       <li class="post">
         <a href="/blog/2016/03/31/nodemcu-and-1602i2c/">NodeMCU and 1602I2C</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/03/29/tips-on-shrinking-vhd-file/">Tips on Shrinking VHD File</a>
       </li>
     
   </ul>
