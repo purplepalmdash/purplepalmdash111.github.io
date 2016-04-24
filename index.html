@@ -9,10 +9,9 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Steps Install steps are listed as following: First as root user, create the initial stack user via: 1
-2
-3
-# git clone https://git.openstack.org/ &hellip;">
+  <meta name="description" content="为了在家里验证一下DevStack的网络配置，组建了一个网络，涉及到的点比较多，以下是
+具体记录。 交换机配置 前段时间从美国亚马逊买回来一个TP-LINK的千兆交换机一直没用起来，型号是TL-SG108E
+，8口可网管交换机。但前面有写过文章可以用来参考: http:// &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -68,6 +67,366 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/04/24/tipsonosexperiment/">TipsOnOSExperiment</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-04-24T17:32:12+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>5:32 pm</span></time>
+        
+         | <a href="/blog/2016/04/24/tipsonosexperiment/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>为了在家里验证一下DevStack的网络配置，组建了一个网络，涉及到的点比较多，以下是
+具体记录。</p>
+
+<h3>交换机配置</h3>
+
+<p>前段时间从美国亚马逊买回来一个TP-LINK的千兆交换机一直没用起来，型号是TL-SG108E
+，8口可网管交换机。但前面有写过文章可以用来参考:</p>
+
+<p><a href="http://purplepalmdash.github.io/blog/2015/12/12/ba-wan-tl-sg108e/">http://purplepalmdash.github.io/blog/2015/12/12/ba-wan-tl-sg108e/</a></p>
+
+<p>但这篇文章里讲的主要还是ovs后虚拟机的vlan，和最近要做的DevStack的FloatIP配置稍
+微有点差异。</p>
+
+<h3>网络规划</h3>
+
+<p>家里已有网络192.168.177.0/24, 这个网络是可以访问Internet的。所以DevStack机器上
+的eth0将连接到这个网段，并在其上分配floating IP.</p>
+
+<p>另外我们需要创建一个VLAN隔离的private network，用于给DevStack里的虚拟机默认启
+动后分配IP地址。将DevStack机器上的eth1连接到此网络。</p>
+
+<h3>配置交换机</h3>
+
+<p>TP-LINK的DEB-100网卡是比较皮实，奈何win10驱动需要找，随便找了个淘宝9.9包邮的
+USB转10兆网卡连上SurfacePro，开始配置交换机。</p>
+
+<p>步骤:  <br/>
+打开桌面的<code>Easy Smart Configuration Utility</code>，开始自动发现局域网内的交换机，如
+下图:</p>
+
+<p><img src="/images/2016_04_24_17_58_49.jpg" alt="/images/2016_04_24_17_58_49.jpg" /></p>
+
+<p>需要重新配置下USB有线网卡的IP地址才能连接上交换机:</p>
+
+<p><img src="/images/2016_04_24_18_02_45.jpg" alt="/images/2016_04_24_18_02_45.jpg" /></p>
+
+<p>双击发现的交换机，用<code>admin/admin</code>登录后的界面如下:</p>
+
+<p><img src="/iamges/2016_04_24_18_08_04.jpg" alt="/images/2016_04_24_18_08_04.jpg" /></p>
+
+<p>以前我曾经把这个交换机配置成802.1Q VLAN, 这次基于端口来隔离，所以要配置成<code>Port
+Based VLAN</code>, 配置完毕后的画面如下:</p>
+
+<p><img src="/images/2016_04_24_18_20_36.jpg" alt="/images/2016_04_24_18_20_36.jpg" /></p>
+
+<p>这种基于端口VLAN的验证方法很简单，将上网机和宽带路由器分别插在1～4和5～8口，即
+可测试出VLAN被端口隔离。但这好像不是DevStack中需要设置的。</p>
+
+<p>还是继续配置802.1Q VLAN. 值得注意的是，如果之前配置端口VLAN时将SurfacePro的连
+接和交换机网段隔离了，那可能会连接不上，换回同一VLAN即可连接上。</p>
+
+<p>配置vlan100如以下图所示:</p>
+
+<p><img src="/images/2016_04_24_19_51_15.jpg" alt="/images/2016_04_24_19_51_15.jpg" /></p>
+
+<h3>测试VLAN</h3>
+
+<p>将两台PC连接在5~8口上，VLAN100。</p>
+
+<p>PC1, ArchLinux, Systemd配置VLAN:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat enp0s25.100.network
+</span><span class='line'>[Match]
+</span><span class='line'>Name=enp0s25.100
+</span><span class='line'>
+</span><span class='line'>[Network]
+</span><span class='line'>DNS=192.168.2.1
+</span><span class='line'>Address=192.168.2.1/24
+</span><span class='line'>$ cat enp0s25.100.netdev 
+</span><span class='line'>[NetDev]
+</span><span class='line'>Name=enp0s25.100
+</span><span class='line'>Kind=vlan
+</span><span class='line'>
+</span><span class='line'>[VLAN]
+</span><span class='line'>Id=100
+</span><span class='line'>
+</span><span class='line'>[Network]
+</span><span class='line'>DNS=192.168.2.1
+</span><span class='line'>Address=192.168.2.1/24
+</span><span class='line'>Gateway=192.168.2.1
+</span><span class='line'>$ pwd
+</span><span class='line'>/etc/systemd/network</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动PC1后，<code>192.168.2.1</code>将成为VLAN100口的地址。作为<code>192.168.2.1</code>,我们在这
+个端口上启动dhcp服务及路由转发等服务。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S dhcp
+</span><span class='line'>$ sudo systemctl enable dhcpd4.service</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>干掉冗余的默认dhcpd.conf文件，写一个最小的配置文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/dhcpd.conf.example 
+</span><span class='line'>$ sudo vim /etc/dhcpd.conf         
+</span><span class='line'>option domain-name-servers 180.76.76.76,223.5.5.5;
+</span><span class='line'>option subnet-mask 255.255.255.0;
+</span><span class='line'>option routers 192.168.2.1;
+</span><span class='line'>subnet 192.168.2.0 netmask 255.255.255.0 {
+</span><span class='line'>  range 192.168.2.150 192.168.2.250;
+</span><span class='line'>
+</span><span class='line'>  host macbookpro{
+</span><span class='line'>   hardware ethernet 70:56:81:22:33:44;
+</span><span class='line'>   fixed-address 192.168.2.199;
+</span><span class='line'>  }
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>开启dhcpd服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl start dhcpd4.service</span></code></pre></td></tr></table></div></figure>
+
+
+<p>PC2, 用openvswitch的vlan配置, libvirt的XML配置如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&lt;interface type='bridge'&gt;
+</span><span class='line'>  &lt;mac address='52:54:00:fd:03:e9'/&gt;
+</span><span class='line'>  &lt;source bridge='ovsbr0'/&gt;
+</span><span class='line'>  &lt;vlan trunk='yes'&gt;
+</span><span class='line'>    &lt;tag id='100' nativeMode='untagged'/&gt;
+</span><span class='line'>  &lt;/vlan&gt;
+</span><span class='line'>  &lt;virtualport type='openvswitch'&gt;
+</span><span class='line'>    &lt;parameters interfaceid='fb3e7f34-6fcd-41dc-8fed-c3ffe0d54b18'/&gt;
+</span><span class='line'>  &lt;/virtualport&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>测试，即启动PC2上的虚拟机，若虚拟机能获得IP地址，则说明VLAN配置成功。</p>
+
+<h3>DevStack网络配置</h3>
+
+<p>操作系统为Ubuntu14.04, 网卡为eth0(192.168.177.100)和eth1(vlan 100)</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/04/24/zai-devstackzhong-shi-yong-packer/">在DevStack中使用Packer</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-04-24T10:16:39+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>24</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>10:16 am</span></time>
+        
+         | <a href="/blog/2016/04/24/zai-devstackzhong-shi-yong-packer/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>导入源镜像</h3>
+
+<p>源镜像可以从ubuntu.com下载到，并使用以下命令导入:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+</span><span class='line'>$ glance image-create --name ubuntu-trusty --disk-format qcow2 \
+</span><span class='line'>--container-format bare --file trusty-server-cloudimg-amd64-disk1.img</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>openstack.json文件</h3>
+
+<p>github上有现成的，克隆到本地:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/Thingee/packer-devstack.git</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com/">Rsync the vault.centos.com</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-04-22T19:39:58+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2016</span></span> <span class='time'>7:39 pm</span></time>
+        
+         | <a href="/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>For I want to do some configuration workings on old distribution of CentOS, I have to
+use lots of materials which from vault.centos.com, following are the steps for syncing
+them.</p>
+
+<p>First, rsync in <code>vault.centos.com</code> is closed, thus we have to choose
+<code>http://archive.kernel.org/centos/</code>.</p>
+
+<h3>Rsync Scripts</h3>
+
+<p>Refers to:   <br/>
+<a href="https://www.totalnetsolutions.net/2013/10/02/setting-up-a-corporate-yum-repository-mirror-for-bandwidth-and-staged-update-management/">https://www.totalnetsolutions.net/2013/10/02/setting-up-a-corporate-yum-repository-mirror-for-bandwidth-and-staged-update-management/</a></p>
+
+<h3>Make Repository</h3>
+
+<p><a href="https://wiki.centos.org/HowTos/CreateLocalMirror">https://wiki.centos.org/HowTos/CreateLocalMirror</a></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/04/21/switching-to-win10/">Switching to Win10</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-04-21T10:06:44+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>21</span><span class='date-suffix'>st</span>, <span class='date-year'>2016</span></span> <span class='time'>10:06 am</span></time>
+        
+         | <a href="/blog/2016/04/21/switching-to-win10/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Background</h3>
+
+<p>Since the monitor in my company are so ba&hellip;&hellip;..d, I have to change my working
+environment from PC to SurfacePro, thus I have some tools changes, following are the
+records.</p>
+
+<h3>Tool List</h3>
+
+<p>Terminal: XShell4, Make sure you have change the screen-size issue.   <br/>
+<a href="purplepalmdash.github.io/blog/2015/11/13/win10-tips-for-using-xshell/">purplepalmdash.github.io/blog/2015/11/13/win10-tips-for-using-xshell/</a></p>
+
+<p>Screen-Shot:  <br/>
+I use picPick for replacing the scrot, the scrot is so convenient thus I found many
+tools for replacing it.</p>
+
+<p>picPick Configuration: the main purpose is for selecting the rectangle and save it
+automatically to the folder with the timestamp.</p>
+
+<p>Auto-Syncing tool:   <br/>
+using WinSCP&rsquo;s keep remote the latest status:</p>
+
+<p><img src="/images/2016_04_21_10_39_10.jpg" alt="/images/2016_04_21_10_39_10.jpg" /></p>
+
+<p>OK, Now we could also using the same writing behavior just as under Linux Awesome
+Desktop.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -135,6 +494,10 @@
 </span><span class='line'>NOVNC_REPO=http://git.trystack.cn/kanaka/noVNC.git
 </span><span class='line'>SPICE_REPO=http://git.trystack.cn/git/spice/spice-html5.git</span></code></pre></td></tr></table></div></figure>
 
+
+<p>Add following configurations:</p>
+
+<p><img src="/images/2016_04_21_10_46_16_505x495.jpg" alt="/images/2016_04_21_10_46_16_505x495.jpg" /></p>
 
 <p>Now stacking the devstack:</p>
 
@@ -596,616 +959,6 @@ docker repository, following are the steps:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/31/nodemcu-and-1602i2c/">NodeMCU and 1602I2C</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-31T21:34:42+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>31</span><span class='date-suffix'>st</span>, <span class='date-year'>2016</span></span> <span class='time'>9:34 pm</span></time>
-        
-         | <a href="/blog/2016/03/31/nodemcu-and-1602i2c/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
-验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
-用来做一个WIFI显示屏.</p>
-
-<p>今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, 如下图所示,这里简单记录
-一下制作过程.</p>
-
-<p><img src="/images/1009950725.jpg" alt="/images/1009950725.jpg" /></p>
-
-<p><img src="/images/1162591797.jpg" alt="/images/1162591797.jpg" /></p>
-
-<h3>连线图</h3>
-
-<p>1602 I2C上有四个口,分别是GND/VCC/SDA/SCL.  <br/>
-GND自然不用多说,连接NodeMCU上的GND即可.  <br/>
-VCC我们使用5V输入,在NodeMCU上则是VIN口. 在下图里我用红色做了标注. <br/>
-SDA接GPIO0, SDC接GPIO2,在图中我用橙色做了标识.</p>
-
-<p><img src="/images/2016_03_31_21_46_54_644x477.jpg" alt="/images/2016_03_31_21_46_54_644x477.jpg" /></p>
-
-<h3>软件准备</h3>
-
-<p>我这里参考了
-<a href="http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/">http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/</a>
-上的实例, 所以用ESPlorer来写入1602的库文件. ESPlorer的下载地址在:</p>
-
-<p><a href="http://esp8266.ru/esplorer/#download">http://esp8266.ru/esplorer/#download</a></p>
-
-<p>如果你使用的是ArchLinux的话,一行命令就够了:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt esplorer</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-如果你运行上述网址上的示例, 故事的结尾你会获得一个Hallo的显示,以及跑马灯式的显
-示效果.</p>
-
-<h3>CPU Load Program</h3>
-
-<p>先上代码, 用Python写的, 如果你看过上面的示例程序就会明白, 往串口写入1602的lua
-脚本,就能获得对应的显示效果,那么以下的Python代码就是每分钟读取CPU的负载值, 将
-它封装在一个字符串中发送到NodeMCU连接的串口.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">psutil</span>
-</span><span class='line'><span class="kn">import</span> <span class="nn">serial</span>
-</span><span class='line'><span class="kn">import</span> <span class="nn">time</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="c"># Setup the Serial Port and open it. </span>
-</span><span class='line'><span class="n">ser</span> <span class="o">=</span> <span class="n">serial</span><span class="o">.</span><span class="n">Serial</span><span class="p">()</span>
-</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">baudrate</span> <span class="o">=</span> <span class="mi">9600</span>
-</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="s">&#39;/dev/ttyUSB0&#39;</span>
-</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
-</span><span class='line'><span class="c">## Todo, to check if the port is opened.</span>
-</span><span class='line'>
-</span><span class='line'><span class="c"># Really talks to the i2c LCD.</span>
-</span><span class='line'>
-</span><span class='line'><span class="c"># Setup the wiring</span>
-</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;i2c.setup(0, 4, 3, i2c.SLOW)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="c"># dofile, load the lcd library</span>
-</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd = dofile(&quot;lcd1602.lua&quot;)()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="c"># Now Refresh the LCD. </span>
-</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.clear()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="c"># Fetching the percentage per 1 second</span>
-</span><span class='line'><span class="c"># Todo, change the while true into CTRL+C stopped. </span>
-</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-</span><span class='line'>    <span class="c"># Get current percentage</span>
-</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.clear()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="n">currentPer</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">psutil</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">())</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;ascii&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="c"># Format oneLine</span>
-</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(0, 5), &quot;CPU Load&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="n">oneLine</span> <span class="o">=</span> <span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(1, 6), &quot;&#39;</span> <span class="o">+</span> <span class="n">currentPer</span> <span class="o">+</span> <span class="n">b</span><span class="s">&#39;&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span>
-</span><span class='line'>    <span class="c"># Write oneLine</span>
-</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">oneLine</span><span class="p">)</span>
-</span><span class='line'>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>代码运行的前提条件是,在ArchLinux上,安装pyserial库和psutil库,
-而后运行<code>sudo python WriteLoadToLCD.py</code>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="err">$</span> <span class="n">sudo</span> <span class="n">pacman</span> <span class="o">-</span><span class="n">S</span> <span class="n">python</span><span class="o">-</span><span class="n">psutil</span>
-</span><span class='line'><span class="err">$</span> <span class="n">sudo</span> <span class="n">pacman</span> <span class="o">-</span><span class="n">S</span> <span class="n">python</span><span class="o">-</span><span class="n">pyserial</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>可以看到你的系统CPU使用率已经显示在1602 LCD上了,每分钟更新一次.   <br/>
-当然你也可以将显示
-值从CPU使用率换成内存占用率,或是CPU温度,或是PM2.5的值等等. 你要做的就是构建自
-己的数据<code>CurrentPer</code>和写入的格式<code>oneLine</code>.</p>
-
-<p>通过串口发送数据, 通过NodeMCU驱动1602, 这功能对NodeMCU而言太小儿科了,所以接下
-来我会继续做一个WIFI驱动的LCD.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/29/tips-on-shrinking-vhd-file/">Tips on Shrinking VHD File</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-29T18:15:51+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>6:15 pm</span></time>
-        
-         | <a href="/blog/2016/03/29/tips-on-shrinking-vhd-file/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>UnCleaned Templates Generation</h3>
-
-<p>Before remove big files:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[root@fwgwg ~]# df -h
-</span><span class='line'>Filesystem            Size  Used Avail Use% Mounted on
-</span><span class='line'>/dev/mapper/VolGroup00-LogVol00
-</span><span class='line'>                       18G  5.1G   12G  31% /
-</span><span class='line'>/dev/xvda1             99M   14M   80M  15% /boot
-</span><span class='line'>tmpfs                 128M     0  128M   0% /dev/shm</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Create the vhd file in CloudStack:</p>
-
-<p><img src="source/images/2016_03_29_18_17_10_634x380.jpg" alt="source/images/2016_03_29_18_17_10_634x380.jpg" /></p>
-
-<p>Name it:</p>
-
-<p><img src="source/images/2016_03_29_18_17_55_301x382.jpg" alt="source/images/2016_03_29_18_17_55_301x382.jpg" /></p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/29/monitoring-xenserver/">Monitoring XenServer</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-29T12:23:50+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>12:23 pm</span></time>
-        
-         | <a href="/blog/2016/03/29/monitoring-xenserver/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Prerequisition</h3>
-
-<p>Refers
-to<a href="https://github.com/crashdump/collectd-xenserver">https://github.com/crashdump/collectd-xenserver</a></p>
-
-<ul>
-<li>Collected 4.9 or later</li>
-<li>Python2.4 Or Later</li>
-<li>sudo pip install XenAPI</li>
-<li>sudo pip install collectd</li>
-</ul>
-
-
-<h3>Configuration</h3>
-
-<p>The plugin could not working. to be investigated.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/29/use-debmirror-for-setup-local-repository/">Use Debmirror for Setup Local Repository</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-29T11:31:42+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>11:31 am</span></time>
-        
-         | <a href="/blog/2016/03/29/use-debmirror-for-setup-local-repository/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Setup Repository</h3>
-
-<p>Install debmirror via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y debmirror
-</span><span class='line'>$ sudo mkdir /home/UbuntuMirror
-</span><span class='line'>$ sudo vim /usr/local/bin/mirrorbuild.sh</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The mirrorbuild.sh file listed as following:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c">#### Start script to automate building of Ubuntu mirror #####</span>
-</span><span class='line'><span class="c">## THE NEXT LINE IS NEEDED THE REST OF THE LINES STARTING WITH A # CAN BE DELETED</span>
-</span><span class='line'>
-</span><span class='line'><span class="c">#!/bin/bash</span>
-</span><span class='line'>
-</span><span class='line'><span class="c">## Setting variables with explanations.</span>
-</span><span class='line'>
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="c"># Don&#39;t touch the user&#39;s keyring, have our own instead</span>
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nb">export </span><span class="nv">GNUPGHOME</span><span class="o">=</span>/home/mirrorkeyring
-</span><span class='line'>
-</span><span class='line'><span class="c"># Arch=         -a      # Architecture. For Ubuntu can be i386, powerpc or amd64.</span>
-</span><span class='line'><span class="c"># sparc, only starts in dapper, it is only the later models of sparc.</span>
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nv">arch</span><span class="o">=</span>i386,amd64
-</span><span class='line'>
-</span><span class='line'><span class="c"># Minimum Ubuntu system requires main, restricted</span>
-</span><span class='line'><span class="c"># Section=      -s      # Section (One of the following -</span>
-</span><span class='line'>main/restricted/universe/multiverse<span class="o">)</span>.
-</span><span class='line'><span class="c"># You can add extra file with $Section/debian-installer. ex:</span>
-</span><span class='line'>main/debian-installer,universe/debian-installer,multiverse/debian-installer,restricted/debian-installer
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nv">section</span><span class="o">=</span>main,restricted,universe,multiverse
-</span><span class='line'>
-</span><span class='line'><span class="c"># Release=      -d      # Release of the system (...Hardy, Intrepid... Lucid, Precise,</span>
-</span><span class='line'>Quantal, Saucy, Trusty <span class="o">)</span>, and the -updates and -security <span class="o">(</span> -backports can be added <span class="k">if</span>
-</span><span class='line'>desired<span class="o">)</span>
-</span><span class='line'><span class="c"># List of updated releases in: https://wiki.ubuntu.com/Releases</span>
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'>
-</span><span class='line'><span class="nv">release</span><span class="o">=</span>trusty,trusty-security,trusty-updates
-</span><span class='line'>
-</span><span class='line'><span class="c"># Server=       -h      # Server name, minus the protocol and the path at the end</span>
-</span><span class='line'><span class="c"># CHANGE &quot;*&quot; to equal the mirror you want to create your mirror from. au. in Australia</span>
-</span><span class='line'>ca. in Canada.
-</span><span class='line'><span class="c"># This can be found in your own /etc/apt/sources.list file, assuming you have Ubuntu</span>
-</span><span class='line'>installed.
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nv">server</span><span class="o">=</span>archive.ubuntu.com
-</span><span class='line'>
-</span><span class='line'><span class="c"># Dir=          -r      # Path from the main server, so http://my.web.server/$dir,</span>
-</span><span class='line'>Server dependant
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nv">inPath</span><span class="o">=</span>/ubuntu
-</span><span class='line'>
-</span><span class='line'><span class="c"># Proto=        --method=       # Protocol to use for transfer (http, ftp, hftp, rsync)</span>
-</span><span class='line'><span class="c"># Choose one - http is most usual the service, and the service must be avaialbe on the</span>
-</span><span class='line'>server you point at.
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nv">proto</span><span class="o">=</span>http
-</span><span class='line'>
-</span><span class='line'><span class="c"># Outpath=              # Directory to store the mirror in</span>
-</span><span class='line'><span class="c"># Make this a full path to where you want to mirror the material.</span>
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'><span class="nv">outPath</span><span class="o">=</span>/home/UbuntuMirror
-</span><span class='line'>
-</span><span class='line'><span class="c"># The --nosource option only downloads debs and not deb-src&#39;s</span>
-</span><span class='line'><span class="c"># The --progress option shows files as they are downloaded</span>
-</span><span class='line'><span class="c"># --source \ in the place of --no-source \ if you want sources also.</span>
-</span><span class='line'><span class="c"># --nocleanup  Do not clean up the local mirror after mirroring is complete. Use this</span>
-</span><span class='line'>option to keep older repository
-</span><span class='line'><span class="c"># Start script</span>
-</span><span class='line'><span class="c">#</span>
-</span><span class='line'>debmirror       -a <span class="nv">$arch</span> <span class="se">\</span>
-</span><span class='line'>                --no-source <span class="se">\</span>
-</span><span class='line'>                -s <span class="nv">$section</span> <span class="se">\</span>
-</span><span class='line'>                -h <span class="nv">$server</span> <span class="se">\</span>
-</span><span class='line'>                -d <span class="nv">$release</span> <span class="se">\</span>
-</span><span class='line'>                -r <span class="nv">$inPath</span> <span class="se">\</span>
-</span><span class='line'>                --progress <span class="se">\</span>
-</span><span class='line'>                --method<span class="o">=</span><span class="nv">$proto</span> <span class="se">\</span>
-</span><span class='line'>                <span class="nv">$outPath</span>
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'><span class="c">#### End script to automate building of Ubuntu mirror ####</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Modify the related priviledge:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo chmod +x /usr/local/bin/mirrorbuild.sh
-</span><span class='line'><span class="nv">$ </span>sudo chown -R root:dash /home/UbuntuMirror/
-</span><span class='line'><span class="nv">$ </span>sudo chmod -R <span class="m">571</span> /home/UbuntuMirror/
-</span><span class='line'><span class="nv">$ </span>sudo chmod <span class="m">777</span> -R /home/mirrorkeyring/
-</span><span class='line'><span class="nv">$ </span>gpg --no-default-keyring --keyring /home/mirrorkeyring/pubring.gpg --import
-</span><span class='line'>/usr/share/keyrings/ubuntu-archive-keyring.gpg
-</span><span class='line'><span class="nv">$ </span>gpg --no-default-keyring --keyring /home/mirrorkeyring/trustedkeys.gpg --import
-</span><span class='line'>/usr/share/keyrings/ubuntu-archive-keyring.gpg
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you could build the local repository via:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>mirrorbuild.sh
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Resize Repository</h3>
-
-<p>First we syncing all of the Repositries, to see its size:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>➜  UbuntuMirror du -hs *
-</span><span class='line'>72M   dists
-</span><span class='line'>192G  pool
-</span><span class='line'>12K   project
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we add some regex for restrict :</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sudo vim /usr/local/bin/mirrorbuild.sh
-</span><span class='line'>debmirror       -a <span class="nv">$arch</span> <span class="se">\</span>
-</span><span class='line'>                --no-source <span class="se">\</span>
-</span><span class='line'>                -s <span class="nv">$section</span> <span class="se">\</span>
-</span><span class='line'>                -h <span class="nv">$server</span> <span class="se">\</span>
-</span><span class='line'>                -d <span class="nv">$release</span> <span class="se">\</span>
-</span><span class='line'>                -r <span class="nv">$inPath</span> <span class="se">\</span>
-</span><span class='line'>                --progress <span class="se">\</span>
-</span><span class='line'>                --method<span class="o">=</span><span class="nv">$proto</span> <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>admin <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>base <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>comm <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>devel <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>doc <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>electronics <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>embedded <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>games <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>gnome <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>graphics <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>hamradio <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>interpreters <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>kde <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>libdevel <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>libs <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>mail <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>math <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>misc <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>net <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>news <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>oldlibs <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>otherosfs <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>perl <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>python <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>science <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>shells <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>sound <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>tex <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>text <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>utils <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>web <span class="se">\</span>
-</span><span class='line'>                --exclude-deb-section<span class="o">=</span>x11 <span class="se">\</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>which will deduce the size for syncing, but this won&rsquo;t reduce much.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>➜  UbuntuMirror du -hs *
-</span><span class='line'>22M   dists
-</span><span class='line'>33G   pool
-</span><span class='line'>12K   project
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>I think this is only works for debian.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/2">&larr; Older</a>
@@ -1221,23 +974,23 @@ to<a href="https://github.com/crashdump/collectd-xenserver">https://github.com/c
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/04/24/tipsonosexperiment/">TipsOnOSExperiment</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/04/24/zai-devstackzhong-shi-yong-packer/">在DevStack中使用Packer</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com/">Rsync the vault.centos.com</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/04/21/switching-to-win10/">Switching to Win10</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/04/20/devstack-enable-neutron/">DevStack Enable Neutron</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/18/change-ip-in-devstack/">Change IP in DevStack</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/15/moving-docker-repository-position/">Moving Docker Repository Position</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/06/tips-on-setup-eclipse-che/">Tips on Setup Eclipse CHE</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/05/extend-vagrants-disk/">Extend Vagrant's Disk</a>
       </li>
     
   </ul>

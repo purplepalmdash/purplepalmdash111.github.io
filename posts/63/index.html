@@ -9,7 +9,9 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="It seems this board is good: OpenWRT trunk for imx233-OLinuXino now have 3220 packages http://olimex.wordpress.com/2013/07/24/openwrt-for-imx233- &hellip;">
+  <meta name="description" content="Pogoplug上了debian wheezy后，想配置成VPN服务器，在最后一步配置iptables时发现无法激活NAT表。 显示结果为： 1
+2
+$ iptables -t nat -A POSTROUTING -s 10.10.10.0/24 -o eth0 -j MASQUERADE &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +67,321 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/09/03/add-netfilter-nat-for-pogoplug/">Add Netfilter NAT for Pogoplug</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-03T16:06:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>4:06 pm</span></time>
+        
+         | <a href="/blog/2013/09/03/add-netfilter-nat-for-pogoplug/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Pogoplug上了debian wheezy后，想配置成VPN服务器，在最后一步配置iptables时发现无法激活NAT表。</p>
+
+<p>显示结果为：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ iptables -t nat -A POSTROUTING -s 10.10.10.0/24 -o eth0 -j MASQUERADE
+</span><span class='line'>can't initialize iptables table 'NAT': Table does not exist (do you need to insmod?)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>解决方法:重新编译NetFilter模块。</p>
+
+<p>下载Linux3.1.10内核并解压到/usr/src</p>
+
+<p>$ make menuconfig</p>
+
+<p><img class="img" src="/images/2013_09_03_12_53_06_868x411.jpg"></p>
+
+<p>而后：</p>
+
+<p><img class="img" src="/images/2013_09_03_12_54_08_749x362.jpg"></p>
+
+<p>确保以下选项被激活：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>CONFIG_NF_CONNTRACK
+</span><span class='line'>CONFIG_NF_CONNTRACK_IPV4
+</span><span class='line'>CONFIG_NF_NAT
+</span><span class='line'>CONFIG_IP_NF_IPTABLES</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而后编译，由于在嵌入式系统上编译速度较慢，所以只是编译目录下对应的模块，其他的则不编：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ make M=net/netfilter modules  # Make all modules in specified dir
+</span><span class='line'>$ make M=net/netfilter          # Same as 'make M=dir modules'
+</span><span class='line'>$ make M=net/netfilter  modules_install # Install modules</span></code></pre></td></tr></table></div></figure>
+
+
+<p>这样就应该可以了，具体的验证等回家再看。</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/09/03/using-tsocks-for-acrossing-the-company-firewall/">Using Tsocks for Acrossing the Company Firewall</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-03T09:57:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>9:57 am</span></time>
+        
+         | <a href="/blog/2013/09/03/using-tsocks-for-acrossing-the-company-firewall/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>1. 在家庭主机上配置DDNS服务，可以从no-ip.com申请一个免费的动态域名。no-ip同时提供了适用于不同平台的客户端，可以在其主页下载，并在家庭主机上安装之。家里的路由器上也可以配置DDNS，国内的可以用花生壳服务，而后开放DMZ主机给内网的主机即可。家庭主机需要开启sshd服务，这方面可以参考网上的有关ssh服务器的配置攻略</p>
+
+<p>2. 在公司主机上，使用下列命令即可建立ssh代理</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ssh -qTfnN -D 1394 xxx@xxx.no-ip.biz</span></code></pre></td></tr></table></div></figure>
+
+
+<p>命令详解:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>-q Quite模式
+</span><span class='line'>-T 不分配伪终端
+</span><span class='line'>-f ssh后台运行
+</span><span class='line'>-n 将标准输入重定向到/dev/null
+</span><span class='line'>-N 不执行远程命令
+</span><span class='line'>-D 绑定本地端口1394</span></code></pre></td></tr></table></div></figure>
+
+
+<p>接下来我们就可以使用本地的端口127.0.0.1:1394作为socket代理服务器了。</p>
+
+<p>3. 安装tsocks, 并配置.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S tsocks
+</span><span class='line'>$ vim /etc/tsocks.conf
+</span><span class='line'>server = 127.0.0.1
+</span><span class='line'>server_type = 5
+</span><span class='line'>server_port = 1394</span></code></pre></td></tr></table></div></figure>
+
+
+<p>4. 使用tsocks运行出一个完全自由的终端：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ tsocks gnome-terminal</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在新弹出的终端内，无需设置任何代理即可自由访问各处资源，衍生于该终端的应用程序也可以直接享用家庭网络的自由权限。enjoy it!</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/09/03/archlinux-ntp-update-time/">ArchLinux Ntp Update Time</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-03T07:47:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>3</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>7:47 am</span></time>
+        
+         | <a href="/blog/2013/09/03/archlinux-ntp-update-time/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>1. 安装ntpd</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pacman -S ntpd</span></code></pre></td></tr></table></div></figure>
+
+
+<p>2. 配置ntp服务器</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim /etc/ntp.conf
+</span><span class='line'>server 0.pool.ntp.org iburst
+</span><span class='line'>server 1.pool.ntp.org iburst
+</span><span class='line'>server 2.pool.ntp.org iburst
+</span><span class='line'>server 3.pool.ntp.org iburst</span></code></pre></td></tr></table></div></figure>
+
+
+<p>3. 同步时间</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo ntpd -gq</span></code></pre></td></tr></table></div></figure>
+
+
+<p>4. 加入守护进程运行</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl enable ntpd</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/08/28/pure-c-in-arduino/">Pure C in Arduino</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-08-28T17:31:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:31 pm</span></time>
+        
+         | <a href="/blog/2013/08/28/pure-c-in-arduino/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>1. 输入.c文件，用于点亮arduino板上的LED，默认为pin 5口</p>
+
+<figure class='code'><figcaption><span>led.c - led.c </span></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#include &lt;avr/io.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;util/delay.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">enum</span> <span class="p">{</span>
+</span><span class='line'> <span class="n">BLINK_DELAY_MS</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'> <span class="cm">/* set pin 5 of PORTB for output*/</span>
+</span><span class='line'> <span class="n">DDRB</span> <span class="o">|=</span> <span class="n">_BV</span><span class="p">(</span><span class="n">DDB5</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'> <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="cm">/* set pin 5 high to turn led on */</span>
+</span><span class='line'>  <span class="n">PORTB</span> <span class="o">|=</span> <span class="n">_BV</span><span class="p">(</span><span class="n">PORTB5</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">_delay_ms</span><span class="p">(</span><span class="n">BLINK_DELAY_MS</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="cm">/* set pin 5 low to turn led off */</span>
+</span><span class='line'>  <span class="n">PORTB</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">_BV</span><span class="p">(</span><span class="n">PORTB5</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">_delay_ms</span><span class="p">(</span><span class="n">BLINK_DELAY_MS</span><span class="p">);</span>
+</span><span class='line'> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>2. 编译并生成映像文件：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ avr-gcc -Os -DF_CPU=16000000UL -mmcu=atmega328p -c -o led.o led.c
+</span><span class='line'>$ avr-gcc -mmcu=atmega328p led.o -o led
+</span><span class='line'>$ avr-objcopy -O ihex -R .eeprom led led.hex</span></code></pre></td></tr></table></div></figure>
+
+
+<p>3. 使用avrdude上传之</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>/media/y/arduino/1.0.5/hardware/tools/avrdude -C/media/y/arduino/1.0.5/hardware/tools/avrdude.conf -v -v -v -v -patmega328p -carduino -P/dev/ttyUSB0 -b57600 -D -Uflash:w:led.hex:i</span></code></pre></td></tr></table></div></figure>
+
+
+<p>上传完毕后板子会自动运行新上传的文件。
+感觉用purec来开发的灵活性会比较强。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1823,812 +2140,6 @@ Procedure Call Standard
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-2/">用Qemu和GNU编译链研究ARM汇编(2)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-10T16:30:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>4:30 pm</span></time>
-        
-         | <a href="/blog/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-2/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>研究两个汇编程序, 通过研究这两个程序，初步了解ARM汇编的知识：</p>
-
-<ul>
-<li>用于求数组和的程序</li>
-<li>用于计算字符串长度的程序</li>
-</ul>
-
-
-<p>1. 数组求和</p>
-
-<figure class='code'><figcaption><span>sum.s - sum.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>entry<span class="o">:</span>  b start                 <span class="o">@</span> Skip over the data
-</span><span class='line'>arr<span class="o">:</span>    <span class="m">.</span>byte <span class="m">10</span><span class="p">,</span> <span class="m">20</span><span class="p">,</span> <span class="m">25</span>        <span class="o">@</span> Read<span class="o">-</span>only <span class="kt">array</span> of bytes
-</span><span class='line'>eoa<span class="o">:</span>                            <span class="o">@</span> Address of end of <span class="kt">array</span> <span class="o">+</span> <span class="m">1</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>align
-</span><span class='line'>start<span class="o">:</span>
-</span><span class='line'>        ldr   r0<span class="p">,</span> <span class="o">=</span>eoa          <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>eoa
-</span><span class='line'>        ldr   r1<span class="p">,</span> <span class="o">=</span>arr          <span class="o">@</span> r1 <span class="o">=</span> <span class="o">&amp;</span>arr
-</span><span class='line'>        mov   r3<span class="p">,</span> <span class="c1">#0            @ r3 = 0</span>
-</span><span class='line'>loop<span class="o">:</span>   ldrb  r2<span class="p">,</span> <span class="p">[</span>r1<span class="p">],</span> <span class="c1">#1      @ r2 = *r1++</span>
-</span><span class='line'>        add   r3<span class="p">,</span> r2<span class="p">,</span> r3        <span class="o">@</span> r3 <span class="o">+=</span> r2
-</span><span class='line'>        cmp   r1<span class="p">,</span> r0            <span class="o">@</span> <span class="kr">if</span> <span class="p">(</span>r1 <span class="o">!=</span> r2<span class="p">)</span>
-</span><span class='line'>        bne   loop              <span class="o">@</span>    goto loop
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>.byte声明：</p>
-
-<p>.byte声明的变量在内存中以连续的比特存在，.2byte和.4byte与之类似，分别用于存储16位值和32位值。联想到C语言中的内建数据结构定义，不难想象char/int/long int 预编译完是哪一种类型。</p>
-
-<p>通用语法结构如下：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>.byte   exp1, exp2, ...
-</span><span class='line'>.2byte  exp1, exp2, ...
-</span><span class='line'>.4byte  exp1, exp2, ...</span></code></pre></td></tr></table></div></figure>
-
-
-<p>你可以指定数据的格式，二进制用前缀0b/0B修饰，八进制以前缀0修饰，十进制/十六进制以0x/0X开头。整数也可以用字符常量来表示，加上单引号即可，在这种情况下ASCII码会被用到。</p>
-
-<p>也可以用C表达式，包含文字和其他符号的组合，如下例：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>pattern:  .byte 0b01010101, 0b00110011, 0b00001111
-</span><span class='line'>npattern: .byte npattern - pattern
-</span><span class='line'>halpha:   .byte 'A', 'B', 'C', 'D', 'E', 'F'
-</span><span class='line'>dummy:    .4byte 0xDEADBEEF
-</span><span class='line'>nalpha:   .byte 'Z' - 'A' + 1</span></code></pre></td></tr></table></div></figure>
-
-
-<p>.align声明：</p>
-
-<p>ARM指令需要32位对齐，指令的起始内存地址需要是4的倍数，所以用.align指令来插入无用的byte，来确保下一条指令的起始地址是4的倍数。在代码中存在byte或是半字(half words)的时候，需要用到这条指令。</p>
-
-<p>编译&amp;运行：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># assemble
-</span><span class='line'>$ arm-none-eabi-as -o sum.o sum.s 
-</span><span class='line'># link to elf file
-</span><span class='line'>$ arm-none-eabi-ld -Ttext=0x0 -o sum.elf sum.o
-</span><span class='line'># form bin file
-</span><span class='line'>$ arm-none-eabi-objcopy -O binary sum.elf sum.bin
-</span><span class='line'># form flash image
-</span><span class='line'>$ dd if=/dev/zero of=flash.bin bs=4k count=4k
-</span><span class='line'>$ dd if=sum.bin of=flash.bin bs=4K conv=notrunc
-</span><span class='line'># emulate with flash image
-</span><span class='line'>$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
-</span><span class='line'># examine the result
-</span><span class='line'>R00=00000007 R01=00000007 R02=00000019 R03=00000037
-</span><span class='line'>R04=00000000 R05=00000000 R06=00000000 R07=00000000
-</span><span class='line'>R08=00000000 R09=00000000 R10=00000000 R11=00000000
-</span><span class='line'>R12=00000000 R13=00000000 R14=00000000 R15=00000024
-</span><span class='line'>PSR=600001d3 -ZC- A svc32
-</span><span class='line'>FPSCR: 00000000</span></code></pre></td></tr></table></div></figure>
-
-
-<p>R03的值正是我们求和的结果:  0x37==55==10+20+25, 可以用一张流程图来表示程序的运行过程</p>
-
-<p>2. 字符串长度</p>
-
-<figure class='code'><figcaption><span>string.s - string.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>        b start
-</span><span class='line'>
-</span><span class='line'>str<span class="o">:</span>    <span class="m">.</span>asciz <span class="s">&quot;Hello World&quot;</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>equ   nul<span class="p">,</span> <span class="m">0</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="m">.</span>align
-</span><span class='line'>start<span class="o">:</span>  ldr   r0<span class="p">,</span> <span class="o">=</span>str          <span class="o">@</span> r0 <span class="o">=</span> <span class="o">&amp;</span>str
-</span><span class='line'>        mov   r1<span class="p">,</span> <span class="c1">#0</span>
-</span><span class='line'>
-</span><span class='line'>loop<span class="o">:</span>   ldrb  r2<span class="p">,</span> <span class="p">[</span>r0<span class="p">],</span> <span class="c1">#1      @ r2 = *(r0++)</span>
-</span><span class='line'>        add   r1<span class="p">,</span> r1<span class="p">,</span> <span class="c1">#1        @ r1 += 1</span>
-</span><span class='line'>        cmp   r2<span class="p">,</span> <span class="c1">#nul          @ if (r1 != nul)</span>
-</span><span class='line'>        bne   loop              <span class="o">@</span>    goto loop
-</span><span class='line'>
-</span><span class='line'>        sub   r1<span class="p">,</span> r1<span class="p">,</span> <span class="c1">#1        @ r1 -= 1</span>
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b <span class="kp">stop</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>运行结果：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>(qemu) info registers
-</span><span class='line'>R00=00000010 R01=0000000b R02=00000000 R03=00000000
-</span><span class='line'>R04=00000000 R05=00000000 R06=00000000 R07=00000000
-</span><span class='line'>R08=00000000 R09=00000000 R10=00000000 R11=00000000
-</span><span class='line'>R12=00000000 R13=00000000 R14=00000000 R15=0000002c
-</span><span class='line'>PSR=600001d3 -ZC- A svc32
-</span><span class='line'>FPSCR: 00000000</span></code></pre></td></tr></table></div></figure>
-
-
-<p>r1是用来存储字符串长度的，计算结果为11。</p>
-
-<p>.asciz声明:
- .asciz声明接受一个字符串作为参数，字符串以双引号修饰的字符表示。汇编器自动在字符串后面加nul字符（即\0字符）</p>
-
-<p>.equ声明
-汇编器维持一张符号表，符号表维持键->值的格式。当汇编器遇到一个标号时，汇编器将在符号表中自动建立一个条目。以后当汇编器遇到一个关于label的引用时，将自动替换为符号表中储存的label的地址。</p>
-
-<p>使用汇编器指令.equ，我们可以手动在符号表中插入条目。</p>
-
-<p>.equ通常这样定义:
-    .equ name, expression</p>
-
-<p>.equ不会分配任何内存，它们只是在符号表中插入条目罢了。</p>
-
-<p>bne的意思是(!=) , b means bit. bit not equal. ble (&lt;=), beq (==), bge (>=), bgt (>), and bne (!=).</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/09/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-1/">用Qemu和GNU编译链研究ARM汇编(1)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-09T20:42:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>9</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>8:42 pm</span></time>
-        
-         | <a href="/blog/2013/07/09/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-1/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>1. 汇编程序代码格式</p>
-
-<p>汇编代码由一系列的声明所组成，每行一个。每条声明由下列格式组成：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>label(标签):   instruction @comment(注释)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>说明：</p>
-
-<ul>
-<li>label:
-标签的引入使得在内存中查询指令地址变得很方便，标签可以在任意一个内存地址使用，
-例如分支指令中就可以用到标签, 标签可以包括字母、数字_和$符号。</li>
-<li>注释：
-注释内容必须在@符号之后</li>
-<li>指令:
-指令可以是ARM指令集或是汇编器指令，汇编器指令是需要传递给汇编器的命令，总是以.开头。</li>
-</ul>
-
-
-<p>2. 一个简单的汇编语言文件:</p>
-
-<figure class='code'><figcaption><span>add.s -add.s </span></figcaption>
-<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='s'><span class='line'>        <span class="m">.</span>text
-</span><span class='line'>start<span class="o">:</span>                       <span class="o">@</span> Label<span class="p">,</span> not really required
-</span><span class='line'>        mov   r0<span class="p">,</span> <span class="c1">#5         @ Load register r0 with the value 5</span>
-</span><span class='line'>        mov   r1<span class="p">,</span> <span class="c1">#4         @ Load register r1 with the value 4</span>
-</span><span class='line'>        add   r2<span class="p">,</span> r1<span class="p">,</span> r0     <span class="o">@</span> Add r0 and r1 and store <span class="kr">in</span> r2
-</span><span class='line'>
-</span><span class='line'><span class="kp">stop</span><span class="o">:</span>   b stop               <span class="o">@</span> Infinite loop to stop execution
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>上面代码的意思是，把立即数5载入到寄存器r0, 4载入到r1,
-以r1和r0相加的结果填充r2.</p>
-
-<p>.text是汇编器指令，用于告知汇编器需要把代码组装到code段,而不是.data段。有关section的概念在后面将被讲到。</p>
-
-<p>3. 编译二进制文件</p>
-
-<p>GNU的汇编器名字叫as， 用下列命令将源文件编译成.o文件</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-as -o add.o add.s</span></code></pre></td></tr></table></div></figure>
-
-
-<p>链接器的名字叫ld，用下列命令可以将二进制文件链接成elf文件</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-ld -Ttext=0x0 -o add.elf add.o</span></code></pre></td></tr></table></div></figure>
-
-
-<p>-Ttext指明需要分配给label的地址,
-这条指令告诉链接器从地址0x0开始装载指令。我们可以用nm来查看具体的地址分配信息。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-nm add.elf 
-</span><span class='line'>00008010 T __bss_end__
-</span><span class='line'>00008010 T _bss_end__
-</span><span class='line'>00008010 T __bss_start
-</span><span class='line'>00008010 T __bss_start__
-</span><span class='line'>00008010 T __data_start
-</span><span class='line'>00008010 T _edata
-</span><span class='line'>00008010 T _end
-</span><span class='line'>00008010 T __end__
-</span><span class='line'>00080000 T _stack
-</span><span class='line'>00000000 t start
-</span><span class='line'>         U _start
-</span><span class='line'>0000000c t stop</span></code></pre></td></tr></table></div></figure>
-
-
-<p>start和stop之间由0c个字节，因为stop是在start开始后三条指令，
-每条指令的长度为4个Byte，3*4=12=0xc</p>
-
-<p>更改链接的参数将得到不同的地址分配。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-ld -Ttext=0x20000000 -o add.elf add.o
-</span><span class='line'>arm-none-eabi-ld: warning: cannot find entry symbol _start; defaulting to 20000000
-</span><span class='line'>$ arm-none-eabi-nm add.elf
-</span><span class='line'>20008010 T __bss_end__
-</span><span class='line'>20008010 T _bss_end__
-</span><span class='line'>20008010 T __bss_start
-</span><span class='line'>20008010 T __bss_start__
-</span><span class='line'>20008010 T __data_start
-</span><span class='line'>20008010 T _edata
-</span><span class='line'>20008010 T _end
-</span><span class='line'>20008010 T __end__
-</span><span class='line'>00080000 T _stack
-</span><span class='line'>20000000 t start
-</span><span class='line'>         U _start
-</span><span class='line'>2000000c t stop</span></code></pre></td></tr></table></div></figure>
-
-
-<p>ld得到的文件一般是ELF文件，在有操作系统的时候ELF可以工作的很好，但是我们将在裸机模式下(Bare
-Metal)运行此程序， 因此需要将文件类型转化为更简单的binary类型。</p>
-
-<p>GNU编译链的objcopy可以完成不同可执行文件之间的转换：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ arm-none-eabi-objcopy -O binary add.elf add.bin
-</span><span class='line'>$ file add.bin
-</span><span class='line'>add.bin: Hitachi SH big-endian COFF</span></code></pre></td></tr></table></div></figure>
-
-
-<p>4. 在Qemu中执行二进制文件。</p>
-
-<p>我们将使用connex开发板来模拟运行此程序，它把16MB的Flash放在地址0x0，而通常arm处理器重启时都会执行0x0处的代码。
-因而我们需要把add.bin写入到16MB Flash文件的头部。</p>
-
-<p>首先创建一个空的16MB Flash文件</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ dd if=/dev/zero of=flash.bin bs=4k count=4k
-</span><span class='line'>4096+0 records in
-</span><span class='line'>4096+0 records out
-</span><span class='line'>16777216 bytes (17 MB) copied, 0.0153106 s, 1.1 GB/s</span></code></pre></td></tr></table></div></figure>
-
-
-<p>而后，使用下列命令将add.bin放到Flash头部</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ dd if=add.bin of=flash.bin bs=4K conv=notrunc
-</span><span class='line'>0+1 records in
-</span><span class='line'>0+1 records out
-</span><span class='line'>16 bytes (16 B) copied, 0.00011154 s, 143 kB/s</span></code></pre></td></tr></table></div></figure>
-
-
-<p>add.bin大小刚好为16B, notrunc参数代表no truncated，意思是直接覆盖掉原有内容。</p>
-
-<p>用下列命令执行此改动后的flash文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
-</span><span class='line'>QEMU 1.4.2 monitor - type 'help' for more information</span></code></pre></td></tr></table></div></figure>
-
-
-<p>-M connex 指定connex机器， -pflash指定flash.bin代替flash闪存。</p>
-
-<p>-pflash file    use &lsquo;file&rsquo; as a parallel flash image 并行flash镜像</p>
-
-<p>-serial /dev/null 将connex的串口输出重定向到/dev/null</p>
-
-<p>查看寄存器信息：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>(qemu) info registers
-</span><span class='line'>R00=00000005 R01=00000004 R02=00000009 R03=00000000
-</span><span class='line'>R04=00000000 R05=00000000 R06=00000000 R07=00000000
-</span><span class='line'>R08=00000000 R09=00000000 R10=00000000 R11=00000000
-</span><span class='line'>R12=00000000 R13=00000000 R14=00000000 R15=0000000c
-</span><span class='line'>PSR=400001d3 -Z-- A svc32
-</span><span class='line'>FPSCR: 00000000</span></code></pre></td></tr></table></div></figure>
-
-
-<p>R02的值正是计算后的结果4+5=9.
-R15=0000000c 猜测应该为指令寄存器，指向stop(0xc)</p>
-
-<p>5. 更多的查看命令:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>help  List available commands
-</span><span class='line'>quit   Quits the emulator
-</span><span class='line'>xp /fmt addr   Physical memory dump from addr
-</span><span class='line'>system_reset   Reset the system.</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>(qemu) help xp
-</span><span class='line'>xp /fmt addr -- physical memory dump starting at 'addr'
-</span><span class='line'>(qemu) xp /4iw 0x0
-</span><span class='line'>0x00000000:  e3a00005      mov    r0, #5  ; 0x5
-</span><span class='line'>0x00000004:  e3a01004      mov    r1, #4  ; 0x4
-</span><span class='line'>0x00000008:  e0812000      add    r2, r1, r0
-</span><span class='line'>0x0000000c:  eafffffe      b  0xc</span></code></pre></td></tr></table></div></figure>
-
-
-<p>4: 4 个条目被显示, i表示打印出指令，即内建的反汇编，
-w表明条目的大小为32个bit，即一个全字。</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/08/zai-qemushang-yun-xing-raspberry-pijing-xiang/">在Qemu上运行Raspberry PI镜像</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-08T18:09:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>6:09 pm</span></time>
-        
-         | <a href="/blog/2013/07/08/zai-qemushang-yun-xing-raspberry-pijing-xiang/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>1. 下载和准备镜像文件</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget http://downloads.raspberrypi.org/images/raspbian/2013-05-25-wheezy-raspbian/2013-05-25-wheezy-raspbian.zip
-</span><span class='line'>$ unzip 2013-05-25-wheezy-raspbian.zip</span></code></pre></td></tr></table></div></figure>
-
-
-<p>2. 查看镜像文件分区信息</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ fdisk -l 2013-05-25-wheezy-raspbian.img 
-</span><span class='line'>Disk 2013-05-25-wheezy-raspbian.img: 1939 MB, 1939865600 bytes, 3788800 sectors
-</span><span class='line'>Units = sectors of 1 * 512 = 512 bytes
-</span><span class='line'>Sector size (logical/physical): 512 bytes / 512 bytes
-</span><span class='line'>I/O size (minimum/optimal): 512 bytes / 512 bytes
-</span><span class='line'>Disk label type: dos
-</span><span class='line'>Disk identifier: 0x000c7b31
-</span><span class='line'>
-</span><span class='line'>                         Device Boot      Start         End      Blocks   Id
-</span><span class='line'>System
-</span><span class='line'>2013-05-25-wheezy-raspbian.img1            8192      122879       57344    c  W95 FAT32 (LBA)
-</span><span class='line'>2013-05-25-wheezy-raspbian.img2          122880     3788799     1832960   83  Linux</span></code></pre></td></tr></table></div></figure>
-
-
-<p>从上面可以看到，根文件分区的地址偏移为512*122880=62914560</p>
-
-<p>3. 更改根分区文件里preload信息:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mount ./2013-05-25-wheezy-raspbian.img -o offset=62914560 /mnt3
-</span><span class='line'>$ sudo vim /mnt3/etc/ld.so.preload 
-</span><span class='line'>#注释掉这一行，否则在qemu启动完系统后将自动提示配置rpi而造成系统无法登陆
-</span><span class='line'>#/usr/lib/arm-linux-gnueabihf/libcofi_rpi.so
-</span><span class='line'>$ sudo umount /mnt3</span></code></pre></td></tr></table></div></figure>
-
-
-<p>4. 用qemu-system-arm启动raspberrypi镜像</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-arm -kernel kernel-qemu -cpu arm1176 -m 256 -M versatilepb \
-</span><span class='line'>-no-reboot -serial stdio -append "root=/dev/sda2 panic=1" -hda \
-</span><span class='line'>./2013-05-25-wheezy-raspbian.img </span></code></pre></td></tr></table></div></figure>
-
-
-<p>系统将启动到一个root登陆的无需密码的shell中，运行下列命令以修复文件系统:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ fsck /dev/sda2
-</span><span class='line'>$ shutdown -r now</span></code></pre></td></tr></table></div></figure>
-
-
-<p>再次启动完毕后的登陆用户名和密码如下，接下来就等同于原机操作了。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Login as pi
-</span><span class='line'>Password raspberry</span></code></pre></td></tr></table></div></figure>
-
-
-<p>5. ArchLinux on RaspberryPI</p>
-
-<p>基本步骤也是一样，挂在第2块分区后，需要更改etc/fstab做下列修改：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># &lt;file system&gt;        &lt;dir&gt;         &lt;type&gt;    &lt;options&gt;          &lt;dump&gt; &lt;pass&gt;
-</span><span class='line'>/dev/sda1   /boot           vfat    defaults        0       0
-</span><span class='line'>/dev/sda2   /     auto    defaults        0       0</span></code></pre></td></tr></table></div></figure>
-
-
-<p>之后挂载命令一样。</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/07/08/yong-qemumo-ni-arm-3/">用Qemu模拟ARM(3)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-07-08T16:35:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>4:35 pm</span></time>
-        
-         | <a href="/blog/2013/07/08/yong-qemumo-ni-arm-3/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>1. 下载并交叉编译u-boot。</p>
-
-<p>新版本的u-boot我加载后总有问题，2009.11版则可以顺利通过编译和测试。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget ftp://ftp.denx.de/pub/u-boot/u-boot-2009.11.tar.bz2
-</span><span class='line'>$ tar xjvf u-boot-2009.11.tar.bz2 
-</span><span class='line'>$ cd u-boot-2009.11
-</span><span class='line'>$ make versatilepb_config arch=ARM CROSS_COMPILE=arm-none-eabi-
-</span><span class='line'>$ make all arch=ARM CROSS_COMPILE=arm-none-eabi- </span></code></pre></td></tr></table></div></figure>
-
-
-<p>编译完成后会在目录下生成u-boot.bin和u-boot文件。</p>
-
-<p>2. 运行u-boot.bin:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-arm -M versatilepb -kernel u-boot.bin -nographic</span></code></pre></td></tr></table></div></figure>
-
-
-<p>如果采用-nographic来运行qemu-system-arm，终端将无法再响应任何系统输入譬如Ctrl+c/ctrl+d_，要终止qemu-system-arm就只能查到进程号再kill。所以我一般不带-nographic选项，启动后ctrl+alt+2去看serial0输出,保留在终端窗口直接ctrl+c杀死qemu-sytem-arm进程的权力。</p>
-
-<p>3. 用u-boot引导镜像文件:</p>
-
-<p>改动上一篇文章里用于构建启动镜像的linker.ld文件，因为u-boot.bin文件大小的缘故，我们需要把启动镜像的起始地址整体上移.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ls -l -h u-boot.bin 
-</span><span class='line'>-rwxr-xr-x 1 Trusty root 85K Jul  8 15:57 u-boot.bin</span></code></pre></td></tr></table></div></figure>
-
-
-<p>linker.ld文件里， 0x100000，这个大小相比于85K显然已经足够。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ENTRY(_Start)
-</span><span class='line'>SECTIONS
-</span><span class='line'>{
-</span><span class='line'>. = 0x100000;
-</span><span class='line'>startup : { startup.o(.text)}
-</span><span class='line'>.data : {*(.data)}
-</span><span class='line'>.bss : {*(.bss)}
-</span><span class='line'>. = . + 0x500;
-</span><span class='line'>sp_top = .;
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>按上一章的编译方法生成output.bin，不再重述。</p>
-
-<p>使用mkimage工具创建u-boot可识别的image文件：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkimage -A arm -C none -O linux -T kernel -d output.bin -a 0x00100000 -e 0x00100000 output.uimg
-</span><span class='line'>Image Name:   
-</span><span class='line'>Created:      Mon Jul  8 16:04:11 2013
-</span><span class='line'>Image Type:   ARM Linux Kernel Image (uncompressed)
-</span><span class='line'>Data Size:    152 Bytes = 0.15 kB = 0.00 MB
-</span><span class='line'>Load Address: 00100000
-</span><span class='line'>Entry Point:  00100000
-</span><span class='line'>
-</span><span class='line'>$ file *.uimg
-</span><span class='line'>output.uimg: u-boot legacy uImage, , Linux/ARM, OS Kernel Image (Not \
-</span><span class='line'>compressed), 152 bytes, Mon Jul  8 16:04:11 2013, Load Address: 0x00100000,\
-</span><span class='line'>Entry Point: 0x00100000, Header CRC: 0x3C62F575, Data CRC: 0x69CE9647</span></code></pre></td></tr></table></div></figure>
-
-
-<p>将u-boot.bin和output.uimg打包为一个文件：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat u-boot.bin output.uimg &gt;flash.bin</span></code></pre></td></tr></table></div></figure>
-
-
-<p>下面这条命令用于计算output.img在使用u-boot加载完flash.bin后在内存中的地址，-kernel选项告诉qemu从0x100000开始加载镜像，即65536。
-65536+u-boot.bin后的大小，即output.img在内存中的地址。printf则是用16进制的格式打印出来，以便加载.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ printf "0x%X" $(expr $(stat -c%s u-boot.bin) + 65536)
-</span><span class='line'>0x2525C</span></code></pre></td></tr></table></div></figure>
-
-
-<p>启动qemu-system-arm并运行自定义镜像:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ qemu-system-arm -M versatilepb -nographic -kernel flash.bin
-</span><span class='line'># iminfo 0x2525c
-</span><span class='line'>
-</span><span class='line'>## Checking Image at 0002525c ...
-</span><span class='line'>   Legacy image found
-</span><span class='line'>   Image Name:   
-</span><span class='line'>   Image Type:   ARM Linux Kernel Image (uncompressed)
-</span><span class='line'>   Data Size:    152 Bytes =  0.1 kB
-</span><span class='line'>   Load Address: 00100000
-</span><span class='line'>   Entry Point:  00100000
-</span><span class='line'>   Verifying Checksum ... OK
-</span><span class='line'>
-</span><span class='line'>VersatilePB # bootm 0x2525c
-</span><span class='line'>## Booting kernel from Legacy Image at 0002525c ...
-</span><span class='line'>   Image Name:   
-</span><span class='line'>   Image Type:   ARM Linux Kernel Image (uncompressed)
-</span><span class='line'>   Data Size:    152 Bytes =  0.1 kB
-</span><span class='line'>   Load Address: 00100000
-</span><span class='line'>   Entry Point:  00100000
-</span><span class='line'>   Loading Kernel Image ... OK
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>Starting kernel ...
-</span><span class='line'>
-</span><span class='line'>Hello Open World</span></code></pre></td></tr></table></div></figure>
-
-
-<p>u-boot可以支持的选项还有很多，包括使用NFS/TFTP启动等等，留待以后慢慢研究。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/64">&larr; Older</a>
@@ -2646,23 +2157,23 @@ w表明条目的大小为32个bit，即一个全字。</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/04/24/tipsonosexperiment/">TipsOnOSExperiment</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/04/24/zai-devstackzhong-shi-yong-packer/">在DevStack中使用Packer</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com/">Rsync the vault.centos.com</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/04/21/switching-to-win10/">Switching to Win10</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/04/20/devstack-enable-neutron/">DevStack Enable Neutron</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/18/change-ip-in-devstack/">Change IP in DevStack</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/15/moving-docker-repository-position/">Moving Docker Repository Position</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/06/tips-on-setup-eclipse-che/">Tips on Setup Eclipse CHE</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/04/05/extend-vagrants-disk/">Extend Vagrant's Disk</a>
       </li>
     
   </ul>

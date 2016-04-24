@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Virtualization | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/virtualization/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-04-20T19:47:40+08:00</updated>
+  <updated>2016-04-24T22:42:19+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,191 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[TipsOnOSExperiment]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/24/tipsonosexperiment/"/>
+    <updated>2016-04-24T17:32:12+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/24/tipsonosexperiment</id>
+    <content type="html"><![CDATA[<p>为了在家里验证一下DevStack的网络配置，组建了一个网络，涉及到的点比较多，以下是
+具体记录。</p>
+
+<h3>交换机配置</h3>
+
+<p>前段时间从美国亚马逊买回来一个TP-LINK的千兆交换机一直没用起来，型号是TL-SG108E
+，8口可网管交换机。但前面有写过文章可以用来参考:</p>
+
+<p><a href="http://purplepalmdash.github.io/blog/2015/12/12/ba-wan-tl-sg108e/">http://purplepalmdash.github.io/blog/2015/12/12/ba-wan-tl-sg108e/</a></p>
+
+<p>但这篇文章里讲的主要还是ovs后虚拟机的vlan，和最近要做的DevStack的FloatIP配置稍
+微有点差异。</p>
+
+<h3>网络规划</h3>
+
+<p>家里已有网络192.168.177.0/24, 这个网络是可以访问Internet的。所以DevStack机器上
+的eth0将连接到这个网段，并在其上分配floating IP.</p>
+
+<p>另外我们需要创建一个VLAN隔离的private network，用于给DevStack里的虚拟机默认启
+动后分配IP地址。将DevStack机器上的eth1连接到此网络。</p>
+
+<h3>配置交换机</h3>
+
+<p>TP-LINK的DEB-100网卡是比较皮实，奈何win10驱动需要找，随便找了个淘宝9.9包邮的
+USB转10兆网卡连上SurfacePro，开始配置交换机。</p>
+
+<p>步骤:  <br/>
+打开桌面的<code>Easy Smart Configuration Utility</code>，开始自动发现局域网内的交换机，如
+下图:</p>
+
+<p><img src="/images/2016_04_24_17_58_49.jpg" alt="/images/2016_04_24_17_58_49.jpg" /></p>
+
+<p>需要重新配置下USB有线网卡的IP地址才能连接上交换机:</p>
+
+<p><img src="/images/2016_04_24_18_02_45.jpg" alt="/images/2016_04_24_18_02_45.jpg" /></p>
+
+<p>双击发现的交换机，用<code>admin/admin</code>登录后的界面如下:</p>
+
+<p><img src="/iamges/2016_04_24_18_08_04.jpg" alt="/images/2016_04_24_18_08_04.jpg" /></p>
+
+<p>以前我曾经把这个交换机配置成802.1Q VLAN, 这次基于端口来隔离，所以要配置成<code>Port
+Based VLAN</code>, 配置完毕后的画面如下:</p>
+
+<p><img src="/images/2016_04_24_18_20_36.jpg" alt="/images/2016_04_24_18_20_36.jpg" /></p>
+
+<p>这种基于端口VLAN的验证方法很简单，将上网机和宽带路由器分别插在1～4和5～8口，即
+可测试出VLAN被端口隔离。但这好像不是DevStack中需要设置的。</p>
+
+<p>还是继续配置802.1Q VLAN. 值得注意的是，如果之前配置端口VLAN时将SurfacePro的连
+接和交换机网段隔离了，那可能会连接不上，换回同一VLAN即可连接上。</p>
+
+<p>配置vlan100如以下图所示:</p>
+
+<p><img src="/images/2016_04_24_19_51_15.jpg" alt="/images/2016_04_24_19_51_15.jpg" /></p>
+
+<h3>测试VLAN</h3>
+
+<p>将两台PC连接在5~8口上，VLAN100。</p>
+
+<p>PC1, ArchLinux, Systemd配置VLAN:</p>
+
+<pre><code>$ cat enp0s25.100.network
+[Match]
+Name=enp0s25.100
+
+[Network]
+DNS=192.168.2.1
+Address=192.168.2.1/24
+$ cat enp0s25.100.netdev 
+[NetDev]
+Name=enp0s25.100
+Kind=vlan
+
+[VLAN]
+Id=100
+
+[Network]
+DNS=192.168.2.1
+Address=192.168.2.1/24
+Gateway=192.168.2.1
+$ pwd
+/etc/systemd/network
+</code></pre>
+
+<p>重新启动PC1后，<code>192.168.2.1</code>将成为VLAN100口的地址。作为<code>192.168.2.1</code>,我们在这
+个端口上启动dhcp服务及路由转发等服务。</p>
+
+<pre><code>$ sudo pacman -S dhcp
+$ sudo systemctl enable dhcpd4.service
+</code></pre>
+
+<p>干掉冗余的默认dhcpd.conf文件，写一个最小的配置文件:</p>
+
+<pre><code>$ sudo vim /etc/dhcpd.conf.example 
+$ sudo vim /etc/dhcpd.conf         
+option domain-name-servers 180.76.76.76,223.5.5.5;
+option subnet-mask 255.255.255.0;
+option routers 192.168.2.1;
+subnet 192.168.2.0 netmask 255.255.255.0 {
+  range 192.168.2.150 192.168.2.250;
+
+  host macbookpro{
+   hardware ethernet 70:56:81:22:33:44;
+   fixed-address 192.168.2.199;
+  }
+}
+</code></pre>
+
+<p>开启dhcpd服务:</p>
+
+<pre><code>$ sudo systemctl start dhcpd4.service
+</code></pre>
+
+<p>PC2, 用openvswitch的vlan配置, libvirt的XML配置如下:</p>
+
+<pre><code>    &lt;interface type='bridge'&gt;
+      &lt;mac address='52:54:00:fd:03:e9'/&gt;
+      &lt;source bridge='ovsbr0'/&gt;
+      &lt;vlan trunk='yes'&gt;
+        &lt;tag id='100' nativeMode='untagged'/&gt;
+      &lt;/vlan&gt;
+      &lt;virtualport type='openvswitch'&gt;
+        &lt;parameters interfaceid='fb3e7f34-6fcd-41dc-8fed-c3ffe0d54b18'/&gt;
+      &lt;/virtualport&gt;
+</code></pre>
+
+<p>测试，即启动PC2上的虚拟机，若虚拟机能获得IP地址，则说明VLAN配置成功。</p>
+
+<h3>DevStack网络配置</h3>
+
+<p>操作系统为Ubuntu14.04, 网卡为eth0(192.168.177.100)和eth1(vlan 100)</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[在DevStack中使用Packer]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/24/zai-devstackzhong-shi-yong-packer/"/>
+    <updated>2016-04-24T10:16:39+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/24/zai-devstackzhong-shi-yong-packer</id>
+    <content type="html"><![CDATA[<h3>导入源镜像</h3>
+
+<p>源镜像可以从ubuntu.com下载到，并使用以下命令导入:</p>
+
+<pre><code>$ wget https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+$ glance image-create --name ubuntu-trusty --disk-format qcow2 \
+--container-format bare --file trusty-server-cloudimg-amd64-disk1.img
+</code></pre>
+
+<h3>openstack.json文件</h3>
+
+<p>github上有现成的，克隆到本地:</p>
+
+<pre><code>$ git clone https://github.com/Thingee/packer-devstack.git
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Rsync the vault.centos.com]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com/"/>
+    <updated>2016-04-22T19:39:58+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com</id>
+    <content type="html"><![CDATA[<p>For I want to do some configuration workings on old distribution of CentOS, I have to
+use lots of materials which from vault.centos.com, following are the steps for syncing
+them.</p>
+
+<p>First, rsync in <code>vault.centos.com</code> is closed, thus we have to choose
+<code>http://archive.kernel.org/centos/</code>.</p>
+
+<h3>Rsync Scripts</h3>
+
+<p>Refers to:   <br/>
+<a href="https://www.totalnetsolutions.net/2013/10/02/setting-up-a-corporate-yum-repository-mirror-for-bandwidth-and-staged-update-management/">https://www.totalnetsolutions.net/2013/10/02/setting-up-a-corporate-yum-repository-mirror-for-bandwidth-and-staged-update-management/</a></p>
+
+<h3>Make Repository</h3>
+
+<p><a href="https://wiki.centos.org/HowTos/CreateLocalMirror">https://wiki.centos.org/HowTos/CreateLocalMirror</a></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[DevStack Enable Neutron]]></title>
@@ -48,6 +233,10 @@ NOVNC_REPO=http://git.trystack.cn/kanaka/noVNC.git
 SPICE_REPO=http://git.trystack.cn/git/spice/spice-html5.git
 </code></pre>
 
+<p>Add following configurations:</p>
+
+<p><img src="/images/2016_04_21_10_46_16_505x495.jpg" alt="/images/2016_04_21_10_46_16_505x495.jpg" /></p>
+
 <p>Now stacking the devstack:</p>
 
 <pre><code>$ ./stack.sh
@@ -73,127 +262,6 @@ stack@packer-PerforceTest:~/devstack$ ./unstack.sh &amp;&amp; ./stack.sh
 </code></pre>
 
 <p>Now visiting your <code>http://Your_New_IP/dashboard</code> you will got the openstack dashborad.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Extend Vagrant's Disk]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/04/05/extend-vagrants-disk/"/>
-    <updated>2016-04-05T15:30:35+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/04/05/extend-vagrants-disk</id>
-    <content type="html"><![CDATA[<p>In Vagrantfile, edit the following definition:</p>
-
-<pre><code>  config.vm.provider "virtualbox" do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-    vb.memory = "1024"
-    file_to_disk = File.realpath( "." ).to_s + "/disk.vdi"
-    if ARGV[0] == "up" &amp;&amp; ! File.exist?(file_to_disk) 
-      puts "Creating 5GB disk #{file_to_disk}."
-      vb.customize [
-        'createhd', 
-        '--filename', file_to_disk, 
-        '--format', 'VDI', 
-        '--size', 5000 * 1024 # 5 GB
-        ] 
-      vb.customize [
-        'storageattach', :id, 
-        '--storagectl', 'SATA', 
-        '--port', 1, '--device', 0, 
-        '--type', 'hdd', '--medium', 
-        file_to_disk
-        ]
-    end
-    #config.vm.provision "shell", path: "scripts/add_new_disk.sh"
-  end
-  config.vm.provision "shell", path: "scripts/add_new_disk.sh"
-</code></pre>
-
-<p>The <code>add_new_disk.sh</code> should be written like following:</p>
-
-<pre><code>set -e
-set -x
-
-if [ -f /etc/disk_added_date ]
-then
-   echo "disk already added so exiting."
-   exit 0
-fi
-
-
-sudo fdisk -u /dev/sdb &lt;&lt;EOF
-n
-p
-1
-
-
-t
-8e
-w
-EOF
-
-pvcreate /dev/sdb1
-vgextend VolGroup /dev/sdb1
-lvextend /dev/VolGroup/lv_root
-resize2fs /dev/VolGroup/lv_root
-
-date &gt; /etc/disk_added_date
-</code></pre>
-
-<p>Notice: this won&rsquo;t fit for Ubuntu Snappy Core.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on Shrinking VHD File]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/29/tips-on-shrinking-vhd-file/"/>
-    <updated>2016-03-29T18:15:51+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/29/tips-on-shrinking-vhd-file</id>
-    <content type="html"><![CDATA[<h3>UnCleaned Templates Generation</h3>
-
-<p>Before remove big files:</p>
-
-<pre><code>[root@fwgwg ~]# df -h
-Filesystem            Size  Used Avail Use% Mounted on
-/dev/mapper/VolGroup00-LogVol00
-                       18G  5.1G   12G  31% /
-/dev/xvda1             99M   14M   80M  15% /boot
-tmpfs                 128M     0  128M   0% /dev/shm
-</code></pre>
-
-<p>Create the vhd file in CloudStack:</p>
-
-<p><img src="source/images/2016_03_29_18_17_10_634x380.jpg" alt="source/images/2016_03_29_18_17_10_634x380.jpg" /></p>
-
-<p>Name it:</p>
-
-<p><img src="source/images/2016_03_29_18_17_55_301x382.jpg" alt="source/images/2016_03_29_18_17_55_301x382.jpg" /></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Monitoring XenServer]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/29/monitoring-xenserver/"/>
-    <updated>2016-03-29T12:23:50+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/29/monitoring-xenserver</id>
-    <content type="html"><![CDATA[<h3>Prerequisition</h3>
-
-<p>Refers
-to<a href="https://github.com/crashdump/collectd-xenserver">https://github.com/crashdump/collectd-xenserver</a></p>
-
-<ul>
-<li>Collected 4.9 or later</li>
-<li>Python2.4 Or Later</li>
-<li>sudo pip install XenAPI</li>
-<li>sudo pip install collectd</li>
-</ul>
-
-
-<h3>Configuration</h3>
-
-<p>The plugin could not working. to be investigated.</p>
 ]]></content>
   </entry>
   

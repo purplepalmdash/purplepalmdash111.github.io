@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-04-20T19:47:40+08:00</updated>
+  <updated>2016-04-24T22:42:19+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,278 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[TipsOnOSExperiment]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/24/tipsonosexperiment/"/>
+    <updated>2016-04-24T17:32:12+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/24/tipsonosexperiment</id>
+    <content type="html"><![CDATA[<p>为了在家里验证一下DevStack的网络配置，组建了一个网络，涉及到的点比较多，以下是
+具体记录。</p>
+
+<h3>交换机配置</h3>
+
+<p>前段时间从美国亚马逊买回来一个TP-LINK的千兆交换机一直没用起来，型号是TL-SG108E
+，8口可网管交换机。但前面有写过文章可以用来参考:</p>
+
+<p><a href="http://purplepalmdash.github.io/blog/2015/12/12/ba-wan-tl-sg108e/">http://purplepalmdash.github.io/blog/2015/12/12/ba-wan-tl-sg108e/</a></p>
+
+<p>但这篇文章里讲的主要还是ovs后虚拟机的vlan，和最近要做的DevStack的FloatIP配置稍
+微有点差异。</p>
+
+<h3>网络规划</h3>
+
+<p>家里已有网络192.168.177.0/24, 这个网络是可以访问Internet的。所以DevStack机器上
+的eth0将连接到这个网段，并在其上分配floating IP.</p>
+
+<p>另外我们需要创建一个VLAN隔离的private network，用于给DevStack里的虚拟机默认启
+动后分配IP地址。将DevStack机器上的eth1连接到此网络。</p>
+
+<h3>配置交换机</h3>
+
+<p>TP-LINK的DEB-100网卡是比较皮实，奈何win10驱动需要找，随便找了个淘宝9.9包邮的
+USB转10兆网卡连上SurfacePro，开始配置交换机。</p>
+
+<p>步骤:  <br/>
+打开桌面的<code>Easy Smart Configuration Utility</code>，开始自动发现局域网内的交换机，如
+下图:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_04_24_17_58_49.jpg" alt="/images/2016_04_24_17_58_49.jpg" /></p>
+
+<p>需要重新配置下USB有线网卡的IP地址才能连接上交换机:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_04_24_18_02_45.jpg" alt="/images/2016_04_24_18_02_45.jpg" /></p>
+
+<p>双击发现的交换机，用<code>admin/admin</code>登录后的界面如下:</p>
+
+<p><img src="http://purplepalmdash.github.io/iamges/2016_04_24_18_08_04.jpg" alt="/images/2016_04_24_18_08_04.jpg" /></p>
+
+<p>以前我曾经把这个交换机配置成802.1Q VLAN, 这次基于端口来隔离，所以要配置成<code>Port
+Based VLAN</code>, 配置完毕后的画面如下:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_04_24_18_20_36.jpg" alt="/images/2016_04_24_18_20_36.jpg" /></p>
+
+<p>这种基于端口VLAN的验证方法很简单，将上网机和宽带路由器分别插在1～4和5～8口，即
+可测试出VLAN被端口隔离。但这好像不是DevStack中需要设置的。</p>
+
+<p>还是继续配置802.1Q VLAN. 值得注意的是，如果之前配置端口VLAN时将SurfacePro的连
+接和交换机网段隔离了，那可能会连接不上，换回同一VLAN即可连接上。</p>
+
+<p>配置vlan100如以下图所示:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_04_24_19_51_15.jpg" alt="/images/2016_04_24_19_51_15.jpg" /></p>
+
+<h3>测试VLAN</h3>
+
+<p>将两台PC连接在5~8口上，VLAN100。</p>
+
+<p>PC1, ArchLinux, Systemd配置VLAN:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat enp0s25.100.network
+</span><span class='line'>[Match]
+</span><span class='line'>Name=enp0s25.100
+</span><span class='line'>
+</span><span class='line'>[Network]
+</span><span class='line'>DNS=192.168.2.1
+</span><span class='line'>Address=192.168.2.1/24
+</span><span class='line'>$ cat enp0s25.100.netdev 
+</span><span class='line'>[NetDev]
+</span><span class='line'>Name=enp0s25.100
+</span><span class='line'>Kind=vlan
+</span><span class='line'>
+</span><span class='line'>[VLAN]
+</span><span class='line'>Id=100
+</span><span class='line'>
+</span><span class='line'>[Network]
+</span><span class='line'>DNS=192.168.2.1
+</span><span class='line'>Address=192.168.2.1/24
+</span><span class='line'>Gateway=192.168.2.1
+</span><span class='line'>$ pwd
+</span><span class='line'>/etc/systemd/network</span></code></pre></td></tr></table></div></figure>
+
+
+<p>重新启动PC1后，<code>192.168.2.1</code>将成为VLAN100口的地址。作为<code>192.168.2.1</code>,我们在这
+个端口上启动dhcp服务及路由转发等服务。</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S dhcp
+</span><span class='line'>$ sudo systemctl enable dhcpd4.service</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>干掉冗余的默认dhcpd.conf文件，写一个最小的配置文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/dhcpd.conf.example 
+</span><span class='line'>$ sudo vim /etc/dhcpd.conf         
+</span><span class='line'>option domain-name-servers 180.76.76.76,223.5.5.5;
+</span><span class='line'>option subnet-mask 255.255.255.0;
+</span><span class='line'>option routers 192.168.2.1;
+</span><span class='line'>subnet 192.168.2.0 netmask 255.255.255.0 {
+</span><span class='line'>  range 192.168.2.150 192.168.2.250;
+</span><span class='line'>
+</span><span class='line'>  host macbookpro{
+</span><span class='line'>   hardware ethernet 70:56:81:22:33:44;
+</span><span class='line'>   fixed-address 192.168.2.199;
+</span><span class='line'>  }
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>开启dhcpd服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl start dhcpd4.service</span></code></pre></td></tr></table></div></figure>
+
+
+<p>PC2, 用openvswitch的vlan配置, libvirt的XML配置如下:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>&lt;interface type='bridge'&gt;
+</span><span class='line'>  &lt;mac address='52:54:00:fd:03:e9'/&gt;
+</span><span class='line'>  &lt;source bridge='ovsbr0'/&gt;
+</span><span class='line'>  &lt;vlan trunk='yes'&gt;
+</span><span class='line'>    &lt;tag id='100' nativeMode='untagged'/&gt;
+</span><span class='line'>  &lt;/vlan&gt;
+</span><span class='line'>  &lt;virtualport type='openvswitch'&gt;
+</span><span class='line'>    &lt;parameters interfaceid='fb3e7f34-6fcd-41dc-8fed-c3ffe0d54b18'/&gt;
+</span><span class='line'>  &lt;/virtualport&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>测试，即启动PC2上的虚拟机，若虚拟机能获得IP地址，则说明VLAN配置成功。</p>
+
+<h3>DevStack网络配置</h3>
+
+<p>操作系统为Ubuntu14.04, 网卡为eth0(192.168.177.100)和eth1(vlan 100)</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[在DevStack中使用Packer]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/24/zai-devstackzhong-shi-yong-packer/"/>
+    <updated>2016-04-24T10:16:39+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/24/zai-devstackzhong-shi-yong-packer</id>
+    <content type="html"><![CDATA[<h3>导入源镜像</h3>
+
+<p>源镜像可以从ubuntu.com下载到，并使用以下命令导入:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wget https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+</span><span class='line'>$ glance image-create --name ubuntu-trusty --disk-format qcow2 \
+</span><span class='line'>--container-format bare --file trusty-server-cloudimg-amd64-disk1.img</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>openstack.json文件</h3>
+
+<p>github上有现成的，克隆到本地:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone https://github.com/Thingee/packer-devstack.git</span></code></pre></td></tr></table></div></figure>
+
+
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Rsync the vault.centos.com]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com/"/>
+    <updated>2016-04-22T19:39:58+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/22/rsync-the-vault-dot-centos-dot-com</id>
+    <content type="html"><![CDATA[<p>For I want to do some configuration workings on old distribution of CentOS, I have to
+use lots of materials which from vault.centos.com, following are the steps for syncing
+them.</p>
+
+<p>First, rsync in <code>vault.centos.com</code> is closed, thus we have to choose
+<code>http://archive.kernel.org/centos/</code>.</p>
+
+<h3>Rsync Scripts</h3>
+
+<p>Refers to:   <br/>
+<a href="https://www.totalnetsolutions.net/2013/10/02/setting-up-a-corporate-yum-repository-mirror-for-bandwidth-and-staged-update-management/">https://www.totalnetsolutions.net/2013/10/02/setting-up-a-corporate-yum-repository-mirror-for-bandwidth-and-staged-update-management/</a></p>
+
+<h3>Make Repository</h3>
+
+<p><a href="https://wiki.centos.org/HowTos/CreateLocalMirror">https://wiki.centos.org/HowTos/CreateLocalMirror</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Switching to Win10]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/04/21/switching-to-win10/"/>
+    <updated>2016-04-21T10:06:44+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/04/21/switching-to-win10</id>
+    <content type="html"><![CDATA[<h3>Background</h3>
+
+<p>Since the monitor in my company are so ba&hellip;&hellip;..d, I have to change my working
+environment from PC to SurfacePro, thus I have some tools changes, following are the
+records.</p>
+
+<h3>Tool List</h3>
+
+<p>Terminal: XShell4, Make sure you have change the screen-size issue.   <br/>
+<a href="purplepalmdash.github.io/blog/2015/11/13/win10-tips-for-using-xshell/">purplepalmdash.github.io/blog/2015/11/13/win10-tips-for-using-xshell/</a></p>
+
+<p>Screen-Shot:  <br/>
+I use picPick for replacing the scrot, the scrot is so convenient thus I found many
+tools for replacing it.</p>
+
+<p>picPick Configuration: the main purpose is for selecting the rectangle and save it
+automatically to the folder with the timestamp.</p>
+
+<p>Auto-Syncing tool:   <br/>
+using WinSCP&rsquo;s keep remote the latest status:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_04_21_10_39_10.jpg" alt="/images/2016_04_21_10_39_10.jpg" /></p>
+
+<p>OK, Now we could also using the same writing behavior just as under Linux Awesome
+Desktop.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[DevStack Enable Neutron]]></title>
@@ -61,6 +333,10 @@
 </span><span class='line'>NOVNC_REPO=http://git.trystack.cn/kanaka/noVNC.git
 </span><span class='line'>SPICE_REPO=http://git.trystack.cn/git/spice/spice-html5.git</span></code></pre></td></tr></table></div></figure>
 
+
+<p>Add following configurations:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_04_21_10_46_16_505x495.jpg" alt="/images/2016_04_21_10_46_16_505x495.jpg" /></p>
 
 <p>Now stacking the devstack:</p>
 
@@ -2214,569 +2490,6 @@ operations.</p>
 
 
 <p>在验证系统时，可以进入vagrant的sandbox模式，验证成功后才正式提交。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[把玩ebuddy(4)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/15/ba-wan-ebuddy-4/"/>
-    <updated>2016-03-15T14:25:48+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/15/ba-wan-ebuddy-4</id>
-    <content type="html"><![CDATA[<p>总结了一下ebuddy的玩法，最近加了点玩法，就是用ebuddy作为Bash运行脚本后的提示部件。譬如
-，当完成了某个编译任务后，用ebuddy来告知任务的运行成功。</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ Task A ; NOTIFY EBUDDY</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>/bin/ebuddy</h3>
-
-<p>创建一个<code>/bin/ebuddy</code>的文件，内容如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#!/bin/bash
-</span><span class='line'>FILE=/tmp/ebuddy
-</span><span class='line'>while true
-</span><span class='line'>do
-</span><span class='line'>  # if exists the file, then blinking the ebuddy.
-</span><span class='line'>  if [ -f $FILE ];
-</span><span class='line'>  then
-</span><span class='line'>    # Exists the file, shining the ebuddy
-</span><span class='line'>     echo 07 &gt; /dev/udp/127.0.0.1/8888
-</span><span class='line'>  else
-</span><span class='line'>    # Now clear the status of the ebuddy
-</span><span class='line'>     echo 17 &gt; /dev/udp/127.0.0.1/8888
-</span><span class='line'>  fi
-</span><span class='line'>#echo 07 &gt; /dev/udp/127.0.0.1/8888
-</span><span class='line'>sleep 3
-</span><span class='line'>done</span></code></pre></td></tr></table></div></figure>
-
-
-<p>这个文件的意思是，如果存在<code>/tmp/ebuddy</code>文件，ebuddy的头会亮起，否则，清除ebuddy的状态。</p>
-
-<h3>notifyebuddy &amp;&amp; clearebuddy</h3>
-
-<p>这两个命令是做在.zshrc里的两个alias:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vim ~/.zshrc
-</span><span class='line'># For Using ebuddy
-</span><span class='line'>alias notifyebuddy='touch /tmp/ebuddy'
-</span><span class='line'>alias clearebuddy='rm -f /tmp/ebuddy'</span></code></pre></td></tr></table></div></figure>
-
-
-<p>这样我们可以在运行完某个命令后，告知ebuddy完成事件。</p>
-
-<h3>局限</h3>
-
-<p>不能同时标识两个以上的命令完成情况。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[使用squid缓存所有rpm/deb安装包]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/"/>
-    <updated>2016-03-15T10:23:34+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao</id>
-    <content type="html"><![CDATA[<p>在进行自动化部署的时候，需要频繁安装系统，鉴于工作环境的带宽有限，我需要设置一个代理服
-务器，用于缓存所有的RPM/DEB安装包，以便自动化部署可以在瞬间完成。</p>
-
-<p>以下示例运行在ArchLinux上。</p>
-
-<h3>Squid搭建</h3>
-
-<p>Squid介绍:</p>
-
-<p>Squid 是一个 Web 缓存代理，支持 HTTP, HTTPS, FTP, 以及更多。它通过缓存与重用经常请求的
-web页面，减少带宽使用同时提升了响应时间。Squid 具有可扩展的访问控制功能，同时可以使服务
-器加速。它运行在 Unix 和 Windows 中，采用 GNU GPL 协议发布。</p>
-
-<p>安装squid:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S squid</span></code></pre></td></tr></table></div></figure>
-
-
-<p>我们需要配置squid以便它能适配我们的环境，我的环境里主要需要做以下几个事情： <br/>
-1. 更改squid缓存目录到/home分区。  <br/>
-2. 更改squid缓存目录大小为30G以上。  <br/>
-3. 更改缓存文件大小，以便它支持大的RPM/DEB包。</p>
-
-<p>更改缓存目录， 找到以下的行，在其下添加我们自定义的缓存目录:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/squid/squid.conf
-</span><span class='line'># Uncomment and adjust the following to add a disk cache directory.
-</span><span class='line'>#cache_dir ufs /var/cache/squid 100 16 256
-</span><span class='line'>cache_dir ufs /home/dash/squid 30000 16 256</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-我们将在指定目录下创建目录， 第一层数为16, 每个文件夹下最多包含256个子文件夹。</p>
-
-<p>在配置文件的最后加入以下行，以支持更大的缓存文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/squid/squid.conf
-</span><span class='line'>maximum_object_size 200 MB</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>现在开始创建缓存目录:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ squid -z</span></code></pre></td></tr></table></div></figure>
-
-
-<p>启动服务后，运行检查</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl restart squid
-</span><span class='line'>$ sudo systemctl enable squidz
-</span><span class='line'>$ sudo systemctl -k check</span></code></pre></td></tr></table></div></figure>
-
-
-<p>验证可以通过<code>netstat -anp | grep 3128</code>来检查squid进程是否运行。</p>
-
-<h3>使用squid代理</h3>
-
-<h3>apt-cacher</h3>
-
-<p>以上设置的代理仅能支持RPM包的工作，对于DEB包我们需要使用apt-cacher, 在ArchLinux上安装和配置apt-cacher:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt apt-cacher
-</span><span class='line'>$ sudo vim /etc/apt-cacher-ng/acng.conf
-</span><span class='line'>CacheDir: /home/nomodify/apt-cacher
-</span><span class='line'>Port: 3142
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Config on Agent:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/apt/apt.conf.d/01proxy 
-</span><span class='line'>Acquire::http::Proxy "http://192.168.0.121:3142";</span></code></pre></td></tr></table></div></figure>
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[用Vagrant管理libvirt]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/13/yong-vagrantguan-li-libvirt/"/>
-    <updated>2016-03-13T16:07:59+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/13/yong-vagrantguan-li-libvirt</id>
-    <content type="html"><![CDATA[<h3>先决条件</h3>
-
-<p>Vagrant为0.8.1.</p>
-
-<p>参考:  <br/>
-<a href="http://linuxsimba.com/vagrant.html">http://linuxsimba.com/vagrant.html</a>  <br/>
-<a href="http://linuxsimba.com/vagrant-libvirt-install/">http://linuxsimba.com/vagrant-libvirt-install/</a></p>
-
-<h3>Ubuntu设置</h3>
-
-<p>考虑到天朝防火墙的存在,需要经过以下命令才能安装vagrant-libvirt插件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo apt-get install -y libvirt-dev ruby-dev
-</span><span class='line'>$ gem source -r https://rubygems.org/
-</span><span class='line'>$ gem source -a http://mirrors.aliyun.com/rubygems/
-</span><span class='line'>$ gem install ruby-libvirt -v '0.6.0'
-</span><span class='line'>$ gem install vagrant-libvirt -v '0.0.32'
-</span><span class='line'>$ vagrant plugin install vagrant-libvirt
-</span><span class='line'>$ vagrant plugin list
-</span><span class='line'>vagrant-libvirt (0.0.32)
-</span><span class='line'>$ axel http://linuxsimba.com/vagrantbox/ubuntu-trusty.box
-</span><span class='line'>$ vagrant box add ./ubuntu-trusty.box --name "trusty64"</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>ArchLinux设置</h3>
-
-<p>按照ArchLinux wiki的方法,安装vagrant-libvirt插件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'> # in case it's already installled
-</span><span class='line'> vagrant plugin uninstall vagrant-libvirt
-</span><span class='line'> 
-</span><span class='line'> # vagrant's copy of curl prevents the proper installation of ruby-libvirt
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/libcurl.so{,.backup}
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/libcurl.so.4{,.backup}
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/libcurl.so.4.4.0{,.backup}
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{,.backup}
-</span><span class='line'> 
-</span><span class='line'> CONFIGURE_ARGS="with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib" vagrant plugin install vagrant-libvirt
-</span><span class='line'> 
-</span><span class='line'> # https://github.com/pradels/vagrant-libvirt/issues/541
-</span><span class='line'> export PATH=/opt/vagrant/embedded/bin:$PATH
-</span><span class='line'> export GEM_HOME=~/.vagrant.d/gems
-</span><span class='line'> export GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems
-</span><span class='line'> gem uninstall ruby-libvirt
-</span><span class='line'> gem install ruby-libvirt
-</span><span class='line'> 
-</span><span class='line'> # put vagrant's copy of curl back
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/libcurl.so{.backup,}
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/libcurl.so.4{.backup,}
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/libcurl.so.4.4.0{.backup,}
-</span><span class='line'> sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{.backup,}</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>导入box</h3>
-
-<p>用packer编译出来的box文件默认工作在virtualbox下,我们需要用一个插件将其转换为
-libvirt可用的box:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#  vagrant plugin install vagrant-mutate
-</span><span class='line'># vagrant mutate ubuntu-14.04.virtualbox.box libvirt
-</span><span class='line'>Extracting box file to a temporary directory.
-</span><span class='line'>Converting ubuntu-14.04.virtualbox from virtualbox to libvirt.
-</span><span class='line'>    (100.00/100%)
-</span><span class='line'>Cleaning up temporary files.
-</span><span class='line'>The box ubuntu-14.04.virtualbox (libvirt) is now ready to use.
-</span><span class='line'># cd /root/.vagrant.d/boxes/
-</span><span class='line'># mv ubuntu-14.04.virtualbox/ trusty64
-</span><span class='line'># vagrant box list
-</span><span class='line'>trusty64 (libvirt, 0)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>检查安装的box</h3>
-
-<p>可以通过以下命令检查已经安装好的box:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant box list
-</span><span class='line'>trusty64  (libvirt, 0)
-</span><span class='line'>ubuntu1404    (virtualbox, 0)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>配置Vagrantfile</h3>
-
-<p>以下是一个例子:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># -*- mode: ruby -*-
-</span><span class='line'># vi: set ft=ruby :
-</span><span class='line'>Vagrant.configure(2) do |config|
-</span><span class='line'>
-</span><span class='line'>  config.vm.box = "trusty64"
-</span><span class='line'>  # vagrant issues #1673..fixes hang with configure_networks
-</span><span class='line'>  config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
-</span><span class='line'>  config.vm.provider :libvirt do |domain|
-</span><span class='line'>    domain.memory = 256
-</span><span class='line'>    domain.nested = true
-</span><span class='line'>  end
-</span><span class='line'>
-</span><span class='line'># Private network using virtual network switching
-</span><span class='line'>  config.vm.define :vm1 do |vm1|
-</span><span class='line'>    vm1.vm.network :private_network, :ip =&gt; "192.168.56.11"
-</span><span class='line'>  end
-</span><span class='line'>
-</span><span class='line'>  config.vm.define :vm2 do |vm2|
-</span><span class='line'>    vm2.vm.network :private_network, :ip =&gt; "192.168.56.12"
-</span><span class='line'>  end
-</span><span class='line'>
-</span><span class='line'>  # Private network. Point to Point between 2 Guest OS using a TCP tunnel
-</span><span class='line'>  # Guest 1
-</span><span class='line'>  #config.vm.define :test_vm1 do |test_vm1|
-</span><span class='line'>  #  test_vm1.vm.network :private_network,
-</span><span class='line'>  #    :libvirt__tunnel_type =&gt; 'server',
-</span><span class='line'>  #    # default is 127.0.0.1 if omitted
-</span><span class='line'>  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
-</span><span class='line'>  #    :libvirt__tunnel_port =&gt; '11111'
-</span><span class='line'>
-</span><span class='line'>  # Guest 2
-</span><span class='line'>  #config.vm.define :test_vm2 do |test_vm2|
-</span><span class='line'>  #  test_vm2.vm.network :private_network,
-</span><span class='line'>  #    :libvirt__tunnel_type =&gt; 'client',
-</span><span class='line'>  #    # default is 127.0.0.1 if omitted
-</span><span class='line'>  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
-</span><span class='line'>  #    :libvirt__tunnel_port =&gt; '11111'
-</span><span class='line'>
-</span><span class='line'>
-</span><span class='line'>  # Public Network
-</span><span class='line'>  config.vm.define :vm1 do |vm1|
-</span><span class='line'>    vm1.vm.network :public_network,
-</span><span class='line'>      :dev =&gt; "virbr0",
-</span><span class='line'>      :mode =&gt; "bridge",
-</span><span class='line'>      :type =&gt; "bridge"
-</span><span class='line'>  end
-</span><span class='line'>end
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>启动虚拟机</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vagrant up --provider=libvirt</span></code></pre></td></tr></table></div></figure>
-
-
-<p>启动时会出现以下问题, 解决方案为:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant up --provider=libvirt
-</span><span class='line'>....
-</span><span class='line'>Missing required arguments: libvirt_uri
-</span><span class='line'>.....
-</span><span class='line'>$ vagrant plugin install --plugin-version 0.0.3 fog-libvirt</span></code></pre></td></tr></table></div></figure>
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Tips on 5050RGB]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/12/tips-on-5050rgb/"/>
-    <updated>2016-03-12T19:32:42+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/12/tips-on-5050rgb</id>
-    <content type="html"><![CDATA[<h3>背景</h3>
-
-<p>淘宝上买的5050RGB模块, 外观如下图:</p>
-
-<p><img src="http://purplepalmdash.github.io/images/2016_03_12_19_36_05_351x233.jpg" alt="/images/2016_03_12_19_36_05_351x233.jpg" /></p>
-
-<p>连线:</p>
-
-<p>这个RGB模块比较奇怪,直接使用Arduino的5v输出一直有问题,我是用的外接5V电源供电,
-动用了面包板模块.(之后发现不是供电的问题, 是因为淘宝上卖的模块提供示例代码的问
-题)</p>
-
-<p>更具体的连线如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>// V-VCC 5V   R-9   B-10  G-11
-</span><span class='line'>#define LEDR 9
-</span><span class='line'>#define LEDB 10
-</span><span class='line'>#define LEDG 11</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>测试</h3>
-
-<p>按照厂方提供的程序,未能成功运行.</p>
-
-<p>厂方提供的电路图如下:</p>
-
-<p><img src="http://purplepalmdash.github.io/images/2016_03_12_20_31_25_373x471.jpg" alt="/images/2016_03_12_20_31_25_373x471.jpg" /></p>
-
-<h3>Debug</h3>
-
-<p>百思不得其解后,用万用表测试, 电阻发声的那档, 发现加电后,某两个LED可以亮, 另外
-一个不能亮.</p>
-
-<p>发现奇怪的一点是, VCC接高电压, RGB接低电压时, 无法点亮LED. RGB接高电压, VCC接
-低电压时, LED可以被点亮两个.</p>
-
-<p>猜测: 厂方给的参考资料有误, 接线错误. 而且LED坏了一个.</p>
-
-<p>验证, 正确.</p>
-
-<p>连线更改为:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>// V-VCC 5V   R-9   B-10  G-11
-</span><span class='line'>#define LEDR 9
-</span><span class='line'>#define LEDG 10</span></code></pre></td></tr></table></div></figure>
-
-
-<p>蓝色的LED已坏, 所以示例代码中,不许配置LEDB.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>// V-VCC GND   R-9   G-10  
-</span><span class='line'>#define LEDR 9
-</span><span class='line'>#define LEDG 10
-</span><span class='line'>
-</span><span class='line'>int i = 0;
-</span><span class='line'>
-</span><span class='line'>void setup()
-</span><span class='line'>{
-</span><span class='line'>  pinMode(LEDG,OUTPUT);
-</span><span class='line'>  pinMode(LEDR,OUTPUT);
-</span><span class='line'>
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'>void loop()
-</span><span class='line'>{
-</span><span class='line'>  analogWrite(LEDR,0);
-</span><span class='line'>  analogWrite(LEDG,0);  //off
-</span><span class='line'>  delay(1000);
-</span><span class='line'>  analogWrite(LEDR,255); 
-</span><span class='line'>delay(1000); 
-</span><span class='line'>  analogWrite(LEDR,0);
-</span><span class='line'>  analogWrite(LEDG,0);
-</span><span class='line'>  delay(1000); 
-</span><span class='line'>  analogWrite(LEDR,30);
-</span><span class='line'>  analogWrite(LEDG,200);
-</span><span class='line'>delay(1000); 
-</span><span class='line'>  analogWrite(LEDR,0);
-</span><span class='line'>  analogWrite(LEDG,0);
-</span><span class='line'>  delay(1000); 
-</span><span class='line'>    analogWrite(LEDG,30);
-</span><span class='line'>  analogWrite(LEDR,200);
-</span><span class='line'>  delay(1000); 
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>正确的电路连线应该是:</p>
-
-<p><img src="http://purplepalmdash.github.io/images/2016_03_12_20_54_55_707x379.jpg" alt="/images/2016_03_12_20_54_55_707x379.jpg" /></p>
 ]]></content>
   </entry>
   
