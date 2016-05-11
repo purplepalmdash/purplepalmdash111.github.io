@@ -9,8 +9,8 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="Prepare Install following packages: 1
-$ sudo apt-get install build-essential subversion git-core libncurses5-dev zlib1g-dev gawk flex quilt libssl- &hellip;">
+  <meta name="description" content="Problem The mysql server always keep crash, with following log under /var/log/mysql/error.log: 1
+141104 23:06:46 InnoDB: Fatal error: cannot allocate &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -66,6 +66,191 @@ $ sudo apt-get install build-essential subversion git-core libncurses5-dev zlib1
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/11/05/mysql-creashes-on-digitalocean/">MySQL Creashes on DigitalOcean</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-11-05T13:51:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:51 pm</span></time>
+        
+         | <a href="/blog/2014/11/05/mysql-creashes-on-digitalocean/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h3>Problem</h3>
+
+<p>The mysql server always keep crash, with following log under /var/log/mysql/error.log:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>141104 23:06:46 InnoDB: Fatal error: cannot allocate memory for the buffer pool
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So this is the memory problem, we should allocate more memory for our VPS.</p>
+
+<h3>Solution</h3>
+
+<p>Add swap partition:   <br/>
+First check the swap partition:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# free -m
+</span><span class='line'>             total       used       free     shared    buffers     cached
+</span><span class='line'>Mem:           490        464         25         28         61        172
+</span><span class='line'>-/+ buffers/cache:        230        259
+</span><span class='line'>Swap:            0          0          0
+</span><span class='line'>root@xxx:/var/log# swapon -s
+</span><span class='line'>Filename                                Type            Size    Used    Priority
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now create a swapfile:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># dd if=/dev/zero of=/swapfile bs=1M count=1024
+</span><span class='line'>1024+0 records in
+</span><span class='line'>1024+0 records out
+</span><span class='line'>1073741824 bytes (1.1 GB) copied, 2.16285 s, 496 MB/s
+</span><span class='line'># ls /swapfile -l -h
+</span><span class='line'>-rw-r--r-- 1 root root 1.0G Nov  5 00:58 /swapfile
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Setting the swapfile:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# chmod 600 /swapfile 
+</span><span class='line'>root@xxx:/var/log# swapon /swapfile
+</span><span class='line'>swapon: /swapfile: read swap header failed: Invalid argument
+</span><span class='line'>root@xxx:/var/log# mkswap /swapfile
+</span><span class='line'>Setting up swapspace version 1, size = 1048572 KiB
+</span><span class='line'>no label, UUID=64b727dd-0d7e-45ff-9235-cd9ba84b062f
+</span><span class='line'>root@xxx:/var/log# swapon /swapfile 
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now use free command you could check swap file enabled:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# free -m
+</span><span class='line'>             total       used       free     shared    buffers     cached
+</span><span class='line'>Mem:           490        458         31         28         25        229
+</span><span class='line'>-/+ buffers/cache:        204        285
+</span><span class='line'>Swap:         1023          0       1023
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add it permanately into the /etc/fstab:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>/swapfile   none    swap    sw    0   0
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Configure the parameters:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/swappiness
+</span><span class='line'>60
+</span><span class='line'>root@xxx:/var/log# sysctl vm.swappiness=10
+</span><span class='line'>vm.swappiness = 10                                                                                      
+</span><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/swappiness                                                  
+</span><span class='line'>10                                                
+</span><span class='line'>root@xxx:/var/log# vim /etc/sysctl.conf
+</span><span class='line'>vm.swappiness=10
+</span><span class='line'>vm.vfs_cache_pressure = 50
+</span><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
+</span><span class='line'>100                                         
+</span><span class='line'>root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
+</span><span class='line'>50                                                                                                     
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now the mysql server should be good.</p>
+
+<h3>Disable wp-admin login password</h3>
+
+<p>Disable the login password.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/apache2/apache2.conf
+</span><span class='line'>#&lt;DirectoryMatch ^.*/wp-admin/&gt;
+</span><span class='line'>#    AuthType Basic
+</span><span class='line'>#    AuthName "Please login to your droplet via SSH for login details."
+</span><span class='line'>#    AuthUserFile /etc/apache2/.htpasswd
+</span><span class='line'>#    Require valid-user
+</span><span class='line'>#&lt;DirectoryMatch&gt;
+</span><span class='line'>root@xxx:~# service apache2 restart
+</span><span class='line'> * Restarting web server apache2      
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Change the password for login details</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ htpasswd .htpasswd user2
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3204,77 +3389,6 @@ Restart samba service:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/10/27/system-trouble-shooting/">System Trouble Shooting</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2014-10-27T11:05:00+08:00'><span class='date'><span class='date-month'>Oct</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:05 am</span></time>
-        
-         | <a href="/blog/2014/10/27/system-trouble-shooting/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>SSHD Timeout</h3>
-
-<h4>Trouble</h4>
-
-<p>When you login to some remote ssh machine, after 1 or 2 minutes, the server will hint you:   <br/>
-Connection closed by foreign host.</p>
-
-<h4>Solution</h4>
-
-<p>This trouble happens on Ubuntu14.04, because we don&rsquo;t set the timeout intervals. So we could add following 2 lines into the <code>/etc/ssh/sshd_config</code></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ClientAliveInterval 60
-</span><span class='line'>ClientAliveCountMax 3
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>AliveInterval means we could keep the client alive for 60 minutes. AliveCountMax means when server send 3 times request to ssh client, if client didn&rsquo;t send back reply message, then the ssh connection will be lost.  <br/>
-Restart the ssh via <code>service ssh restart</code> and now you won&rsquo;t got this annoying trouble.</p>
-
-<h3>DNS</h3>
-
-<p>Since I use dnsencrypt at home, so once it enabled, all of the query goes to the 127.0.0.1, I have to turn it back at company.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@~]$ cat /etc/resolv.conf
-</span><span class='line'># Generated by resolvconf
-</span><span class='line'>nameserver 10.0.0.1
-</span><span class='line'>search lan
-</span><span class='line'>alias disdns='sudo systemctl stop dnscrypt-proxy.service'
-</span><span class='line'>$ disdns
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>By doing this you could reach the internet.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/35">&larr; Older</a>
@@ -3292,6 +3406,10 @@ Restart the ssh via <code>service ssh restart</code> and now you won&rsquo;t got
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/05/11/setup-lxd-on-ubuntu1604/">Setup LXD on Ubuntu1604</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/05/10/tips-on-lxc/">Tips on Lxc</a>
       </li>
     
@@ -3305,10 +3423,6 @@ Restart the ssh via <code>service ssh restart</code> and now you won&rsquo;t got
     
       <li class="post">
         <a href="/blog/2016/05/04/linux-tips-5/">Linux Tips(5)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/05/04/working-tips-on-ansible-cobbler/">Working Tips on Ansible-cobbler</a>
       </li>
     
   </ul>
