@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Linux | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/linux/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-05-12T21:04:38+08:00</updated>
+  <updated>2016-05-18T23:32:15+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,419 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Working Tips on Ansible-cobbler(3)]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/05/18/working-tips-on-ansible-cobbler-3/"/>
+    <updated>2016-05-18T21:15:10+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/05/18/working-tips-on-ansible-cobbler-3</id>
+    <content type="html"><![CDATA[<h3>APT Packages</h3>
+
+<p>The downloaded deb files should be under <code>/var/cache/apt</code>, use following command for copying to
+another position:</p>
+
+<pre><code>$ find . | grep -i deb$ | xargs % cp % ~/Dest_Folder
+$ scp -r ~/Dest_Folder Your_Cobbler_Machine
+</code></pre>
+
+<h3>Repositories</h3>
+
+<p>Install <code>dpkg-dev</code> package, so we could generate the dpkg packages:</p>
+
+<pre><code>$ sudo apt-get install -y dpkg-dev
+</code></pre>
+
+<p>Create a new repository:</p>
+
+<p><img src="/images/2016_05_18_21_28_37_717x452.jpg" alt="/images/2016_05_18_21_28_37_717x452.jpg" /></p>
+
+<p>Edit the advanced options:</p>
+
+<p><img src="/images/2016_05_18_21_30_04_508x314.jpg" alt="/images/2016_05_18_21_30_04_508x314.jpg" /></p>
+
+<p>Report the repository info via:</p>
+
+<pre><code>root@cobbler-ubuntu:~# cobbler repo report --name=ubuntu1604Mate
+Name                           : ubuntu1604Mate
+Apt Components (apt only)      : ['main']
+Apt Dist Names (apt only)      : ['stable']
+Arch                           : x86_64
+Breed                          : apt
+Comment                        : Ubuntu 16.04 Repository For installing MATE
+Createrepo Flags               : &lt;&lt;inherit&gt;&gt;
+Environment Variables          : {}
+Keep Updated                   : False
+Mirror                         : 
+Mirror locally                 : True
+Owners                         : ['admin']
+Priority                       : 99
+External proxy URL             : 
+RPM List                       : []
+Yum Options                    : {}
+</code></pre>
+
+<p>Repository Structure Creation:</p>
+
+<pre><code>$ mkdir /srv/www/cobbler/repo_mirror/ubuntu1604Mate
+$ cd /srv/www/cobbler/repo_mirror/ubuntu1604Mate
+$ mkdir -p pool/main dists/stable/main/binary-i386 dists/stable/main/binary-amd64
+$ cp ~/apt/debs/*.deb ./pool/main/
+</code></pre>
+
+<p>Enable the <code>allow_unauthenticated</code> options in kickstart file:</p>
+
+<pre><code>$ vim /var/lib/cobbler/kickstarts/sample.seed
+ d-i debian-installer/allow_unauthenticated boolean true
+</code></pre>
+
+<p>Generate the gpg key:</p>
+
+<pre><code># gpg --gen-key
+  gpg (GnuPG) 2.0.14; Copyright (C) 2009 Free Software Foundation, Inc.
+  This is free software: you are free to change and redistribute it.
+  There is NO WARRANTY, to the extent permitted by law.
+
+  gpg: directory `/root/.gnupg' created
+  gpg: new configuration file `/root/.gnupg/gpg.conf' created
+  gpg: WARNING: options in `/root/.gnupg/gpg.conf' are not yet active during this run
+  gpg: keyring `/root/.gnupg/secring.gpg' created
+  gpg: keyring `/root/.gnupg/pubring.gpg' created
+ Please select what kind of key you want:
+    (1) RSA and RSA (default)
+    (2) DSA and Elgamal
+    (3) DSA (sign only)
+    (4) RSA (sign only)
+ Your selection? 1
+ RSA keys may be between 1024 and 4096 bits long.
+ What keysize do you want? (2048)
+ Requested keysize is 2048 bits
+ Please specify how long the key should be valid.
+          0 = key does not expire
+       &lt;n&gt;  = key expires in n days
+       &lt;n&gt;w = key expires in n weeks
+       &lt;n&gt;m = key expires in n months
+       &lt;n&gt;y = key expires in n years
+ Key is valid for? (0)
+ Key does not expire at all
+ Is this correct? (y/N) y
+</code></pre>
+
+<p>For generating the random key, install the <code>haveged</code> in system:</p>
+
+<pre><code>$ sudo aptitude install haveged
+</code></pre>
+
+<p>List the keys via:</p>
+
+<pre><code># gpg --list-keys
+/home/vagrant/.gnupg/pubring.gpg
+--------------------------------
+pub   2048R/16D87321 2016-05-18
+uid                  xxxxx &lt;xxxxxx@gmail.com&gt;
+sub   2048R/8C4A318A 2016-05-18
+</code></pre>
+
+<p>Generate the pgp signature via:</p>
+
+<pre><code># gpg --export -a 16D87321&gt;~/junk.key
+# gpg --no-default-keyring --keyring /srv/www/cobbler/repo_mirror/ubuntu1604Mate/public.pgp --import ~/junk.key
+# rm -f ~/junk.key
+# chmod a+r /srv/www/cobbler/repo_mirror/ubuntu1604Mate/public.pgp
+</code></pre>
+
+<p>Re-Generate the repository infos via:</p>
+
+<pre><code>$ cd /srv/www/cobbler/repo_mirror/ubuntu1604Mate/
+$ vim reindex_apt.sh
+$ chmod 777 reindex_apt.sh 
+$ ./reindex_apt.sh 
+</code></pre>
+
+<p>The content of <code>reindex_apt.sh</code> is listed as following:</p>
+
+<pre><code>#!/bin/bash
+
+GPG_NAME=16D87321
+REPONAME=stable
+VERSION=1.0
+
+for bindir in `find dists/${REPONAME} -type d -name "binary*"`; do
+    arch=`echo $bindir|cut -d"-" -f 2`
+    echo "Processing ${bindir} with arch ${arch}"
+
+    overrides_file=/tmp/overrides
+    package_file=$bindir/Packages
+    release_file=$bindir/Release
+
+    # Create simple overrides file to stop warnings
+    cat /dev/null &gt; $overrides_file
+    for pkg in `ls pool/main/ | grep -E "(all|${arch})\.deb"`; do
+        pkg_name=`/usr/bin/dpkg-deb -f pool/main/${pkg} Package`
+        echo "${pkg_name} Priority extra" &gt;&gt; $overrides_file
+    done
+
+    # Index of packages is written to Packages which is also zipped
+    dpkg-scanpackages -a ${arch} pool/main $overrides_file &gt; $package_file
+    # The line above is also commonly written as:
+    # dpkg-scanpackages -a ${arch} pool/main /dev/null &gt; $package_file
+    gzip -9c $package_file &gt; ${package_file}.gz
+    bzip2 -c $package_file &gt; ${package_file}.bz2
+
+    # Cleanup
+    rm $overrides_file
+done
+
+# Release info goes into Release &amp; Release.gpg which includes an md5 &amp; sha1 hash of Packages.*
+# Generate &amp; sign release file
+cd dists/${REPONAME}
+cat &gt; Release &lt;&lt;ENDRELEASE
+Suite: ${REPONAME}
+Version: ${VERSION}
+Component: main
+Origin: somewhere
+Label: ubuntu1604Mate
+Architecture: i386 amd64
+Date: `date`
+ENDRELEASE
+
+# Generate hashes
+echo "MD5Sum:" &gt;&gt; Release
+for hashme in `find main -type f`; do
+    md5=`openssl dgst -md5 ${hashme}|cut -d" " -f 2`
+    size=`stat -c %s ${hashme}`
+    echo " ${md5} ${size} ${hashme}" &gt;&gt; Release
+done
+echo "SHA1:" &gt;&gt; Release
+for hashme in `find main -type f`; do
+    sha1=`openssl dgst -sha1 ${hashme}|cut -d" " -f 2`
+    size=`stat -c %s ${hashme}`
+    echo " ${sha1} ${size} ${hashme}" &gt;&gt; Release
+done
+
+# Sign!
+gpg --yes -u $GPG_NAME --sign -bao Release.gpg Release
+cd -
+</code></pre>
+
+<p>Now continue to modify the kickstart file for using the generated gpgs:</p>
+
+<pre><code># pwd
+/var/lib/cobbler/snippets
+# cp preseed_apt_repo_config preseed_apt_repo_config_pgpkey
+</code></pre>
+
+<p>The <code>preseed_apt_repo_config_pgpkey</code> should be listed as following:</p>
+
+<pre><code># Additional repositories, local[0-9] available
+#set $cur=1
+#set $repo_data = $getVar("repo_data",[])
+#for $repo in $repo_data
+ #for $dist in $repo.apt_dists
+ #set $comps = " ".join($repo.apt_components)
+d-i apt-setup/local${cur}/repository string \
+ #if $repo.mirror_locally
+      http://$http_server/cblr/repo_mirror/${repo.name} $dist $comps
+ #else
+      ${repo.mirror} $dist $comps
+ #end if
+ #if $repo.comment != ""
+d-i apt-setup/local${cur}/comment string ${repo.comment}
+ #end if
+ #if $repo.breed == "src"
+# Enable deb-src lines
+d-i apt-setup/local${cur}/source boolean false
+ #end if
++++ # Add repo pgp pub key
++++ d-i apt-setup/local${cur}/key string \
++++       http://$http_server/cblr/repo_mirror/${repo.name}/public.pgp
+ #set $cur=$cur+1
+ #end for
+#end for
+</code></pre>
+
+<p>Using the new preseed file, and changint the <code>preseed_apt_repo_config_pgpkey</code>:</p>
+
+<pre><code># pwd
+/var/lib/cobbler/kickstarts
+# cp sample.seed ubuntu1604.seed
+# vim ubuntu1604.seed
+-  $SNIPPET('preseed_apt_repo_config')
++  $SNIPPET('preseed_apt_repo_config_pgpkey')
+</code></pre>
+
+<p>Changing the seed in the <code>cobbler_web</code>:</p>
+
+<p><img src="/images/2016_05_18_22_25_48_732x294.jpg" alt="/images/2016_05_18_22_25_48_732x294.jpg" /></p>
+
+<p>Use <code>cobbler sync</code> for syncing the configuration.</p>
+
+<h3>Use the Repository</h3>
+
+<p>Add the <code>ubuntu1604Mate</code> into the Repos:</p>
+
+<p><img src="/images/2016_05_18_22_31_42_731x486.jpg" alt="/images/2016_05_18_22_31_42_731x486.jpg" /></p>
+
+<p>After added, the configuration should be:</p>
+
+<p><img src="/images/2016_05_18_22_33_00_471x149.jpg" alt="/images/2016_05_18_22_33_00_471x149.jpg" /></p>
+
+<p>Now <code>cobbler sync</code> for syncing the configuration.</p>
+
+<p>Bug: you should move the <code>preseed_apt_repo_config</code> and  then <code>cobbler sync</code> then your deployment will be OK:</p>
+
+<pre><code>$ mv /var/lib/cobbler/snippets/preseed_apt_repo_config /root/
+$ cobbler sync
+</code></pre>
+
+<h3>Added Mate Installation</h3>
+
+<p>Configure the preseed late:</p>
+
+<pre><code># cp /var/lib/cobbler/scripts/preseed_late_default /var/lib/cobbler/scripts/preseed_late_default_mate
+# vim /var/lib/cobbler/scripts/preseed_late_default_mate
+# vim preseed_late_default_mate 
+$SNIPPET('post_install_network_config_deb')
+$SNIPPET('late_apt_repo_config')
+$SNIPPET('post_run_deb')
+$SNIPPET('download_config_files')
++ $SNIPPET('ubuntumate')
+$SNIPPET('kickstart_done')
+</code></pre>
+
+<p>Now add the snippet of <code>ubuntumate</code>:</p>
+
+<pre><code># cat ../snippets/ubuntumate 
+echo "debconf debconf/frontend select noninteractive" | sudo debconf-set-selections
+apt-get --allow-unauthenticated update -y
+apt-get --allow-unauthenticated upgrade -y
+apt-get --allow-unauthenticated install -y build-essential
+### apt-get --allow-unauthenticated install -y ubuntu-mate-desktop
+apt-get --allow-unauthenticated install -y vim
+### apt-get --allow-unauthenticated install -y chromium-browser
+### apt-get --allow-unauthenticated install -y meld vim-gtk
+### apt-get --allow-unauthenticated install -y evince
+### sudo apt-get --allow-unauthenticated install -y language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-gnome-zh-hans-base
+### sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
+### sudo localectl set-locale LANG=zh_CN.UTF-8
+### # TW/HK language support
+### sudo apt-get --allow-unauthenticated install -y language-pack-zh-hant language-pack-zh-hant-base language-pack-gnome-zh-hant language-pack-gnome-zh-hant-base
+### sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
+### apt-get --allow-unauthenticated install -y fcitx
+### apt-get --allow-unauthenticated install -y fcitx-table-wubi fcitx-table-wubi-large
+### apt-get --allow-unauthenticated install -y fcitx-googlepinyin
+### apt-get --allow-unauthenticated install -y gimp
+### apt-get --allow-unauthenticated install -y ibus-pinyin 
+### apt-get --allow-unauthenticated install -y thunderbird-locale-en-us mythes-en-au hunspell-en-gb thunderbird-locale-en-gb fonts-arphic-ukai wbritish fcitx-sunpinyin openoffice.org-hyphenation language-pack-gnome-en hunspell-en-za fcitx-chewing fcitx-table-cangjie gimp-help-en language-pack-en mythes-en-us thunderbird-locale-en fcitx-module-cloudpinyin libreoffice-help-en-us firefox-locale-en libreoffice-help-en-gb fonts-arphic-uming hyphen-en-gb libreoffice-l10n-en-za fcitx-ui-qimpanel hunspell-en-au libreoffice-l10n-en-gb hyphen-en-us hunspell-en-ca 
+### apt-get --allow-unauthenticated install -y zsh
+### apt-get --allow-unauthenticated install -y fonts-wqy-zenhei fonts-wqy-microhei ttf-wqy-microhei  ttf-wqy-zenhei  xfonts-wqy
+### apt-get --allow-unauthenticated install -y eclipse
+### apt-get --allow-unauthenticated install -y gpicview
+### apt-get --allow-unauthenticated install -y scrot
+### apt-get --allow-unauthenticated install -y byobu
+### apt-get --allow-unauthenticated install -y subversion git
+### apt-get --allow-unauthenticated install -y kdiff3
+### apt-get --allow-unauthenticated install -y docker
+</code></pre>
+
+<p>Use <code>cobbler sync</code>, and now you could deploy mate desktop via cobbler.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Tips on Maas 2.0]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/05/12/tips-on-maas-2-dot-0/"/>
+    <updated>2016-05-12T14:10:48+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/05/12/tips-on-maas-2-dot-0</id>
+    <content type="html"><![CDATA[<h3>Installation</h3>
+
+<p>Based on Ubuntu16.04, install maas via:</p>
+
+<pre><code>$ sudo apt-get install -y maas
+</code></pre>
+
+<p>After installation, create the default username/password via following command:</p>
+
+<pre><code>$ sudo maas-region createadmin --username=root --email=xxyy@xxyy.com
+Password: 
+Again: 
+</code></pre>
+
+<p>Now you could login to the <code>http://YourIP/MAAS</code> via:</p>
+
+<p><img src="/images/2016_05_12_14_25_12_456x494.jpg" alt="/images/2016_05_12_14_25_12_456x494.jpg" /></p>
+
+<h3>Using API to talk</h3>
+
+<p>In maas cli, using following steps for generate the API key and use:</p>
+
+<pre><code># sudo maas-region apikey --username=root
+AYnuZY3gWTnpxJb7Kp:AtDG3yUmaDu8tXGzTc:tumR29xsRGL6A7T6M2G7LTETPP5kkDwC
+# maas login mymaas http://10.17.17.2/MAAS/api/2.0
+AYnuZY3gWTnpxJb7Kp:AtDG3yUmaDu8tXGzTc:tumR29xsRGL6A7T6M2G7LTETPP5kkDwC
+
+You are now logged in to the MAAS server at
+http://10.17.17.2/MAAS/api/2.0/ with the profile name 'mymaas'.
+
+For help with the available commands, try:
+
+  maas mymaas --help
+</code></pre>
+
+<p>Later we will use <code>mymaas</code> for talk to MAAS Controller.</p>
+
+<h3>Add Boot Source</h3>
+
+<p>Click <code>Images</code>, you won&rsquo;t see anything because the images are not downloaded. you could
+download it manually via following command:</p>
+
+<pre><code>$ sudo apt-get install simplestreams ubuntu-cloudimage-keyring apache2
+$ sudo sstream-mirror --keyring=/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg \
+https://images.maas.io/ephemeral-v2/daily/ /var/www/html/maas/images/ephemeral-v2/daily \
+'arch=amd64' 'subarch~(generic|hwe-t)' 'release~(trusty|precise|xenial)' --max=1
+</code></pre>
+
+<p>After downloading, the image content will be available under <code>/var/www/html/</code>.</p>
+
+<p>Or, if you downloaded the html files before, do following steps for using your
+pre-downloaded packages:</p>
+
+<pre><code>$ tar xJvf html.tar.bz2 -C /var/www/html/
+$ sudo maas mymaas boot-sources create url=http://10.17.17.2/mirror/images/ephemeral-v2/releases/ keyring_filename=/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg 
+</code></pre>
+
+<p>Now there are two boot-sources in maas, delete the default one(Because we are in china,
+and its goddamned GFW!)</p>
+
+<pre><code>dash@maascontroller:~$ sudo maas mymaas boot-source delete 1
+Success.
+Machine-readable output follows:
+
+dash@maascontroller:~$ sudo maas mymaas boot-sources read
+Success.
+Machine-readable output follows:
+[
+    {
+        "keyring_data": "&lt;memory at 0x7f4e9478b288&gt;",
+        "resource_uri": "/MAAS/api/2.0/boot-sources/2/",
+        "id": 2,
+        "url": "http://10.17.17.2/mirror/images/ephemeral-v2/releases/",
+        "keyring_filename": "/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg"
+    }
+$ 
+</code></pre>
+
+<p>Import boot-sources via:</p>
+
+<pre><code>$ sudo maas mymaas boot-resources import
+</code></pre>
+
+<p>It will takes a little bit time for importing the boot images.</p>
+
+<p>For adding nodes:</p>
+
+<p><a href="https://maas.ubuntu.com/docs2.0/nodes.html">https://maas.ubuntu.com/docs2.0/nodes.html</a></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Linux Tips(5)]]></title>
@@ -169,6 +582,69 @@ and, finally run:
 <p><a href="https://github.com/battlemidget/vagrant-maas">https://github.com/battlemidget/vagrant-maas</a></p>
 
 <p><a href="https://github.com/battlemidget/vagrant-maas-in-a-box/blob/master/Vagrantfile">https://github.com/battlemidget/vagrant-maas-in-a-box/blob/master/Vagrantfile</a></p>
+
+<h3>15. Convert vm to physical</h3>
+
+<p>Thus you could enjoy packer building the physical machine! :)</p>
+
+<pre><code>cd /media/wherever-the-image-is/
+
+# for VMWare
+sudo apt-get install qemu-kvm
+qemu-img convert your-vmware-disk.vmdk -O raw disk.img
+
+# For VirtualBox
+VBoxManage internalcommands converttoraw your-virtualbox-disk.vdi /dev/sdX
+</code></pre>
+
+<h3>16. Generate Random Seed</h3>
+
+<p>Error message is <code>Please do some other work to give
+the OS a chance to collect more entropy!</code></p>
+
+<pre><code>$ sudo aptitude install haveged
+</code></pre>
+
+<h3>17. DEB Repository in Cobbler</h3>
+
+<p><a href="https://github.com/cobbler/cobbler/wiki/Creating-custom-apt-repositories-in-centos-or-el-based-cobbler">https://github.com/cobbler/cobbler/wiki/Creating-custom-apt-repositories-in-centos-or-el-based-cobbler</a></p>
+
+<p>Trouble-Shooting:  <br/>
+<a href="https://github.com/cobbler/cobbler/issues/1530">https://github.com/cobbler/cobbler/issues/1530</a></p>
+
+<h3>18. Manually Install Mate Desktop</h3>
+
+<pre><code>echo "debconf debconf/frontend select noninteractive" | sudo debconf-set-selections
+apt-get --allow-unauthenticated update -y
+apt-get --allow-unauthenticated upgrade -y
+apt-get --allow-unauthenticated install -y build-essential
+apt-get --allow-unauthenticated install -y ubuntu-mate-desktop
+apt-get --allow-unauthenticated install -y vim
+apt-get --allow-unauthenticated install -y chromium-browser
+apt-get --allow-unauthenticated install -y meld vim-gtk
+apt-get --allow-unauthenticated install -y evince
+sudo apt-get --allow-unauthenticated install -y language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-gnome-zh-hans-base
+sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
+sudo localectl set-locale LANG=zh_CN.UTF-8
+# TW/HK language support
+sudo apt-get --allow-unauthenticated install -y language-pack-zh-hant language-pack-zh-hant-base language-pack-gnome-zh-hant language-pack-gnome-zh-hant-base
+sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
+apt-get --allow-unauthenticated install -y fcitx
+apt-get --allow-unauthenticated install -y fcitx-table-wubi fcitx-table-wubi-large
+apt-get --allow-unauthenticated install -y fcitx-googlepinyin
+apt-get --allow-unauthenticated install -y gimp
+apt-get --allow-unauthenticated install -y ibus-pinyin 
+apt-get --allow-unauthenticated install -y thunderbird-locale-en-us mythes-en-au hunspell-en-gb thunderbird-locale-en-gb fonts-arphic-ukai wbritish fcitx-sunpinyin openoffice.org-hyphenation language-pack-gnome-en hunspell-en-za fcitx-chewing fcitx-table-cangjie gimp-help-en language-pack-en mythes-en-us thunderbird-locale-en fcitx-module-cloudpinyin libreoffice-help-en-us firefox-locale-en libreoffice-help-en-gb fonts-arphic-uming hyphen-en-gb libreoffice-l10n-en-za fcitx-ui-qimpanel hunspell-en-au libreoffice-l10n-en-gb hyphen-en-us hunspell-en-ca 
+apt-get --allow-unauthenticated install -y zsh
+apt-get --allow-unauthenticated install -y fonts-wqy-zenhei fonts-wqy-microhei ttf-wqy-microhei  ttf-wqy-zenhei  xfonts-wqy
+apt-get --allow-unauthenticated install -y eclipse
+apt-get --allow-unauthenticated install -y gpicview
+apt-get --allow-unauthenticated install -y scrot
+apt-get --allow-unauthenticated install -y byobu
+apt-get --allow-unauthenticated install -y subversion git
+apt-get --allow-unauthenticated install -y kdiff3
+apt-get --allow-unauthenticated install -y docker
+</code></pre>
 ]]></content>
   </entry>
   
@@ -255,226 +731,6 @@ alias clearebuddy='rm -f /tmp/ebuddy'
 <h3>局限</h3>
 
 <p>不能同时标识两个以上的命令完成情况。</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[使用squid缓存所有rpm/deb安装包]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/"/>
-    <updated>2016-03-15T10:23:34+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao</id>
-    <content type="html"><![CDATA[<p>在进行自动化部署的时候，需要频繁安装系统，鉴于工作环境的带宽有限，我需要设置一个代理服
-务器，用于缓存所有的RPM/DEB安装包，以便自动化部署可以在瞬间完成。</p>
-
-<p>以下示例运行在ArchLinux上。</p>
-
-<h3>Squid搭建</h3>
-
-<p>Squid介绍:</p>
-
-<p>Squid 是一个 Web 缓存代理，支持 HTTP, HTTPS, FTP, 以及更多。它通过缓存与重用经常请求的
-web页面，减少带宽使用同时提升了响应时间。Squid 具有可扩展的访问控制功能，同时可以使服务
-器加速。它运行在 Unix 和 Windows 中，采用 GNU GPL 协议发布。</p>
-
-<p>安装squid:</p>
-
-<pre><code>$ sudo pacman -S squid
-</code></pre>
-
-<p>我们需要配置squid以便它能适配我们的环境，我的环境里主要需要做以下几个事情： <br/>
-1. 更改squid缓存目录到/home分区。  <br/>
-2. 更改squid缓存目录大小为30G以上。  <br/>
-3. 更改缓存文件大小，以便它支持大的RPM/DEB包。</p>
-
-<p>更改缓存目录， 找到以下的行，在其下添加我们自定义的缓存目录:</p>
-
-<pre><code>$ sudo vim /etc/squid/squid.conf
-# Uncomment and adjust the following to add a disk cache directory.
-#cache_dir ufs /var/cache/squid 100 16 256
-cache_dir ufs /home/dash/squid 30000 16 256
-</code></pre>
-
-<p>我们将在指定目录下创建目录， 第一层数为16, 每个文件夹下最多包含256个子文件夹。</p>
-
-<p>在配置文件的最后加入以下行，以支持更大的缓存文件:</p>
-
-<pre><code>$ sudo vim /etc/squid/squid.conf
-maximum_object_size 200 MB
-</code></pre>
-
-<p>现在开始创建缓存目录:</p>
-
-<pre><code>$ squid -z
-</code></pre>
-
-<p>启动服务后，运行检查</p>
-
-<pre><code>$ sudo systemctl restart squid
-$ sudo systemctl enable squidz
-$ sudo systemctl -k check
-</code></pre>
-
-<p>验证可以通过<code>netstat -anp | grep 3128</code>来检查squid进程是否运行。</p>
-
-<h3>使用squid代理</h3>
-
-<h3>apt-cacher</h3>
-
-<p>以上设置的代理仅能支持RPM包的工作，对于DEB包我们需要使用apt-cacher, 在ArchLinux上安装和配置apt-cacher:</p>
-
-<pre><code>$ yaourt apt-cacher
-$ sudo vim /etc/apt-cacher-ng/acng.conf
-CacheDir: /home/nomodify/apt-cacher
-Port: 3142
-</code></pre>
-
-<p>Config on Agent:</p>
-
-<pre><code>$ sudo vim /etc/apt/apt.conf.d/01proxy 
-Acquire::http::Proxy "http://192.168.0.121:3142";
-</code></pre>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[配置Qemu的VDE网络]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo/"/>
-    <updated>2016-03-10T14:18:43+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/03/10/pei-zhi-qemude-vdewang-luo</id>
-    <content type="html"><![CDATA[<p>为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
-，DHCP获得IP地址，从而得到网络连接， 以下是步骤。</p>
-
-<h3>安装VDE</h3>
-
-<p>ArchLinux下安装命令为<code>sudo pacman -S vde2</code>.</p>
-
-<h3>配置</h3>
-
-<p>贴出配置文件如下, 摘录自ArchLinux的Wiki. 值得注意的是，在Systemd的配置文件中，需要先把
-tun驱动装载上，才能使得VDE启动成功。</p>
-
-<p>配置qemu网络环境配置脚本:</p>
-
-<pre><code class="sh">$ vim /etc/systemd/scripts/qemu-network-env 
-#!/bin/sh
-# QEMU/VDE network environment preparation script
-
-# The IP configuration for the tap device that will be used for
-# the virtual machine network:
-
-TAP_DEV=tap0
-TAP_IP=10.33.34.254
-TAP_MASK=24
-TAP_NETWORK=10.33.34.0
-
-# Host interface
-NIC=enp2s0
-
-case "$1" in
-  start)
-        echo -n "Starting VDE network for QEMU: "
-
-        # If you want tun kernel module to be loaded by script uncomment here
-        modprobe tun 2&gt;/dev/null
-        # Wait for the module to be loaded
-        while ! lsmod | grep -q "^tun"; do echo "Waiting for tun device"; sleep 1; done
-
-        # Start tap switch
-        vde_switch -tap "$TAP_DEV" -daemon -mod 660 -group users
-
-        # Bring tap interface up
-        ip address add "$TAP_IP"/"$TAP_MASK" dev "$TAP_DEV"
-        ip link set "$TAP_DEV" up
-
-        # Start IP Forwarding
-        echo "1" &gt; /proc/sys/net/ipv4/ip_forward
-        iptables -t nat -A POSTROUTING -s "$TAP_NETWORK"/"$TAP_MASK" -o "$NIC" -j MASQUERADE
-        ;;
-  stop)
-        echo -n "Stopping VDE network for QEMU: "
-        # Delete the NAT rules
-        iptables -t nat -D POSTROUTING "$TAP_NETWORK"/"$TAP_MASK" -o "$NIC" -j MASQUERADE
-
-        # Bring tap interface down
-        ip link set "$TAP_DEV" down
-
-        # Kill VDE switch
-        pgrep -f vde_switch | xargs kill -TERM
-        ;;
-  restart|reload)
-        $0 stop
-        sleep 1
-        $0 start
-        ;;
-  *)
-        echo "Usage: $0 {start|stop|restart|reload}"
-        exit 1
-esac
-exit 0
-</code></pre>
-
-<p>配置symtemd服务:</p>
-
-<pre><code class="sh">$ vim /etc/systemd/system/qemu-network-env.service
-[Unit]
-Description=Manage VDE Switch
-
-[Service]
-Type=oneshot
-ExecStart=/etc/systemd/scripts/qemu-network-env start
-ExecStop=/etc/systemd/scripts/qemu-network-env stop
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-</code></pre>
-
-<p>使能服务，并重新启动机器:</p>
-
-<pre><code>$ sudo systemctl enable qemu-network-env.service
-</code></pre>
-
-<h3>配置DHCPD</h3>
-
-<p>需要配置dhcpd以使得在<code>10.33.34.0/24</code>网段提供DHCP服务：</p>
-
-<pre><code>$ sudo vim /etc/dhcpd.conf
-
-subnet
-10.33.34.0 netmask 255.255.255.0 {
-# --- default gateway
-option routers
-10.33.34.254;
-# --- Netmask
-option subnet-mask
-255.255.255.0;
-# --- Broadcast Address
-option broadcast-address
-10.33.34.255;
-# --- Domain name servers, tells the clients which DNS servers to use.
-option domain-name-servers
-223.5.5.5,180.76.76.76;
-option time-offset 0;
-range 10.33.34.2 10.33.34.253;
-default-lease-time 1209600;
-max-lease-time 1814400;
-}
-</code></pre>
-
-<p>修改完dhcpd的配置后， 重新启动dhcpd服务:</p>
-
-<pre><code>$ sudo systemctl restart dhcpd4
-</code></pre>
-
-<h3>启动虚拟机</h3>
-
-<p>启动虚拟机，并使其使用我们刚才添加的vde网络:</p>
-
-<pre><code>$ sudo qemu-system-x86_64 -net nic -net vde -hda ./test1.qcow2 -m 2048 --enable-kvm
-</code></pre>
-
-<p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。    <br/>
-如果使用普通用户，会出错， To be solved.</p>
 ]]></content>
   </entry>
   
