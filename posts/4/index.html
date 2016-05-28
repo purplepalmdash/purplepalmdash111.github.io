@@ -9,7 +9,8 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="先决条件 Vagrant为0.8.1. 参考: http://linuxsimba.com/vagrant.html http://linuxsimba.com/vagrant-libvirt-install/ Ubuntu设置 考虑到天朝防火墙的存在,需要经过以下命令才能安装vagrant- &hellip;">
+  <meta name="description" content="在进行自动化部署的时候，需要频繁安装系统，鉴于工作环境的带宽有限，我需要设置一个代理服
+务器，用于缓存所有的RPM/DEB安装包，以便自动化部署可以在瞬间完成。 以下示例运行在ArchLinux上。 Squid搭建 Squid介绍: Squid 是一个 Web 缓存代理，支持 HTTP, &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +66,127 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/">使用squid缓存所有rpm/deb安装包</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-03-15T10:23:34+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>15</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>10:23 am</span></time>
+        
+         | <a href="/blog/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>在进行自动化部署的时候，需要频繁安装系统，鉴于工作环境的带宽有限，我需要设置一个代理服
+务器，用于缓存所有的RPM/DEB安装包，以便自动化部署可以在瞬间完成。</p>
+
+<p>以下示例运行在ArchLinux上。</p>
+
+<h3>Squid搭建</h3>
+
+<p>Squid介绍:</p>
+
+<p>Squid 是一个 Web 缓存代理，支持 HTTP, HTTPS, FTP, 以及更多。它通过缓存与重用经常请求的
+web页面，减少带宽使用同时提升了响应时间。Squid 具有可扩展的访问控制功能，同时可以使服务
+器加速。它运行在 Unix 和 Windows 中，采用 GNU GPL 协议发布。</p>
+
+<p>安装squid:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo pacman -S squid</span></code></pre></td></tr></table></div></figure>
+
+
+<p>我们需要配置squid以便它能适配我们的环境，我的环境里主要需要做以下几个事情： <br/>
+1. 更改squid缓存目录到/home分区。  <br/>
+2. 更改squid缓存目录大小为30G以上。  <br/>
+3. 更改缓存文件大小，以便它支持大的RPM/DEB包。</p>
+
+<p>更改缓存目录， 找到以下的行，在其下添加我们自定义的缓存目录:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/squid/squid.conf
+</span><span class='line'># Uncomment and adjust the following to add a disk cache directory.
+</span><span class='line'>#cache_dir ufs /var/cache/squid 100 16 256
+</span><span class='line'>cache_dir ufs /home/dash/squid 30000 16 256</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+我们将在指定目录下创建目录， 第一层数为16, 每个文件夹下最多包含256个子文件夹。</p>
+
+<p>在配置文件的最后加入以下行，以支持更大的缓存文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/squid/squid.conf
+</span><span class='line'>maximum_object_size 200 MB</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>现在开始创建缓存目录:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ squid -z</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动服务后，运行检查</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl restart squid
+</span><span class='line'>$ sudo systemctl enable squidz
+</span><span class='line'>$ sudo systemctl -k check</span></code></pre></td></tr></table></div></figure>
+
+
+<p>验证可以通过<code>netstat -anp | grep 3128</code>来检查squid进程是否运行。</p>
+
+<h3>使用squid代理</h3>
+
+<h3>apt-cacher</h3>
+
+<p>以上设置的代理仅能支持RPM包的工作，对于DEB包我们需要使用apt-cacher, 在ArchLinux上安装和配置apt-cacher:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ yaourt apt-cacher
+</span><span class='line'>$ sudo vim /etc/apt-cacher-ng/acng.conf
+</span><span class='line'>CacheDir: /home/nomodify/apt-cacher
+</span><span class='line'>Port: 3142
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Config on Agent:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /etc/apt/apt.conf.d/01proxy 
+</span><span class='line'>Acquire::http::Proxy "http://192.168.0.121:3142";</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1797,48 +1919,6 @@ e-buddy人偶的提醒功能.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/">E-buddy消息提醒服务设计思路(1)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-01T19:47:55+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2016</span></span> <span class='time'>7:47 pm</span></time>
-        
-         | <a href="/blog/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>设计目的</h3>
-
-<p>设计为一个系统通用的? 还是特定应用的?</p>
-
-<h3>监控 vs 告警</h3>
-
-<p>监控某项指标? 然后告警?</p>
-
-<h3>总线?</h3>
-
-<p>DBUS 总线? <br/>
-D-Bus For Python.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/5">&larr; Older</a>
@@ -1856,6 +1936,10 @@ D-Bus For Python.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/05/28/yang-cheng-man-bu-yi/">羊城漫步(一)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/05/18/working-tips-on-ansible-cobbler-3/">Working Tips on Ansible-cobbler(3)</a>
       </li>
     
@@ -1869,10 +1953,6 @@ D-Bus For Python.</p>
     
       <li class="post">
         <a href="/blog/2016/05/10/tips-on-lxc/">Tips on Lxc</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/05/09/working-tips-on-mesos-slash-ansible/">Working Tips on Mesos/Ansible</a>
       </li>
     
   </ul>
