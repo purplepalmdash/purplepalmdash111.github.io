@@ -9,9 +9,29 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
-验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
-用来做一个WIFI显示屏. 今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, &hellip;">
+  <meta name="description" content="今天更新了一下代码，实现了两行显示，第一行显示CPU Load，第二行显示剩余内存数。 只是部分替代数据显示部分，这个代码还是有BUG的，譬如说最后一位在下一次显示时不会被清零。 1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23 &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -67,6 +87,136 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/04/01/nodemcu-and-1602i2c-1/">NodeMCU and 1602I2C(1)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-04-01T18:00:38+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>1</span><span class='date-suffix'>st</span>, <span class='date-year'>2016</span></span> <span class='time'>6:00 pm</span></time>
+        
+         | <a href="/blog/2016/04/01/nodemcu-and-1602i2c-1/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>今天更新了一下代码，实现了两行显示，第一行显示CPU Load，第二行显示剩余内存数。</p>
+
+<p>只是部分替代数据显示部分，这个代码还是有BUG的，譬如说最后一位在下一次显示时不会被清零。</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">psutil</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">serial</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">time</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Setup the Serial Port and open it. </span>
+</span><span class='line'><span class="n">ser</span> <span class="o">=</span> <span class="n">serial</span><span class="o">.</span><span class="n">Serial</span><span class="p">()</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">baudrate</span> <span class="o">=</span> <span class="mi">9600</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="s">&#39;/dev/ttyUSB0&#39;</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+</span><span class='line'><span class="c">## Todo, to check if the port is opened.</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Really talks to the i2c LCD.</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Setup the wiring</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;i2c.setup(0, 4, 3, i2c.SLOW)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># dofile, load the lcd library</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd = dofile(&quot;lcd1602.lua&quot;)()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Now Refresh the LCD. </span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.clear()</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="c">#ser.write(b&#39;lcd.put(lcd.light(on))\r\n&#39;)</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(0, 0), &quot;CPU Load: &quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(1, 0), &quot;Mem Free: &quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(0, 14), &quot;%&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(1, 14), &quot;MB&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Fetching the percentage per 1 second</span>
+</span><span class='line'><span class="c"># Todo, change the while true into CTRL+C stopped. </span>
+</span><span class='line'><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+</span><span class='line'>    <span class="c"># Get current percentage</span>
+</span><span class='line'>    <span class="c">#ser.write(b&#39;lcd.clear()\r\n&#39;)</span>
+</span><span class='line'>    <span class="n">currentPer</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">psutil</span><span class="o">.</span><span class="n">cpu_percent</span><span class="p">())</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;ascii&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">memFree</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">psutil</span><span class="o">.</span><span class="n">virtual_memory</span><span class="p">()</span><span class="o">.</span><span class="n">free</span><span class="o">/</span><span class="mi">1024</span><span class="o">/</span><span class="mi">1024</span><span class="p">))</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;ascii&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">oneLine</span> <span class="o">=</span> <span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(0, 9), &quot;&#39;</span> <span class="o">+</span> <span class="n">currentPer</span> <span class="o">+</span> <span class="n">b</span><span class="s">&#39;&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span>
+</span><span class='line'>    <span class="n">SecondLine</span> <span class="o">=</span> <span class="n">b</span><span class="s">&#39;lcd.put(lcd.locate(1, 9), &quot;&#39;</span> <span class="o">+</span> <span class="n">memFree</span> <span class="o">+</span> <span class="n">b</span><span class="s">&#39;&quot;)</span><span class="se">\r\n</span><span class="s">&#39;</span>
+</span><span class='line'>    <span class="c"># Format oneLine</span>
+</span><span class='line'>    <span class="c">#ser.write(b&#39;lcd.put(lcd.locate(0, 0), &quot;CPU Load: &quot;)\r\n&#39;)</span>
+</span><span class='line'>    <span class="c">#ser.write(b&#39;lcd.put(lcd.locate(1, 0), &quot;Mem Free: &quot;)\r\n&#39;)</span>
+</span><span class='line'>    <span class="c">#ser.write(b&#39;lcd.put(lcd.locate(0, 14), &quot;%&quot;)\r\n&#39;)</span>
+</span><span class='line'>    <span class="c">#ser.write(b&#39;lcd.put(lcd.locate(1, 14), &quot;MB&quot;)\r\n&#39;)</span>
+</span><span class='line'>    <span class="c">#time.sleep(0.2)</span>
+</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">oneLine</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">SecondLine</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1855,248 +2005,6 @@ operations.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/03/16/vagrant-libvirt-playing/">Vagrant-libvirt Playing</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2016-03-16T10:31:53+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>16</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>10:31 am</span></time>
-        
-         | <a href="/blog/2016/03/16/vagrant-libvirt-playing/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>最终目的是用vagrant实现CloudStack+Xenserver的自动化部署。</p>
-
-<h3>CentOS6.7 box Creating</h3>
-
-<p>用packer生成CentOS6.7 amd64的镜像，这个镜像默认是virtualbox兼容的，用vagrant-mutate插件
-将其转换为libvirt可用的box镜像:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vagrant mutate centos-6.7.virtualbox.box libvirt
-</span><span class='line'># cd /root/.vagrant.d/boxes
-</span><span class='line'># ls
-</span><span class='line'>centos-6.7.virtualbox  trusty64
-</span><span class='line'># mv centos-6.7.virtualbox/ centos6764
-</span><span class='line'># vagrant box list
-</span><span class='line'>centos6764 (libvirt, 0)
-</span><span class='line'>trusty64   (libvirt, 0)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建Vagrantfile文件启动一个实验性质的虚拟机：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># pwd
-</span><span class='line'>/media/opensusue/dash/Code/Vagrant/CentOS2New
-</span><span class='line'># ls
-</span><span class='line'>Vagrantfile  Vagrantfile~
-</span><span class='line'># cat Vagrantfile
-</span><span class='line'>    # -*- mode: ruby -*-
-</span><span class='line'>    # vi: set ft=ruby :
-</span><span class='line'>    Vagrant.configure(2) do |config|
-</span><span class='line'>      # The most common configuration options are documented and commented below.
-</span><span class='line'>      # For a complete reference, please see the online documentation at
-</span><span class='line'>      # https://docs.vagrantup.com.
-</span><span class='line'>    
-</span><span class='line'>      config.vm.box = "centos6764"
-</span><span class='line'>      # vagrant issues #1673..fixes hang with configure_networks
-</span><span class='line'>      config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
-</span><span class='line'>      config.vm.provider :libvirt do |domain|
-</span><span class='line'>        domain.memory = 512
-</span><span class='line'>        domain.nested = true
-</span><span class='line'>      end
-</span><span class='line'>    
-</span><span class='line'>      config.vm.define :centosnew do |centosnew|
-</span><span class='line'>        centosnew.vm.network :private_network, :ip =&gt; "192.168.88.2"
-</span><span class='line'>      end
-</span><span class='line'>    
-</span><span class='line'>    end
-</span><span class='line'># vagrant up</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>vagrant up</code>以后，一个名为<code>CentOS2New_centosnew</code>的虚拟机将被创建， 命名规则为当前文件夹
-名+定义的vm名称。</p>
-
-<p>虚拟机启动完毕后，检查状态并登录到该机器:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vagrant status
-</span><span class='line'>Current machine states:
-</span><span class='line'>
-</span><span class='line'>centosnew                 running (libvirt)
-</span><span class='line'>
-</span><span class='line'>The Libvirt domain is running. To stop this machine, you can run
-</span><span class='line'>`vagrant halt`. To destroy the machine, you can run `vagrant destroy`.
-</span><span class='line'># vagrant ssh centosnew
-</span><span class='line'>Last login: Wed Mar 16 02:31:18 2016 from 192.168.121.1
-</span><span class='line'>[vagrant@localhost ~]$</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>我们可以检查网卡状态，是否设置为我们需要设置的地址<code>192.168.88.2</code>.</p>
-
-<h3>更多定制化参数</h3>
-
-<h4>嵌套虚拟化</h4>
-
-<p>未知原因，我在CentOS6上检查嵌套虚拟化总是提示有问题，所以以下的验证是在Ubuntu系统上验证
-的。</p>
-
-<p>我们在上面的配置文件里制定了nested选项为true, 现在登录进去检查一下嵌套虚拟化是否加载成
-功:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>vagrant@vagrant:~$ lsmod | grep kvm
-</span><span class='line'>kvm_intel             143590  0 
-</span><span class='line'>kvm                   452043  1 kvm_intel
-</span><span class='line'>vagrant@vagrant:~$ modinfo kvm_intel | grep nested
-</span><span class='line'>parm:           nested:bool
-</span><span class='line'>vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
-</span><span class='line'>N
-</span><span class='line'>vagrant@vagrant:~$ sudo modprobe -r kvm_intel
-</span><span class='line'>vagrant@vagrant:~$ sudo modprobe kvm_intel nested=1
-</span><span class='line'>vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
-</span><span class='line'>Y</span></code></pre></td></tr></table></div></figure>
-
-
-<p>改变nested选项为false后，验证步骤如下:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cat /sys/module/kvm_intel/parameters/nested
-</span><span class='line'>N</span></code></pre></td></tr></table></div></figure>
-
-
-<p>
-值得注意的是，在虚拟机中，仍然可以通过<code>modprobe kvm_intel nested=1</code>来打开nested选项。</p>
-
-<h4>CPU Passthrough</h4>
-
-<p>指定参数为<code>domain.cpu_mode = 'host-passthrough'</code>:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>  config.vm.provider :libvirt do |domain|
-</span><span class='line'>    domain.memory = 512
-</span><span class='line'>    domain.nested = false
-</span><span class='line'>    #domain.cpu_mode = 'host-passthrough'
-</span><span class='line'>  end</span></code></pre></td></tr></table></div></figure>
-
-
-<p>未指定时:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>vagrant@vagrant:~$ cat /proc/cpuinfo  | grep -i "model name"
-</span><span class='line'>model name    : Intel Core i7 9xx (Nehalem Class Core i7)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>指定后:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[vagrant@localhost ~]$ cat /proc/cpuinfo | grep -i "model name"
-</span><span class='line'>model name    : Intel(R) Core(TM) i3 CPU         540  @ 3.07GHz</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>指定hostname</h4>
-
-<p>安装cloudstack时hostname是必要条件之一， Vagrantfile中可以指定vm的hostname:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>  config.vm.define "centosnew" do |centosnew|
-</span><span class='line'>    centosnew.vm.hostname = "centosnew.example.com"
-</span><span class='line'>  end</span></code></pre></td></tr></table></div></figure>
-
-
-<p>启动虚拟机后可以通过<code>hostname</code>和<code>hostname --fqdn</code>来检查结果。</p>
-
-<h3>快照</h3>
-
-<p>通过sahara来实现libvirt机器的快照:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ vagrant plugin install sahara</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在验证系统时，可以进入vagrant的sandbox模式，验证成功后才正式提交。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/4">&larr; Older</a>
@@ -2114,6 +2022,10 @@ operations.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/05/31/bu-tong-zhuo-mian-huan-jing-zhan-yong-nei-cun-slash-cpudui-bi/">不同桌面环境占用内存/CPU对比</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/05/29/yang-cheng-man-bu-er/">羊城漫步(二)</a>
       </li>
     
@@ -2127,10 +2039,6 @@ operations.</p>
     
       <li class="post">
         <a href="/blog/2016/05/12/tips-on-maas-2-dot-0/">Tips on Maas 2.0</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/05/11/setup-lxd-on-ubuntu1604/">Setup LXD on Ubuntu1604</a>
       </li>
     
   </ul>

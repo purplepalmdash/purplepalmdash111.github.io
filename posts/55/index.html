@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="使用定时器的好处是，等待某个时隙的同时还可以干别的事，而定时器的时间一到，得到一个中断后对应执行中断函数中的服务例程而已。STM32的定时器非常之复杂而强大，配置和使用都要花很大精力。 打开TIM2线的程序如下： TIM.c1
+  <meta name="description" content="Cortx-M3特有的SysTick可以很方便的实现定时。系统始终的频率和开启系统时钟中断主要在RCC.c里进行设置： RCC.c1
 2
 3
 4
@@ -17,7 +17,23 @@
 6
 7
 8
-void &hellip;">
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+//SYSTICK分频-- &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -73,6 +89,163 @@ void &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/11/30/stm32zhong-de-systick/">STM32中的Systick</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-11-30T11:24:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>30</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>11:24 am</span></time>
+        
+         | <a href="/blog/2013/11/30/stm32zhong-de-systick/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Cortx-M3特有的SysTick可以很方便的实现定时。系统始终的频率和开启系统时钟中断主要在RCC.c里进行设置：</p>
+
+<figure class='code'><figcaption><span>RCC.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="c1">//SYSTICK分频--1ms的系统时钟中断</span>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="n">SysTick_Config</span><span class="p">(</span><span class="n">SystemCoreClock</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">))</span>
+</span><span class='line'>      <span class="p">{</span>
+</span><span class='line'>          <span class="cm">/* Capture error */</span>
+</span><span class='line'>  <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'><span class="c1">// The definition of the SysTick_Config:</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/**</span>
+</span><span class='line'><span class="cm"> * @brief  Initialize and start the SysTick counter and its interrupt.</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * @param   ticks   number of ticks between two interrupts</span>
+</span><span class='line'><span class="cm"> * @return  1 = failed, 0 = successful</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * Initialise the system tick timer and its interrupt and start the</span>
+</span><span class='line'><span class="cm"> * system tick timer / counter in free running mode to generate </span>
+</span><span class='line'><span class="cm"> * periodical interrupts.</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">/*</span>
+</span><span class='line'><span class="cm">  *      - SystemCoreClock variable: Contains the core clock (HCLK), it can be used</span>
+</span><span class='line'><span class="cm">  *                                  by the user application to setup the SysTick </span>
+</span><span class='line'><span class="cm">  *                                  timer or configure other parameters.</span>
+</span><span class='line'><span class="cm">*/</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>　　系统时钟SYSCLK，它是供STM32中绝大部分部件工作的时钟源。系统时钟可选择为PLL输出、HSI或者HSE。系统时钟最大频率为72MHz，它通过AHB分频器分频后送给各模块使用，AHB分频器可选择1、2、4、8、16、64、128、256、512分频。其中AHB分频器输出的时钟送给5大模块使用：  <br/>
+　　①、送给AHB总线、内核、内存和DMA使用的HCLK时钟。  <br/>
+　　②、通过8分频后送给Cortex的系统定时器时钟。  <br/>
+　　③、直接送给Cortex的空闲运行时钟FCLK。  <br/>
+　　④、送给APB1分频器。APB1分频器可选择1、2、4、8、16分频，其输出一路供APB1外设使用(PCLK1，最大频率36MHz)，另一路送给定时器(Timer)2、3、4倍频器使用。该倍频器可选择1或者2倍频，时钟输出供定时器2、3、4使用。  <br/>
+　　⑤、送给APB2分频器。APB2分频器可选择1、2、4、8、16分频，其输出一路供APB2外设使用(PCLK2，最大频率72MHz)，另一路送给定时器(Timer)1倍频器使用。该倍频器可选择1或者2倍频，时钟输出供定时器1使用。另外，APB2分频器还有一路输出供分频器使用，分频后送给ADC模块使用。ADC分频器可选择为2、4、6、8分频。  <br/>
+Cortex-M3允许为SysTick提供2个时钟源以供选择，第一个是内核的“自由运行时钟”FCLK，“自由”表现在它不是来自系统时钟HCLK，因此在系统时钟停止时，FCLK也能继续运行。第2个是一个外部的参考时钟，但是使用外部时钟时，因为它在内部是通过FCLK来采样的，因此其周期必须至少是FCLK的两倍（采样定理）。</p>
+
+<figure class='code'><figcaption><span>stm32f10x_it.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/*******************************************************************************</span>
+</span><span class='line'><span class="cm">* Function Name  : SysTickHandler</span>
+</span><span class='line'><span class="cm">* Description    :系统时钟，一般调教到1MS中断一次</span>
+</span><span class='line'><span class="cm">*******************************************************************************/</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">void</span> <span class="nf">SysTick_Handler</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span><span class="p">(</span><span class="n">Timer1</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">Timer1</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Timer1 为全局变量,我们将设置这个全局变量，以决定其定时期限。</p>
+
+<figure class='code'><figcaption><span>RCC.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cm">/********************************************</span>
+</span><span class='line'><span class="cm">**函数名:SysTickDelay</span>
+</span><span class='line'><span class="cm">**功能:使用系统时钟的硬延迟</span>
+</span><span class='line'><span class="cm">**注意事项:一般地,不要在中断中调用本函数,否则会存在重入问题.另外如果屏蔽了全局中断,则不要使用此函数</span>
+</span><span class='line'><span class="cm">********************************************/</span>
+</span><span class='line'><span class="k">volatile</span> <span class="n">u16</span> <span class="n">Timer1</span><span class="p">;</span>
+</span><span class='line'><span class="kt">void</span> <span class="nf">SysTickDelay</span><span class="p">(</span><span class="n">u16</span> <span class="n">dly_ms</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">Timer1</span><span class="o">=</span><span class="n">dly_ms</span><span class="p">;</span>
+</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="n">Timer1</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>而设置这个全局变量则是在main.c的loop函数中设置的。</p>
+
+<figure class='code'><figcaption><span>main.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">for</span><span class="p">(;;)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="n">SysTickDelay</span><span class="p">(</span><span class="mi">500</span><span class="p">);</span>
+</span><span class='line'>  <span class="n">GPIOA</span><span class="o">-&gt;</span><span class="n">ODR</span><span class="o">^=</span><span class="n">GPIO_Pin_8</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如果把500改成其它的值，则很方便可以实现不同大小的定时器。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2035,259 +2208,6 @@ Get the interface definition via:</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/11/22/conky-customization/">Conky Customization</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2013-11-22T15:08:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2013</span></span> <span class='time'>3:08 pm</span></time>
-        
-         | <a href="/blog/2013/11/22/conky-customization/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><h3>Add existing user to specified group</h3>
-
-<p>The problem is : why I can&rsquo;t use hddtemp? This is because hddtemp need priviledge for accessing the disk related equipment.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>[Trusty@XXXyyy ~]$ whoami
-</span><span class='line'>Trusty
-</span><span class='line'>[Trusty@XXXyyy ~]$ groups
-</span><span class='line'>root log kvm users vboxusers
-</span><span class='line'>[Trusty@XXXyyy ~]$ su root
-</span><span class='line'>Password: 
-</span><span class='line'>[root@XXXyyy Trusty]# groups
-</span><span class='line'>root bin daemon sys adm disk wheel log
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>But this didn&rsquo;t solve the problem, I have to add prividge in /etc/sudoes,</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># visudo
-</span><span class='line'>Trusty ALL = NOPASSWD: /usr/bin/hddtemp
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Therefore in the configuration file of conky I need to replace the hddtemp with &ldquo;sudo hddtemp&rdquo;, everything will be displayed.</p>
-
-<h3>Now testing the Conky</h3>
-
-<p>After you have installed conky, the first thing for you to do is to edit its configuration file, to decide what to display on your own widget, my configuration file is listed as following:</p>
-
-<figure class='code'><figcaption><span>conkyrc.conf</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-<span class='line-number'>58</span>
-<span class='line-number'>59</span>
-<span class='line-number'>60</span>
-<span class='line-number'>61</span>
-<span class='line-number'>62</span>
-<span class='line-number'>63</span>
-<span class='line-number'>64</span>
-<span class='line-number'>65</span>
-<span class='line-number'>66</span>
-<span class='line-number'>67</span>
-<span class='line-number'>68</span>
-<span class='line-number'>69</span>
-<span class='line-number'>70</span>
-<span class='line-number'>71</span>
-<span class='line-number'>72</span>
-<span class='line-number'>73</span>
-<span class='line-number'>74</span>
-<span class='line-number'>75</span>
-<span class='line-number'>76</span>
-<span class='line-number'>77</span>
-<span class='line-number'>78</span>
-<span class='line-number'>79</span>
-<span class='line-number'>80</span>
-<span class='line-number'>81</span>
-<span class='line-number'>82</span>
-<span class='line-number'>83</span>
-<span class='line-number'>84</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'>alignment top_right
-</span><span class='line'>background yes
-</span><span class='line'>border_width 1
-</span><span class='line'>cpu_avg_samples 2
-</span><span class='line'>default_color black
-</span><span class='line'>default_outline_color blue
-</span><span class='line'>default_shade_color blue
-</span><span class='line'>draw_borders no
-</span><span class='line'>draw_graph_borders yes
-</span><span class='line'>draw_outline no
-</span><span class='line'>draw_shades no
-</span><span class='line'>use_xft yes
-</span><span class='line'>xftfont AR PL KaitiM GB:size=12
-</span><span class='line'>gap_x 5
-</span><span class='line'>gap_y 30
-</span><span class='line'>minimum_size 280 5
-</span><span class='line'>net_avg_samples 2
-</span><span class='line'>no_buffers yes
-</span><span class='line'>out_to_console no
-</span><span class='line'>out_to_stderr no
-</span><span class='line'>extra_newline no
-</span><span class='line'>own_window yes
-</span><span class='line'>own_window_class Conky
-</span><span class='line'>own_window_type override
-</span><span class='line'>##设置conky的默认背景色
-</span><span class='line'>##own_window_colour 573049
-</span><span class='line'>##很重要，只有启用argb才能透明，但是如果窗口属性如果设置为override，可能无法生效
-</span><span class='line'>#own_window_argb_visual yes
-</span><span class='line'>##设置透明的alpha值0-255，0为透明，255不透明
-</span><span class='line'>#own_window_argb_value 0
-</span><span class='line'>##own_window_argb_visual true
-</span><span class='line'>##own_window_argb_value 120
-</span><span class='line'>own_window_transparent yes
-</span><span class='line'>double_buffer yes
-</span><span class='line'>stippled_borders 0
-</span><span class='line'>update_interval 1
-</span><span class='line'>uppercase no
-</span><span class='line'>use_spacer none
-</span><span class='line'>show_graph_scale no
-</span><span class='line'>show_graph_range no
-</span><span class='line'>
-</span><span class='line'>TEXT
-</span><span class='line'>#${color red}${font AR PL KaitiM GB:style=Blod:size=17}    ${time %Y.%m.%d %H:%M:%S}
-</span><span class='line'>#${font AR PL KaitiM GB:style=Blod:size=12}
-</span><span class='line'>#${font AR PL KaitiM GB:style=Blod:size=12}${scroll 16 $nodename - $sysname $kernel on $machine}
-</span><span class='line'>#$hr
-</span><span class='line'>#${font AR PL KaitiM GB:style=Blod:size=14}${color green}${exec cal}
-</span><span class='line'>#$hr
-</span><span class='line'>${font AR PL KaitiM GB:style=Blod:size=12}${color purple}Uptime:$color $uptime
-</span><span class='line'>${color purple}Frequency (in MHz):$color $freq
-</span><span class='line'>#${color purple}Frequency (in GHz):$color $freq_g
-</span><span class='line'>${color purple}RAM: $color$mem/$memmax - $memperc% ${membar 4}
-</span><span class='line'>${color purple}Swap: $color$swap/$swapmax - $swapperc% ${swapbar 4}
-</span><span class='line'>${color purple}CPU1: $color${cpu cpu1}% ${cpubar 4}
-</span><span class='line'>${color purple}CPU2: $color${cpu cpu2}% ${cpubar 4}
-</span><span class='line'>${color purple}CPU3: $color${cpu cpu3}% ${cpubar 4}
-</span><span class='line'>${color purple}CPU4: $color${cpu cpu4}% ${cpubar 4}
-</span><span class='line'>${color purple}Processes: $color $processes  ${color red}Running:$color $running_processes
-</span><span class='line'>$hr
-</span><span class='line'>#${color red}Temp:
-</span><span class='line'>${color purple}CPU1 Temp: ${color red}${exec sensors | grep &#39;Core 0&#39; | awk {&#39;print $3&#39;}}
-</span><span class='line'>${color purple}CPU2 Temp: ${color red}${exec sensors | grep &#39;Core 1&#39; | awk {&#39;print $3&#39;}}
-</span><span class='line'>${color purple}System Temp: ${color red}${exec sensors | grep &#39;temp1&#39; | tail -1 | awk {&#39;print $2&#39;}}
-</span><span class='line'>${color purple}Hard Temp: ${color red}${exec sudo hddtemp /dev/sda -n -u=C}°C
-</span><span class='line'>$hr
-</span><span class='line'>#${color red}File systems:
-</span><span class='line'>${color black}${exec df -h | grep /dev/sda3 | awk {&#39;print $3&#39;}} / $color${fs_used /}/${fs_size /} ${fs_bar 6 /}
-</span><span class='line'>${exec df -h | grep /dev/sda2 | awk {&#39;print $3&#39;}} x $color${exec df -h | grep /dev/sda2 | awk {&#39;print $3&#39;}}/138GB ${fs_bar 6 /media/ubuntu}
-</span><span class='line'>#${exec df -h | grep /dev/sda8 | cut -c40-43} /boot $color${fs_used /boot}/${fs_size /boot} ${fs_bar 6 /boot}
-</span><span class='line'>$hr
-</span><span class='line'>#${color red}Networking:
-</span><span class='line'>#${color red}eth0:
-</span><span class='line'>#Up:$color ${upspeed eth0} ${color red} - Down:$color ${downspeed eth0}
-</span><span class='line'>${color red}br0:
-</span><span class='line'>Up:$color ${upspeed br0} ${color red} - Down:$color ${downspeed eth0}
-</span><span class='line'>#${color red}ppp0:
-</span><span class='line'>#${color red}Up:$color ${upspeed ppp0} ${color red} - Down:$color ${downspeed ppp0}
-</span><span class='line'>$hr
-</span><span class='line'>${color red}Name              PID   CPU%   MEM%
-</span><span class='line'>${color black} ${top name 1} ${top pid 1} ${top cpu 1} ${top mem 1}
-</span><span class='line'>${color black} ${top name 2} ${top pid 2} ${top cpu 2} ${top mem 2}
-</span><span class='line'>${color black} ${top name 3} ${top pid 3} ${top cpu 3} ${top mem 3}
-</span><span class='line'>${color purple} ${top name 4} ${top pid 4} ${top cpu 4} ${top mem 4}
-</span><span class='line'>${color purple} ${top name 5} ${top pid 5} ${top cpu 5} ${top mem 5}
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In fact I didn&rsquo;t finished the Translucent, so I use the Transparent, a little bit ugly, but it&rsquo;s OK.</p>
-
-<h3>Add it into awesome</h3>
-
-<p>Simply add one line in your ~/.config/awesome/rc.lua could solve the problem:</p>
-
-<figure class='code'><figcaption><span>conkyrc.conf</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'>awful.util.spawn(&quot;conky&quot;)
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now you can enjoy your Conky.</p>
-
-<p><img src="/images/conky.jpg" alt="conky.jpg" /></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/56">&larr; Older</a>
@@ -2305,6 +2225,10 @@ Get the interface definition via:</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/05/31/bu-tong-zhuo-mian-huan-jing-zhan-yong-nei-cun-slash-cpudui-bi/">不同桌面环境占用内存/CPU对比</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/05/29/yang-cheng-man-bu-er/">羊城漫步(二)</a>
       </li>
     
@@ -2318,10 +2242,6 @@ Get the interface definition via:</p>
     
       <li class="post">
         <a href="/blog/2016/05/12/tips-on-maas-2-dot-0/">Tips on Maas 2.0</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/05/11/setup-lxd-on-ubuntu1604/">Setup LXD on Ubuntu1604</a>
       </li>
     
   </ul>
