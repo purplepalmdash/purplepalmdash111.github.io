@@ -9,7 +9,7 @@
   <meta name="author" content="Dash">
 
   
-  <meta name="description" content="最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署 &hellip;">
+  <meta name="description" content="本节在前面部署完Fuel 控制节点的基础上，接着部署一个OpenStack HA环境，并准备好OpenContrail的三个部署节点。 节点初始化准备 所有加入到Fuel控制节点里的机器，在加入前都需要进行初始化配置，而后才可以被Fuel所识别. 在所有配置好的机器里，点击Details-> &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -65,6 +65,141 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/">使用Fuel部署OpenContrail(2)</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2015-04-27T17:04:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:04 pm</span></time>
+        
+         | <a href="/blog/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/#disqus_thread">Comments</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>本节在前面部署完Fuel 控制节点的基础上，接着部署一个OpenStack HA环境，并准备好OpenContrail的三个部署节点。</p>
+
+<h3>节点初始化准备</h3>
+
+<p>所有加入到Fuel控制节点里的机器，在加入前都需要进行初始化配置，而后才可以被Fuel所识别.  <br/>
+在所有配置好的机器里，点击Details-> Boot Options, 设置如下：  <br/>
+<img src="/images/2015_04_27_17_14_26_532x372.jpg" alt="/images/2015_04_27_17_14_26_532x372.jpg" />  <br/>
+因为第一次启动的时候，磁盘里是没有内容的，机器会自动从第二选项启动(PXE). 机器将自动侦测5个网段上的PXE Server， 因为Fuel Controller接管了10.20.0.0/24 网段上的PXE请求，它将会把机器从PXE变成可部署的状态。</p>
+
+<h3>OpenStack HA环境创建</h3>
+
+<p>创建一个OpenStack HA环境，如下步骤，因为是HA，所以需要至少三个OpenStack Controller节点和一个OpenStack Compute节点。  <br/>
+点击界面里的New OpenStack Environment, 在弹出的窗口中，命名需要部署的HA环境名，并选择部署所需要的镜像，这里我们选择Ubuntu作为部署OpenStack的基础镜像。  <br/>
+<img src="/images/2015_04_27_17_18_22_680x435.jpg" alt="/images/2015_04_27_17_18_22_680x435.jpg" />  <br/>
+点击下一步，选择HA模式：  <br/>
+<img src="/images/2015_04_27_17_20_13_681x427.jpg" alt="/images/2015_04_27_17_20_13_681x427.jpg" /> <br/>
+点击下一步，选择计算节点模式，这里选择qemu或者kvm问题都不大，不要选vcenter就是了:   <br/>
+<img src="/images/2015_04_27_17_21_48_683x435.jpg" alt="/images/2015_04_27_17_21_48_683x435.jpg" />   <br/>
+点击下一步，进入到网络模式选择，选择Legacy Network(nova-network), 先部署成这种形式，接下来我们会使用neutron和contrail的组合重新规划网络:   <br/>
+<img src="/images/2015_04_27_17_23_03_682x428.jpg" alt="/images/2015_04_27_17_23_03_682x428.jpg" /> <br/>
+点击下一步，Storage Backend，因为我们不打算引入任何存储节点，这里选择Default，直接进入下一步， Additional Service里我们也不打算启任何额外的服务，一路Next直到最后Create出整个OpenStack环境。</p>
+
+<p>依次创建另一个OpenStack HA环境，用来部署三台Contrail Controller的节点机.</p>
+
+<h3>OpenStack环境网络</h3>
+
+<p>Fuel默认的网络配置会激活三个物理端口，第一个端口接入PXE网络，第二个接入Public网络，第三个上启三个VLAN，分别接入到Management/Storage/Private网络。我认为VLAN的配置增加了配置和部署的复杂度，更改为五个物理网络，分别使用我们在Virt-Manager中创建出的五个物理网卡接入。更改方法如下:   <br/>
+点击Network, 更改Management下的CIDR，手动填入10.55.55.0/24，然后去掉前面的Use VLAN Tag:      <br/>
+<img src="/images/2015_04_27_17_32_09_465x466.jpg" alt="/images/2015_04_27_17_32_09_465x466.jpg" /></p>
+
+<p>依次修改Storage网络和Private网络，更改完毕后，你的配置应该看起来是这样的:    <br/>
+<img src="/images/2015_04_27_17_34_33_387x388.jpg" alt="/images/2015_04_27_17_34_33_387x388.jpg" /></p>
+
+<p>对于Public网络我们不需要有任何修改，保持172.16网段的配置即可。</p>
+
+<p>确认Network的配置为FlatDHCP Manager:   <br/>
+<img src="/images/2015_04_27_17_35_37_391x149.jpg" alt="/images/2015_04_27_17_35_37_391x149.jpg" /></p>
+
+<h3>建立OpenStack HA环境</h3>
+
+<p>经PXE启动的虚拟机会把自己加入到"Unallocated Nodes"的队列里，在创建好的环境里，点击Node后，可以看到Fuel对角色的分配，添加一个OpenStack Controller的步骤如下：  <br/>
+在Assign Roles里选择"Controller", 下面的备选节点里选择一台机器后，Apply Changes按钮会变绿，点击进入下一步.   <br/>
+<img src="/images/2015_04_27_17_42_34_800x530.jpg" alt="/images/2015_04_27_17_42_34_800x530.jpg" />  <br/>
+在切换到的页面中，点击节点最右边的齿轮，配置该节点机器的网络、存储等，这里只配置网络：  <br/>
+<img src="/images/2015_04_27_17_44_05_797x203.jpg" alt="/images/2015_04_27_17_44_05_797x203.jpg" />  <br/>
+点击Configure Network配置网络:   <br/>
+<img src="/images/2015_04_27_17_45_19_448x349.jpg" alt="/images/2015_04_27_17_45_19_448x349.jpg" />  <br/>
+可以看到前4个节点已经配置好了，我们只需要把VM(Fix)这个框从eth0拖动到eth4即可:    <br/>
+<img src="/images/2015_04_27_17_46_34_524x342.jpg" alt="/images/2015_04_27_17_46_34_524x342.jpg" />  <br/>
+添加完毕后，网络配置应该如下图:  <br/>
+<img src="/images/2015_04_27_17_48_22_489x436.jpg" alt="/images/2015_04_27_17_48_22_489x436.jpg" /> <br/>
+点击Apply后，保存当前配置，然后点击Back to node list可以顺次添加其他节点。</p>
+
+<p>下面是一个添加好的OpenStack HA环境示例(3 Controller + 2 Compute):   <br/>
+<img src="/images/2015_04_27_17_57_01_948x432.jpg" alt="/images/2015_04_27_17_57_01_948x432.jpg" /></p>
+
+<p>这里要注意，因为我们要启用嵌套虚拟化，所以确保Compute节点是把Host CPU Configuration下发了的那台。 <br/>
+添加完三个OpenStack Controller节点和一个OpenStack Compute节点后，就可以点击Deploy Changes开始部署了。整个部署的过程至少需要1个小时，取决于机器配置和磁盘读写快慢。</p>
+
+<p>部署完毕后，Fuel会弹出提示信息，并给出可访问OpenStack HA Horizon界面的URL。</p>
+
+<h3>准备Contrail部署节点</h3>
+
+<p>在OpenStack HA节点部署的同时，我们可以准备好Contrail部署节点。  <br/>
+同样创建出一个新的OpenStack HA部署环境，记住我们不能在已有的OpenStack HA环境里添加节点机，因为那样部署出来的节点机都会带上OpenStack的一些包，我们需要一个纯净的Ubuntu环境进行Contrail组件的配置。 <br/>
+同样添加3个Compute节点，进行同样的网络配置，添加完节点后，Deploy Changes按钮是不能被点下的，因为我们的环境里没有OpenStack Controller. 一个环境示例如下:  <br/>
+<img src="/images/2015_04_27_17_59_13_837x489.jpg" alt="/images/2015_04_27_17_59_13_837x489.jpg" /></p>
+
+<p>我们需要登录到Fuel Controller的终端，就是10.20.0.2那台机器(用户名root,密码r00tme)，手动对添加的三个Contrail节点进行provision:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># fuel --env &lt;ENVIRONMENT_ID&gt; node --list
+</span><span class='line'># fuel node --node-id &lt;NODE1_ID&gt;,&lt;NODE2_ID&gt;,&lt;NODE3_ID&gt; --env-id &lt;ENVIRONMENT_ID&gt; --provision
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>如何得到当前的ENVIRONMENT_ID, 下面提供了一个例子:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>[root@fuel ~]# fuel --env environment
+</span><span class='line'>id | status      | name                              | mode       | release_id | changes                                                                                                                                                               | pending_release_id
+</span><span class='line'>---|-------------|-----------------------------------|------------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------
+</span><span class='line'>36 | operational | JunoOpenStack                     | multinode  | 2          | []                                       
+</span><span class='line'>[root@fuel ~]# fuel --env 36 node --list
+</span><span class='line'>id | status | name             | cluster | ip        | mac               | roles      | pending_roles | online | group_id
+</span><span class='line'>---|--------|------------------|---------|-----------|-------------------|------------|---------------|--------|---------
+</span><span class='line'>3  | ready  | Untitled (e5:f2) | 36      | 10.20.0.3 | da:98:96:c5:c3:4b | compute    |               | False  | 36      
+</span><span class='line'>4  | ready  | Untitled (71:15) | 36      | 10.20.0.4 | 1a:ff:37:1f:26:44 | controller |               | False  | 36  
+</span><span class='line'>[root@fuel ~]# fuel node --node-id 3 --env-id 36 --provision2
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>同样需要大约30分钟时间用来在三台Contrail Controller的节点机上部署完可用的Ubuntu系统，部署完毕后，node界面上可以看到绿色的小字"ubuntu installed".</p>
+
+<p>这一节我们通过Fuel部署完毕OpenStack HA, 并准备了用于后续部署OpenContrail的三台Contrail Controller节点。接下来我们可以进入到OpenStack和OpenContrail的集成了。</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2748,420 +2883,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/">安装Icehouse@Ubuntu14.04(4)</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-<time class='entry-date' datetime='2015-04-13T17:34:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2015</span></span> <span class='time'>5:34 pm</span></time>
-        
-         | <a href="/blog/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/#disqus_thread">Comments</a>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>这里将配置计算节点。计算节点我们使用了一台2G内存的虚拟机，并使用了嵌套虚拟化，可以通过<code>lscpu</code>来看到CPU的VMX/VT-X标志都已经被下发到虚拟机中。</p>
-
-<h3>数据库准备</h3>
-
-<p>使用下列命令来创建nova所需数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# mysql -u root -p
-</span><span class='line'>Enter password: 
-</span><span class='line'>Welcome to the MariaDB monitor.  Commands end with ; or \g.
-</span><span class='line'>Your MariaDB connection id is 35
-</span><span class='line'>Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-</span><span class='line'>
-</span><span class='line'>Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-</span><span class='line'>
-</span><span class='line'>Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; CREATE DATABASE nova;
-</span><span class='line'>Query OK, 1 row affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'xxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY 'xxxx';
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; flush privileges;
-</span><span class='line'>Query OK, 0 rows affected (0.00 sec)
-</span><span class='line'>
-</span><span class='line'>MariaDB [(none)]&gt; quit
-</span><span class='line'>Bye
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>nova用户</h3>
-
-<p>创建nova用户:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# source ~/openstack/admin-openrc.sh
-</span><span class='line'>root@JunoController:~# keystone user-create --name nova --pass xxxx
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>| Property |              Value               |
-</span><span class='line'>+----------+----------------------------------+
-</span><span class='line'>|  email   |                                  |
-</span><span class='line'>| enabled  |               True               |
-</span><span class='line'>|    id    | 845c22d1a781458a8b28ba54534b73dd |
-</span><span class='line'>|   name   |               nova               |
-</span><span class='line'>| username |               nova               |
-</span><span class='line'>+----------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>制定nova属于service tenant, 并赋予admin权限:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone user-role-add --user nova --tenant service --role admin
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在keystone注册nova:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone service-create --name nova --type compute --description "OpenStack Compute"
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>|   Property  |              Value               |
-</span><span class='line'>+-------------+----------------------------------+
-</span><span class='line'>| description |        OpenStack Compute         |
-</span><span class='line'>|   enabled   |               True               |
-</span><span class='line'>|      id     | 8733caba0b9742a39ee9ac53ad4d8e27 |
-</span><span class='line'>|     name    |               nova               |
-</span><span class='line'>|     type    |             compute              |
-</span><span class='line'>+-------------+----------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>在keystone注册nova end-point:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ compute / {print $2}') --publicurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --internalurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --adminurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --region regionOne
-</span><span class='line'>+-------------+-------------------------------------------+
-</span><span class='line'>|   Property  |                   Value                   |
-</span><span class='line'>+-------------+-------------------------------------------+
-</span><span class='line'>|   adminurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
-</span><span class='line'>|      id     |      d16c91bfacf2474ebee36314535a146f     |
-</span><span class='line'>| internalurl | http://10.17.17.211:8774/v2/%(tenant_id)s |
-</span><span class='line'>|  publicurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
-</span><span class='line'>|    region   |                 regionOne                 |
-</span><span class='line'>|  service_id |      8733caba0b9742a39ee9ac53ad4d8e27     |
-</span><span class='line'>+-------------+-------------------------------------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Compute服务安装</h3>
-
-<h4>Controller节点配置</h4>
-
-<p>在Controller节点上，安装以下包:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# apt-get -y install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置nova所需的配置文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/nova/nova.conf
-</span><span class='line'>[database]
-</span><span class='line'>connection = mysql://nova:xxxxx@10.17.17.211/nova
-</span><span class='line'>
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>....
-</span><span class='line'>rpc_backend = rabbit
-</span><span class='line'>rabbit_host = 10.17.17.211
-</span><span class='line'>rabbit_password = xxxxxx
-</span><span class='line'>my_ip=10.17.17.211
-</span><span class='line'>vncserver_listen = 0.0.0.0
-</span><span class='line'>vncserver_proxyclient_address = 10.17.17.211
-</span><span class='line'>auth_strategy = keystone 
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = nova
-</span><span class='line'>admin_password = xxxx
-</span><span class='line'>[glance]
-</span><span class='line'>host=10.17.17.211
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除sqlite3数据库:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# rm /var/lib/nova/nova.sqlite 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>创建数据库：</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# su -s /bin/sh -c "nova-manage db sync" nova
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重启服务，使用nova检查本机可用镜像情况:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# service nova-api restart
-</span><span class='line'>root@JunoController:~# service nova-cert restart
-</span><span class='line'>root@JunoController:~#  service nova-consoleauth restart
-</span><span class='line'>root@JunoController:~# service nova-scheduler restart
-</span><span class='line'>root@JunoController:~# service nova-conductor restart
-</span><span class='line'>root@JunoController:~# service nova-novncproxy restart
-</span><span class='line'>root@JunoController:~# nova image-list
-</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
-</span><span class='line'>| ID                                   | Name                | Status | Server |
-</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
-</span><span class='line'>| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | ACTIVE |        |
-</span><span class='line'>+--------------------------------------+---------------------+--------+--------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Compute节点安装</h4>
-
-<p>安装下列包:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~#  apt-get -y install nova-compute sysfsutils
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>配置:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# vim /etc/nova/nova.conf 
-</span><span class='line'>[DEFAULT]
-</span><span class='line'>......
-</span><span class='line'>auth_strategy = keystone
-</span><span class='line'>rpc_backend = rabbit
-</span><span class='line'>rabbit_host = 10.17.17.211
-</span><span class='line'>rabbit_password = xxxx
-</span><span class='line'>my_ip = 10.17.17.213
-</span><span class='line'>vnc_enabled = True
-</span><span class='line'>vncserver_listen = 0.0.0.0
-</span><span class='line'>vncserver_proxyclient_address = 10.17.17.213
-</span><span class='line'>novncproxy_base_url = http://10.17.17.211:6080/vnc_auto.html
-</span><span class='line'>glance_host = 10.17.17.211
-</span><span class='line'>
-</span><span class='line'>[keystone_authtoken]
-</span><span class='line'>auth_uri = http://10.17.17.211:5000
-</span><span class='line'>auth_host = 10.17.17.211
-</span><span class='line'>auth_port = 35357
-</span><span class='line'>auth_protocol = http
-</span><span class='line'>admin_tenant_name = service
-</span><span class='line'>admin_user = nova
-</span><span class='line'>admin_password = xxxx
-</span><span class='line'>
-</span><span class='line'>[database]
-</span><span class='line'>#The SQLAlchemy connection string used to connect to the database
-</span><span class='line'>connection = mysql://nova:xxxx@10.17.17.211/nova
-</span><span class='line'>[glance]
-</span><span class='line'>host=10.17.17.211
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>看cpu硬件是否支持硬件加速:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# egrep -c '(vmx|svm)' /proc/cpuinfo
-</span><span class='line'>2
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>如果支持加速，则配置nova-compute.conf为:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# cat /etc/nova/nova-compute.conf
-</span><span class='line'>[libvirt]
-</span><span class='line'>virt_type=kvm
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>删除不需要的nova.sqlite文件:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# rm -f /var/lib/nova/nova.sqlite 
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>重起nova服务:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoCompute:~# service nova-compute restart
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>验证</h3>
-
-<p>在控制节点上,列出所有的service:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>root@JunoController:~# nova service-list
-</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-</span><span class='line'>| Binary           | Host           | Zone     | Status  | State | Updated_at                 | Disabled Reason |
-</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-</span><span class='line'>| nova-cert        | JunoController | internal | enabled | up    | 2015-04-13T10:16:10.000000 | -               |
-</span><span class='line'>| nova-consoleauth | JunoController | internal | enabled | up    | 2015-04-13T10:16:12.000000 | -               |
-</span><span class='line'>| nova-scheduler   | JunoController | internal | enabled | up    | 2015-04-13T10:16:05.000000 | -               |
-</span><span class='line'>| nova-conductor   | JunoController | internal | enabled | up    | 2015-04-13T10:16:08.000000 | -               |
-</span><span class='line'>| nova-compute     | JunoCompute    | nova     | enabled | up    | 2015-04-13T10:16:09.000000 | -               |
-</span><span class='line'>+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>现在compute节点已经配置完了，接下来可以配置网络节点。配置完网络节点后，就可以启动虚拟机了。</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/posts/23">&larr; Older</a>
@@ -3179,6 +2900,10 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/06/01/use-rakehd-for-deploying-systems/">Use RackHD for Deploying Systems</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2016/05/31/bu-tong-zhuo-mian-huan-jing-zhan-yong-nei-cun-slash-cpudui-bi/">不同桌面环境占用内存/CPU对比</a>
       </li>
     
@@ -3192,10 +2917,6 @@ Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contra
     
       <li class="post">
         <a href="/blog/2016/05/18/working-tips-on-ansible-cobbler-3/">Working Tips on Ansible-cobbler(3)</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/05/12/tips-on-maas-2-dot-0/">Tips on Maas 2.0</a>
       </li>
     
   </ul>
