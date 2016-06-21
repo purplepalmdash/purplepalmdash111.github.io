@@ -4,7 +4,7 @@
   <title><![CDATA[Dash]]></title>
   <link href="http://purplepalmdash.github.io/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-06-14T20:01:41+08:00</updated>
+  <updated>2016-06-21T19:40:30+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,393 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[搭建基于docker的监控系统]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/06/20/da-jian-ji-yu-dockerde-jian-kong-xi-tong/"/>
+    <updated>2016-06-20T09:39:55+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/06/20/da-jian-ji-yu-dockerde-jian-kong-xi-tong</id>
+    <content type="html"><![CDATA[<h3>Graphite/Grafana</h3>
+
+<p>这两个用于记录和展示监控数据，通过以下命令可以快速搭建:</p>
+
+<h4>Graphite</h4>
+
+<p>开启容器:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir -p /local/path/to/graphite/storage/whisper/
+</span><span class='line'>$ sudo docker run -d \
+</span><span class='line'>  --name graphite \
+</span><span class='line'>  -p 8080:80 \
+</span><span class='line'>  -p 2003:2003 \
+</span><span class='line'>  -v /local/path/to/.htpasswd:/etc/nginx/.htpasswd \
+</span><span class='line'>  -v /local/path/to/graphite/storage/whisper:/opt/graphite/storage/whisper \
+</span><span class='line'>  sitespeedio/graphite</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建htpasswd文件的方法可以参阅:    <br/>
+<a href="http://httpd.apache.org/docs/2.2/programs/htpasswd.html">http://httpd.apache.org/docs/2.2/programs/htpasswd.html</a></p>
+
+<p>当然如果你使用默认的密码的话，用户名/密码是:guest/guest.</p>
+
+<h4>Grafana</h4>
+
+<p>开启容器:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /local/path/to/grafana
+</span><span class='line'># docker run -d -p 3000:3000 --name=grafana -v /local/path/to/grafana:/var/lib/grafana  grafana/grafana</span></code></pre></td></tr></table></div></figure>
+
+
+<p>
+默认用户名/密码为admin/admin.</p>
+
+<h3>Collectd</h3>
+
+<p>用于采集节点机上的数据，</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># docker run -d --net=host --privileged -v /:/hostfs:ro --name=collectd -e \
+</span><span class='line'>HOST_NAME=localhost -e \
+</span><span class='line'>GRAPHITE_HOST=192.168.1.79 andreasjansson/collectd-write-graphite</span></code></pre></td></tr></table></div></figure>
+
+
+<p>参数说明:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>--net=host :     使用主机上的网络配置
+</span><span class='line'>GRAPHITE_HOST:  前面设置的graphite机器的地址</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>systemd 启动方式</h3>
+
+<p>collectd启动方式:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo vim /usr/lib/systemd/system/collectddocker.service
+</span><span class='line'>[Unit]
+</span><span class='line'>Description=collectd container
+</span><span class='line'>Requires=docker.service
+</span><span class='line'>After=docker.service
+</span><span class='line'>
+</span><span class='line'>[Service]
+</span><span class='line'>Restart=always
+</span><span class='line'>ExecStart=/usr/bin/docker start -a collectd
+</span><span class='line'>ExecStop=/usr/bin/docker stop -t 2 collectd
+</span><span class='line'>
+</span><span class='line'>[Install]
+</span><span class='line'>WantedBy=multi-user.target</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动并使能服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo systemctl enable collectddocker.service</span></code></pre></td></tr></table></div></figure>
+
+
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[搭建无盘CentOS桌面环境]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/06/18/da-jian-wu-pan-centoszhuo-mian-huan-jing/"/>
+    <updated>2016-06-18T13:43:48+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/06/18/da-jian-wu-pan-centoszhuo-mian-huan-jing</id>
+    <content type="html"><![CDATA[<h3>网络准备</h3>
+
+<p>创建一个无DHCP的网络:</p>
+
+<p><img src="http://purplepalmdash.github.io/images/2016_06_18_13_53_06_399x429.jpg" alt="/images/2016_06_18_13_53_06_399x429.jpg" /></p>
+
+<p>DHCP服务器我们将配置在PXE服务器节点上。</p>
+
+<h3>PXE节点配置</h3>
+
+<h4>初始化配置</h4>
+
+<p>最小化安装CentOS 7 Server。并配置其IP地址为<code>10.19.20.2</code>.  <br/>
+关闭selinux和firewalld服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vi /etc/selinux/config 
+</span><span class='line'>SELINUX=disabled
+</span><span class='line'>
+</span><span class='line'># systemctl disable firewalld.service</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>使用DVD作为源</h4>
+
+<p>创建挂载目录并挂在DVD：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir /cdrom
+</span><span class='line'># mount -t iso9660 -o loop ./CentOS-7-x86_64-Everything-1511.iso /cdrom/</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建新的repo文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vi /etc/yum.repos.d/local.repo
+</span><span class='line'>
+</span><span class='line'>[LocalRepo]
+</span><span class='line'>name=Local Repository
+</span><span class='line'>baseurl=file:///cdrom
+</span><span class='line'>enabled=1
+</span><span class='line'>gpgcheck=1
+</span><span class='line'>gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7</span></code></pre></td></tr></table></div></figure>
+
+
+<p>生成新的缓存：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir back
+</span><span class='line'># mv CentOS-* back
+</span><span class='line'># yum makecache</span></code></pre></td></tr></table></div></figure>
+
+
+<p>安装一些必要的包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y vim wget</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>TFTP Server</h4>
+
+<p>安装必要的包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># yum -y install syslinux xinetd tftp-server
+</span><span class='line'># mkdir /var/lib/tftpboot/pxelinux.cfg 
+</span><span class='line'># cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/ </span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置PXE：</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/xinetd.d/tftp 
+</span><span class='line'>disable = no
+</span><span class='line'># systemctl start xinetd
+</span><span class='line'># systemctl enable xinetd</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>DHCP服务器</h4>
+
+<p>安装:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># yum install -y dhcp</span></code></pre></td></tr></table></div></figure>
+
+
+<p>配置:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/dhcp/dhcpd.conf
+</span><span class='line'>    #
+</span><span class='line'>    # DHCP Server Configuration file.
+</span><span class='line'>    #   see /usr/share/doc/dhcp*/dhcpd.conf.example
+</span><span class='line'>    #   see dhcpd.conf(5) man page
+</span><span class='line'>    #
+</span><span class='line'>    # create new
+</span><span class='line'>    
+</span><span class='line'>    # specify domain name
+</span><span class='line'>    option domain-name "srv.world";
+</span><span class='line'>    # specify name server's hostname or IP address
+</span><span class='line'>    option domain-name-servers dlp.srv.world;
+</span><span class='line'>    # default lease time
+</span><span class='line'>    default-lease-time 600;
+</span><span class='line'>    # max lease time
+</span><span class='line'>    max-lease-time 7200;
+</span><span class='line'>    # this DHCP server to be declared valid
+</span><span class='line'>    authoritative;
+</span><span class='line'>    # specify network address and subnet mask
+</span><span class='line'>    subnet 10.19.20.0 netmask 255.255.255.0 {
+</span><span class='line'>        # specify the range of lease IP address
+</span><span class='line'>        range dynamic-bootp 10.19.20.200 10.19.20.254;
+</span><span class='line'>        # specify broadcast address
+</span><span class='line'>        option broadcast-address 10.19.20.255;
+</span><span class='line'>        # specify default gateway
+</span><span class='line'>        option routers 10.19.20.1;
+</span><span class='line'>        option domain-name-servers   10.19.20.2;
+</span><span class='line'>        filename        "pxelinux.0";
+</span><span class='line'>        next-server     10.19.20.2;
+</span><span class='line'>    }</span></code></pre></td></tr></table></div></figure>
+
+
+<p>启动并使能服务:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># systemctl start dhcpd 
+</span><span class='line'># systemctl enable dhcpd </span></code></pre></td></tr></table></div></figure>
+
+
+<h4>PXE服务器</h4>
+
+<p>安装一些必要的包:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># yum -y install dracut-network nfs-utils</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在PXE服务器上构建一个无盘系统用的文件系统</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># mkdir -p /var/lib/tftpboot/centos7/root 
+</span><span class='line'># yum groups -y install "Server with GUI" --releasever=7 --installroot=/var/lib/tftpboot/centos7/root/</span></code></pre></td></tr></table></div></figure>
+
+
+<p>给出root用户的默认密码:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># python -c 'import crypt,getpass; \ 
+</span><span class='line'>print(crypt.crypt(getpass.getpass(), \
+</span><span class='line'>crypt.mksalt(crypt.METHOD_SHA512)))' 
+</span><span class='line'>Password:
+</span><span class='line'>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</span></code></pre></td></tr></table></div></figure>
+
+
+<p>填入root密码到/etc/shadown中:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /var/lib/tftpboot/centos7/root/etc/shadow
+</span><span class='line'>root:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:16372:0:99999:7:::</span></code></pre></td></tr></table></div></figure>
+
+
+<p>构建<code>/etc/fstab</code>文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vi /var/lib/tftpboot/centos7/root/etc/fstab
+</span><span class='line'> none    /tmp        tmpfs   defaults   0 0
+</span><span class='line'>tmpfs   /dev/shm    tmpfs   defaults   0 0
+</span><span class='line'>sysfs   /sys        sysfs   defaults   0 0
+</span><span class='line'>proc    /proc       proc    defaults   0 0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>下载pxe所需要的vmlinuz和initrd.img文件:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># wget -P /var/lib/tftpboot/centos7/ \
+</span><span class='line'>http://mirrors.aliyun.com/centos/7/os/x86_64/images/pxeboot/vmlinuz \
+</span><span class='line'>http://mirrors.aliyun.com/centos/7/os/x86_64/images/pxeboot/initrd.img</span></code></pre></td></tr></table></div></figure>
+
+
+<p>创建默认的pxe启动项目:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vi /var/lib/tftpboot/pxelinux.cfg/default
+</span><span class='line'># create new
+</span><span class='line'> default centos7
+</span><span class='line'>
+</span><span class='line'>label centos7
+</span><span class='line'>    kernel centos7/vmlinuz
+</span><span class='line'>    append initrd=centos7/initrd.img root=nfs:10.19.20.2:/var/lib/tftpboot/centos7/root rw selinux=0 </span></code></pre></td></tr></table></div></figure>
+
+
+<p>映射NFS服务器:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vi /etc/exports
+</span><span class='line'>/var/lib/tftpboot/centos7/root 10.19.20.0/24(rw,no_root_squash)
+</span><span class='line'># systemctl start rpcbind nfs-server 
+</span><span class='line'># systemctl enable rpcbind nfs-server </span></code></pre></td></tr></table></div></figure>
+
+
+<p>现在在网络中加入新的机器，从PXE启动后，将直接进入到CentOS7的桌面。</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[RackHD Worktips]]></title>
@@ -2737,6 +3124,144 @@ the OS a chance to collect more entropy!</code></p>
 <h3>24. performance tool</h3>
 
 <p><a href="http://www.tecmint.com/linux-cpu-load-stress-test-with-stress-ng-tool/2/">http://www.tecmint.com/linux-cpu-load-stress-test-with-stress-ng-tool/2/</a></p>
+
+<h3>25. X11 Forwarding Issue</h3>
+
+<p>Problem:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>X11 forwarding request failed on channel 0</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Solved via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pacman -S xorg-xauth
+</span><span class='line'># vim /etc/ssh/sshd_config
+</span><span class='line'>AddressFamily any
+</span><span class='line'>X11Forwarding yes</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Then restart the sshd daemon, you will get X11 on ssh forwarding enabled.</p>
+
+<p>Add new user <code>clouder</code>:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># useradd -d /home/clouder/ clouder
+</span><span class='line'># chown -R clouder:clouder /home/clouder/
+</span><span class='line'># usermod -aG kvm clouder
+</span><span class='line'># usermod -aG libvirt clouder</span></code></pre></td></tr></table></div></figure>
+
+
+<p>polkit configuration:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># vim /etc/polkit-1/rules.d/50-libvirt.rules 
+</span><span class='line'>/* Allow users in kvm group to manage the libvirt
+</span><span class='line'>daemon without authentication */
+</span><span class='line'>polkit.addRule(function(action, subject) {
+</span><span class='line'>    if (action.id == "org.libvirt.unix.manage" &&
+</span><span class='line'>        subject.isInGroup("kvm")) {
+</span><span class='line'>            return polkit.Result.YES;
+</span><span class='line'>    }
+</span><span class='line'>});</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install following packages:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># pacman -Syu ebtables dnsmasq</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Open nested kvm.</p>
+
+<h3>26. Hack into system</h3>
+
+<p><a href="http://null-byte.wonderhowto.com/how-to/hack-like-pro-hack-shellshock-vulnerability-0157651/">http://null-byte.wonderhowto.com/how-to/hack-like-pro-hack-shellshock-vulnerability-0157651/</a></p>
+
+<h3>27. Quickly setup graphite and grafana</h3>
+
+<p>On ArchLinux, do following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir -p /root/data/graphite/storage/whisper/
+</span><span class='line'>$ sudo docker run -d \
+</span><span class='line'>  --name graphite \
+</span><span class='line'>  -p 8080:80 \
+</span><span class='line'>  -p 2003:2003 \
+</span><span class='line'>  -v /local/path/to/.htpasswd:/etc/nginx/.htpasswd \
+</span><span class='line'>  -v /root/data/graphite/storage/whisper:/opt/graphite/storage/whisper \
+</span><span class='line'>  sitespeedio/graphite</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now your graphite runs OK, default username/password is guest/guest.</p>
+
+<p>Continue setup the docker container for grafana:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker run -i -p 3000:3000 grafana/grafana</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Or, setup our own persistent storage via:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir -p /root/data/grafana/
+</span><span class='line'>$ chmod 777 -R /root/data/grafana/
+</span><span class='line'>$ docker run -d -v /root/data/grafana:/var/lib/grafana --name grafana-storage busybox:latest
+</span><span class='line'>$ docker run  -d -p 3000:3000 --name=grafana --volumes-from grafana-storage grafana/grafana
+</span><span class='line'>$ docker logs grafana</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The correct way for running grfafana via following:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># docker run -d -p 3000:3000 --name=grafana -v /root/data/grafana:/var/lib/grafana  grafana/grafana</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>28. docker-enter issue</h3>
+
+<p>If you met <code>importenv: not found</code> issue, do following to let docker-enter running:</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># docker pull jpetazzo/nsenter
+</span><span class='line'># docker run --rm -v /usr/local/bin:/target jpetazzo/nsenter
+</span><span class='line'># docker-enter &lt;container_name&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>29. Docker-Collectd</h3>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># docker run -d --net=host --privileged -v /:/hostfs:ro --name=collectd -e HOST_NAME=localhost -e \
+</span><span class='line'>GRAPHITE_HOST=192.168.1.79 andreasjansson/collectd-write-graphite</span></code></pre></td></tr></table></div></figure>
+
 ]]></content>
   </entry>
   
@@ -3338,72 +3863,6 @@ Desktop.</p>
 
 <figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
 </pre></td><td class='code'><pre><code class=''><span class='line'>$ ./stack.sh</span></code></pre></td></tr></table></div></figure>
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Change IP in DevStack]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/04/18/change-ip-in-devstack/"/>
-    <updated>2016-04-18T12:15:35+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/04/18/change-ip-in-devstack</id>
-    <content type="html"><![CDATA[<h3>Tips</h3>
-
-<p>After changing the IP Address of the DevStack machine, do following for re-installing
-the envs:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ ssh stack@Your_IP
-</span><span class='line'>stack@packer-PerforceTest:~$ pwd
-</span><span class='line'>/opt/stack
-</span><span class='line'>stack@packer-PerforceTest:~$ cd devstack/
-</span><span class='line'>stack@packer-PerforceTest:~/devstack$ ./unstack.sh && ./stack.sh </span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now visiting your <code>http://Your_New_IP/dashboard</code> you will got the openstack dashborad.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Moving Docker Repository Position]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/04/15/moving-docker-repository-position/"/>
-    <updated>2016-04-15T15:55:15+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/04/15/moving-docker-repository-position</id>
-    <content type="html"><![CDATA[<p>Since the root partition is not so large, I have to change the default position of the
-docker repository, following are the steps:</p>
-
-<h3>Make a Soft Link</h3>
-
-<p>Make a soft link to the docker repository via:</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ sudo mkdir DockerRepo
-</span><span class='line'>$ sudo chown -R dash:dash DockerRepo
-</span><span class='line'>$ sudo chmod  777 -R DockerRepo
-</span><span class='line'>$ sudo tar -zcC /var/lib docker &gt; /home/juju/DockerRepo/var_lib_docker-backup-$(date +%s).tar.gz
-</span><span class='line'>$ ls -l -h /home/juju/DockerRepo
-</span><span class='line'>$ sudo mv /var/lib/docker /home/juju/DockerRepo/
-</span><span class='line'>$ sudo ln -s /home/juju/DockerRepo/docker /var/lib/docker
-</span><span class='line'>$ sudo service docker restart
-</span><span class='line'>$ sudo service docker status</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Change Docker Parameters</h3>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Ubuntu/Debian: edit your /etc/default/docker file with the -g option: DOCKER_OPTS="-dns 8.8.8.8 -dns 8.8.4.4 -g /mnt"</span></code></pre></td></tr></table></div></figure>
 
 ]]></content>
   </entry>

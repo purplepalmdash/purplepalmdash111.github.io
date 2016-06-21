@@ -4,7 +4,7 @@
   <title><![CDATA[Category: Linux | Dash]]></title>
   <link href="http://purplepalmdash.github.io/blog/categories/linux/atom.xml" rel="self"/>
   <link href="http://purplepalmdash.github.io/"/>
-  <updated>2016-06-14T20:01:41+08:00</updated>
+  <updated>2016-06-21T19:40:30+08:00</updated>
   <id>http://purplepalmdash.github.io/</id>
   <author>
     <name><![CDATA[Dash]]></name>
@@ -12,6 +12,274 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[搭建基于docker的监控系统]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/06/20/da-jian-ji-yu-dockerde-jian-kong-xi-tong/"/>
+    <updated>2016-06-20T09:39:55+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/06/20/da-jian-ji-yu-dockerde-jian-kong-xi-tong</id>
+    <content type="html"><![CDATA[<h3>Graphite/Grafana</h3>
+
+<p>这两个用于记录和展示监控数据，通过以下命令可以快速搭建:</p>
+
+<h4>Graphite</h4>
+
+<p>开启容器:</p>
+
+<pre><code>$ mkdir -p /local/path/to/graphite/storage/whisper/
+$ sudo docker run -d \
+  --name graphite \
+  -p 8080:80 \
+  -p 2003:2003 \
+  -v /local/path/to/.htpasswd:/etc/nginx/.htpasswd \
+  -v /local/path/to/graphite/storage/whisper:/opt/graphite/storage/whisper \
+  sitespeedio/graphite
+</code></pre>
+
+<p>创建htpasswd文件的方法可以参阅:    <br/>
+<a href="http://httpd.apache.org/docs/2.2/programs/htpasswd.html">http://httpd.apache.org/docs/2.2/programs/htpasswd.html</a></p>
+
+<p>当然如果你使用默认的密码的话，用户名/密码是:guest/guest.</p>
+
+<h4>Grafana</h4>
+
+<p>开启容器:</p>
+
+<pre><code># mkdir -p /local/path/to/grafana
+# docker run -d -p 3000:3000 --name=grafana -v /local/path/to/grafana:/var/lib/grafana  grafana/grafana
+</code></pre>
+
+<p>默认用户名/密码为admin/admin.</p>
+
+<h3>Collectd</h3>
+
+<p>用于采集节点机上的数据，</p>
+
+<pre><code># docker run -d --net=host --privileged -v /:/hostfs:ro --name=collectd -e \
+HOST_NAME=localhost -e \
+GRAPHITE_HOST=192.168.1.79 andreasjansson/collectd-write-graphite
+</code></pre>
+
+<p>参数说明:</p>
+
+<pre><code>--net=host :    使用主机上的网络配置
+GRAPHITE_HOST:  前面设置的graphite机器的地址
+</code></pre>
+
+<h3>systemd 启动方式</h3>
+
+<p>collectd启动方式:</p>
+
+<pre><code>$ sudo vim /usr/lib/systemd/system/collectddocker.service
+[Unit]
+Description=collectd container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker start -a collectd
+ExecStop=/usr/bin/docker stop -t 2 collectd
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<p>启动并使能服务:</p>
+
+<pre><code>$ sudo systemctl enable collectddocker.service
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[搭建无盘CentOS桌面环境]]></title>
+    <link href="http://purplepalmdash.github.io/blog/2016/06/18/da-jian-wu-pan-centoszhuo-mian-huan-jing/"/>
+    <updated>2016-06-18T13:43:48+08:00</updated>
+    <id>http://purplepalmdash.github.io/blog/2016/06/18/da-jian-wu-pan-centoszhuo-mian-huan-jing</id>
+    <content type="html"><![CDATA[<h3>网络准备</h3>
+
+<p>创建一个无DHCP的网络:</p>
+
+<p><img src="/images/2016_06_18_13_53_06_399x429.jpg" alt="/images/2016_06_18_13_53_06_399x429.jpg" /></p>
+
+<p>DHCP服务器我们将配置在PXE服务器节点上。</p>
+
+<h3>PXE节点配置</h3>
+
+<h4>初始化配置</h4>
+
+<p>最小化安装CentOS 7 Server。并配置其IP地址为<code>10.19.20.2</code>.  <br/>
+关闭selinux和firewalld服务:</p>
+
+<pre><code># vi /etc/selinux/config 
+SELINUX=disabled
+
+# systemctl disable firewalld.service
+</code></pre>
+
+<h4>使用DVD作为源</h4>
+
+<p>创建挂载目录并挂在DVD：</p>
+
+<pre><code># mkdir /cdrom
+# mount -t iso9660 -o loop ./CentOS-7-x86_64-Everything-1511.iso /cdrom/
+</code></pre>
+
+<p>创建新的repo文件:</p>
+
+<pre><code># vi /etc/yum.repos.d/local.repo
+
+[LocalRepo]
+name=Local Repository
+baseurl=file:///cdrom
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+</code></pre>
+
+<p>生成新的缓存：</p>
+
+<pre><code># mkdir back
+# mv CentOS-* back
+# yum makecache
+</code></pre>
+
+<p>安装一些必要的包:</p>
+
+<pre><code># yum install -y vim wget
+</code></pre>
+
+<h4>TFTP Server</h4>
+
+<p>安装必要的包:</p>
+
+<pre><code># yum -y install syslinux xinetd tftp-server
+# mkdir /var/lib/tftpboot/pxelinux.cfg 
+# cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/ 
+</code></pre>
+
+<p>配置PXE：</p>
+
+<pre><code># vim /etc/xinetd.d/tftp 
+disable = no
+# systemctl start xinetd
+# systemctl enable xinetd
+</code></pre>
+
+<h4>DHCP服务器</h4>
+
+<p>安装:</p>
+
+<pre><code># yum install -y dhcp
+</code></pre>
+
+<p>配置:</p>
+
+<pre><code># vim /etc/dhcp/dhcpd.conf
+    #
+    # DHCP Server Configuration file.
+    #   see /usr/share/doc/dhcp*/dhcpd.conf.example
+    #   see dhcpd.conf(5) man page
+    #
+    # create new
+
+    # specify domain name
+    option domain-name "srv.world";
+    # specify name server's hostname or IP address
+    option domain-name-servers dlp.srv.world;
+    # default lease time
+    default-lease-time 600;
+    # max lease time
+    max-lease-time 7200;
+    # this DHCP server to be declared valid
+    authoritative;
+    # specify network address and subnet mask
+    subnet 10.19.20.0 netmask 255.255.255.0 {
+        # specify the range of lease IP address
+        range dynamic-bootp 10.19.20.200 10.19.20.254;
+        # specify broadcast address
+        option broadcast-address 10.19.20.255;
+        # specify default gateway
+        option routers 10.19.20.1;
+        option domain-name-servers   10.19.20.2;
+        filename        "pxelinux.0";
+        next-server     10.19.20.2;
+    }
+</code></pre>
+
+<p>启动并使能服务:</p>
+
+<pre><code># systemctl start dhcpd 
+# systemctl enable dhcpd 
+</code></pre>
+
+<h4>PXE服务器</h4>
+
+<p>安装一些必要的包:</p>
+
+<pre><code># yum -y install dracut-network nfs-utils
+</code></pre>
+
+<p>在PXE服务器上构建一个无盘系统用的文件系统</p>
+
+<pre><code># mkdir -p /var/lib/tftpboot/centos7/root 
+# yum groups -y install "Server with GUI" --releasever=7 --installroot=/var/lib/tftpboot/centos7/root/
+</code></pre>
+
+<p>给出root用户的默认密码:</p>
+
+<pre><code># python -c 'import crypt,getpass; \ 
+print(crypt.crypt(getpass.getpass(), \
+crypt.mksalt(crypt.METHOD_SHA512)))' 
+Password:
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+</code></pre>
+
+<p>填入root密码到/etc/shadown中:</p>
+
+<pre><code># vim /var/lib/tftpboot/centos7/root/etc/shadow
+root:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:16372:0:99999:7:::
+</code></pre>
+
+<p>构建<code>/etc/fstab</code>文件:</p>
+
+<pre><code># vi /var/lib/tftpboot/centos7/root/etc/fstab
+ none    /tmp        tmpfs   defaults   0 0
+tmpfs   /dev/shm    tmpfs   defaults   0 0
+sysfs   /sys        sysfs   defaults   0 0
+proc    /proc       proc    defaults   0 0
+</code></pre>
+
+<p>下载pxe所需要的vmlinuz和initrd.img文件:</p>
+
+<pre><code># wget -P /var/lib/tftpboot/centos7/ \
+http://mirrors.aliyun.com/centos/7/os/x86_64/images/pxeboot/vmlinuz \
+http://mirrors.aliyun.com/centos/7/os/x86_64/images/pxeboot/initrd.img
+</code></pre>
+
+<p>创建默认的pxe启动项目:</p>
+
+<pre><code># vi /var/lib/tftpboot/pxelinux.cfg/default
+# create new
+ default centos7
+
+label centos7
+    kernel centos7/vmlinuz
+    append initrd=centos7/initrd.img root=nfs:10.19.20.2:/var/lib/tftpboot/centos7/root rw selinux=0 
+</code></pre>
+
+<p>映射NFS服务器:</p>
+
+<pre><code># vi /etc/exports
+/var/lib/tftpboot/centos7/root 10.19.20.0/24(rw,no_root_squash)
+# systemctl start rpcbind nfs-server 
+# systemctl enable rpcbind nfs-server 
+</code></pre>
+
+<p>现在在网络中加入新的机器，从PXE启动后，将直接进入到CentOS7的桌面。</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[不同桌面环境占用内存/CPU对比]]></title>
@@ -542,341 +810,6 @@ $
 <p>For adding nodes:</p>
 
 <p><a href="https://maas.ubuntu.com/docs2.0/nodes.html">https://maas.ubuntu.com/docs2.0/nodes.html</a></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Linux Tips(5)]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/05/04/linux-tips-5/"/>
-    <updated>2016-05-04T20:03:21+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/05/04/linux-tips-5</id>
-    <content type="html"><![CDATA[<h3>1. Detach Running Tasks</h3>
-
-<p><code>Ctrl+Z</code> for suspend the tasks, then <code>bg</code> it, now you could use <code>disown %1</code> for
-detaching the running process.</p>
-
-<p>Next time you login, you will see this background task is also running.</p>
-
-<h3>2. Installation of Cobbler</h3>
-
-<p>Shell Scripts:</p>
-
-<p><a href="https://gist.github.com/luisbolson/1d0dc42976d2468171d0">https://gist.github.com/luisbolson/1d0dc42976d2468171d0</a></p>
-
-<h3>3. yum groups</h3>
-
-<p><a href="http://ramblings.narrabilis.com/creating-a-yum-repository-repo-and-creating-a-yum-group-to-install-kickstart">http://ramblings.narrabilis.com/creating-a-yum-repository-repo-and-creating-a-yum-group-to-install-kickstart</a></p>
-
-<h3>4. rvm issue</h3>
-
-<p>rvm met <code>openssl.so (LoadError)</code>, could be solved via following steps.</p>
-
-<pre><code>$  curl https://github.com/ruby/ruby/commit/801e1fe46d83c856844ba18ae4751478c59af0d1.diff &gt; openssl.patch\n
-$  rvm install 1.9.3 --with-openssl-dir=$HOME/.rvm/usr --patch ./openssl.patch 
-</code></pre>
-
-<h3>5. Get the name of rpm packages</h3>
-
-<p>Only print the name of the rpm package:</p>
-
-<pre><code># rpm -qp --queryformat '%{NAME}\n' *.rpm&gt;package.list
-</code></pre>
-
-<h3>6. xargs tips</h3>
-
-<p>Example:</p>
-
-<pre><code># find . -type f -exec grep -ilR "MY PATTERN" {} \; | xargs -I % cp % /dest/dir/
-</code></pre>
-
-<p>For me, I find out all of the packges in cache file, and copy them to another position:</p>
-
-<pre><code>$ find . | \grep rpm$ | xargs -I % cp % /home/dash/rpms
-</code></pre>
-
-<h3>7. Make local repo</h3>
-
-<p>From the stackoverflow answers.</p>
-
-<pre><code>Yes as you've described it, it sounds doable. I think I would be inclined to do the
-following steps.
-
-Setup directories
-$ mkdir {Desktop,Desktop_Platform,X_Window_System,Fonts}
-Download RPMs
-Then run these types of commands to download the RPMs for the given groups:
-
-$ repoquery --qf=%{name} -g --list --grouppkgs=all "Fonts" | \
-     xargs -I{} repotrack -a x86_64 -p Fonts/ {}
-You can wrap it in a for loop too:
-
-$ for i in "Desktop" "Desktop_Platform" "X_Window_System" "Fonts";do  
-    repoquery --qf=%{name} -g --list --grouppkgs=all "$i" | \
-       xargs -I{} repotrack -a x86_64 -p $i/ {}; 
-  done
-This will go through each group and download the packages into their respective
-directories.
-
-Re-installation
-Then use the command as you've described:
-
-$ yum --nogpgcheck localinstall {Desktop,Desktop_Platform,X_Window_System,Fonts}/*.rpm
-</code></pre>
-
-<h3>8. Simple Screen Recorder</h3>
-
-<p>Ubuntu:</p>
-
-<pre><code>sudo add-apt-repository ppa:maarten-baert/simplescreenrecorder
-sudo apt-get update
-sudo apt-get install simplescreenrecorder
-# if you want to record 32-bit OpenGL applications on a 64-bit system:
-sudo apt-get install simplescreenrecorder-lib:i386
-</code></pre>
-
-<p>ArchLinux:</p>
-
-<pre><code>$ sudo pacman -S simplescreenrecorder
-</code></pre>
-
-<h3>9. Convert virtualbox hd to qcow2</h3>
-
-<pre><code>VBoxManage clonehd /home/dash/VirtualBox\ VMs/ansible-cobbler_cobbler-ubuntu_1462410925173_15793/packer-virtualbox-iso-1454031074-disk1.vmdk /home/dash/output.img --format raw &amp;&amp; qemu-img convert -f raw /home/dash/output.img -O qcow2 /home/dash/ansible-cobbler.qcow2
-</code></pre>
-
-<h3>10. Ansible issue</h3>
-
-<p>The isssue is:</p>
-
-<pre><code>ansible: ERROR: become is not a legal parameter in an Ansible Playbook
-</code></pre>
-
-<p>Solved via upgrading to the newest version of ansible:</p>
-
-<pre><code>$ sudo apt-get install software-properties-common
-$ sudo apt-add-repository ppa:ansible/ansible
-$ sudo apt-get update
-$ sudo apt-get install ansible
-</code></pre>
-
-<p>Using the newest ansible you could aoid this error.</p>
-
-<h3>11. Create customized lxc image</h3>
-
-<pre><code>http://unix.stackexchange.com/questions/186638/how-to-make-a-local-template-for-a-linux-container-and-point-to-that
-</code></pre>
-
-<p><a href="https://insights.ubuntu.com/2015/03/20/installing-lxd-and-the-command-line-tool/">https://insights.ubuntu.com/2015/03/20/installing-lxd-and-the-command-line-tool/</a></p>
-
-<p><a href="https://www.stgraber.org/2016/03/30/lxd-2-0-image-management-512/">https://www.stgraber.org/2016/03/30/lxd-2-0-image-management-512/</a></p>
-
-<p><a href="https://insights.ubuntu.com/2016/04/01/lxd-2-0-image-management-512/">https://insights.ubuntu.com/2016/04/01/lxd-2-0-image-management-512/</a></p>
-
-<h3>12. Changing to eth0 in Ubuntu</h3>
-
-<p>Modify the name of <code>enps*</code> to <code>eth0/1/2/3/4/</code>, via following steps:</p>
-
-<pre><code>try this: Edit your /etc/default/grub. Change the line from
-
-GRUB_CMDLINE_LINUX=""
-to
-
-GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"
-and, finally run:
-
-# update-grub
-</code></pre>
-
-<h3>13. MAAS Syncing PXE File</h3>
-
-<p><a href="https://maas.ubuntu.com/docs/sstreams-mirror.html">https://maas.ubuntu.com/docs/sstreams-mirror.html</a>  <br/>
-<a href="http://ytooyama.hatenadiary.jp/entry/2016/05/11/002532">http://ytooyama.hatenadiary.jp/entry/2016/05/11/002532</a></p>
-
-<p>For building our own MAAS image:</p>
-
-<p><a href="http://askubuntu.com/questions/744966/how-do-you-install-the-maas-image-builder-on-14-04-lts">http://askubuntu.com/questions/744966/how-do-you-install-the-maas-image-builder-on-14-04-lts</a></p>
-
-<h3>14. Vagrant For MAAS</h3>
-
-<p><a href="https://github.com/battlemidget/vagrant-maas">https://github.com/battlemidget/vagrant-maas</a></p>
-
-<p><a href="https://github.com/battlemidget/vagrant-maas-in-a-box/blob/master/Vagrantfile">https://github.com/battlemidget/vagrant-maas-in-a-box/blob/master/Vagrantfile</a></p>
-
-<h3>15. Convert vm to physical</h3>
-
-<p>Thus you could enjoy packer building the physical machine! :)</p>
-
-<pre><code>cd /media/wherever-the-image-is/
-
-# for VMWare
-sudo apt-get install qemu-kvm
-qemu-img convert your-vmware-disk.vmdk -O raw disk.img
-
-# For VirtualBox
-VBoxManage internalcommands converttoraw your-virtualbox-disk.vdi /dev/sdX
-</code></pre>
-
-<h3>16. Generate Random Seed</h3>
-
-<p>Error message is <code>Please do some other work to give
-the OS a chance to collect more entropy!</code></p>
-
-<pre><code>$ sudo aptitude install haveged
-</code></pre>
-
-<h3>17. DEB Repository in Cobbler</h3>
-
-<p><a href="https://github.com/cobbler/cobbler/wiki/Creating-custom-apt-repositories-in-centos-or-el-based-cobbler">https://github.com/cobbler/cobbler/wiki/Creating-custom-apt-repositories-in-centos-or-el-based-cobbler</a></p>
-
-<p>Trouble-Shooting:  <br/>
-<a href="https://github.com/cobbler/cobbler/issues/1530">https://github.com/cobbler/cobbler/issues/1530</a></p>
-
-<h3>18. Manually Install Mate Desktop</h3>
-
-<pre><code>echo "debconf debconf/frontend select noninteractive" | sudo debconf-set-selections
-apt-get --allow-unauthenticated update -y
-apt-get --allow-unauthenticated upgrade -y
-apt-get --allow-unauthenticated install -y build-essential
-apt-get --allow-unauthenticated install -y ubuntu-mate-desktop
-apt-get --allow-unauthenticated install -y vim
-apt-get --allow-unauthenticated install -y chromium-browser
-apt-get --allow-unauthenticated install -y meld vim-gtk
-apt-get --allow-unauthenticated install -y evince
-sudo apt-get --allow-unauthenticated install -y language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-gnome-zh-hans-base
-sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
-sudo localectl set-locale LANG=zh_CN.UTF-8
-# TW/HK language support
-sudo apt-get --allow-unauthenticated install -y language-pack-zh-hant language-pack-zh-hant-base language-pack-gnome-zh-hant language-pack-gnome-zh-hant-base
-sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
-apt-get --allow-unauthenticated install -y fcitx
-apt-get --allow-unauthenticated install -y fcitx-table-wubi fcitx-table-wubi-large
-apt-get --allow-unauthenticated install -y fcitx-googlepinyin
-apt-get --allow-unauthenticated install -y gimp
-apt-get --allow-unauthenticated install -y ibus-pinyin 
-apt-get --allow-unauthenticated install -y thunderbird-locale-en-us mythes-en-au hunspell-en-gb thunderbird-locale-en-gb fonts-arphic-ukai wbritish fcitx-sunpinyin openoffice.org-hyphenation language-pack-gnome-en hunspell-en-za fcitx-chewing fcitx-table-cangjie gimp-help-en language-pack-en mythes-en-us thunderbird-locale-en fcitx-module-cloudpinyin libreoffice-help-en-us firefox-locale-en libreoffice-help-en-gb fonts-arphic-uming hyphen-en-gb libreoffice-l10n-en-za fcitx-ui-qimpanel hunspell-en-au libreoffice-l10n-en-gb hyphen-en-us hunspell-en-ca 
-apt-get --allow-unauthenticated install -y zsh
-apt-get --allow-unauthenticated install -y fonts-wqy-zenhei fonts-wqy-microhei ttf-wqy-microhei  ttf-wqy-zenhei  xfonts-wqy
-apt-get --allow-unauthenticated install -y eclipse
-apt-get --allow-unauthenticated install -y gpicview
-apt-get --allow-unauthenticated install -y scrot
-apt-get --allow-unauthenticated install -y byobu
-apt-get --allow-unauthenticated install -y subversion git
-apt-get --allow-unauthenticated install -y kdiff3
-apt-get --allow-unauthenticated install -y docker
-</code></pre>
-
-<p>Final Version should be:</p>
-
-<pre><code>echo "debconf debconf/frontend select noninteractive" | sudo debconf-set-selections
-unset DEBIAN_HAS_FRONTEND DEBIAN_FRONTEND DEBCONF_REDIR DEBCONF_OLD_FD_BASE
-export DEBIAN_FRONTEND=noninteractive
-apt-get update --assume-yes
-apt-get dist-upgrade --assume-yes
-apt-get install --assume-yes vim build-essential ubuntu-mate-desktop chromium-browser meld vim-gtk evince language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-gnome-zh-hans-base language-pack-zh-hant language-pack-zh-hant-base language-pack-gnome-zh-hant language-pack-gnome-zh-hant-base fcitx fcitx-table-wubi fcitx-table-wubi-large fcitx-googlepinyin gimp ibus-pinyin thunderbird-locale-en-us mythes-en-au hunspell-en-gb thunderbird-locale-en-gb fonts-arphic-ukai wbritish fcitx-sunpinyin openoffice.org-hyphenation language-pack-gnome-en hunspell-en-za fcitx-chewing fcitx-table-cangjie gimp-help-en language-pack-en mythes-en-us thunderbird-locale-en fcitx-module-cloudpinyin libreoffice-help-en-us firefox-locale-en libreoffice-help-en-gb fonts-arphic-uming hyphen-en-gb libreoffice-l10n-en-za fcitx-ui-qimpanel hunspell-en-au libreoffice-l10n-en-gb hyphen-en-us hunspell-en-ca zsh fonts-wqy-zenhei fonts-wqy-microhei ttf-wqy-microhei  ttf-wqy-zenhei  xfonts-wqy eclipse gpicview scrot byobu subversion git kdiff3 docker
-apt-get install --assume-yes  `check-language-support -l zh`
-</code></pre>
-
-<h3>19. Use rync for resume tranferring</h3>
-
-<p>Command:</p>
-
-<pre><code>$ rsync -P -e ssh remoteuser@remotehost:/remote/path /local/path
-</code></pre>
-
-<h3>20. RackHD Howto</h3>
-
-<p><a href="http://dojoblog.emc.com/rackhd-cpi/setting-up-rackhd/">http://dojoblog.emc.com/rackhd-cpi/setting-up-rackhd/</a></p>
-
-<h3>21. sync repo</h3>
-
-<pre><code>vagrant@ubuntu-1404:/etc/apt$ cat /var/mirrors/ubuntu/14.04/var/postmirror.sh 
-#!/bin/sh -x 
-# the udebs script gets the actual files we need 
-#/mnt/repo/apt-mirror/var/udebs.sh  
-# A quick apt directory structure primer: 
-# an apt server (e.g. archive.ubuntu.com) contains repositories (e.g. trusty-backports), 
-# which contain archives (e.g. multiverse), which contain directories 
-# a complete example - http://archive.ubuntu.com/ubuntu/dists/trusty-backports/multiverse/debian-installer/  
-# With this in mind, we create bash 'arrays' of the structure: 
-# server we're syncing against 
-#MIRROR="cn.archive.ubuntu.com" 
-MIRROR="archive.ubuntu.com" 
-# repositories we're mirroring 
-#REPOS="trusty trusty-updates trusty-security trusty-proposed trusty-backports" 
-REPOS="trusty"
-# archives in repositories 
-#ARCHIVES="main multiverse restricted universe" 
-ARCHIVES="main"
-# installer location inside archive 
-#DIRECTORIES="debian-installer dist-upgrader-all installer-amd64 installer-i386" 
-DIRECTORIES="debian-installer installer-amd64"
-#where we're storing it locally 
-LOCALDIR="/var/mirrors/ubuntu/14.04/mirror/mirrors.aliyun.com"
-#LOCALDIR="/mnt/repo/apt-mirror/mirror/archive.ubuntu.com"  
-for REPO in $REPOS; do 
-for ARCHIVE in $ARCHIVES; do 
-for DIRECTORY in $DIRECTORIES;do 
-# create directory structure 
-if [ ! -e "$LOCALDIR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY" ]; then
-mkdir -p "$LOCALDIR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY"
-fi
-# do the sync 
-rsync --recursive --times --links --hard-links --delete --delete-after \
-rsync://$MIRROR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY/ $LOCALDIR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY
-done
-done
-done
-</code></pre>
-
-<h3>22. Vagrantfile for adding more disks</h3>
-
-<pre><code>To be done. 
-</code></pre>
-
-<h3>23. rvm install issue</h3>
-
-<p>With openssl patched you can install rvm successfully:</p>
-
-<pre><code>$ wget https://github.com/ruby/ruby/commit/801e1fe46d83c856844ba18ae4751478c59af0d1.diff -O openssl.patch
-$ rvm install --patch ./openssl.patch 2.2.3
-</code></pre>
-
-<h3>24. performance tool</h3>
-
-<p><a href="http://www.tecmint.com/linux-cpu-load-stress-test-with-stress-ng-tool/2/">http://www.tecmint.com/linux-cpu-load-stress-test-with-stress-ng-tool/2/</a></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Switching to Win10]]></title>
-    <link href="http://purplepalmdash.github.io/blog/2016/04/21/switching-to-win10/"/>
-    <updated>2016-04-21T10:06:44+08:00</updated>
-    <id>http://purplepalmdash.github.io/blog/2016/04/21/switching-to-win10</id>
-    <content type="html"><![CDATA[<h3>Background</h3>
-
-<p>Since the monitor in my company are so ba&hellip;&hellip;..d, I have to change my working
-environment from PC to SurfacePro, thus I have some tools changes, following are the
-records.</p>
-
-<h3>Tool List</h3>
-
-<p>Terminal: XShell4, Make sure you have change the screen-size issue.   <br/>
-<a href="purplepalmdash.github.io/blog/2015/11/13/win10-tips-for-using-xshell/">purplepalmdash.github.io/blog/2015/11/13/win10-tips-for-using-xshell/</a></p>
-
-<p>Screen-Shot:  <br/>
-I use picPick for replacing the scrot, the scrot is so convenient thus I found many
-tools for replacing it.</p>
-
-<p>picPick Configuration: the main purpose is for selecting the rectangle and save it
-automatically to the folder with the timestamp.</p>
-
-<p>Auto-Syncing tool:   <br/>
-using WinSCP&rsquo;s keep remote the latest status:</p>
-
-<p><img src="/images/2016_04_21_10_39_10.jpg" alt="/images/2016_04_21_10_39_10.jpg" /></p>
-
-<p>OK, Now we could also using the same writing behavior just as under Linux Awesome
-Desktop.</p>
 ]]></content>
   </entry>
   
