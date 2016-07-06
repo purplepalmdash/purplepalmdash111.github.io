@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Qemu on Dash</title>
+    <link>http://purplepalmdash.github.io/categories/qemu/</link>
+    <description>Recent content in Qemu on Dash</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 18 Mar 2014 00:00:00 +0000</lastBuildDate>
+    <atom:link href="http://purplepalmdash.github.io/categories/qemu/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>Building Qemu Based RaspberryPI Development Environment</title>
+      <link>http://purplepalmdash.github.io/2014/03/18/building-qemu-based-raspberrypi-development-environment/</link>
+      <pubDate>Tue, 18 Mar 2014 00:00:00 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2014/03/18/building-qemu-based-raspberrypi-development-environment/</guid>
+      <description>&lt;p&gt;First download the latest image from &lt;a href=&#34;http://www.raspberrypi.org/downloads&#34;&gt;http://www.raspberrypi.org/downloads&lt;/a&gt;, mine is Wheezy. &lt;br /&gt;
+And we also have to download the qemu-compatible kernel from following address:&lt;br /&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ wget http://xecdesign.com/downloads/linux-qemu/kernel-qemu
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Change the img file according to &lt;a href=&#34;http://localhost/blog/2013/09/04/qemu-for-raspberrypi/&#34;&gt;http://localhost/blog/2013/09/04/qemu-for-raspberrypi/&lt;/a&gt;, follow this tutorial, you have to change the img file size and its content, but we have to do some modifications. &lt;br /&gt;
+The run-qemu file is changed to following: &lt;br /&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	#!/bin/bash
+	USERID=$(whoami)
+	
+	# Get name of newly created TAP device; see https://bbs.archlinux.org/viewtopic.php?pid=1285079#p1285079
+	precreationg=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+	sudo /usr/bin/ip tuntap add user $USERID mode tap
+	postcreation=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+	IFACE=$(comm -13 &amp;lt;(echo &amp;quot;$precreationg&amp;quot;) &amp;lt;(echo &amp;quot;$postcreation&amp;quot;))
+	
+	# This line creates a random mac address. The downside is the dhcp server will assign a different ip each time
+	printf -v macaddr &amp;quot;52:54:%02x:%02x:%02x:%02x&amp;quot; $(( $RANDOM &amp;amp; 0xff)) $(( $RANDOM &amp;amp; 0xff )) $(( $RANDOM &amp;amp; 0xff)) $(( $RANDOM &amp;amp; 0xff ))
+	# Instead, uncomment and edit this line to set an static mac address. The benefit is that the dhcp server will assign the same ip.
+	# macaddr=&#39;52:54:be:36:42:a9&#39;
+        macaddr = &#39;52:54:79:3c:80:c0&#39;
+	 
+	qemu-system-arm -net nic,macaddr=$macaddr -net tap,ifname=&amp;quot;$IFACE&amp;quot; -append &amp;quot;root=/dev/sda2 panic=1 rootfstype=ext4 rw&amp;quot; $*
+	  
+	sudo ip link set dev $IFACE down &amp;amp;&amp;gt; /dev/null
+	sudo ip tuntap del $IFACE mode tap &amp;amp;&amp;gt; /dev/null
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;In router, we add the static address for mac corresponding to 10.0.0.168, you can alter it according to your habit. &lt;br /&gt;&lt;/p&gt;
+
+&lt;p&gt;Now we want to disable the X at every startup and use vnc instead. &lt;br /&gt;
+And we can overlocking the raspberryPI to 1000MHZ, this will greatly improve the performance.&lt;br /&gt;&lt;/p&gt;
+
+&lt;p&gt;Enable the vncserver:&lt;br /&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ apt-get install tightvncserver vim 
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now startup the vncserver and use vncviewer to view the desktop:&lt;br /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/Screenshot-QEMU.png&#34; alt=&#34;/images/Screenshot-QEMU.png&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;No, the correct method is listed as: &lt;br /&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	cat /eroot@raspberrypi:~# cat /etc/init.d/startvnc 
+	#!/bin/sh -e
+	### BEGIN INIT INFO
+	# Provides:          vncserver
+	# Required-Start:    networking
+	# Default-Start:     3 4 5
+	# Default-Stop:      0 6
+	### END INIT INFO
+	
+	PATH=&amp;quot;$PATH:/usr/X11R6/bin/&amp;quot;
+	
+	# The Username:Group that will run VNC
+	export USER=&amp;quot;pi&amp;quot;
+	#${RUNAS}
+	
+	# The display that VNC will use
+	DISPLAY=&amp;quot;1&amp;quot;
+	
+	# Color depth (between 8 and 32)
+	DEPTH=&amp;quot;16&amp;quot;
+	
+	# The Desktop geometry to use.
+	#GEOMETRY=&amp;quot;&amp;lt;WIDTH&amp;gt;x&amp;lt;HEIGHT&amp;gt;&amp;quot;
+	#GEOMETRY=&amp;quot;800x600&amp;quot;
+	#GEOMETRY=&amp;quot;1024x768&amp;quot;
+	GEOMETRY=&amp;quot;1280x1024&amp;quot;
+	
+	# The name that the VNC Desktop will have.
+	NAME=&amp;quot;my-vnc-server&amp;quot;
+	
+	OPTIONS=&amp;quot;-name ${NAME} -depth ${DEPTH} -geometry ${GEOMETRY} :${DISPLAY}&amp;quot;
+	
+	. /lib/lsb/init-functions
+	
+	case &amp;quot;$1&amp;quot; in
+	start)
+	log_action_begin_msg &amp;quot;Starting vncserver for user &#39;${USER}&#39; on   localhost:${DISPLAY}&amp;quot;
+	su ${USER} -c &amp;quot;/usr/bin/vncserver ${OPTIONS}&amp;quot;
+	;;
+	
+	stop)
+	log_action_begin_msg &amp;quot;Stoping vncserver for user &#39;${USER}&#39; on localhost:${DISPLAY}&amp;quot;
+	su ${USER} -c &amp;quot;/usr/bin/vncserver -kill :${DISPLAY}&amp;quot;
+	;;
+	
+	restart)
+	$0 stop
+	$0 start
+	;;
+	esac
+	
+	exit 0
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And now we can add this script into /etc/rc.local as:&lt;br /&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	# Start the vncserver here:
+	/etc/init.d/startvnc start
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;So everytime we startup the qemu based raspberryPI, we can easily attached to its geometry, and we can easily adapt the resolution.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>KALI Linux in Qemu</title>
+      <link>http://purplepalmdash.github.io/2013/12/12/kali-linux-in-qemu/</link>
+      <pubDate>Thu, 12 Dec 2013 00:00:00 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2013/12/12/kali-linux-in-qemu/</guid>
+      <description>&lt;p&gt;Download the iso from kali website&lt;a href=&#34;http://www.kali.org/downloads/&#34;&gt;http://www.kali.org/downloads/&lt;/a&gt;:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ wget http://cdimage.kali.org/kali-images/kali-1.0.5/kali-linux-1.0.5-i386.iso
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Create qemu img file:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ qemu-img create -f qcow2 kali.qcow2 30G
+	Formatting &#39;kali.qcow2&#39;, fmt=qcow2 size=32212254720 encryption=off cluster_size=65536 lazy_refcounts=off 
+Run installation. Here we use the run-qemu script which has been generated before under the same directory:
+	[Trusty@DashArch kali]$ ./run-qemu -hda ./kali.qcow2 -boot d -cdrom /media/nfs/iso/kali-linux-1.0.5-i386.iso  -m 1024 -enable-kvm -usb
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Choose &amp;ldquo;Graphic Install&amp;rdquo; because currently we are not familiar with this brand new distribution.&lt;br /&gt;
+Command for startup the sytem is:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	[Trusty@DashArch kali]$ ./run-qemu -hda ./kali.qcow2 -boot d -cdrom /media/nfs/iso/kali-linux-1.0.5-i386.iso  -m 1024 -enable-kvm -usb
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;After installation finished, run &amp;ldquo;sudo apt-get update&amp;rdquo; and &amp;ldquo;sudo apt-get upgrade&amp;rdquo; to update your system to the newest version.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Enable spice for qemu virtual machine</title>
+      <link>http://purplepalmdash.github.io/2013/12/06/enable-spice-for-qemu-virtual-machine/</link>
+      <pubDate>Fri, 06 Dec 2013 00:00:00 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2013/12/06/enable-spice-for-qemu-virtual-machine/</guid>
+      <description>&lt;p&gt;###Package Installation
+Install virt-viewer for browsing the virtual machine desktop. For default spicec is not OK.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ pacman -S gtk-vnc
+	$ yaourt -S spice-gtk3
+	$ yaourt -S virt-viewer
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Install virt-manager&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	[root@DashArch Trusty]# pacman -S virt-manager 
+	[root@DashArch Trusty]# systemctl start libvirtd.service
+	[root@DashArch Trusty]# systemctl enable  libvirtd.service
+	ln -s &#39;/usr/lib/systemd/system/libvirtd.service&#39; &#39;/etc/systemd/system/multi-user.target.wants/libvirtd.service&#39;
+	[root@DashArch Trusty]# ps -ef | grep libvirt
+	root      8852     1  5 15:23 ?        00:00:00 /usr/bin/libvirtd -p /var/run/libvirtd.pid
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;###启动支持spice Server的qemu
+-vga qxl -spice port=5988,disable-ticketing将使能spice&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga qxl -spice port=5988,disable-ticketing -localtime
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在本地或者远程访问spice server:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ spice -h 127.0.0.1 -p 5988
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;但是ArchLinux上的X Server会出现问题，具体解决方案未明了。然而在Ubuntu上则是可以顺利访问的。
+###启动支持VNC的Qemu&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga std -nographic  -localtime -vnc :33
+启动后vncviewer :33则可连接到qemu的窗口
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;###启动Qemu，以std方式
+全新启动：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga std  -localtime `
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;保存状态： ctl+alt+2&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$ savevm booted
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;启动到上一次保存的状态：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	$  ./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga std  -localtime --loadvm booted
+
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Install Qemu virtio driver under windows</title>
+      <link>http://purplepalmdash.github.io/2013/12/06/install-qemu-virtio-driver-under-windows/</link>
+      <pubDate>Fri, 06 Dec 2013 00:00:00 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2013/12/06/install-qemu-virtio-driver-under-windows/</guid>
+      <description>&lt;p&gt;Download the iso file from the redhat repository:&lt;br /&gt;
+&lt;a href=&#34;http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/images/images/bin/src/&#34;&gt;http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/images/images/bin/src/&lt;/a&gt;&lt;br /&gt;
+Start the qemu with the following command :&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; 	./run-qemu -hda fpgawindows.qcow2 -m 1024 -cdrom ./virtio-win-0.1-74.iso -drive file=./fake.qcow2,if=ide
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;In run-qemu, the actual command is:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;	qemu-system-i386 -net nic,model=virtio,macaddr=$macaddr -net tap,ifname=&amp;quot;$IFACE&amp;quot; $*
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Then, follow the following images to operate:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/qemu1.jpg&#34; alt=&#34;qemu1.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/qemu2.jpg&#34; alt=&#34;qemu2.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/qemu3.jpg&#34; alt=&#34;qemu3.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/qemu4.jpg&#34; alt=&#34;qemu4.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/qemu5.jpg&#34; alt=&#34;qemu5.jpg&#34; /&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

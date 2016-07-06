@@ -1,0 +1,1503 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Embedded on Dash</title>
+    <link>http://purplepalmdash.github.io/categories/embedded/</link>
+    <description>Recent content in Embedded on Dash</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Fri, 01 Apr 2016 18:00:38 +0000</lastBuildDate>
+    <atom:link href="http://purplepalmdash.github.io/categories/embedded/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>NodeMCU and 1602I2C(1)</title>
+      <link>http://purplepalmdash.github.io/2016/04/01/nodemcu-and-1602i2c-1/</link>
+      <pubDate>Fri, 01 Apr 2016 18:00:38 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/04/01/nodemcu-and-1602i2c-1/</guid>
+      <description>&lt;p&gt;今天更新了一下代码，实现了两行显示，第一行显示CPU Load，第二行显示剩余内存数。&lt;/p&gt;
+
+&lt;p&gt;只是部分替代数据显示部分，这个代码还是有BUG的，譬如说最后一位在下一次显示时不会被清零。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import psutil
+import serial
+import time
+
+
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = &#39;/dev/ttyUSB0&#39;
+ser.open()
+## Todo, to check if the port is opened.
+
+# Really talks to the i2c LCD.
+
+# Setup the wiring
+ser.write(b&#39;i2c.setup(0, 4, 3, i2c.SLOW)\r\n&#39;)
+
+# dofile, load the lcd library
+ser.write(b&#39;lcd = dofile(&amp;quot;lcd1602.lua&amp;quot;)()\r\n&#39;)
+
+# Now Refresh the LCD. 
+ser.write(b&#39;lcd.clear()\r\n&#39;)
+#ser.write(b&#39;lcd.put(lcd.light(on))\r\n&#39;)
+ser.write(b&#39;lcd.put(lcd.locate(0, 0), &amp;quot;CPU Load: &amp;quot;)\r\n&#39;)
+ser.write(b&#39;lcd.put(lcd.locate(1, 0), &amp;quot;Mem Free: &amp;quot;)\r\n&#39;)
+ser.write(b&#39;lcd.put(lcd.locate(0, 14), &amp;quot;%&amp;quot;)\r\n&#39;)
+ser.write(b&#39;lcd.put(lcd.locate(1, 14), &amp;quot;MB&amp;quot;)\r\n&#39;)
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    #ser.write(b&#39;lcd.clear()\r\n&#39;)
+    currentPer = str(psutil.cpu_percent()).encode(&#39;ascii&#39;)
+    memFree = str(int(psutil.virtual_memory().free/1024/1024)).encode(&#39;ascii&#39;)
+    oneLine = b&#39;lcd.put(lcd.locate(0, 9), &amp;quot;&#39; + currentPer + b&#39;&amp;quot;)\r\n&#39;
+    SecondLine = b&#39;lcd.put(lcd.locate(1, 9), &amp;quot;&#39; + memFree + b&#39;&amp;quot;)\r\n&#39;
+    # Format oneLine
+    #ser.write(b&#39;lcd.put(lcd.locate(0, 0), &amp;quot;CPU Load: &amp;quot;)\r\n&#39;)
+    #ser.write(b&#39;lcd.put(lcd.locate(1, 0), &amp;quot;Mem Free: &amp;quot;)\r\n&#39;)
+    #ser.write(b&#39;lcd.put(lcd.locate(0, 14), &amp;quot;%&amp;quot;)\r\n&#39;)
+    #ser.write(b&#39;lcd.put(lcd.locate(1, 14), &amp;quot;MB&amp;quot;)\r\n&#39;)
+    #time.sleep(0.2)
+    ser.write(oneLine)
+    time.sleep(0.2)
+    ser.write(SecondLine)
+    time.sleep(1)
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>NodeMCU And 1602I2C</title>
+      <link>http://purplepalmdash.github.io/2016/03/31/nodemcu-and-1602i2c/</link>
+      <pubDate>Thu, 31 Mar 2016 21:34:42 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/31/nodemcu-and-1602i2c/</guid>
+      <description>
+
+&lt;p&gt;最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
+验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
+用来做一个WIFI显示屏.&lt;/p&gt;
+
+&lt;p&gt;今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, 如下图所示,这里简单记录
+一下制作过程.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/1009950725.jpg&#34; alt=&#34;/images/1009950725.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/1162591797.jpg&#34; alt=&#34;/images/1162591797.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;连线图&#34;&gt;连线图&lt;/h3&gt;
+
+&lt;p&gt;1602 I2C上有四个口,分别是GND/VCC/SDA/SCL.&lt;br /&gt;
+GND自然不用多说,连接NodeMCU上的GND即可.&lt;br /&gt;
+VCC我们使用5V输入,在NodeMCU上则是VIN口. 在下图里我用红色做了标注.&lt;br /&gt;
+SDA接GPIO0, SDC接GPIO2,在图中我用橙色做了标识.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_31_21_46_54_644x477.jpg&#34; alt=&#34;/images/2016_03_31_21_46_54_644x477.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;软件准备&#34;&gt;软件准备&lt;/h3&gt;
+
+&lt;p&gt;我这里参考了
+&lt;a href=&#34;http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/&#34;&gt;http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/&lt;/a&gt;
+上的实例, 所以用ESPlorer来写入1602的库文件. ESPlorer的下载地址在:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://esp8266.ru/esplorer/#download&#34;&gt;http://esp8266.ru/esplorer/#download&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如果你使用的是ArchLinux的话,一行命令就够了:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ yaourt esplorer
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如果你运行上述网址上的示例, 故事的结尾你会获得一个Hallo的显示,以及跑马灯式的显
+示效果.&lt;/p&gt;
+
+&lt;h3 id=&#34;cpu-load-program&#34;&gt;CPU Load Program&lt;/h3&gt;
+
+&lt;p&gt;先上代码, 用Python写的, 如果你看过上面的示例程序就会明白, 往串口写入1602的lua
+脚本,就能获得对应的显示效果,那么以下的Python代码就是每分钟读取CPU的负载值, 将
+它封装在一个字符串中发送到NodeMCU连接的串口.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import psutil
+import serial
+import time
+
+
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = &#39;/dev/ttyUSB0&#39;
+ser.open()
+## Todo, to check if the port is opened.
+
+# Really talks to the i2c LCD.
+
+# Setup the wiring
+ser.write(b&#39;i2c.setup(0, 4, 3, i2c.SLOW)\r\n&#39;)
+
+# dofile, load the lcd library
+ser.write(b&#39;lcd = dofile(&amp;quot;lcd1602.lua&amp;quot;)()\r\n&#39;)
+
+# Now Refresh the LCD. 
+ser.write(b&#39;lcd.clear()\r\n&#39;)
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    ser.write(b&#39;lcd.clear()\r\n&#39;)
+    currentPer = str(psutil.cpu_percent()).encode(&#39;ascii&#39;)
+    # Format oneLine
+    ser.write(b&#39;lcd.put(lcd.locate(0, 5), &amp;quot;CPU Load&amp;quot;)\r\n&#39;)
+    oneLine = b&#39;lcd.put(lcd.locate(1, 6), &amp;quot;&#39; + currentPer + b&#39;&amp;quot;)\r\n&#39;
+    # Write oneLine
+    ser.write(oneLine)
+    time.sleep(1)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;代码运行的前提条件是,在ArchLinux上,安装pyserial库和psutil库,
+而后运行&lt;code&gt;sudo python WriteLoadToLCD.py&lt;/code&gt;.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ sudo pacman -S python-psutil
+$ sudo pacman -S python-pyserial
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到你的系统CPU使用率已经显示在1602 LCD上了,每分钟更新一次.&lt;br /&gt;
+当然你也可以将显示
+值从CPU使用率换成内存占用率,或是CPU温度,或是PM2.5的值等等. 你要做的就是构建自
+己的数据&lt;code&gt;CurrentPer&lt;/code&gt;和写入的格式&lt;code&gt;oneLine&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;通过串口发送数据, 通过NodeMCU驱动1602, 这功能对NodeMCU而言太小儿科了,所以接下
+来我会继续做一个WIFI驱动的LCD.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips On NodeMCU</title>
+      <link>http://purplepalmdash.github.io/2016/03/27/tips-on-nodemcu/</link>
+      <pubDate>Sun, 27 Mar 2016 09:30:05 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/27/tips-on-nodemcu/</guid>
+      <description>
+
+&lt;h3 id=&#34;电路图&#34;&gt;电路图&lt;/h3&gt;
+
+&lt;p&gt;在淘宝上买的NodeMCU是v1.0版的, v0.9版和v1.0版的差别如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_27_09_41_53_653x244.jpg&#34; alt=&#34;/images/2016_03_27_09_41_53_653x244.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;1.0版的连线如图:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/NodeMCU__v1.0_pinout.jpg&#34; alt=&#34;/images/NodeMCU__v1.0_pinout.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;烧写固件&#34;&gt;烧写固件&lt;/h3&gt;
+
+&lt;p&gt;ArchLinux下,可以通过python程序直接烧写固件.&lt;/p&gt;
+
+&lt;p&gt;下载integer版本的固件,&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ wget https://github.com/nodemcu/nodemcu-firmware/releases/download/0.9.6-dev_20150704/nodemcu_integer_0.9.6-dev_20150704.bin
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;下载esp-tool, ArchLinux需要安装python2版本的pyserial库才能运行该软件:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ git clone https://github.com/themadinventor/esptool.git
+$ sudo pacman -S python2-pyserial
+$ sudo python2 ./esptool.py --port /dev/ttyUSB0 --write_flash 0x0000 ../nodemcu_integer_0.9.6-dev_20150704.bin
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;minicom串口&#34;&gt;Minicom串口&lt;/h3&gt;
+
+&lt;p&gt;Minicom串口配置如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_27_10_09_12_746x325.jpg&#34; alt=&#34;/images/2016_03_27_10_09_12_746x325.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;烧写完固件后,最简单的测试如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; print &amp;quot;Hello World&amp;quot;
+Hello World
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;同时我们可以看下NodeMCU的版本,命令如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; majorVer, minorVer, devVer, chipid, flashid, flashsize, flashmode, flashspeed = node.info();
+&amp;gt; print(&amp;quot;NodeMCU &amp;quot;..majorVer..&amp;quot;.&amp;quot;..minorVer..&amp;quot;.&amp;quot;..devVer)
+NodeMCU 0.9.6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看到我们使用的固件版本是0.9.6的.&lt;/p&gt;
+
+&lt;h3 id=&#34;闪烁led&#34;&gt;闪烁LED&lt;/h3&gt;
+
+&lt;p&gt;NodeMCU支持LUA编程,为此我们需要准备另一个写入LUA脚本的小程序:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ git clone https://github.com/4refr0nt/luatool.git
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;NodeMCU板上自带有两个LED, 我们先点亮D4口,即GPIO2口上的LED:&lt;/p&gt;
+
+&lt;p&gt;程序照搬
+&lt;a href=&#34;http://esp8266.co.uk/recipes/blink-demo/&#34;&gt;http://esp8266.co.uk/recipes/blink-demo/&lt;/a&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;-- Config
+local pin = 4            --&amp;gt; GPIO2
+local value = gpio.LOW
+local duration = 1000    --&amp;gt; 1 second
+
+
+-- Function toggles LED state
+function toggleLED ()
+    if value == gpio.LOW then
+        value = gpio.HIGH
+    else
+        value = gpio.LOW
+    end
+
+    gpio.write(pin, value)
+end
+
+
+-- Initialise the pin
+gpio.mode(pin, gpio.OUTPUT)
+gpio.write(pin, value)
+
+
+-- Create an interval
+tmr.alarm(0, duration, 1, toggleLED)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;烧写到板子上:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ sudo python2 luatool/luatool/luatool.py --port /dev/ttyUSB0 --src blinkLED/init.lua --dest init.lua --restart
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;把&lt;code&gt;pin = 4&lt;/code&gt;改为&lt;code&gt;pin = 0&lt;/code&gt;, 则可以点亮另一个LED.&lt;/p&gt;
+
+&lt;h3 id=&#34;wifi控制led&#34;&gt;WIFI控制LED&lt;/h3&gt;
+
+&lt;p&gt;注意,需要把init.lua文件里的第二行改为你自家的WIFI SSID和密码:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ mkdir webLED
+$ vim webLED/init.lua
+wifi.setmode(wifi.STATION)
+wifi.sta.config(&amp;quot;SSID&amp;quot;,&amp;quot;PASSWORD&amp;quot;)
+print(wifi.sta.getip())
+led1 = 0
+led2 = 4
+gpio.mode(led1, gpio.OUTPUT)
+gpio.mode(led2, gpio.OUTPUT)
+srv=net.createServer(net.TCP)
+srv:listen(80,function(conn)
+    conn:on(&amp;quot;receive&amp;quot;, function(client,request)
+        local buf = &amp;quot;&amp;quot;;
+        local _, _, method, path, vars = string.find(request, &amp;quot;([A-Z]+) (.+)?(.+) HTTP&amp;quot;);
+        if(method == nil)then
+            _, _, method, path = string.find(request, &amp;quot;([A-Z]+) (.+) HTTP&amp;quot;);
+        end
+        local _GET = {}
+        if (vars ~= nil)then
+            for k, v in string.gmatch(vars, &amp;quot;(%w+)=(%w+)&amp;amp;*&amp;quot;) do
+                _GET[k] = v
+            end
+        end
+        buf = buf..&amp;quot;&amp;lt;h1&amp;gt; ESP8266 Web Server&amp;lt;/h1&amp;gt;&amp;quot;;
+        buf = buf..&amp;quot;&amp;lt;p&amp;gt;GPIO0 &amp;lt;a href=\&amp;quot;?pin=ON1\&amp;quot;&amp;gt;&amp;lt;button&amp;gt;ON&amp;lt;/button&amp;gt;&amp;lt;/a&amp;gt;&amp;amp;nbsp;&amp;lt;a href=\&amp;quot;?pin=OFF1\&amp;quot;&amp;gt;&amp;lt;button&amp;gt;OFF&amp;lt;/button&amp;gt;&amp;lt;/a&amp;gt;&amp;lt;/p&amp;gt;&amp;quot;;
+        buf = buf..&amp;quot;&amp;lt;p&amp;gt;GPIO2 &amp;lt;a href=\&amp;quot;?pin=ON2\&amp;quot;&amp;gt;&amp;lt;button&amp;gt;ON&amp;lt;/button&amp;gt;&amp;lt;/a&amp;gt;&amp;amp;nbsp;&amp;lt;a href=\&amp;quot;?pin=OFF2\&amp;quot;&amp;gt;&amp;lt;button&amp;gt;OFF&amp;lt;/button&amp;gt;&amp;lt;/a&amp;gt;&amp;lt;/p&amp;gt;&amp;quot;;
+        local _on,_off = &amp;quot;&amp;quot;,&amp;quot;&amp;quot;
+        if(_GET.pin == &amp;quot;OFF1&amp;quot;)then
+            gpio.write(led1, gpio.HIGH);
+        elseif(_GET.pin == &amp;quot;ON1&amp;quot;)then
+            gpio.write(led1, gpio.LOW);
+        elseif(_GET.pin == &amp;quot;OFF2&amp;quot;)then
+            gpio.write(led2, gpio.HIGH);
+        elseif(_GET.pin == &amp;quot;ON2&amp;quot;)then
+            gpio.write(led2, gpio.LOW);
+        end
+        client:send(buf);
+        client:close();
+        collectgarbage();
+    end)
+end)
+$ sudo python2 luatool/luatool/luatool.py --port /dev/ttyUSB0 --src webLED/init.lua --dest init.lua --restartkk
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;串口上可以得到ESP板的IP地址:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt; print(wifi.sta.getip())
+192.168.177.6   255.255.255.0   192.168.177.1
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;现在可以通过访问主机的页面&lt;code&gt;http://192.168.177.6&lt;/code&gt;来设置LED了.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_27_10_52_37_430x215.jpg&#34; alt=&#34;/images/2016_03_27_10_52_37_430x215.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;arduino版led&#34;&gt;Arduino版LED&lt;/h3&gt;
+
+&lt;p&gt;Arduino默认是不支持ESP的,需要安装插件来支持.&lt;br /&gt;
+File -&amp;gt; Preferences -&amp;gt; Settings中, 如下图所示, 填json定义网址&lt;br /&gt;
+&lt;a href=&#34;http://arduino.esp8266.com/stable/package_esp8266com_index.json&#34;&gt;http://arduino.esp8266.com/stable/package_esp8266com_index.json&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_27_13_25_19_905x639.jpg&#34; alt=&#34;/images/2016_03_27_13_25_19_905x639.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;而后打开Tools -&amp;gt; Boards -&amp;gt; Board Manager, 自动刷新后, 安装ESP8266相关的库:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_27_13_28_14_784x425.jpg&#34; alt=&#34;/images/2016_03_27_13_28_14_784x425.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;安装完毕后就可以使用ESP对应的Board了.&lt;/p&gt;
+
+&lt;p&gt;这里的代码实现了LED的闪烁, 源代码如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;/*LED_Breathing.ino Arduining.com  20 AUG 2015
+Using NodeMCU Development Kit V1.0
+Going beyond Blink sketch to see the blue LED breathing.
+A PWM modulation is made in software because GPIO16 can&#39;t
+be used with analogWrite().
+*/
+
+#define LED     D0        // Led in NodeMCU at pin GPIO16 (D0).
+ 
+#define BRIGHT    350     //max led intensity (1-500)
+#define INHALE    1250    //Inhalation time in milliseconds.
+#define PULSE     INHALE*1000/BRIGHT
+#define REST      1000    //Rest Between Inhalations.
+
+//----- Setup function. ------------------------
+void setup() {                
+  pinMode(LED, OUTPUT);   // LED pin as output.    
+}
+
+//----- Loop routine. --------------------------
+void loop() {
+  //ramp increasing intensity, Inhalation: 
+  for (int i=1;i&amp;lt;BRIGHT;i++){
+    digitalWrite(LED, LOW);          // turn the LED on.
+    delayMicroseconds(i*10);         // wait
+    digitalWrite(LED, HIGH);         // turn the LED off.
+    delayMicroseconds(PULSE-i*10);   // wait
+    delay(0);                        //to prevent watchdog firing.
+  }
+  //ramp decreasing intensity, Exhalation (half time):
+  for (int i=BRIGHT-1;i&amp;gt;0;i--){
+    digitalWrite(LED, LOW);          // turn the LED on.
+    delayMicroseconds(i*10);          // wait
+    digitalWrite(LED, HIGH);         // turn the LED off.
+    delayMicroseconds(PULSE-i*10);  // wait
+    i--;
+    delay(0);                        //to prevent watchdog firing.
+  }
+  delay(REST);                       //take a rest...
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;直接在Arduino IDE中编译验证即可.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips on 5050RGB(2)</title>
+      <link>http://purplepalmdash.github.io/2016/03/17/tips-on-5050rgb-2/</link>
+      <pubDate>Thu, 17 Mar 2016 13:09:12 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/17/tips-on-5050rgb-2/</guid>
+      <description>&lt;p&gt;上次的5050RGB模块损坏后, 我又从淘宝买了一块. 价格不贵,4块钱不到. 卖家的资料上
+这么写着:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_17_13_08_03_532x306.jpg&#34; alt=&#34;/images/2016_03_17_13_08_03_532x306.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;瞅着还挺OK的,不就是Arduino板5V电压外接,然后用三个GPIO口来控制嘛. 接线完毕后发
+现怎么也点不亮.&lt;/p&gt;
+
+&lt;p&gt;于是用万用表Debug, 发现公共端应该是接GND, 三个控制端需要电平置为高才可以点亮对
+应的颜色.&lt;/p&gt;
+
+&lt;p&gt;于是正确的连线和示例代码如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;// V-VCC GND   R-9   B-10  G-11
+#define LEDR 9
+#define LEDB 10
+#define LEDG 11
+
+void clear()
+{
+  analogWrite(LEDR,0);
+  analogWrite(LEDB,0);
+  analogWrite(LEDG,0);  //off
+}
+
+
+void setup()
+{
+  pinMode(LEDG,OUTPUT);
+  pinMode(LEDB,OUTPUT);
+  pinMode(LEDR,OUTPUT);
+}
+
+void loop()
+{
+  clear();
+  // Red
+  analogWrite(LEDR,255);
+  delay(1000);
+  clear();
+  // Green
+  analogWrite(LEDG,255);
+  delay(1000);
+  clear();
+  // Blue
+  analogWrite(LEDB,255);
+  delay(1000);
+  // White
+  analogWrite(LEDB,255);
+  analogWrite(LEDG,255);
+  analogWrite(LEDR,255);
+  delay(2000);
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;编译并上传代码到Arduino板子上, LED将呈现成红色-&amp;gt;绿色-&amp;gt;蓝色-&amp;gt;白色的渐变.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips On 5050RGB</title>
+      <link>http://purplepalmdash.github.io/2016/03/12/tips-on-5050rgb/</link>
+      <pubDate>Sat, 12 Mar 2016 19:32:42 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/12/tips-on-5050rgb/</guid>
+      <description>
+
+&lt;h3 id=&#34;背景&#34;&gt;背景&lt;/h3&gt;
+
+&lt;p&gt;淘宝上买的5050RGB模块, 外观如下图:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_12_19_36_05_351x233.jpg&#34; alt=&#34;/images/2016_03_12_19_36_05_351x233.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;连线:&lt;/p&gt;
+
+&lt;p&gt;这个RGB模块比较奇怪,直接使用Arduino的5v输出一直有问题,我是用的外接5V电源供电,
+动用了面包板模块.(之后发现不是供电的问题, 是因为淘宝上卖的模块提供示例代码的问
+题)&lt;/p&gt;
+
+&lt;p&gt;更具体的连线如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;// V-VCC 5V   R-9   B-10  G-11
+#define LEDR 9
+#define LEDB 10
+#define LEDG 11
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;测试&#34;&gt;测试&lt;/h3&gt;
+
+&lt;p&gt;按照厂方提供的程序,未能成功运行.&lt;/p&gt;
+
+&lt;p&gt;厂方提供的电路图如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_12_20_31_25_373x471.jpg&#34; alt=&#34;/images/2016_03_12_20_31_25_373x471.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;debug&#34;&gt;Debug&lt;/h3&gt;
+
+&lt;p&gt;百思不得其解后,用万用表测试, 电阻发声的那档, 发现加电后,某两个LED可以亮, 另外
+一个不能亮.&lt;/p&gt;
+
+&lt;p&gt;发现奇怪的一点是, VCC接高电压, RGB接低电压时, 无法点亮LED. RGB接高电压, VCC接
+低电压时, LED可以被点亮两个.&lt;/p&gt;
+
+&lt;p&gt;猜测: 厂方给的参考资料有误, 接线错误. 而且LED坏了一个.&lt;/p&gt;
+
+&lt;p&gt;验证, 正确.&lt;/p&gt;
+
+&lt;p&gt;连线更改为:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;// V-VCC 5V   R-9   B-10  G-11
+#define LEDR 9
+#define LEDG 10
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;蓝色的LED已坏, 所以示例代码中,不许配置LEDB.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;// V-VCC GND   R-9   G-10  
+#define LEDR 9
+#define LEDG 10
+
+int i = 0;
+
+void setup()
+{
+  pinMode(LEDG,OUTPUT);
+  pinMode(LEDR,OUTPUT);
+
+}
+
+void loop()
+{
+  analogWrite(LEDR,0);
+  analogWrite(LEDG,0);  //off
+  delay(1000);
+  analogWrite(LEDR,255); 
+delay(1000); 
+  analogWrite(LEDR,0);
+  analogWrite(LEDG,0);
+  delay(1000); 
+  analogWrite(LEDR,30);
+  analogWrite(LEDG,200);
+delay(1000); 
+  analogWrite(LEDR,0);
+  analogWrite(LEDG,0);
+  delay(1000); 
+    analogWrite(LEDG,30);
+  analogWrite(LEDR,200);
+  delay(1000); 
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;正确的电路连线应该是:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_12_20_54_55_707x379.jpg&#34; alt=&#34;/images/2016_03_12_20_54_55_707x379.jpg&#34; /&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips on w5100</title>
+      <link>http://purplepalmdash.github.io/2016/03/11/tips-on-w5100/</link>
+      <pubDate>Fri, 11 Mar 2016 22:00:50 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/11/tips-on-w5100/</guid>
+      <description>
+
+&lt;h3 id=&#34;参考&#34;&gt;参考&lt;/h3&gt;
+
+&lt;p&gt;参考如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://www.bigiot.net/help/6.html&#34;&gt;http://www.bigiot.net/help/6.html&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;问题&#34;&gt;问题&lt;/h3&gt;
+
+&lt;p&gt;上报的数据不准确.&lt;/p&gt;
+
+&lt;p&gt;原因是因为W5100抄版的淘宝版本有短路, 换成别的模拟口:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;const int LM35 = 3;//LM35 pin
+byte mac[] = {0x00, 0x1D, 0x72, 0x82, 0x35, 0x9D};
+EthernetClient client ;
+IPAddress ip(192, 168, 17, 177);//local IP
+//IPAddress server(121,42,180,30);
+char server[] = &amp;quot;www.bigiot.net&amp;quot;; 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;连线改为了3, 即A3口以后,上报数据成功.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips on V-USB and Arduino(5)</title>
+      <link>http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-5/</link>
+      <pubDate>Mon, 07 Mar 2016 21:52:47 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-5/</guid>
+      <description>
+
+&lt;p&gt;这一节将添加一个LED到已有的方案中. 这个LED将使用11口, 通过&lt;code&gt;./set-led new&lt;/code&gt;来设
+置状态.&lt;/p&gt;
+
+&lt;h3 id=&#34;连线&#34;&gt;连线&lt;/h3&gt;
+
+&lt;p&gt;新加一个LED如图:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_03_07_21_52_18_683x513.jpg&#34; alt=&#34;/images/2016_03_07_21_52_18_683x513.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;仅仅添加了一个LED + 220欧电阻.&lt;/p&gt;
+
+&lt;h3 id=&#34;代码修改&#34;&gt;代码修改&lt;/h3&gt;
+
+&lt;h4 id=&#34;requests-h&#34;&gt;requests.h&lt;/h4&gt;
+
+&lt;p&gt;添加新的request定义:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;diff --git a/requests.h b/requests.h
+index 90275f5..b354a73 100644
+--- a/requests.h
++++ b/requests.h
+@@ -32,4 +32,6 @@
+ 
+ #define CUSTOM_RQ_BLINK    3
+ 
++#define CUSTOM_RQ_NEWLED    4
++
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;hid-custom-rq-h&#34;&gt;hid_custom_rq.h&lt;/h4&gt;
+
+&lt;p&gt;添加新的管脚, 和对&lt;code&gt;CUSTOM_RQ_NEWLED&lt;/code&gt;的处理代码:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;diff --git a/hid_custom_rq.h b/hid_custom_rq.h
+index f5509e4..b5411cf 100644
+--- a/hid_custom_rq.h
++++ b/hid_custom_rq.h
+@@ -13,6 +13,7 @@ class hid_custom_rqDevice {
+   hid_custom_rqDevice () {
+     usbInit();
+     ledPin = 13;        // pin 13 as default ledPin
++    newledPin = 11;    // pin 11 as newledPin
+   }
+     
+   void poll() {
+@@ -20,6 +21,7 @@ class hid_custom_rqDevice {
+   }
+   
+   unsigned int ledPin;  
++  unsigned int newledPin;  
+ };
+ 
+ hid_custom_rqDevice hid_custom_rq = hid_custom_rqDevice();
+@@ -99,6 +101,14 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
+             usbMsgPtr = dataBuffer;         /* tell the driver which data to
+return */
+             return 1;                       /* tell the driver to send 1 byte
+*/
+         }
++       /* Added for newly added LED */
++       else if(rq-&amp;gt;bRequest == CUSTOM_RQ_NEWLED){
++            if(rq-&amp;gt;wValue.bytes[0] &amp;amp; 1){    /* set new LED */
++                digitalWrite(hid_custom_rq.newledPin, HIGH);
++            }else{                          /* clear new LED */
++                digitalWrite(hid_custom_rq.newledPin, LOW);
++            }
++       }
+     }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;set-led-c&#34;&gt;set-led.c&lt;/h4&gt;
+
+&lt;p&gt;这个文件中,添加了两条新命令,分别为&lt;code&gt;./set-led newledon&lt;/code&gt;和&lt;code&gt;./set-led newledoff&lt;/code&gt;用于点亮/
+熄灭新加的LED.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;diff --git a/examples/hid_custom_rq_demo/commandline/set-led.c b/examples/hid_custom_rq_demo/commandline/set-led.c
+index 44d39f9..a306eca 100644
+--- a/examples/hid_custom_rq_demo/commandline/set-led.c
++++ b/examples/hid_custom_rq_demo/commandline/set-led.c
+@@ -91,12 +91,19 @@ buffer[3] = 0;
+         }else{
+             printf(&amp;quot;LED is %s\n&amp;quot;, buffer[0] ? &amp;quot;on&amp;quot; : &amp;quot;off&amp;quot;);
+         }
+-    }else if((isOn = (strcasecmp(argv[1], &amp;quot;on&amp;quot;) == 0)) || strcasecmp(argv[1], &amp;quot;off&amp;quot;) == 0){
++    }
++    else if((isOn = (strcasecmp(argv[1], &amp;quot;on&amp;quot;) == 0)) || strcasecmp(argv[1], &amp;quot;off&amp;quot;) == 0){
+         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_SET_STATUS, isOn, 0, buffer, 0, 5000);
+         if(cnt &amp;lt; 0){
+             fprintf(stderr, &amp;quot;USB error: %s\n&amp;quot;, usb_strerror());
+         }
+     }
++    else if((isOn = (strcasecmp(argv[1], &amp;quot;newledon&amp;quot;) == 0)) || strcasecmp(argv[1], &amp;quot;newledoff&amp;quot;) == 0){
++        cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_NEWLED, isOn, 0, buffer, 0, 5000);
++        if(cnt &amp;lt; 0){
++            fprintf(stderr, &amp;quot;USB error: %s\n&amp;quot;, usb_strerror());
++        }
++    }
+ 
+ else if(strcasecmp(argv[1], &amp;quot;onoff&amp;quot;) == 0){ /* Test custom on/off */
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;hid-custom-rq-demo-ped&#34;&gt;hid_custom_rq_demo.ped&lt;/h4&gt;
+
+&lt;p&gt;因为新添加了硬件,ped文件同样需要更新.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;diff --git a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
+index 77e3912..6d98151 100644
+--- a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
++++ b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
+@@ -1,10 +1,13 @@
+ #include &amp;lt;hid_custom_rq.h&amp;gt;
+ 
+ const int ledPin = 13;
++const int newledPin = 11;
+ 
+ void setup() {
+   hid_custom_rq.ledPin = ledPin;
+   pinMode(hid_custom_rq.ledPin, OUTPUT);
++  hid_custom_rq.newledPin = newledPin;
++  pinMode(hid_custom_rq.newledPin, OUTPUT);
+ }
+ 
+ void loop() {
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;验证&#34;&gt;验证&lt;/h3&gt;
+
+&lt;p&gt;写入新编译的Arduino固件, 并新编译&lt;code&gt;set-led&lt;/code&gt;程序, 即可看到新增的LED被点亮/熄灭.&lt;/p&gt;
+
+&lt;p&gt;效果如图:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/70584386.jpg&#34; alt=&#34;/images/70584386.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;延伸&#34;&gt;延伸&lt;/h3&gt;
+
+&lt;p&gt;既然点亮了LED, 其他各种设备就不在话下了. 引入一个舵机,或者步进电机, 就可以实现
+e-buddy人偶的提醒功能.&lt;/p&gt;
+
+&lt;p&gt;当然我们可以想得更妙, 例如,用蓝牙或者WIFI来替代USB传输. 这样可以做到更远距离.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips on V-USB and Arduino(4)</title>
+      <link>http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-4/</link>
+      <pubDate>Mon, 07 Mar 2016 21:07:53 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-4/</guid>
+      <description>
+
+&lt;p&gt;前面把玩了一下ebuddy, 回去想了一下, 觉得基于v-usb和arduino来实现
+一个自己的ebuddy也不是特别难的事情.&lt;/p&gt;
+
+&lt;h3 id=&#34;思路&#34;&gt;思路&lt;/h3&gt;
+
+&lt;p&gt;还是参考:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://coopermaa2nd.blogspot.tw/2011/10/v-usb-examples-for-arduino.html&#34;&gt;V-USB examples for Arduino&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;以&lt;code&gt;hid_custom_rq&lt;/code&gt;项目来改. 例子里已经实现了Arduino板载的LED亮/灭. 我们只需要在
+原例上修改, 添加自定义命令和硬件即可.&lt;/p&gt;
+
+&lt;h3 id=&#34;代码&#34;&gt;代码&lt;/h3&gt;
+
+&lt;p&gt;示例代码我做完后放到了github上, 可以通过以下命令获得:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ git clone git@github.com:purplepalmdash/arduino-usb-led.git
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;主要修改&#34;&gt;主要修改&lt;/h3&gt;
+
+&lt;h4 id=&#34;request-h&#34;&gt;request.h&lt;/h4&gt;
+
+&lt;p&gt;这个头文件被USB固件和主机所共享, 定义了USB的request number数字, request number
+被用于主机和设备之间的通信.&lt;/p&gt;
+
+&lt;p&gt;添加:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#define CUSTOM_RQ_BLINK    3
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;hid-custom-rq-h&#34;&gt;hid_custom_rq.h&lt;/h4&gt;
+
+&lt;p&gt;这个文件是Arduino板上固件程序中对各种来自主机的request信息的响应, 或者说, 消息
+处理函数.&lt;/p&gt;
+
+&lt;p&gt;针对上面在&lt;code&gt;requst.h&lt;/code&gt;文件中添加的消息, 我们需要在&lt;code&gt;usbFunctionSetup()&lt;/code&gt;函数中添加
+对应的消息处理代码, 为简单起见, 直接添加在函数的入口处就好.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;
+usbMsgLen_t usbFunctionSetup(uchar data[8])
+{
+    usbRequest_t    *rq = (usbRequest_t *)((void *)data);    
+
++    if(rq-&amp;gt;bRequest == CUSTOM_RQ_BLINK){ /* blink -- used for blink the LED */
++            /* First set the led pin to high  */
++             unsigned char i = 6;
++             while(i &amp;gt;= 1)
++             {
++             digitalWrite(hid_custom_rq.ledPin, HIGH);
++             delay(1000);
++             digitalWrite(hid_custom_rq.ledPin, LOW);
++             delay(1000);
++             i--;
++             }
++    }
+
+    if((rq-&amp;gt;bmRequestType &amp;amp; USBRQ_TYPE_MASK) == USBRQ_TYPE_VENDOR){
+        if(rq-&amp;gt;bRequest == CUSTOM_RQ_SET_STATUS){
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;上面添加的代码, 在监测到&lt;code&gt;CUSTOM_RQ_BLINK&lt;/code&gt;消息后, 会将led闪烁6次.&lt;/p&gt;
+
+&lt;h4 id=&#34;set-led-c&#34;&gt;set-led.c&lt;/h4&gt;
+
+&lt;p&gt;&lt;code&gt;set-led.c&lt;/code&gt;文件用于编译出主机端程序, 编译出来的程序将接受用户输入, 将对应的输
+入发送给USB设备.&lt;/p&gt;
+
+&lt;p&gt;在&lt;code&gt;set-led.c&lt;/code&gt;文件中我们添加一条命令,用于发送&lt;code&gt;CUSTOM_RQ_BLINK&lt;/code&gt;消息:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ vim examples/hid_custom_rq_demo/commandline/set-led.c
+int main(int argc, char **argv)
+{
+
+//.......
+
++ else if(strcasecmp(argv[1], &amp;quot;blink&amp;quot;) == 0){ /* set blink goes here */
++         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_BLINK, 0, 0, buffer, 0, 5000);
++         if(cnt &amp;lt; 0){
++             fprintf(stderr, &amp;quot;USB error: %s\n&amp;quot;, usb_strerror());
++         }
++ }
+
+//.......
+
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;验证&#34;&gt;验证&lt;/h3&gt;
+
+&lt;p&gt;将代码拷贝到Arduino IDE的&lt;code&gt;libraries&lt;/code&gt;目录下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ pwd
+/media/y/arduino/1.0.5/libraries/hid_custom_rq
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;IDE菜单里的&lt;code&gt;File -&amp;gt; Examples -&amp;gt; hid_custom_rq&lt;/code&gt;下将出现&lt;code&gt;hid_custom_rq_demo&lt;/code&gt;, 点
+击, 开始编译. 编译完以后, 上传到Arduino板.&lt;/p&gt;
+
+&lt;p&gt;按
+&lt;a href=&#34;http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/&#34;&gt;http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/&lt;/a&gt;
+设置并检查Arduino连线.&lt;/p&gt;
+
+&lt;p&gt;现在拔掉Arduino串口的USB线, 插上我们新加的USB连线, 而后运行以下验证例程:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;➜  hid_custom_rq git:(master) cd examples/hid_custom_rq_demo/commandline 
+➜  commandline git:(master) ./set-led blink
+USB error: Connection timed out
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;出现USB error是因为在板子上的服务例程中耗费了太多时间. 问题不大. 每次运行
+&lt;code&gt;./set-led blink&lt;/code&gt;命令将使得板子上13口的led闪烁6次.&lt;/p&gt;
+
+&lt;p&gt;做到这里, 我们已经能模拟出ebuddy的心脏灯光效果了. 通过编写不同的request消息,发
+送给Arduino板子即可.&lt;/p&gt;
+
+&lt;p&gt;下面将研究添加一个新的LED灯, 等同于ebuddy的头灯.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>把玩ebuddy(2)</title>
+      <link>http://purplepalmdash.github.io/2016/03/03/ba-wan-ebuddy-2/</link>
+      <pubDate>Thu, 03 Mar 2016 10:15:43 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/03/ba-wan-ebuddy-2/</guid>
+      <description>
+
+&lt;h3 id=&#34;archlinux配置过程&#34;&gt;ArchLinux配置过程&lt;/h3&gt;
+
+&lt;p&gt;因为ArchLinux默认python版本为python3, 使用python2激活e-buddy人偶:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ sudo pacman -S python2-pip
+$ sudo pip2 install pyusb
+$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
+$ sudo python2 ~/Code/ebuddy/pybuddy-dx/pybuddyDX.py
+$ sudo netstat -anp | grep 8888
+udp        0      0 127.0.0.1:8888          0.0.0.0:*                           14635/python2 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;接下来就是往&lt;code&gt;127.0.0.1:8888&lt;/code&gt;发送指令控制人偶的干活了。具体的指令可以见上一篇文章。&lt;/p&gt;
+
+&lt;h3 id=&#34;定期检查邮件控制人偶&#34;&gt;定期检查邮件控制人偶&lt;/h3&gt;
+
+&lt;p&gt;先安装用于检查imap服务端状态的python模块:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ sudo pip2 install imapclient
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;检查邮件的脚本如下, 该脚本检查163邮箱的IMAP服务器，如果有新邮件，人偶的头就会出现颜色渐
+变，否则，则显示绿灯闪烁:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#!/usr/bin/env python
+import imaplib 
+from imapclient import IMAPClient
+import time
+import subprocess
+import thread
+
+DEBUG = True
+ 
+HOSTNAME = &#39;imap.163.com&#39;
+USERNAME = &#39;XXXXXXXX&#39;
+PASSWORD = &#39;XXXXXXXX&#39;
+MAILBOX = &#39;Inbox&#39;
+newmails = 0
+ 
+NEWMAIL_OFFSET = 0   # my unread messages never goes to zero, yours might
+MAIL_CHECK_FREQ = 60 # check mail every 60 seconds
+
+# Define a function for checking email
+def check_mail( threadName):
+    while True:
+        # Login into the imap server and check the numbers for the new mail.
+        server = IMAPClient(HOSTNAME, use_uid=True, ssl=True)
+        server.login(USERNAME, PASSWORD)
+        if DEBUG:
+            print(&#39;Logging in as &#39; + USERNAME)
+            select_info = server.select_folder(MAILBOX)
+            print(&#39;%d messages in INBOX&#39; % select_info[&#39;EXISTS&#39;])
+
+        folder_status = server.folder_status(MAILBOX, &#39;UNSEEN&#39;)
+        global newmails
+        newmails = int(folder_status[&#39;UNSEEN&#39;])
+
+        if DEBUG:
+            print &amp;quot;You have&amp;quot;, newmails, &amp;quot;new emails!&amp;quot;
+        time.sleep(MAIL_CHECK_FREQ)
+
+def loop():
+ 
+    if newmails &amp;gt; NEWMAIL_OFFSET:
+        bashCommand = &#39;echo 12 &amp;gt; /dev/udp/127.0.0.1/8888&#39;
+        output = subprocess.check_output([&#39;bash&#39;,&#39;-c&#39;, bashCommand])
+        time.sleep(8)
+    else:
+        bashCommand = &#39;echo 08 &amp;gt; /dev/udp/127.0.0.1/8888&#39;
+        output = subprocess.check_output([&#39;bash&#39;,&#39;-c&#39;, bashCommand])
+        time.sleep(5)
+ 
+if __name__ == &#39;__main__&#39;:
+    try:
+        print &#39;Press Ctrl-C to quit.&#39;
+        thread.start_new_thread( check_mail, (&amp;quot;Thread-1&amp;quot;, ) )
+        while True:
+            loop()
+    finally:
+        print &amp;quot;finally comes here!&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>e-buddy消息提醒服务设计思路(1)</title>
+      <link>http://purplepalmdash.github.io/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/</link>
+      <pubDate>Tue, 01 Mar 2016 19:47:55 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/</guid>
+      <description>
+
+&lt;h3 id=&#34;设计目的&#34;&gt;设计目的&lt;/h3&gt;
+
+&lt;p&gt;设计为一个系统通用的? 还是特定应用的?&lt;/p&gt;
+
+&lt;h3 id=&#34;监控-vs-告警&#34;&gt;监控 vs 告警&lt;/h3&gt;
+
+&lt;p&gt;监控某项指标? 然后告警?&lt;/p&gt;
+
+&lt;h3 id=&#34;总线&#34;&gt;总线?&lt;/h3&gt;
+
+&lt;p&gt;DBUS 总线?&lt;br /&gt;
+D-Bus For Python.&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>把玩e-Buddy</title>
+      <link>http://purplepalmdash.github.io/2016/03/01/ba-wan-e-buddy/</link>
+      <pubDate>Tue, 01 Mar 2016 10:47:55 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/03/01/ba-wan-e-buddy/</guid>
+      <description>
+
+&lt;h3 id=&#34;状态&#34;&gt;状态&lt;/h3&gt;
+
+&lt;p&gt;逆向工程得出的控制指令:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;################
+#Commands
+################
+# GLADNESS =        00
+# FEAR =            01
+# FIZZ =            02
+# PLEASANTSURPRISE =03
+# GRIEF =                       04
+# FURY =                        05
+# QUELL =                       06
+# REDHEAD =             07
+# GREENHEAD =           08
+# BLUEHEAD =            09
+# YELLOWHEAD =          10
+# BLAME =                       11
+# BLUEGREENHEAD =       12
+# WHITEHEAD =           13
+# HEART =                       14
+# WINGS =                       15
+# BODY =                        16
+# NOEFFECT =            17
+# ONLINE =                      18
+# BUSY =                        19
+# DAZE =                        20
+# BACKSOON =            21
+# AWAY =                        22
+# PHONE =                       23
+# LUNCH =                       24
+# OFFLINE =             25
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;功能列表:&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;功能代码&lt;/th&gt;
+&lt;th align=&#34;center&#34;&gt;描述&lt;/th&gt;
+&lt;th align=&#34;right&#34;&gt;详细描述&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;00&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;开心&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯变换彩色，翅膀扇动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;01&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;惊恐&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯变换彩色，心灯红色，翅膀扇动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;02&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;嘶嘶&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯变换彩色，心灯红色，翅膀扇动, 身体转动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;03&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;惊喜&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯变换彩色，心灯红色，翅膀扇动, 之后身体转动，头灯红&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;04&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;酸溜溜&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯变换彩色，翅膀扇动, 之后头灯变幻&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;05&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;愤怒&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯红色，翅膀扇动, 身体扭动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;06&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;扭动&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯蓝色，翅膀扇动, 身体平缓扭动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;07&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;红头&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯红色, 闪烁&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;08&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;绿头&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯绿色，闪烁&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;09&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;蓝头&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯蓝色，闪烁&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;10&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;黄头&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯黄色，闪烁&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;11&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;责骂&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯蓝色，闪烁&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;12&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;绿色-&amp;gt;蓝色头&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯绿色到蓝色变换&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;13&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;白头闪&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;头灯白色变换&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;14&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;心跳&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯红色闪烁后，身体转动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;15&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;挥翅&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;翅膀不停挥动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;16&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;身体转动&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;身体转动&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;17&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;无效果&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;无任何效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;18&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;在线&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯一直闪动，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;19&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;忙碌&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯一直快速闪动，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;20&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;发呆&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯一直慢速闪动，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;21&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;马上回来&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯三短闪烁后停止一会，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;22&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;离开&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯三短闪烁后停止一会，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;23&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;离开&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯持续跳动，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;24&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;离开&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯两短后持续跳动，不会停止，除非转为其他效果&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;25&lt;/td&gt;
+&lt;td align=&#34;center&#34;&gt;离开&lt;/td&gt;
+&lt;td align=&#34;right&#34;&gt;心灯四短后，永久沉默&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&#34;e-buddy本地服务器&#34;&gt;e-buddy本地服务器&lt;/h3&gt;
+
+&lt;p&gt;有人已经实现了e-buddy的python库，直接拷贝到本地并运行:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
+$ virtualenv2 venv2 --python=python2.7
+ ✗ . ~/venv2/bin/activate
+(venv2) ➜  _posts git:(master) ✗ python
+Python 2.7.11 (default, Dec  6 2015, 15:43:46) 
+[GCC 5.2.0] on linux2
+$ pip install pyusb
+$ python pybuddyDX1.py
+2016-02-23 15:51:39,242 INFO     Searching e-buddy...
+2016-02-23 15:51:39,399 INFO     DX e-buddy found!
+2016-02-23 15:51:39,962 INFO     Starting daemon...
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;py文件运行后将监听127.0.0.1的8888端口，通过往该端口输入状态码，e-buddy将呈现不同的状态
+。&lt;/p&gt;
+
+&lt;h3 id=&#34;操纵e-buddy&#34;&gt;操纵e-buddy&lt;/h3&gt;
+
+&lt;p&gt;用python操控e-buddy的命令如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;python
+Python 2.7.11 (default, Dec  6 2015, 15:43:46) 
+[GCC 5.2.0] on linux2
+Type &amp;quot;help&amp;quot;, &amp;quot;copyright&amp;quot;, &amp;quot;credits&amp;quot; or &amp;quot;license&amp;quot; for more information.
+&amp;gt;&amp;gt;&amp;gt; import socket
+&amp;gt;&amp;gt;&amp;gt; UDP_IP = &amp;quot;127.0.0.1&amp;quot;
+&amp;gt;&amp;gt;&amp;gt; UDP_PORT = 8888
+&amp;gt;&amp;gt;&amp;gt; sock = socket.socket(socket.AF_INET,  socket.SOCK_DGRAM)
+&amp;gt;&amp;gt;&amp;gt; sock.sendto(&amp;quot;07&amp;quot;,(UDP_IP, UDP_PORT))
+2
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;或者，直接用bash来操作udp socket:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#!/bin/bash
+while true
+do
+echo 07 &amp;gt; /dev/udp/127.0.0.1/8888
+sleep 3
+done
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;以上的脚本就可以直接将e-buddy的头像置为红色，且一直闪烁。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips on V-USB and Arduino(3)--Others</title>
+      <link>http://purplepalmdash.github.io/2016/02/29/tips-on-v-usb-and-arduino-3-others/</link>
+      <pubDate>Mon, 29 Feb 2016 11:50:09 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/02/29/tips-on-v-usb-and-arduino-3-others/</guid>
+      <description>
+
+&lt;h3 id=&#34;连线-电路&#34;&gt;连线/电路&lt;/h3&gt;
+
+&lt;p&gt;不需要对电路做任何修改，仅替换arduino里的程序即可。&lt;/p&gt;
+
+&lt;h3 id=&#34;代码&#34;&gt;代码&lt;/h3&gt;
+
+&lt;p&gt;代码如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;hid_custom_rq/
+hid_data/
+hid_mouse/
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;编译方法和上面一样。&lt;/p&gt;
+
+&lt;p&gt;值得注意的是, 这三个设备都是实现了HID设备，可以做到即插即用。&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;hid_data&lt;/code&gt;的用法：&lt;/p&gt;
+
+&lt;p&gt;读取/写入例子:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;➜  commandline ./hidtool read
+0x01 0x02 0x03 0x04 0x05 0x06 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+➜  commandline ./hidtool write 0x34 0x54 0x20 0x1f
+➜  commandline ./hidtool read
+0x34 0x54 0x20 0x1f 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;custom-class延伸&#34;&gt;custom_class延伸&lt;/h3&gt;
+
+&lt;p&gt;连线LED 11，修改代码后即可控制11 GPIO口的LED亮灭&lt;/p&gt;
+
+&lt;p&gt;custom_class_demo.pde:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;const int ledPin = 11;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;custom_class.h:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;class custom_classDevice {
+ public:
+  custom_classDevice() {
+    usbInit();
+    ledPin = 11;        // pin 11 as default ledPin
+  }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;而后连接一个220欧电阻+LED到ARDUINO的PIN 11上，即可通过USB控制LED亮灭。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips On V-USB And Arduino(2)--用v-usb控制LED</title>
+      <link>http://purplepalmdash.github.io/2016/02/26/tips-on-v-usb-and-arduino-2/</link>
+      <pubDate>Fri, 26 Feb 2016 17:07:20 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/02/26/tips-on-v-usb-and-arduino-2/</guid>
+      <description>
+
+&lt;h3 id=&#34;参考&#34;&gt;参考&lt;/h3&gt;
+
+&lt;p&gt;参考链接如下(需翻墙):&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://coopermaa2nd.blogspot.tw/2011/10/v-usb-examples-for-arduino.html&#34;&gt;V-USB examples for Arduino&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;连线图&#34;&gt;连线图&lt;/h3&gt;
+
+&lt;p&gt;链接里的连线图如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/image_thumb1354.png&#34; alt=&#34;/images/image_thumb1354.png&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;这个图我想了很久，对比上一节里键盘的连线图对比，发现D+/D-的连线刚好是反过来的。此外就是
+D-上加了一个上拉电阻， 电阻值为1.5K， 这个其实没关系，在我们的例子中，用到2.2K，是因为
+我们用的参考电压是5V的。&lt;/p&gt;
+
+&lt;p&gt;对上一章我们的连线图进行修改，得出的连线图如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_02_29_10_52_38_769x625.jpg&#34; alt=&#34;/images/2016_02_29_10_52_38_769x625.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;电路图如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_02_29_10_53_49_720x702.jpg&#34; alt=&#34;/images/2016_02_29_10_53_49_720x702.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;上一章用到的开关可以不用拆除。&lt;/p&gt;
+
+&lt;p&gt;值得注意的是，2.2K的上拉电阻接到了5V输入。&lt;/p&gt;
+
+&lt;h3 id=&#34;代码&#34;&gt;代码&lt;/h3&gt;
+
+&lt;p&gt;下载Windows版0022 Arduino，编译原帖中pde文件并上传，修改
+hardware/arduino/cores/arduino/wiring.c里的:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;SIGNAL(TIMER0_OVF_vect) 
+{
+++++++   sei()
+......
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;客户端程序编译:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;➜  pwd
+......../custom_class/examples/custom_class_demo/commandline
+➜  make clean
+rm -f *.o set-led
+➜  make
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;使用&lt;code&gt;./set-led&lt;/code&gt;即可，编译前需要修改头文件:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ vim set-led.c
+//#include &amp;quot;../firmware/requests.h&amp;quot;   /* custom request numbers */
+//#include &amp;quot;../firmware/usbconfig.h&amp;quot;  /* device&#39;s VID/PID and names */
+#include &amp;quot;../../../requests.h&amp;quot;   /* custom request numbers */
+#include &amp;quot;../../../usbconfig.h&amp;quot;  /* device&#39;s VID/PID and names */
+
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Tips On V-USB And Arduino(1)- USB Keyboard</title>
+      <link>http://purplepalmdash.github.io/2016/02/26/tips-on-v-usb-and-arduino-1/</link>
+      <pubDate>Fri, 26 Feb 2016 16:55:10 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/02/26/tips-on-v-usb-and-arduino-1/</guid>
+      <description>
+
+&lt;h3 id=&#34;参考&#34;&gt;参考&lt;/h3&gt;
+
+&lt;p&gt;主要参考了:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://www.geek-workshop.com/thread-1137-1-1.html&#34;&gt;Arduino学习笔记A11 - Arduino模拟电脑键盘（基于AVR-USB的USB-HID设备）&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;电路图&#34;&gt;电路图&lt;/h3&gt;
+
+&lt;p&gt;安装Fritzing后，可以绘制出面包板连线图和电路图:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_02_26_16_57_48_761x613.jpg&#34; alt=&#34;/images/2016_02_26_16_57_48_761x613.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;电路图:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_02_26_17_00_04_668x679.jpg&#34; alt=&#34;/images/2016_02_26_17_00_04_668x679.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;注意事项:&lt;/p&gt;
+
+&lt;p&gt;电阻换成100欧也可以，原帖中是68欧电阻。&lt;br /&gt;
+注意齐纳二极管的极性，带有色条的一端是负极。&lt;/p&gt;
+
+&lt;h3 id=&#34;代码&#34;&gt;代码&lt;/h3&gt;
+
+&lt;p&gt;值得注意的配置如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#define USB_CFG_IOPORTNAME D
+	
+USB输入输出引脚使用AVR单片机的PORTD，如果改成B就是使用PORTB
+#define USB_CFG_DMINUS_BIT 4
+	
+USB的D-接PORTD的第四位PD4，对应Arduino D4
+#define USB_CFG_DPLUS_BIT  2
+	
+USB的D+接PORTD的第二位PD2，对应Arduino D2
+#define USB_CFG_PULLUP_IOPORTNAME D
+	
+USB上拉引脚使用AVR单片机的PORTD，如果改成B就是使用PORTB
+#define USB_CFG_PULLUP_BIT  5
+	
+USB的上拉电阻接PORTD的第五位PD5，对应Arduino  D5
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在Arduino1.0.5上编译/配置都没有问题，最好在0022～1.05的版本范围内进行实验。&lt;/p&gt;
+
+&lt;p&gt;首先通过USBasp线写入编译后的程序，而后换上我们添加的USB线缆后，点击按键，每次即可输出
+&lt;code&gt;hello world&lt;/code&gt;字符串。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>Playing e-Buddy</title>
+      <link>http://purplepalmdash.github.io/2016/02/23/playing-e-buddy/</link>
+      <pubDate>Tue, 23 Feb 2016 09:36:58 +0000</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/2016/02/23/playing-e-buddy/</guid>
+      <description>
+
+&lt;h3 id=&#34;python-library&#34;&gt;Python Library&lt;/h3&gt;
+
+&lt;p&gt;Clone the repository from google Code to github, then clone it to local:&lt;br /&gt;
+This library could makes the ebuddy dance and sing.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;environment&#34;&gt;Environment&lt;/h3&gt;
+
+&lt;p&gt;Since ArchLinux runs python3, we need to create a virtualenv for running python2.7&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ virtualenv2 venv2 --python=python2.7
+ ✗ . ~/venv2/bin/activate
+(venv2) ➜  _posts git:(master) ✗ python
+Python 2.7.11 (default, Dec  6 2015, 15:43:46) 
+[GCC 5.2.0] on linux2
+$ pip install pyusb
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;modification&#34;&gt;Modification&lt;/h3&gt;
+
+&lt;p&gt;Modify the source code, mainly change the following lines:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;    #except NoBuddyException, e:
+    except NoBuddyException:
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Start the ebuddy via:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ python pybuddyDX1.py
+2016-02-23 15:51:39,242 INFO     Searching e-buddy...
+2016-02-23 15:51:39,399 INFO     DX e-buddy found!
+2016-02-23 15:51:39,962 INFO     Starting daemon...
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Let buddy runs via:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;# echo 03 | nc -q0 -u 127.0.0.1 8888
+# echo 04 | nc -q0 -u 127.0.0.1 8888
+.....
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>
