@@ -19,7 +19,7 @@ Github的pages遵循的命名原则非常简单，如果github在用户的账户
 `<username>.github.io`的仓库，那它会将这个仓库的`master`分支里的内容映射到
 `http://<username>.github.io`.      
 
-以下创建出了一个名字为`purplepalmdash.github.io`的github仓库, 并将hugo生成的`puglic/`目
+以下创建出了一个名字为`purplepalmdash.github.io`的github仓库, 并将hugo生成的`public/`目
 录下的所有内容(即整个静态网站)上传到了github。     
 
 ```
