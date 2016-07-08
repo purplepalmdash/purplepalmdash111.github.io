@@ -73,7 +73,10 @@ CONTAINER ID        IMAGE                   COMMAND                  CREATED    
 9575cd9dbbae        mathieuruellan/piwigo   "/bin/sh -c /entrypoi"   40 minutes ago      Up 40 minutes       0.0.0.0:8964->80/tcp   piwigo_piwigo_1
 31f7ecc60985        mysql:5.5               "docker-entrypoint.sh"   41 minutes ago      Up 41 minutes       3306/tcp               piwigo_mysqlpiwigo_1
 ```
+容器启动完毕后，就可以开始配置网站了。   
+
 ###配置piwigo
+
 打开浏览器，访问`http://localhost:8964`， 即可访问到piwigo的初始配置页面，如下图:    
 
 ![/images/2016_07_08_21_04_21_822x818.jpg](/images/2016_07_08_21_04_21_822x818.jpg)    
