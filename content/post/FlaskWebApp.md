@@ -206,5 +206,42 @@ if __name__ == '__main__':
 
 ![/images/2016_07_12_19_38_03_582x271.jpg](/images/2016_07_12_19_38_03_582x271.jpg)    
 
-### ToDO
-接下来可以做一下删除功能，或者文件的时间戳。    
+### 删除功能
+`youtube.py`添加一个函数和路由:     
+
+```
+# For deleting specified file
+@app.route('/delete/<filename>')
+def remove_file(filename):
+    filename_full = os.path.join(DEST_DIR, filename)
+    print filename_full
+    os.remove(filename_full)
+    return redirect(url_for('videos'))
+```
+模版文件更改:    
+
+```
+$ vim templates/videos.html 
+<!doctype html>
+<html>
+  <head>
+    <title>Video download info</title>
+  </head>
+  <body>
+    <div class="container">
+      <h1>All Downloadable Videos</h1>
+      {% for video in video_url %}
+      <a href="/static/videos/{{ video }}">{{ video }}</a>
+      <a href="/delete/{{ video }}"><img src="/static/img/fuck.png" alt="FuckYou"></a>
+      <a href="/delete/{{ video }}"> Delete this video</a>
+      <br />
+      <hr>
+      {% endfor %}
+...........
+```
+
+`fuck.png`是从网上下载的图片，更改完毕后，页面如下:      
+![/images/2016_07_12_20_27_39_748x382.jpg](/images/2016_07_12_20_27_39_748x382.jpg)    
+
+### ToDo
+添加权限，只有认证过后的用户才能使用删除功能。    
