@@ -304,7 +304,7 @@ Restart the iptables restart:
 
 ```
 # service iptables restart
-# servcie nfs restart
+# service nfs restart
 ```
 
 #### nginx
