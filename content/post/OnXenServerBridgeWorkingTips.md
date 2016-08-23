@@ -49,5 +49,14 @@ want the xenbr1 be the management port.
 Gain a administration shell:    
 
 ![/images/2016_08_18_19_34_41_498x510.jpg](/images/2016_08_18_19_34_41_498x510.jpg)     
-Configure the management port, but, the xenserver which runs in nested KVM is not
-stable. So I have to switch to Virtualbox.       
+Enter following command:    
+
+```
+# ifconfig eth1 netmask 255.255.0.0
+# route add default gw 192.168.0.xxx eth1
+```
+
+Now you can run ansible-playbook against the XenServer, but it will stuck.    
+
+Now manually configure eth1's netmask and its gateway. ansible-playbook could be run
+properly.    
