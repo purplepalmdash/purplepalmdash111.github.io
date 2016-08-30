@@ -937,3 +937,141 @@ packer build \
     -var 'aws_secret_key=bar' \
     template.json
 ```
+
+### 79. Minimum CloudStack Mem Usage
+To limit the memory usage.   
+
+```
+mysql -u cloud -p<password>
+UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='domainrouter';
+UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='elasticloadbalancervm';
+UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='secondarystoragevm';
+UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='internalloadbalancervm';
+UPDATE cloud.service_offering SET ram_size='128', speed='128' WHERE vm_type='consoleproxy';
+quit
+
+```
+
+### 80. Nethogs In Ubuntu14.04
+The default version of nethogs is too old, thus won't be used properly.    
+
+```
+# wget -c https://github.com/raboof/nethogs/archive/v0.8.5.tar.gz
+# tar xf v0.8.5.tar.gz 
+# cd ./nethogs-0.8.5/
+# sudo apt-get install libncurses5-dev libpcap-dev
+# make && sudo make install 
+```
+
+### 81. Vagrant Disk Usage
+Standard VS LVM:    
+
+```
+Standard: 
+    qemu: Filesystem      Size  Used Avail Use% Mounted on
+    qemu: udev            228M     0  228M   0% /dev
+    qemu: tmpfs            49M  1.8M   48M   4% /run
+    qemu: /dev/vda1       211G  1.1G  199G   1% /
+    qemu: tmpfs           245M     0  245M   0% /dev/shm
+    qemu: tmpfs           5.0M     0  5.0M   0% /run/lock
+    qemu: tmpfs           245M     0  245M   0% /sys/fs/cgroup
+    qemu: tmpfs            49M     0   49M   0% /run/user/0
+LVM:
+    qemu: Filesystem                   Size  Used Avail Use% Mounted on
+    qemu: udev                         227M     0  227M   0% /dev
+    qemu: tmpfs                         49M  1.9M   48M   4% /run
+    qemu: /dev/mapper/ubuntu--vg-root  3.0G  1.1G  1.8G  37% /
+    qemu: tmpfs                        245M     0  245M   0% /dev/shm
+    qemu: tmpfs                        5.0M     0  5.0M   0% /run/lock
+    qemu: tmpfs                        245M     0  245M   0% /sys/fs/cgroup
+    qemu: /dev/vda1                    472M   53M  395M  12% /boot
+    qemu: tmpfs                         49M     0   49M   0% /run/user/0
+```
+The standard will take very long time for shrinking the disk.     
+
+So we have to choose lvm, and use vagrant command for enlarge it during start up.   
+An example of Vagrantfile is listed as:   
+
+```
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+############### Definitions Comes Here #################
+OPENSTACK_HOSTNAME = "openstackallinone"
+
+
+############### Vagrant Configuration Here #############
+Vagrant.configure(2) do |config|
+
+  # vagrant issues #1673..fixes hang with configure_networks
+  config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
+  config.vm.provision :shell, path: "add_new_disk.sh"
+  config.ssh.username = 'root'
+  config.ssh.password = 'YourPasswordForRoot'
+  config.ssh.insert_key = 'true'
+  config.vm.provider :libvirt do |domain|
+    domain.nic_model_type = 'e1000'
+    domain.memory = 384
+    domain.nested = true
+    domain.cpu_mode = 'host-model'
+  end
+
+  # openstackallinone node.
+  # Add one networking, modify hostname, define memory, CPU cores.
+  config.vm.define :openstackallinone do |openstackallinone|
+    openstackallinone.vm.box = "Ubuntu1604OneLVM"
+    openstackallinone.vm.boot_timeout = '36000'
+    openstackallinone.vm.hostname = OPENSTACK_HOSTNAME
+    openstackallinone.vm.network :public_network, 
+	    :dev => "br0",
+	    :mode => "bridge",
+	    :type => "bridge",
+	    :ip => "192.168.10.33"
+    # Disable mounting of vagrant folder as it's not supported on xenserver
+    openstackallinone.vm.synced_folder ".", "/vagrant", disabled: true
+    openstackallinone.vm.provider :libvirt do |domain|
+      domain.memory = 10240
+      domain.cpus = 8
+      domain.storage :file, :size => '200G'
+      domain.storage_pool_name = 'XenStoragePool'
+      domain.nested = true
+      domain.cpu_mode = 'host-model'
+      domain.nic_model_type = 'virtio'
+      domain.disk_bus = 'virtio'
+      domain.volume_cache = 'writeback'
+    end
+  end
+
+end
+``` 
+Make sure your `add_new_disk.sh` avaiable:    
+
+```
+set -e
+set -x
+
+if [ -f /etc/disk_added_date ]
+then
+   echo "disk already added so exiting."
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/vdb <<EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/vdb1
+vgextend ubuntu-vg /dev/vdb1
+lvextend -l +100%FREE  /dev/ubuntu-vg/root
+resize2fs /dev/ubuntu-vg/root 
+
+date > /etc/disk_added_date
+``` 
