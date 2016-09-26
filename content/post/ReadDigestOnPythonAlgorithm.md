@@ -7,11 +7,14 @@ title = "ReadDigestOnPythonAlgorithm"
 +++
 ### 目标
 本节目标是:
+
+```
 * 理解算法分析的重要性
 * 能使用"Big-O"描述算法的执行时间
 * 理解常用的Python数组和字典的"Big-O"执行时间
 * 理解Python数据的实现是如何影响到算法分析的
 * 理解如何对简单的Python程序进行性能基准测试
+```
 
 ### 算法分析
 典型问题是: 当两个程序解决了同一个问题，然而看起来有差别的时候，如何得知一种方案确实优
@@ -78,6 +81,52 @@ def sumOfN2(n):
    return theSum,end-start
 
 for i in range(5):
-   print("Sum is %d required %10.7f seconds"%sumOfN(10000))
+   print("Sum is %d required %10.7f seconds"%sumOfN2(10000))
+```
+运行结果:    
 
 ```
+$ python2 bench.py
+Sum is 50005000 required  0.0014350 seconds
+Sum is 50005000 required  0.0013280 seconds
+Sum is 50005000 required  0.0012429 seconds
+Sum is 50005000 required  0.0012109 seconds
+Sum is 50005000 required  0.0012770 seconds
+```
+更改累加数的大小(10,10000,1000000?)，可以看出程序执行时间的变化。    
+
+
+优化过后的算法，可以使用公式: `sum = (n)*(n+1)/2`来快速求累加值，代码如下:     
+
+```
+import time
+
+def sumOfN3(n):
+   start = time.time()
+
+   theSum = 0
+   theSum = (n*(n+1))/2
+
+   end = time.time()
+
+   return theSum,end-start
+
+print("Sum is %d required %10.7f seconds"%sumOfN3(10))
+print("Sum is %d required %10.7f seconds"%sumOfN3(10000))
+print("Sum is %d required %10.7f seconds"%sumOfN3(100000))
+print("Sum is %d required %10.7f seconds"%sumOfN3(1000000))
+print("Sum is %d required %10.7f seconds"%sumOfN3(10000000))
+print("Sum is %d required %10.7f seconds"%sumOfN3(100000000))
+```
+运行结果为:    
+
+```
+$ python2 bench2.py
+Sum is 55 required  0.0000019 seconds
+Sum is 50005000 required  0.0000000 seconds
+Sum is 5000050000 required  0.0000010 seconds
+Sum is 500000500000 required  0.0000012 seconds
+Sum is 50000005000000 required  0.0000010 seconds
+Sum is 5000000050000000 required  0.0000000 seconds
+```
+
