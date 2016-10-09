@@ -20,6 +20,7 @@ title = "LeetCodeTips1"
 返回的数组应为[0, 1].
 ```
 
+#### C语言版
 用C语言我的解决方案如下:    
 
 ```c
@@ -76,4 +77,30 @@ int main(void)
 }
 
 ```
+
+心得1: malloc()/free()的调用需要在不同函数体中进行，因而可能存在内存泄漏的风险，使用
+valgrind来检测可以看到，有两次请求两次释放动作，并没有内存泄漏:    
+
+```
+$ valgrind -v --leak-check=full ./TwoSum
+......
+==3283== HEAP SUMMARY:
+==3283==     in use at exit: 0 bytes in 0 blocks
+==3283==   total heap usage: 2 allocs, 2 frees, 1,032 bytes allocated
+==3283== 
+==3283== All heap blocks were freed -- no leaks are possible
+==3283== 
+==3283== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==3283== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+```
+
+心得2: 算法复杂度为O(n^2)， 因为有嵌套的for()循环. 官方给出的有通过哈希来做的，在C语言
+中内建数据类型并不包括map，因而在后面用python来实现。   
+
+心得3: 对函数的返回值需要检测，如free()掉一个NULL的地址。StackOverFlow上关于free(NULL)
+的讨论如下：    
+[http://stackoverflow.com/questions/1938735/does-freeptr-where-ptr-is-null-corrupt-memory](http://stackoverflow.com/questions/1938735/does-freeptr-where-ptr-is-null-corrupt-memory)    
+
+看起来也不会有什么严重的后果。   
+
 
