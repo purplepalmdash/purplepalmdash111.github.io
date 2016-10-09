@@ -93,128 +93,50 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/30/rtc-on-stm32/">RTC on STM32</a>
+        <a href="http://purplepalmdash.github.io/2013/12/13/ssh-with-no-password-for-github/">ssh with no password for github</a>
       </h1>
-      <span class="post-date">Nov 30, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/11/30/rtc-on-stm32/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 13, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/12/13/ssh-with-no-password-for-github/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
         
       </span>
       
-      <p>RTC(Real Time Clock) 在STM32中可以理解为内置的一个部件，和传说中的DS1302是有差别的。尽管官方发布的程序可以将RTC搞成一个万年历。<br />
-###配置RTC
-RTC需要顺带使用后备寄存器， 因为RTC是一个简单的秒中断定时器，关于年日月分秒的信息需要在掉电保存时依然放在某个地方，这个地方就是STM32的后备寄存器。配置好以后，尽管系统关电，依靠板子上的后备电池，依然可以保存32768的晶振和后备寄存器的数据。<br />
-配置RTC的方法：</p>
+      <p>###Github Account Setting
+Steps for settingup in your github accounting:<br />
+Go to your Settings.<br />
+Click &ldquo;SSH Keys&rdquo; in the left sidebar<br />
+Click &ldquo;Add SSH key&rdquo;<br />
+Paste your key into the &ldquo;Key&rdquo; field<br />
+Click &ldquo;Add key&rdquo;<br />
+Confirm the action by entering your GitHub password</p>
 
-<pre><code>	#include &quot;stm32f10x_bkp.h&quot;
-	#include &quot;stm32f10x_pwr.h&quot;
-	#include &quot;stm32f10x_rtc.h&quot;
-	//使能一些外设
-		RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
-		PWR_BackupAccessCmd(ENABLE);
+<p>The public key could be got via:</p>
 
-</code></pre>
-
-<p>###判断RTC是否被配置过
-下面的函数被用于判断RTC是否被配置过：</p>
-
-<pre><code>/**************************************************************
-** 函数名:TestRtc
-** 功能:测试RTC用
-** 注意事项:用于显示RTC是否已经设置过.
-***************************************************************/
-void TestRtc(void)
-{
-	if(RTC_Blank)
-	{
-		USART1_Puts(&quot;The Time is not set\r\n&quot;);
-	}
-	else
-	{
-		USART1_Puts(&quot;Time Setted.\r\n&quot;);
-	}
-}
+<pre><code>	$ xclip -sel clip &lt; ~/.ssh/id_rsa.pub
 
 </code></pre>
 
-<p>这个函数判断RTC_Blank全局变量的值，而全局变量的值则在配置RTC的时候被设定。</p>
+<p>Then see if you were authorized by github:</p>
 
-<pre><code>void RTC_Configuration(void)
-{
-  //......
-	if(BKP_ReadBackupRegister(BKP_DR1) != 0xA5A5)
-		{
-	//......
-			RTC_Blank=1;	//这个标志代表RTC是没有预设的(或者说是没有上纽扣电池)
-	
-		}
+<pre><code>	[Trusty@XXXyyy debian_octopress]$ ssh -T git@github.com
+	Hi geogueo! You've successfully authenticated, but GitHub does not provide shell access.
 
 </code></pre>
 
-<p>如果RTC后备寄存器的值为设定为0xA5A5，则代表RTC已经被设置过。否则，我们认为它处于未被设置过的状态。<br />
-###使用RTC的秒中断
-在NVIC中，需要有下列的定义，以标识RTC的秒中断。</p>
+<p>###Setting for repository
+Add the remote url for local repository</p>
 
-<pre><code>	/* RTC */
-	NVIC_InitStructure.NVIC_IRQChannel = RTC_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_Init(&amp;NVIC_InitStructure);
+<pre><code>	[Trusty@XXXyyy debian_octopress]$ git remote set-url origin git@github.com:geogueo/debian_octopress.git
 
 </code></pre>
 
-<p>对应的中断响应例程则定义在stm32f10x_it.c中：</p>
+<p>Now you can use the following command for swiftly commit your code</p>
 
-<pre><code>/*******************************************************************************
-* Function Name  : RTC_IRQHandler    RTC中断
-* Description    : 
-* Input          : None
-* Output         : None
-* Return         : None
-*******************************************************************************/
-extern volatile bool Sec;	//1S标志
-void RTC_IRQHandler(void)
-{
-	if(RTC_GetITStatus(RTC_IT_SEC) != RESET) //RTC发生了秒中断（也有可能是溢出或者闹钟中断)
-	{
-		RTC_ClearITPendingBit(RTC_IT_SEC);
-		Sec=TRUE;
-		
-		//以免RTC计数溢出,这里限制了RTC计数值的大小.0x0001517f实际就是一天的秒数
-		if(RTC_GetCounter() &gt;= 0x0001517f)	
-		{
-			RTC_SetCounter(0x0);
-		}
-	}
-}
-
-</code></pre>
-
-<p>而在main.c中，则根据Sec的值来闪烁LED1灯。</p>
-
-<pre><code>	for(;;)
-	{
-		if(Sec == 1)
-		{
-			Sec = 0;
-			GPIOA-&gt;ODR^=GPIO_Pin_8;
-		}
-	}
-
-</code></pre>
-
-<p>Test:</p>
-
-<pre><code>	for(;;)
-	{
-		if(Sec == 1)
-		{
-			Sec = 0;
-			GPIOA-&gt;ODR^=GPIO_Pin_8;
-		}
-	}
+<pre><code>	[Trusty@XXXyyy debian_octopress]$ unset SSH_ASKPASS
+	[Trusty@XXXyyy debian_octopress]$ git push origin master
+	Warning: Permanently added the RSA host key for IP address '192.30.252.129' to the list of known hosts.
+	Everything up-to-date
 
 </code></pre>
 
@@ -223,409 +145,397 @@ void RTC_IRQHandler(void)
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/30/stm32zhong-de-systick/">STM32中的Systick</a>
+        <a href="http://purplepalmdash.github.io/2013/12/12/kali-linux-in-qemu/">KALI Linux in Qemu</a>
       </h1>
-      <span class="post-date">Nov 30, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/11/30/stm32zhong-de-systick/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 12, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/12/12/kali-linux-in-qemu/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/qemu">Qemu</a>
         
       </span>
       
-      <p>Cortx-M3特有的SysTick可以很方便的实现定时。系统始终的频率和开启系统时钟中断主要在RCC.c里进行设置：</p>
+      <p>Download the iso from kali website<a href="http://www.kali.org/downloads/">http://www.kali.org/downloads/</a>:</p>
 
-<pre><code>	//SYSTICK分频--1ms的系统时钟中断
-	if (SysTick_Config(SystemCoreClock / 1000))
-  	{
-  	  	/* Capture error */
-    	while (1);
-  	}
-// The definition of the SysTick_Config:
-
-/**
- * @brief  Initialize and start the SysTick counter and its interrupt.
- *
- * @param   ticks   number of ticks between two interrupts
- * @return  1 = failed, 0 = successful
- *
- * Initialise the system tick timer and its interrupt and start the
- * system tick timer / counter in free running mode to generate 
- * periodical interrupts.
- */
-
-/*
-  *      - SystemCoreClock variable: Contains the core clock (HCLK), it can be used
-  *                                  by the user application to setup the SysTick 
-  *                                  timer or configure other parameters.
-*/
+<pre><code>	$ wget http://cdimage.kali.org/kali-images/kali-1.0.5/kali-linux-1.0.5-i386.iso
 
 </code></pre>
 
-<p>　　系统时钟SYSCLK，它是供STM32中绝大部分部件工作的时钟源。系统时钟可选择为PLL输出、HSI或者HSE。系统时钟最大频率为72MHz，它通过AHB分频器分频后送给各模块使用，AHB分频器可选择1、2、4、8、16、64、128、256、512分频。其中AHB分频器输出的时钟送给5大模块使用：<br />
-　　①、送给AHB总线、内核、内存和DMA使用的HCLK时钟。<br />
-　　②、通过8分频后送给Cortex的系统定时器时钟。<br />
-　　③、直接送给Cortex的空闲运行时钟FCLK。<br />
-　　④、送给APB1分频器。APB1分频器可选择1、2、4、8、16分频，其输出一路供APB1外设使用(PCLK1，最大频率36MHz)，另一路送给定时器(Timer)2、3、4倍频器使用。该倍频器可选择1或者2倍频，时钟输出供定时器2、3、4使用。<br />
-　　⑤、送给APB2分频器。APB2分频器可选择1、2、4、8、16分频，其输出一路供APB2外设使用(PCLK2，最大频率72MHz)，另一路送给定时器(Timer)1倍频器使用。该倍频器可选择1或者2倍频，时钟输出供定时器1使用。另外，APB2分频器还有一路输出供分频器使用，分频后送给ADC模块使用。ADC分频器可选择为2、4、6、8分频。<br />
-Cortex-M3允许为SysTick提供2个时钟源以供选择，第一个是内核的“自由运行时钟”FCLK，“自由”表现在它不是来自系统时钟HCLK，因此在系统时钟停止时，FCLK也能继续运行。第2个是一个外部的参考时钟，但是使用外部时钟时，因为它在内部是通过FCLK来采样的，因此其周期必须至少是FCLK的两倍（采样定理）。</p>
+<p>Create qemu img file:</p>
 
-<pre><code>/*******************************************************************************
-* Function Name  : SysTickHandler
-* Description    :系统时钟，一般调教到1MS中断一次
-*******************************************************************************/
-
-void SysTick_Handler(void)
-{
-	if(Timer1)
-		Timer1--;
-}
+<pre><code>	$ qemu-img create -f qcow2 kali.qcow2 30G
+	Formatting 'kali.qcow2', fmt=qcow2 size=32212254720 encryption=off cluster_size=65536 lazy_refcounts=off 
+Run installation. Here we use the run-qemu script which has been generated before under the same directory:
+	[Trusty@DashArch kali]$ ./run-qemu -hda ./kali.qcow2 -boot d -cdrom /media/nfs/iso/kali-linux-1.0.5-i386.iso  -m 1024 -enable-kvm -usb
 
 </code></pre>
 
-<p>Timer1 为全局变量,我们将设置这个全局变量，以决定其定时期限。</p>
+<p>Choose &ldquo;Graphic Install&rdquo; because currently we are not familiar with this brand new distribution.<br />
+Command for startup the sytem is:</p>
 
-<pre><code>/********************************************
-**函数名:SysTickDelay
-**功能:使用系统时钟的硬延迟
-**注意事项:一般地,不要在中断中调用本函数,否则会存在重入问题.另外如果屏蔽了全局中断,则不要使用此函数
-********************************************/
-volatile u16 Timer1;
-void SysTickDelay(u16 dly_ms)
-{
-	Timer1=dly_ms;
-	while(Timer1);
-}
+<pre><code>	[Trusty@DashArch kali]$ ./run-qemu -hda ./kali.qcow2 -boot d -cdrom /media/nfs/iso/kali-linux-1.0.5-i386.iso  -m 1024 -enable-kvm -usb
 
 </code></pre>
 
-<p>而设置这个全局变量则是在main.c的loop函数中设置的。</p>
-
-<pre><code>	for(;;)
-	{
-		SysTickDelay(500);
-		GPIOA-&gt;ODR^=GPIO_Pin_8;
-	}
-
-</code></pre>
-
-<p>如果把500改成其它的值，则很方便可以实现不同大小的定时器。</p>
+<p>After installation finished, run &ldquo;sudo apt-get update&rdquo; and &ldquo;sudo apt-get upgrade&rdquo; to update your system to the newest version.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/30/stmshi-yong-ku-han-shu-du-xie-flash/">STM使用库函数读写Flash</a>
+        <a href="http://purplepalmdash.github.io/2013/12/12/ntp-in-lan-based-on-openwrt/">NTP in LAN based on OPENWRT</a>
       </h1>
-      <span class="post-date">Nov 30, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/11/30/stmshi-yong-ku-han-shu-du-xie-flash/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 12, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/12/12/ntp-in-lan-based-on-openwrt/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/openwrt">openwrt</a>
         
       </span>
       
-      <p>代码非常之简单：</p>
+      <p>###Package Installation
+Disable the system default ntp server and install ntpd, this ntpd is the real ntpd package, not busybox-ntpd</p>
 
-<pre><code>#define	FLASH_ADR	0x08008000		//要写入数据的地址
-#define	FLASH_DATA	0x5a5a5a5a		//要写入的数据
-
-
-int main(void)
-{
-	u32 tmp;
-	ChipHalInit();			//片内硬件初始化
-	ChipOutHalInit();		//片外硬件初始化
-
-	//判断此FLASH是否为空白
-	tmp=*(vu32*)(FLASH_ADR);
-	if(tmp==0xffffffff)
-	{
-		FLASH_Unlock();
-		FLASH_ProgramWord(FLASH_ADR,FLASH_DATA);
-		FLASH_Lock();
-		USART1_Puts(&quot;The destination is empty, Data has been written in!\r\n&quot;);
-	}
-	else if(tmp==FLASH_DATA)
-	{
-		USART1_Puts(&quot;The destination data is the same as certification data!\r\n&quot;);
-	}
-	else
-	{
-		USART1_Puts(&quot;The destination data is not equal to certification data, may caused via written error, or the destination is not empty!\r\n&quot;);
-		FLASH_Unlock();
-		FLASH_ErasePage(FLASH_ADR);
-		FLASH_Lock();
-		USART1_Puts(&quot;Erased the written destination!\r\n&quot;);
-	}
+<pre><code>	opkg update
+	opkg install ntpd
+	/etc/init.d/sysntpd disable
+	/etc/init.d/ntpd enable
+	/etc/init.d/ntpd start
+	netstat -l | grep ntp
 
 </code></pre>
 
-<p>运行结果为：</p>
+<p>The client installation, on debian:</p>
 
-<pre><code>	The destination is empty, Data has been written in!
-	The destination data is the same as certification data!
-	The destination data is the same as certification data!
-	The destination data is the same as certification data!
-	The destination data is the same as certification data!
+<pre><code>	apt-get install ntp
+
 </code></pre>
 
-<p>原理在于，直接读取到目的地址的值，与预设的值相比较。 要注意如何写入。先unlock，写入字后，lock住。</p>
+<p>###Server Configuration
+Comment all of the possible reference server, use local time source.</p>
+
+<pre><code>	root@OpenWrt:~# cat /etc/ntp.conf 
+	# use a random selection of 4 public stratum 2 servers
+	# see http://twiki.ntp.org/bin/view/Servers/NTPPoolServers
+	
+	restrict default nomodify notrap noquery
+	#restrict default noquery
+	
+	#restrict 127.0.0.1
+	restrict 10.0.0.0 mask 255.255.255.0 nomodify notrap
+	
+	server 127.127.1.0	# LOCAL CLOCK
+	fudge 127.127.1.0 stratum 0
+	
+	driftfile  /var/lib/ntp/ntp.drift
+
+</code></pre>
+
+<p>Then restart the service. Your ntp server is available.
+###Client Configuration
+Enable saned to enable ntp client on beaglebone:</p>
+
+<pre><code>	# error message
+	[....] Starting NTP server: ntpdsaned disabled; edit /etc/default/saned
+	vim /etc/default/saned 
+	# Set to yes to start saned
+	RUN=yes
+
+</code></pre>
+
+<p>Then we have to enable the ntp client&rsquo;s configuration:<br />
+For Client manually synchornize</p>
+
+<pre><code>	root@arm:~# ntpdate 10.0.0.1
+	 1 Jan 05:18:55 ntpdate[2243]: the NTP socket is in use, exiting
+	root@arm:~# ps -ef | grep ntp
+	ntp       1805     1  0 04:30 ?        00:00:00 /usr/sbin/ntpd -p /var/run/ntpd.pid -g -u 107:112
+	root      2245  2127  0 05:19 pts/0    00:00:00 grep ntp
+	root@arm:~# kill 1805
+	root@arm:~# date
+	Sat Jan  1 05:19:05 UTC 2000
+	root@arm:~# ntpdate 10.0.0.1
+	12 Dec 07:38:44 ntpdate[2247]: step time server 10.0.0.1 offset 440129967.397166 sec
+	root@arm:~# date
+	Thu Dec 12 07:38:46 UTC 2013
+
+</code></pre>
+
+<p>The client configuration for ntp, remove all of the possible server, use LAN server:</p>
+
+<pre><code>	server 10.0.0.1
+
+</code></pre>
+
+<p>tzselect will set the timezone of the equipment. The result is:</p>
+
+<pre><code>	TZ='Asia/Shanghai'; export TZ
+
+</code></pre>
+
+<p>Add it into the ~/.profile, then your time will be adjusted to Shanghai Time.<br />
+###Update time via http
+Since I located in UMT+8, I will use following commands for sync the time</p>
+
+<pre><code>	date $(wget -O - &quot;http://www.timeapi.org/utc/in+eight+hours&quot; 2&gt;/dev/null | sed s/[-T:+]/\ /g | awk '{print $2,$3,$4,$5,&quot;.&quot;,$6}' | tr -d &quot; &quot; )
+
+</code></pre>
+
+<p>Then add it to crontab</p>
+
+<pre><code>	root@OpenWrt:~# cat /bin/time.sh 
+	#!/bin/sh
+	#echo $http_proxy
+	#echo $https_proxy
+	date $(wget -O - &quot;http://www.timeapi.org/utc/in+eight+hours&quot; 2&gt;/dev/null | sed s/[-T:+]/\ /g | awk '{print $2,$3,$4,$5,&quot;.&quot;,$6}' | tr -d &quot; &quot; )
+
+</code></pre>
+
+<p>The crontab -e should like following:</p>
+
+<pre><code>	* */3 * * * /bin/time.sh
+
+</code></pre>
+
+<p>This means every 3 hours the script will be called for synchronizing the time.<br />
+Now we can enjoy the precise time from the internet and make it availale for the service on LAN.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/29/stm32shang-de-ding-shi-qi/">STM32上的定时器</a>
+        <a href="http://purplepalmdash.github.io/2013/12/12/western-digits-green-disk-on-ubuntu/">Western Digital Green Disk on Ubuntu</a>
       </h1>
-      <span class="post-date">Nov 29, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/11/29/stm32shang-de-ding-shi-qi/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 12, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/12/12/western-digits-green-disk-on-ubuntu/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
         
       </span>
       
-      <p>使用定时器的好处是，等待某个时隙的同时还可以干别的事，而定时器的时间一到，得到一个中断后对应执行中断函数中的服务例程而已。STM32的定时器非常之复杂而强大，配置和使用都要花很大精力。<br />
-打开TIM2线的程序如下：</p>
+      <p>The WD20EARS (and other sizes include 1.0 and 1.5 TB driver in the series) will attempt to park the read heads once every 8 seconds FOR THE LIFE OF THE HDD which is just horrible! To see if you are affected use the smartctl command (part of smartmontools). If the last column changes rapidly, this section applies to your drive.</p>
 
-<pre><code>void TIM_Configuration(void)
-{
-	//......
-
-	/* TIM2 clock enable */
-  	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-
-	//......
+<pre><code>	# smartctl /dev/sdb -a | grep Load_Cycle
+	193 Load_Cycle_Count        0x0032   001   001   000    Old_age   Always       -       597115	
 
 </code></pre>
 
-<p>有关定时器的设置如下：</p>
+<p>We have to disable this feature. Add lines to /etc/rc.local</p>
 
-<pre><code>	/* 基础设置*/
-	TIM_TimeBaseStructure.TIM_Period = 8000;			//计数值   
-	TIM_TimeBaseStructure.TIM_Prescaler = 7200-1;    	//预分频,此值+1为分频的除数
-	TIM_TimeBaseStructure.TIM_ClockDivision = 0x0;  	//
-	TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up; 	//向上计数
+<pre><code>	hdparam -S 242 /dev/sda
+	exit 0
 
 </code></pre>
 
-<p>这里设置的是定时器溢出控制,分频值的计算就是上述代码中提到的预分频的设置。 TIM2属于低速总线，这条总线最高只能达到36M的速度，芯片内部还有一个X2的倍频器，用于将低速的32M倍频成72M， 库中已经默认有实现。所以我们这里使用的TIM2其速度依然是72M， 如果预设分频为7200的话，分频后的结果就是72M/7200=10K(<sup>72000000</sup>&frasl;<sub>7200</sub>). 我们可以把这个值变大或变小，以获得更慢或更快的分频速度。<br />
-计数值设置的是8000，计数器向上计数到8000的时候会溢出。因而溢出的时间是8000/10K=0.8s 比较值的设置如下：</p>
+<p>The effect for upper comand is listed as:</p>
 
-<pre><code>	u16 CCR1_Val = 4000;
-	u16 CCR2_Val = 2000;
-	u16 CCR3_Val = 1000;
-	u16 CCR4_Val = 500; 
-	/* 比较通道1*/
-	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Inactive;      		//输出比较非主动模式
-	TIM_OCInitStructure.TIM_Pulse = CCR1_Val;  
-	TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;		//极性为正
-	  
-	TIM_OC1Init(TIM2, &amp;TIM_OCInitStructure);
-	TIM_OC1PreloadConfig(TIM2, TIM_OCPreload_Disable);				//禁止OC1重装载,其实可以省掉这句,因为默认是4路都不重装的.
+<pre><code>	# hdparm -S 242 /dev/sda
+	/dev/sda:
+	 setting standby to 242 (1 hours)
 
 </code></pre>
 
-<p>则得到的四个比较值的大小分别为: <sup>4000</sup>&frasl;<sub>10000</sub>=0.4s, <sup>2000</sup>&frasl;<sub>10000</sub>=0.2s, <sup>1000</sup>&frasl;<sub>10000</sub>=0.1s, <sup>500</sup>&frasl;<sub>10000</sub>=0.05</p>
-
-<p>不同的分频值设置，如果把Prescaler设置为14400-1,则得到的分频结果是72000000/14400=5K，对应的时间也随着调整。<br />
-简单来说，我们需要得到分频结果，还有就是预设的几个值与其结果作运算得出的真正时间。</p>
-
-<p>Timer到达后会产生中断，通道的捕获中断发生时，对应会执行相应的动作。这些中断处理函数是在&rdquo;stm32f10x_it.c&rdquo;中实现的：</p>
-
-<pre><code>/*******************************************************************************
-* Function Name  : TIM2_IRQHandler TIM2中断
-* Description    : This function handles TIM2 global interrupt request.
-* Input          : None
-* Output         : None
-* Return         : None
-*******************************************************************************/
-
-void TIM2_IRQHandler(void)
-{
-	if (TIM_GetITStatus(TIM2, TIM_IT_CC1) != RESET)
-	{
-		/*必须清空标志位*/
-		TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
-	
-		/*点亮LED5*/
-		LED5_ON;
-		//LED1直接操作寄存器方式的闪烁
-		GPIOA-&gt;ODR^=GPIO_Pin_8;
-	
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_CC2) != RESET)
-	{
-		TIM_ClearITPendingBit(TIM2, TIM_IT_CC2);
-	
-		/*点亮LED6*/
-		LED6_ON;
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_CC3) != RESET)
-	{
-		TIM_ClearITPendingBit(TIM2, TIM_IT_CC3);
-		
-		/* 点亮LED7*/
-		LED7_ON;
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_CC4) != RESET)
-	{
-	  	TIM_ClearITPendingBit(TIM2, TIM_IT_CC4);
-	    
-	  	/*点亮LED8*/
-		LED8_ON;
-	
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_Update) != RESET)
-	{
-		TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
-		/*熄灭所有LED*/
-		LED5_OFF;
-		LED6_OFF;
-		LED7_OFF;
-		LED8_OFF;
-	}
-}
-
-</code></pre>
-
-<p>需要注意的是， GPIOA-&gt;ODR^=GPIO_Pin_8, 直接操作了寄存器，用于将LED1反向输出。GPIO-&gt;ODR就是GPIOA的输出寄存器，而LED1用的就是GPIOA的8脚， 在这个中断函数中，如果TIM_IT_CC1的值达到了，将点亮LED5和控制LED1的闪烁。<br />
-在IO速度要求很高的场合，建议采用IO直接操作寄存器的方法，比用库函数要快得多。</p>
+<p>By default the disk will standby when 1 hours reached, that will avoid our disk from broken.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-1/">关于STM32板上的12864液晶(2)</a>
+        <a href="http://purplepalmdash.github.io/2013/12/11/bbblackbian-yi-jiao-ben-jie-xi/">BBBlack编译脚本解析</a>
       </h1>
-      <span class="post-date">Nov 28, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-1/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 11, 2013  &middot; <a href="http://purplepalmdash.github.io/2013/12/11/bbblackbian-yi-jiao-ben-jie-xi/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a>
         
       </span>
       
-      <p>###有关电路
-上一章讲的是12864的基础知识。这一章里来看12864和stm32板的连接和驱动的问题。</p>
+      <p>###Preparation
+Download the &ldquo;linux-dev&rdquo; repository from github:</p>
 
-<p>有关12864小LCD的连接，在PDF中我们可以找到如下的表项:</p>
-
-<table>
-<thead>
-<tr>
-<th>功能模块</th>
-<th>占用模块</th>
-<th>备注</th>
-</tr>
-</thead>
-
-<tbody>
-<tr>
-<td>12864小LCD</td>
-<td>PC4,PB2,PB11,PB13,PB15</td>
-<td>PC4:A0,同时也是 CH375 和 TFT 的 A0;<br>PB2:BOOT1,LCD 的 CS 脚;<br>PB11:28J60 和大小 LCD 的复位脚</td>
-</tr>
-</tbody>
-</table>
-
-<p>再结合电路图：<br />
-<img src="/images/stm32spi.jpg" alt="stm32spi.jpg" /></p>
-
-<p>关于GPIO口的设置，我们可以看到有这样的定义：</p>
-
-<pre><code>	typedef enum
-	{ GPIO_Mode_AIN = 0x0,
-	  GPIO_Mode_IN_FLOATING = 0x04,
-	  GPIO_Mode_IPD = 0x28,
-	  GPIO_Mode_IPU = 0x48,
-	  GPIO_Mode_Out_OD = 0x14,
-	  GPIO_Mode_Out_PP = 0x10,
-	  GPIO_Mode_AF_OD = 0x1C,
-	  GPIO_Mode_AF_PP = 0x18
-	}GPIOMode_TypeDef;
+<pre><code>	git clone git://github.com/RobertCNelson/linux-dev.git
 
 </code></pre>
 
-<p>而在stm32的Datasheet中有如下的配置模式：<br />
-<img src="/images/stmgpiomode.jpg" alt="stmgpiomode.jpg" /></p>
+<p>View the downloaded packages:</p>
 
-<p>最低的8个bit和表中是一一对应的，其中通用输出/复用功能输出的mode1/mode0的值为00.<br />
-因为PB15是MOSI2口， PB13是SCK2口，所以这两个管脚需要被设置为AF模式的。AF代表复用功能。PP代表push-pull.</p>
-
-<pre><code>	/* PB15-MOSI2,PB13-SCK2*/
-	/* Why PB14 should be enabled? */
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13 |GPIO_Pin_14 | GPIO_Pin_15;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-	GPIO_Init(GPIOB, &amp;GPIO_InitStructure);
+<pre><code>	[Trusty@XXXyyy mykernel]$ du -hs linux-dev/
+	19M	linux-dev/
+	[Trusty@XXXyyy linux-dev]$ ls
+	build_deb.sh  build_kernel.sh  build_mainline.sh  LICENSE  patches  patch.sh  README  repo_maintenance  scripts  system.sh.sample  tools  version.sh
 
 </code></pre>
 
-<p>PB11和PB2属于output口，所以直接设置为out口即可。<br />
-有关SPI2口的配置， 在STM中的代码如下：</p>
+<p>Switch to the 3.12 Branch:</p>
 
-<pre><code>	/* SPI2 configuration */
-	    SPI_Cmd(SPI2, DISABLE); 												//必须先禁能,才能改变MODE
-	SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;		//两线全双工
-	SPI_InitStructure.SPI_Mode = SPI_Mode_Master;							//主
-	SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;						//8位
-	SPI_InitStructure.SPI_CPOL = SPI_CPOL_High;								//CPOL=1 时钟悬空高
-	SPI_InitStructure.SPI_CPHA = SPI_CPHA_2Edge;							//CPHA=1 数据捕获第2个
-	SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;								//软件NSS
-	SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2;		//2分频
-	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;						//高位在前
-	SPI_InitStructure.SPI_CRCPolynomial = 7;								//CRC7
+<pre><code>	git checkout origin/am33x-v3.12 -b tmp
+	[Trusty@XXXyyy linux-dev]$ ls
+	build_deb.sh  build_kernel.sh  LICENSE  patches  patch.sh  README  repo_maintenance  scripts  system.sh.sample  tools  version.sh
+
+</code></pre>
+
+<p>###Walk by lines
+Since we call ./build_kernel.sh will initialize the building, we will first see what&rsquo;s in this file<br />
+a. Create the deploy directory, Line 23-Line 25</p>
+
+<pre><code>	DIR=$PWD
+	mkdir -p ${DIR}/deploy/
+
+</code></pre>
+
+<p>Then the code goes to line 189, since all of the code between 25-189 are functions.</p>
+
+<pre><code>	/bin/sh -e ${DIR}/tools/host_det.sh || { exit 1 ; }
+
+</code></pre>
+
+<p>This line will call tools/host_det.sh to detect the host, the result is listed:</p>
+
+<pre><code>	[Trusty@XXXyyy linux-dev]$ tools/host_det.sh 
+	which: no lsb_release in (/home/Trusty/.rvm/gems/ruby-1.9.3-p448/bin:/home/Trusty/.rvm/gems/ruby-1.9.3-p448@global/bin:/home/Trusty/.rvm/rubies/ruby-1.9.3-p448/bin:/home/Trusty/.rvm/bin:/media/y/embedded/cortex/gcc-arm-none-eabi-4_7-2013q3/bin:/home/Trusty/perl5/bin:/opt/cross/bin:/media/y/u-boot/4.3.2/bin/:/usr/local/sbin:/usr/local/bin:/usr/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/tools:/usr/bin/site_perl:/usr/bin/core_perl)
+	+ Detected build host []
+	+ host: [x86_64]
+	+ git HEAD commit: [858e7dbdedcb5d85d0e3b84323c5a6bfe6bd3b5e]
+In host_det.sh, the code lines between 6~381 are all functions, till line 381. 
+	if [ $(which lsb_release) ] ; then
+	         info &quot;Detected build host [`lsb_release -sd`]&quot;
+Following is the lsb_relase result, lsb_release is the linux standard base base package, which will provide enough infomations of the installed linux system. 
+	$ lsb_release
+	LSB Version:	:core-3.1-ia32:core-3.1-noarch:graphics-3.1-ia32:graphics-3.1-noarch
+	[Tomcat@MisteryPlace:  [] /opt/home/Tomcat]                                                                                        $ lsb_release -sd
+	&quot;Scientific Linux SL release 5.5 (Boron)&quot;
+	[Tomcat@MisteryPlace:  [] /opt/home/Tomcat]                                                                                        $ uname -m
+	i686
+
+</code></pre>
+
+<p>Testing the host and the git head commit</p>
+
+<pre><code>	info &quot;host: [`uname -m`]&quot;
+	info &quot;git HEAD commit: [`git rev-parse HEAD`]&quot;
+
+</code></pre>
+
+<p>This script is for testing the known hosts which runs redhat/debian/suse, and verify if you have installed all of the package need to support kernel build.</p>
+
+<p>Copy the system.sh.sample to current directory</p>
+
+<pre><code>if [ ! -f ${DIR}/system.sh ] ; then
+	cp ${DIR}/system.sh.sample ${DIR}/system.sh
+
+</code></pre>
+
+<p>Next lines from 199 to 218 is to detect if the branches.list and branch.expired exists, if exists then some testing will be done.</p>
+
+<pre><code>	if [ -f &quot;${DIR}/branches.list&quot; ] ; then
+		echo &quot;-----------------------------&quot;
+		echo &quot;Please checkout one of the active branches:&quot;
+		echo &quot;-----------------------------&quot;
+		cat ${DIR}/branches.list | grep -v INACTIVE
+		echo &quot;-----------------------------&quot;
+		exit
+	fi
+
+</code></pre>
+
+<p>Then go to line 220 and 221, unset 2 system variable</p>
+
+<pre><code>	unset CC
+	unset LINUX_GIT
+
+</code></pre>
+
+<p>Then run system.sh</p>
+
+<pre><code>	. ${DIR}/system.sh
+
+</code></pre>
+
+<p>Then we will prepare the gcc.</p>
+
+<pre><code>	/bin/sh -e &quot;${DIR}/scripts/gcc.sh&quot; || { exit 1 ; }
+Switching to scripts/gcc.sh, the following lines will set the system variables, which will be used to choose the suitable linaro toolchain. 
+	. ${DIR}/system.sh
 	
-	    SPI_Init(SPI2, &amp;SPI_InitStructure);
-	SPI_Cmd(SPI2, ENABLE);
+	#For:
+	#linaro_toolchain
+	. ${DIR}/version.sh
+Test the CC existence, if not then start building:
+	if [ &quot;x${CC}&quot; = &quot;x&quot; ] &amp;&amp; [ &quot;x${ARCH}&quot; != &quot;xarmv7l&quot; ] ; then
+		gcc_linaro_toolchain
+	fi
 
 </code></pre>
 
-<p>###有关SPI总线
-SPI接口是Motorola 首先提出的全双工三线同步串行外围接口，采用主从模式（Master Slave）架构；支持多slave模式应用，一般仅支持单Master。时钟由Master控制，在时钟移位脉冲下，数据按位传输，高位在前，低位在后（MSB first）；SPI接口有2根单向数据线，为全双工通信，目前应用中的数据速率可达几Mbps的水平。<br />
-stm32中关于SPI传送字节的函数编写</p>
+<p>The code are funny, because echo x${CC} is actually x , so the gcc_linaro_toolchain will surely be called.</p>
 
-<pre><code>	static u8 SPIByte(u8 byte)
-	{
-		/*等待发送寄存器空*/
-		while((SPI2-&gt;SR &amp; SPI_I2S_FLAG_TXE)==RESET);
-	    /*发送一个字节*/
-		SPI2-&gt;DR = byte;
-		/* 等待接收寄存器有效*/
-		while((SPI2-&gt;SR &amp; SPI_I2S_FLAG_RXNE)==RESET);
-		return(SPI2-&gt;DR);
-	}
+<pre><code>	$ echo ${linaro_toolchain}
+	cortex_gcc_4_8
 
 </code></pre>
 
-<p>命令和数据是调用这个函数写入的，我们需要注意的是时序，在写入总线时需要先拉低/高A0线</p>
+<p>The variable {linaro_toolchain} is set via . version.sh, then the corresponding code lines will be called</p>
 
-<pre><code>	//写命令
-	void LcdCmd(u8 cmd)
-	{
-		CSLCDS_L;
-		A0_L;
-		//__nop();
-		;
-		SPIByte(cmd);
-		//__nop();
-		;
-		CSLCDS_H;
-	}
+<pre><code>		cortex_gcc_4_8)
+			#https://launchpad.net/linaro-toolchain-binaries/+download
+			#https://launchpad.net/linaro-toolchain-binaries/trunk/2013.10/+download/gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux.tar.xz
 	
-	//写数据
-	void LcdDat(u8 dat)
-	{
-		CSLCDS_L;
-		A0_H;
-		//__nop();
-		;
-		SPIByte(dat);
-		//__nop();
-		;
-		CSLCDS_H;
-	}
+			gcc_version=&quot;4.8&quot;
+			release=&quot;2013.10&quot;
+			toolchain_name=&quot;gcc-linaro-arm-linux-gnueabihf&quot;
+			site=&quot;https://launchpad.net/linaro-toolchain-binaries&quot;
+			version=&quot;trunk/${release}&quot;
+			directory=&quot;${toolchain_name}-${gcc_version}-${release}_linux&quot;
+			filename=&quot;${directory}.tar.xz&quot;
+			datestamp=&quot;${release}-${toolchain_name}&quot;
+			untar=&quot;tar -xJf&quot;
+	
+			binary=&quot;bin/arm-linux-gnueabihf-&quot;
+			;;
+		*)
+			echo &quot;bug: maintainer forgot to set:&quot;
+			echo &quot;linaro_toolchain=\&quot;xzy\&quot; in version.sh&quot;
+			exit 1
+			;;
+
+</code></pre>
+
+<p>dl_gcc_generic will be called. download the corresponding packages from the linaro website.</p>
+
+<p>After set the cross-compiler, we can get the kernel using git.sh, the git.sh is listed in scripts/git.sh</p>
+
+<pre><code>	/bin/sh -e &quot;${DIR}/scripts/git.sh&quot; || { exit 1 ; }
+
+</code></pre>
+
+<p>In git.sh, detect the user&rsquo;s email and user&rsquo;s name:</p>
+
+<pre><code>	unset git_config_user_email
+	git_config_user_email=$(git config --get user.email || true)
+	
+	unset git_config_user_name
+	git_config_user_name=$(git config --get user.name || true)
+
+</code></pre>
+
+<p>Then set using http or git, call git_kernel to git clone the corresponding resources from github.<br />
+git_kernel will call check_and_or_clone() to get the source code from the github.</p>
+
+<pre><code>	git clone ${torvalds_linux} ${DIR}/ignore/linux-src
+
+</code></pre>
+
+<p>and set the LINUX_GIT variable to</p>
+
+<pre><code>	LINUX_GIT=&quot;${DIR}/ignore/linux-src&quot;
+
+</code></pre>
+
+<p>The downloaded packages are so large, that it occupies 1.4G disk space.</p>
+
+<pre><code>	[Trusty@XXXyyy ignore]$ du -hs *
+	1.4G	linux-src
 
 </code></pre>
 
@@ -1045,12 +955,21 @@ stm32中关于SPI传送字节的函数编写</p>
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/111/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

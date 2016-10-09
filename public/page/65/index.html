@@ -93,210 +93,631 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/21/gitlab-installation-and-configuration/">GitLab Installation and Configuration</a>
+        <a href="http://purplepalmdash.github.io/2014/12/03/use-docker-for-deploying-wp/">Use Docker for deploying WP</a>
       </h1>
-      <span class="post-date">Nov 21, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/21/gitlab-installation-and-configuration/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 3, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/03/use-docker-for-deploying-wp/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
         
       </span>
       
       
 
-<p>For sharing the project and holding the status of developing Rohc project, I set this gitlab project.</p>
+<p>Just for swiftly deploy WP and test the RESTful API, I did following operations and runs a WP temporately.</p>
 
-<h3 id="installation">Installation</h3>
+<h3 id="pull">PULL</h3>
 
-<p>The detailed guildeline is from following URL:<br />
-<a href="https://www.digitalocean.com/community/tutorials/how-to-set-up-gitlab-as-your-very-own-private-github-clone">https://www.digitalocean.com/community/tutorials/how-to-set-up-gitlab-as-your-very-own-private-github-clone</a><br />
-But have some modifications.</p>
+<p>Pull following containers:</p>
 
-<h3 id="modification">Modification</h3>
-
-<p>Write permission problem:</p>
-
-<pre><code>ERROR:  While executing gem ... (Gem::FilePermissionError)
-You don't have write permissions for the /usr/local/rvm/gems/ruby
-
-</code></pre>
-
-<p>Solved via:</p>
-
-<pre><code>$ sudo chmod -R 777 /usr/local/bin
-$ sudo chmod -R 777 /usr/local/rvm
+<pre><code>$ docker pull mysql
+$ docker pull wordpress
+$ sudo docker images
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+&lt;none&gt;              &lt;none&gt;              480ac552cd39        About an hour ago   192.8 MB
+mysql               latest              98840bbb442c        39 hours ago        235.5 MB
+wordpress           latest              9f51af77fd96        8 days ago          470.5 MB
 
 </code></pre>
 
-<p>We met modernizr missing problem, do following for avoiding this:</p>
+<h3 id="configuration">Configuration</h3>
 
-<pre><code>$ sudo wget http://rubygems.org/downloads/modernizr-2.6.2.gem
-$ sudo -u git -H gem install modernizr
+<p>Explanation for following commands, <code>--name</code> is the name for our container, <code>-p 8038:80</code> is mapping the host machine&rsquo;s 8038 port to container <code>wordpress_1</code>:</p>
 
-</code></pre>
-
-<p>Also you have to modify following modules in Gemfile and Gemfile.lock:</p>
-
-<pre><code>in Gemfile, line 164, change &quot;modernizr&quot;, &quot;2.6.2&quot; to &quot;modernizr-rails&quot;, &quot;2.7.1&quot;
-in Gemfile.lock, line 292, change modernizr (2.6.2) to modernizr-rails (2.7.1)
-in Gemfile.lock, line 626, change modernizr (= 2.6.2) to modernizr-rails (= 2.7.1)
+<pre><code>$ docker run --name mysql_1 -e MYSQL_ROOT_PASSWORD=xxxx -d mysql
+$ docker run --name wordpress_1 --link mysql_1:mysql -p 8038:80 -d wordpress
 
 </code></pre>
 
-<p>Then run:</p>
+<p>Now open your browser to <code>http://localhost:8038</code> and you got the wordpress installation window.</p>
 
-<pre><code>sudo -u git -H bundle install --deployment --without development test postgres aws
+<h3 id="wp">WP</h3>
+
+<p>After we installed WP, we could install JSON REST API from:<br />
+<a href="https://wordpress.org/plugins/json-rest-api/">https://wordpress.org/plugins/json-rest-api/</a><br />
+After installation, we could test the REST API via curl:</p>
+
+<pre><code>TBD
 
 </code></pre>
 
-<p>You could continue with your settings.</p>
+<h3 id="view-docker-status">View Docker status</h3>
 
-<p>After setting we may met smtp configuration problem, simply modify the following configuration file:</p>
+<p>First we should grab the docker&rsquo;s PID via following command:</p>
 
-<pre><code>$ pwd
-/home/git/gitlab
-$ cat ./config/environments/production.rb
-  # config.action_mailer.delivery_method = :sendmail
-  # # Defaults to:
-  # # # config.action_mailer.sendmail_settings = {
-  # # #   location: '/usr/sbin/sendmail',
-  # # #   arguments: '-i -t'
-  # # # }
-  # config.action_mailer.perform_deliveries = true
-  # config.action_mailer.raise_delivery_errors = true
-  config.action_mailer.delivery_method = :smtp
-  config.action_mailer.smtp_settings = {
-      :address =&gt; 'nwsxxx.xxx.xxxxxx.com',
-      :port =&gt; 25,
-      :domain =&gt; '1xx.2xx.xxx.xxx'
-      #:domain =&gt; '1xx.2xx.xxx.xxx',
-      #:authentication =&gt; :plain,
-      #:user_name =&gt; 'gitlab@yourserver.com',
-      #:password =&gt; 'yourPassword',
-      #:enable_starttls_auto =&gt; true
+<pre><code>$ docker  inspect  --format &quot;{{ .State.Pid }}&quot;  mysql_1 
+28254
+$ docker  inspect  --format &quot;{{ .State.Pid }}&quot;  wordpress_1
+28754
+
+</code></pre>
+
+<p>Then we could nsenter the docker container and view its status:</p>
+
+<pre><code>$ sudo nsenter --target 28254 --mount --uts --ipc --net --pid -- /bin/bash
+$ sudo nsenter --target 28754 --mount --uts --ipc --net --pid -- /bin/bash
+
+</code></pre>
+
+<p>In the &lsquo;attached&rsquo; environment we could inspect the status for corresponding services.</p>
+
+<h3 id="stop-docker-contains">Stop docker contains</h3>
+
+<p>via <code>docker stop</code> we could simply stop the docker container:</p>
+
+<pre><code>[Trusty@~/code/30days/Docker]$ sudo docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                  NAMES
+0995854e2144        wordpress:latest    &quot;/entrypoint.sh apac   About an hour ago   Up About an hour    0.0.0.0:8038-&gt;80/tcp   wordpress_1         
+99d257ad6e24        mysql:latest        &quot;/entrypoint.sh mysq   About an hour ago   Up About an hour    3306/tcp               mysql_1             
+[Trusty@~/code/30days/Docker]$ docker stop 0995854e2144
+0995854e2144
+[Trusty@~/code/30days/Docker]$ docker stop 99d257ad6e24
+99d257ad6e24
+[Trusty@~/code/30days/Docker]$ sudo docker ps
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/12/03/yong-flaskda-jian-ni-zi-ji-de-restful-api/">用Flask搭建你自己的Restful API</a>
+      </h1>
+      <span class="post-date">Dec 3, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/03/yong-flaskda-jian-ni-zi-ji-de-restful-api/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
+        
+      </span>
+      
+      
+
+<h3 id="背景">背景</h3>
+
+<p>最近在过一个《30天学习30种新技术》，过到第10天用Phonegap开发APP的时候，发现作者提供的API不可用，所以费心研究了一下Restful API, 顺利构建出了环境写完了那个APP，下面是一些摘要。<br />
+我用的Tutorial来自这里：<br />
+<a href="http://blog.miguelgrinberg.com/post/designing-a-restful-api-with-python-and-flask">http://blog.miguelgrinberg.com/post/designing-a-restful-api-with-python-and-flask</a><br />
+开发环境是ArchLinux.</p>
+
+<h3 id="hello-flask">Hello Flask</h3>
+
+<p>原Tutorial中给出的是一个关于todo-list的实现，我们从最简单的&rdquo;Hello Flask&rdquo;开始：<br />
+首先安装python虚拟环境和flask，注意因为Arch默认的python版本是3，所以这里我们使用了virtualenv2来创建python虚拟运行环境。</p>
+
+<pre><code>$ mkdir todo-api
+$ cd todo-api
+$ virtualenv2 flask
+$ source flask/bin/activate
+(flask) $ pip install flask
+
+</code></pre>
+
+<p>在当前目录下建立<code>app.py</code>文件， 输入以下内容：</p>
+
+<pre><code>#!flask/bin/python
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return &quot;Hello, Flask!&quot;
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+</code></pre>
+
+<p>现在改变文件属性，运行之:</p>
+
+<pre><code>$ chmod a+x app.py
+$ ./app.py
+
+</code></pre>
+
+<p>打开浏览器访问<code>http://127.0.0.1:5000</code>,，我们可以看到Hello Flask已经出现在浏览器里了。</p>
+
+<h3 id="实现最简单的restful-api">实现最简单的Restful API</h3>
+
+<p>Flask本身支持很多插件，可以用于实现Restful API，由于我们这里只是做DEMO使用，需求比较简单，我们抛弃那些繁琐的插件，手动来写。<br />
+这里我们也不会引入数据库等内容，我们将task任务列表直接保存在内存中，所以一旦断电这些数据就将消失。在实际的生产环境中，我们是需要引入不同的数据库来存储这些数据的。<br />
+在上面生成的<code>app.py</code>中添加以下内容:</p>
+
+<pre><code>#!flask/bin/python
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+tasks = [
+    {
+        'id': 1,
+        'title': u'Buy groceries',
+        'description': u'Milk, Cheese, Pizza, Fruit, Tylenol', 
+        'done': False
+    },
+    {
+        'id': 2,
+        'title': u'Learn Python',
+        'description': u'Need to find a good Python tutorial on the web', 
+        'done': False
+    }
+]
+
+@app.route('/todo/api/v1.0/tasks', methods=['GET'])
+
+def get_tasks():
+    return jsonify({'tasks': tasks})
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+</code></pre>
+
+<p>现在打开终端，用curl就可以访问到我们新添加的API了:</p>
+
+<pre><code>$ curl -i http://127.0.0.1:5000/todo/api/v1.0/tasks
+HTTP/1.0 200 OK
+Content-Type: application/json
+Content-Length: 316
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 08:59:55 GMT
+
+{
+  &quot;tasks&quot;: [
+    {
+      &quot;description&quot;: &quot;Milk, Cheese, Pizza, Fruit, Tylenol&quot;, 
+      &quot;done&quot;: false, 
+      &quot;id&quot;: 1, 
+      &quot;title&quot;: &quot;Buy groceries&quot;
+    }, 
+    {
+      &quot;description&quot;: &quot;Need to find a good Python tutorial on the web&quot;, 
+      &quot;done&quot;: false, 
+      &quot;id&quot;: 2, 
+      &quot;title&quot;: &quot;Learn Python&quot;
+    }
+  ]
+}% 
+
+</code></pre>
+
+<p>第一个Restful的API就这样创建成功了。</p>
+
+<h3 id="添加第二个restful-api">添加第二个RESTful API</h3>
+
+<p>我们接着来添加第二个RESTful API, 加入下列代码到已有的<code>app.py</code>中:</p>
+
+<pre><code>from flask import abort
+
+@app.route('/todo/api/v1.0/tasks/&lt;int:task_id&gt;', methods=['GET'])
+def get_task(task_id):
+    task = filter(lambda t: t['id'] == task_id, tasks)
+    if len(task) == 0:
+        abort(404)
+    return jsonify({'task': task[0]})
+
+</code></pre>
+
+<p>现在用curl来测试，结果应该是这样的:</p>
+
+<pre><code>(flask)[Trusty@~/code/30days/todo-api]$ curl -i http://127.0.0.1:5000/todo/api/v1.0/tasks/2
+HTTP/1.0 200 OK
+Content-Type: application/json
+Content-Length: 151
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:10:25 GMT
+
+{
+  &quot;task&quot;: {
+    &quot;description&quot;: &quot;Need to find a good Python tutorial on the web&quot;, 
+    &quot;done&quot;: false, 
+    &quot;id&quot;: 2, 
+    &quot;title&quot;: &quot;Learn Python&quot;
   }
+}%                                                                                                                                                   (flask)[Trusty@~/code/30days/todo-api]$ curl -i http://127.0.0.1:5000/todo/api/v1.0/tasks/3
+HTTP/1.0 404 NOT FOUND
+Content-Type: text/html
+Content-Length: 233
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:10:27 GMT
+
+&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 3.2 Final//EN&quot;&gt;
+&lt;title&gt;404 Not Found&lt;/title&gt;
+&lt;h1&gt;Not Found&lt;/h1&gt;
+&lt;p&gt;The requested URL was not found on the server.  If you entered the URL manually please check your spelling and try again.&lt;/p&gt;
 
 </code></pre>
 
-<h3 id="existing-problem">Existing problem</h3>
+<p>由于我们引用了abort方法，所以当我们给出的task id错误时，将弹出404错误。</p>
 
-<p>The smtp method won&rsquo;t send out the letters to the external users, I mean the email could only be used intranet not internet.</p>
+<h3 id="错误提示json化">错误提示JSON化</h3>
 
-<h3 id="git-command">Git command</h3>
+<p>通过引入<code>make_response</code>模块我们可以把404返回错误JSON化，添加以下代码到app.py中：</p>
 
-<p>Using different branches for holding code:</p>
+<pre><code>from flask import make_response
 
-<pre><code>[root@Linux01 twal]# pwd
-/root/code/rohctest/twal
-[root@Linux01 twal]# git branch
-  Dev_For_ECCMU/ECCM2
-  DirectoryBasedTestcases
-  eccm2
-* master
-[root@Linux01 twal]# git checkout eccm2
-Switched to branch 'eccm2'
-[root@Linux01 twal]# git branch
-  Dev_For_ECCMU/ECCM2
-  DirectoryBasedTestcases
-* eccm2
-  master
+@app.errorhandler(404)
+def not_found(error):
+    return make_response(jsonify({'error': 'Not found'}), 404)
 
 </code></pre>
 
-<p>So now you are in the eccm2 branch, do:</p>
+<p>现在访问一个不存在的task id将返回如下结果：</p>
 
-<pre><code>$ export TUT_CFG_FILE=/root/code/gencfg_114/wal_tuni_ipconn53.cfg
-$ ./rohcFun11.py
+<pre><code>(flask)[Trusty@~/code/30days/todo-api]$ curl -i http://127.0.0.1:5000/todo/api/v1.0/tasks/3
+HTTP/1.0 404 NOT FOUND
+Content-Type: application/json
+Content-Length: 26
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:16:50 GMT
+
+{
+  &quot;error&quot;: &quot;Not found&quot;
+}%             
+
+</code></pre>
+
+<h3 id="实现post方法">实现POST方法</h3>
+
+<p>添加以下代码以实现POST方法:</p>
+
+<pre><code>from flask import request
+
+@app.route('/todo/api/v1.0/tasks', methods=['POST'])
+def create_task():
+    if not request.json or not 'title' in request.json:
+        abort(400)
+    task = {
+        'id': tasks[-1]['id'] + 1,
+        'title': request.json['title'],
+        'description': request.json.get('description', &quot;&quot;),
+        'done': False
+    }
+    tasks.append(task)
+    return jsonify({'task': task}), 201
 
 </code></pre>
 
-<p>If you want to test on eccmu, simply brach back to master via:</p>
+<p>用curl测试的结果如下：</p>
 
-<pre><code>$ git checkout master
-$ export TUT_CFG_FILE=/root/code/gencfg_117/wal_tuni_ipconn53.cfg
-$ ./rohcFun11.py
+<pre><code>(flask)[Trusty@~/code/30days/todo-api]$ curl -i -H &quot;Content-Type: application/json&quot; -X POST -d '{&quot;title&quot;:&quot;Read a book&quot;}' http://127.0.0.1:5000/todo/api/v1.0/tasks
+HTTP/1.0 201 CREATED
+Content-Type: application/json
+Content-Length: 104
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:18:55 GMT
+
+{
+  &quot;task&quot;: {
+    &quot;description&quot;: &quot;&quot;, 
+    &quot;done&quot;: false, 
+    &quot;id&quot;: 3, 
+    &quot;title&quot;: &quot;Read a book&quot;
+  }
+}% 
+ (flask)[Trusty@~/code/30days/todo-api]$ curl -i http://127.0.0.1:5000/todo/api/v1.0/tasks 
+HTTP/1.0 200 OK
+Content-Type: application/json
+Content-Length: 423
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:19:24 GMT
+
+{
+  &quot;tasks&quot;: [
+    {
+      &quot;description&quot;: &quot;Milk, Cheese, Pizza, Fruit, Tylenol&quot;, 
+      &quot;done&quot;: false, 
+      &quot;id&quot;: 1, 
+      &quot;title&quot;: &quot;Buy groceries&quot;
+    }, 
+    {
+      &quot;description&quot;: &quot;Need to find a good Python tutorial on the web&quot;, 
+      &quot;done&quot;: false, 
+      &quot;id&quot;: 2, 
+      &quot;title&quot;: &quot;Learn Python&quot;
+    }, 
+    {
+      &quot;description&quot;: &quot;&quot;, 
+      &quot;done&quot;: false, 
+      &quot;id&quot;: 3, 
+      &quot;title&quot;: &quot;Read a book&quot;
+    }
+  ]
+}%           
 
 </code></pre>
 
-<p>Push all of the branches to the remote repository:</p>
+<p>从上面的测试中我们可以看到一个新的任务被添加到了task列表中。</p>
 
-<pre><code>$ git push --all
+<h3 id="最后两个restful-api">最后两个RESTful API</h3>
+
+<p>最后的两个RESTful API代码如下:</p>
+
+<pre><code>@app.route('/todo/api/v1.0/tasks/&lt;int:task_id&gt;', methods=['PUT'])
+def update_task(task_id):
+    task = filter(lambda t: t['id'] == task_id, tasks)
+    if len(task) == 0:
+        abort(404)
+    if not request.json:
+        abort(400)
+    if 'title' in request.json and type(request.json['title']) != unicode:
+        abort(400)
+    if 'description' in request.json and type(request.json['description']) is not unicode:
+        abort(400)
+    if 'done' in request.json and type(request.json['done']) is not bool:
+        abort(400)
+    task[0]['title'] = request.json.get('title', task[0]['title'])
+    task[0]['description'] = request.json.get('description', task[0]['description'])
+    task[0]['done'] = request.json.get('done', task[0]['done'])
+    return jsonify({'task': task[0]})
+
+@app.route('/todo/api/v1.0/tasks/&lt;int:task_id&gt;', methods=['DELETE'])
+def delete_task(task_id):
+    task = filter(lambda t: t['id'] == task_id, tasks)
+    if len(task) == 0:
+        abort(404)
+    tasks.remove(task[0])
+    return jsonify({'result': True})
 
 </code></pre>
+
+<p>测试代码如下：</p>
+
+<pre><code>$ curl -i -H &quot;Content-Type: application/json&quot; -X PUT -d '{&quot;done&quot;:true}' http://127.0.0.1:5000/todo/api/v1.0/tasks/2
+
+</code></pre>
+
+<p>运行上面的命令可以将第2条记录里的done字段由false改成true.</p>
+
+<h3 id="改进接口">改进接口</h3>
+
+<p>加入以下代码后，我们调用tasks方法将不再返回id,而是返回URIs，这样取回来就能用了。</p>
+
+<pre><code>from flask import url_for
+
+def make_public_task(task):
+    new_task = {}
+    for field in task:
+        if field == 'id':
+            new_task['uri'] = url_for('get_task', task_id=task['id'], _external=True)
+        else:
+            new_task[field] = task[field]
+    return new_task
+
+</code></pre>
+
+<p>同时我们重写以下方法:</p>
+
+<pre><code>@app.route('/todo/api/v1.0/tasks', methods=['GET'])
+def get_tasks():
+    return jsonify({'tasks': map(make_public_task, tasks)})
+
+</code></pre>
+
+<p>测试结果如下：</p>
+
+<pre><code>$ curl -i http://127.0.0.1:5000/todo/api/v1.0/tasks
+HTTP/1.0 200 OK
+Content-Type: application/json
+Content-Length: 406
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:32:12 GMT
+
+{
+  &quot;tasks&quot;: [
+    {
+      &quot;description&quot;: &quot;Milk, Cheese, Pizza, Fruit, Tylenol&quot;, 
+      &quot;done&quot;: false, 
+      &quot;title&quot;: &quot;Buy groceries&quot;, 
+      &quot;uri&quot;: &quot;http://127.0.0.1:5000/todo/api/v1.0/tasks/1&quot;
+    }, 
+    {
+      &quot;description&quot;: &quot;Need to find a good Python tutorial on the web&quot;, 
+      &quot;done&quot;: false, 
+      &quot;title&quot;: &quot;Learn Python&quot;, 
+      &quot;uri&quot;: &quot;http://127.0.0.1:5000/todo/api/v1.0/tasks/2&quot;
+    }
+  ]
+}% 
+
+</code></pre>
+
+<h3 id="加密restful网络接口">加密RESTful网络接口</h3>
+
+<p>好了，我们的RESTful接口搭建完毕了，但是由于接口对所有人都是开放的，为了考虑安全因素，我们会采用简单加密。<br />
+首先安装flask-httpauth模块:</p>
+
+<pre><code>$ pip install flask-httpauth
+
+</code></pre>
+
+<p>而后添加以下代码：</p>
+
+<pre><code>from flask.ext.httpauth import HTTPBasicAuth
+auth = HTTPBasicAuth()
+
+@auth.get_password
+def get_password(username):
+    if username == 'miguel':
+        return 'python'
+    return None
+
+@auth.error_handler
+def unauthorized():
+    return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+
+</code></pre>
+
+<p>加密路由实现如下：</p>
+
+<pre><code>@app.route('/todo/api/v1.0/tasks', methods=['GET'])
+@auth.login_required
+def get_tasks():
+    return jsonify({'tasks': tasks})
+
+</code></pre>
+
+<p>测试结果如下, 未通过授权时:</p>
+
+<pre><code>$ curl -i http://localhost:5000/todo/api/v1.0/tasks                 
+HTTP/1.0 401 UNAUTHORIZED
+Content-Type: application/json
+Content-Length: 36
+WWW-Authenticate: Basic realm=&quot;Authentication Required&quot;
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:40:02 GMT
+
+{
+  &quot;error&quot;: &quot;Unauthorized access&quot;
+}%   
+
+</code></pre>
+
+<p>通过授权时:</p>
+
+<pre><code>$ curl -u miguel:python -i http://localhost:5000/todo/api/v1.0/tasks
+HTTP/1.0 200 OK
+Content-Type: application/json
+Content-Length: 406
+Server: Werkzeug/0.9.6 Python/2.7.8
+Date: Wed, 03 Dec 2014 09:40:24 GMT
+
+{
+  &quot;tasks&quot;: [
+    {
+      &quot;description&quot;: &quot;Milk, Cheese, Pizza, Fruit, Tylenol&quot;, 
+      &quot;done&quot;: false, 
+      &quot;title&quot;: &quot;Buy groceries&quot;, 
+      &quot;uri&quot;: &quot;http://localhost:5000/todo/api/v1.0/tasks/1&quot;
+    }, 
+.....
+
+</code></pre>
+
+<p>我们可以把出错时返回的错误号从401改变为403,这样返回的就是forbidden错误。</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/20/share-mouse-between-archlinux-and-yosemite/">Share Mouse between ArchLinux &amp;amp; Yosemite</a>
+        <a href="http://purplepalmdash.github.io/2014/12/01/virtual-node-environment-for-phonegap-development/">Virtual Node Environment For PhoneGap Development</a>
       </h1>
-      <span class="post-date">Nov 20, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/20/share-mouse-between-archlinux-and-yosemite/#disqus_thread">Comments</a>
+      <span class="post-date">Dec 1, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/01/virtual-node-environment-for-phonegap-development/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
         
       </span>
       
       
 
-<h3 id="fixed-ip">Fixed IP</h3>
+<h3 id="background">Background</h3>
 
-<p>First configure the IP for Yosemite on router, since the Archlinux takes the 221, Yosemite may use 220 for its fixed ip.</p>
+<p>I met some tutorials which were write one or two years ago, while at that time the corresponding plugins are in an old version, so I need to find a whole &ldquo;virtual&rdquo; environment for developing these tutorials.</p>
 
-<h3 id="archlinux-setting">ArchLinux Setting</h3>
+<h3 id="install-nodeenv">Install Nodeenv</h3>
 
-<p>I use ArchLinux as the synergy server, so first install synergy via:</p>
+<p>&ldquo;Node.js virtual environment builder&rdquo; &mdash; is the introduction for Nodeenv.<br />
+Install it via:</p>
 
-<pre><code>$ sudo pacman -S synergy
-
-</code></pre>
-
-<p>I want to place Yosemite at the right of the ArchLinux, So just configure the <code>/etc/hosts</code> like following.</p>
-
-<pre><code>$ tail /etc/hosts
-# For setting Synergy
-10.0.0.220      Yosemite.lan            Yosemite
-
-</code></pre>
-
-<p>Configuration:</p>
-
-<pre><code>[root@kkkkttt kkkt]# cp /etc/synergy.conf.example /etc/synergy.conf
+<pre><code>$ virtualenv2 venv
+source venv/bin/activate
+(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ 
+$ pip install nodeenv
+(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ which nodeenv
+/home/Trusty/code/30days/PhoneGap2.9.0/venv/bin/nodeenv
+(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ nodeenv --version
+0.11.1
 
 </code></pre>
 
-<p>For easily configure the synergy, download qsynergy.</p>
+<p>With this nodeenv we could setup all kinds of the dev environments.</p>
 
-<pre><code>$ sudo pacman -S qsynergy
+<h3 id="wrok-with-nodeenv">Wrok With Nodeenv</h3>
+
+<p>Install the node.js first, this may cause long time:</p>
+
+<pre><code>(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ nodeenv nodeenv 
+ * Install node.js (0.10.33 
+[Trusty@~/code/30days/PhoneGap2.9.0]$ du -hs *
+170M    nodeenv
+8.9M    venv
+(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ ls
+nodeenv  npm-debug.log  venv
+(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ . nodeenv/bin/activate 
+(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ which npm
+/home/Trusty/code/30days/PhoneGap2.9.0/nodeenv/bin/npm
+(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ which node
+/home/Trusty/code/30days/PhoneGap2.9.0/nodeenv/bin/node
 
 </code></pre>
 
-<p><img src="/images/synergyconfigure.jpg" alt="/images/synergyconfigure.jpg" /><br />
-Then store its configuration to the <code>/etc/synergy.conf</code>.</p>
+<p>Now we could install the specified version of PhoneGap, first we should find the specified versions:</p>
 
-<p>Start the server and enable the server.</p>
+<pre><code>$ npm view phonegap
 
-<pre><code># systemctl enable synergys@mary
-# systemctl start synergys@mary
 
 </code></pre>
 
-<h3 id="yosemite-setting">Yosemite Setting</h3>
+<p>This will returns the specified versions of all of the phonegap.<br />
+Choose whichever you want.</p>
 
-<p>Download the SynergyKM from <a href="http://synergykm.com/">http://synergykm.com/</a>, and configure the SynergyKM connected to 10.0.0.221.<br />
-Also you have to check <code>Start at login</code></p>
+<pre><code>$ npm install phonegap@2.9.0-rc1-0.12.2
 
-<p>Now place the Yosemite at the left of the ArchLinux, your mouse and keyboard could be freely switching from 2 machines.</p>
+</code></pre>
+
+<p>This will install the phonegap around Dec,2013, which should be fit well to the tutorial.<br />
+Then re-activate , or manually modify the PATH as:</p>
+
+<pre><code>$ export PATH=/home/Trusty/code/30days/PhoneGap2.9.0/nodeenv/bin:$PATH
+(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ phonegap -v
+2.9.0-rc1-0.12.2
+
+</code></pre>
+
+<h3 id="run-tutorial">Run Tutorial</h3>
+
+<h4 id="create-apps">Create Apps</h4>
+
+<p>Create the app via following command:</p>
+
+<pre><code>(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ npm config set https_proxy http://1xx.x.xx.xxx:2xxxx
+(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ npm config set proxy http://1xx.x.xx.xxx:2xxx
+$ phonegap create audero-feed-reade com.audero.free.utility.auderofeedreader &quot;Audero Feed Reader&quot;
+
+</code></pre>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/18/enable-light-weighted-webserver/">Enable Light-Weighted WebServer</a>
+        <a href="http://purplepalmdash.github.io/2014/11/28/setup-dev-env-on-do/">Setup Dev Env On DO</a>
       </h1>
-      <span class="post-date">Nov 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/18/enable-light-weighted-webserver/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 28, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/28/setup-dev-env-on-do/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
@@ -305,181 +726,72 @@ Also you have to check <code>Start at login</code></p>
       
       
 
-<h3 id="top-result">TOP Result</h3>
+<h3 id="prepare">Prepare</h3>
 
-<p>Via top we saw:</p>
+<p>Install the following packages:</p>
 
-<pre><code> 2615 mysql     20   0  949.7m 450.7m   0.0  5.7   0:02.62 S mysqld  
-
-</code></pre>
-
-<p>This caused too much memory be wasted while my blog uses the static pages.<br />
-Solution: I will use a light-weighted web-server.</p>
-
-<h3 id="disable-xampp">Disable xampp</h3>
-
-<p>Disble and remove the service of xampp via following command:</p>
-
-<pre><code>[root@kkkktt kkk]# systemctl stop xampp.service
-[root@kkkktt kkk]# systemctl disable xampp.service
-Removed symlink /etc/systemd/system/multi-user.target.wants/xampp.service.
+<pre><code>$ sudo apt-get install python-virtualenv
+$ sudo apt-get install ruby-full ruby
+$ sudo gem install rhc
 
 </code></pre>
 
-<h3 id="lighttpd">lighttpd</h3>
+<p>Since DO&rsquo;s network is pretty good, so it&rsquo;s very swift for developing on it.</p>
 
-<p>Install via following command and test its configuration:</p>
+<h3 id="textblob">TextBlob</h3>
 
-<pre><code>$ sudo pacman -S lighttpd
-[kkk@~]$ ls /etc/lighttpd/lighttpd.conf 
-/etc/lighttpd/lighttpd.conf
-[kkk@~]$ lighttpd -t -f /etc/lighttpd/lighttpd.conf
-Syntax OK
+<pre><code>$ virtualenv venv --python=python2.7
+$ . venv/bin/activate
+$ pip install textblob
+$ python -m textblob.download_corpora
+$ pip install flask
 
-</code></pre>
-
-<p>Test the webpages:</p>
-
-<pre><code>[kkk@/srv]$ sudo echo 'TestMe!' &gt; /srv/http/index.html
-[kkk@/srv]$ chmod 755 /srv/http/index.html
-[kkk@/srv]$ sudo systemctl start lighttpd
-[kkk@/srv]$ sudo systemctl enable lighttpd
-Created symlink from /etc/systemd/system/multi-user.target.wants/lighttpd.service to /usr/lib/systemd/system/lighttpd.service.
 
 </code></pre>
-
-<p>Use your browser for navigating the <a href="http://127.0.0.1">http://127.0.0.1</a>, then you could visit this test page.</p>
-
-<h3 id="octopress-changes">OctoPress Changes</h3>
-
-<p>Add following lines into the rakefile:</p>
-
-<pre><code>  system &quot;jekyll&quot;
-  # Use rsync for syncing the server directory with the public directory
-  system &quot;rsync -vzrtopgu -progress /home/kkk/code/octo/heroku/Tomcat/public/* /srv/http&quot;
-
-</code></pre>
-
-<p>Then everytime when you type <code>rake generate</code>, after generate the static website, the rsync will automatically sync the public folder with remote web server folder <code>/srv/http</code>.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/18/tips-on-installing-yosemite/">Tips on installing Yosemite</a>
+        <a href="http://purplepalmdash.github.io/2014/11/27/apache-parameter-adjust/">Apache Parameter Adjust</a>
       </h1>
-      <span class="post-date">Nov 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/18/tips-on-installing-yosemite/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 27, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/27/apache-parameter-adjust/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/mac">mac</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
         
       </span>
       
-      <p>First get the installation image from the AppStore, then format a flash-disk more than 8G to following format:<br />
-<img src="/images/macosdisk.jpg" alt="/images/macosdisk.jpg" /><br />
-Use following commands for creating the installation media:</p>
-
-<pre><code>kkkkkkkktttt-iMac:~ Trusty$ sudo /Applications/Install\ OS\ X\ Yosemite.app/Contents/Resources/createinstallmedia --volume /Volumes/Install --applicationpath /Applications/Install\ OS\ X\ Yosemite.app --nointeraction
-
-</code></pre>
-
-<p>Take a coffee, cause this will spend a long time for copying everything you need into the disk.</p>
-
-<p>Install Clover:</p>
-
-<p><img src="/images/clover1.jpg" alt="/images/clover1.jpg" /></p>
-
-<p>Customize Clover installation:<br />
-<img src="/images/clover2.jpg" alt="/images/clover2.jpg" /></p>
-
-<p><img src="/images/clover3.jpg" alt="/images/clover3.jpg" /></p>
-
-<p>Copy the dsdt &amp; ssdt files to EFI partition:</p>
-
-<pre><code>kkkkkkkktttt-iMac:Dsdt &amp; Ssdt Trusty$ pwd
-/Users/Trusty/Desktop/MacOS/SurfacePro/SurfacePro 1° Gen FilesPackage V.0.5.1/Dsdt &amp; Ssdt
-kkkkkkkktttt-iMac:Dsdt &amp; Ssdt Trusty$ cp -ar * /Volumes/ESP/EFI/CLOVER/ACPI/patched/
-
-</code></pre>
-
-<p>Copy some device driver files into the Clover:</p>
-
-<pre><code>kkkkkkkktttt-iMac:MacOS Trusty$ tar xzvf GenericUSBXHCI_1.2.7.tar.gz 
-
-</code></pre>
-
-<p>Copy GenericUSBXHCI.kext to 10.9/ 10.10/ Other/:</p>
-
-<pre><code>kkkkkkkktttt-iMac:kexts Trusty$ pwd
-/Volumes/ESP/EFI/CLOVER/kexts
-kkkkkkkktttt-iMac:kexts Trusty$ ls -F
-10.10/  10.6/   10.7/   10.8/   10.9/   Other/
-kkkkkkkktttt-iMac:10.10 Trusty$ sudo cp -r  /Users/Trusty/Desktop/MacOS/GenericUSBXHCI_Yosemite/ /Volumes/ESP/EFI/CLOVER/kexts/10.10/
-
-</code></pre>
-
-<p>Also we have to copy the fakesmc.kext should be copied to above folder.</p>
-
-<pre><code>kkkkkkkktttt-iMac:kexts Trusty$ ls *
-10.10:
-GenericUSBXHCI.kext     fakesmc.kext
-
-10.6:
-
-10.7:
-
-10.8:
-
-10.9:
-GenericUSBXHCI.kext     fakesmc.kext
-
-Other:
-GenericUSBXHCI.kext     fakesmc.kext
-
-</code></pre>
-
-<p>Now copy the config.plist into the CLOVER root directory.</p>
-
-<pre><code>kkkkkkkktttt-iMac:SurfacePro 1° Gen FilesPackage V.0.5.1 Trusty$ pwd
-/Users/Trusty/Desktop/MacOS/SurfacePro/SurfacePro 1° Gen FilesPackage V.0.5.1
-kkkkkkkktttt-iMac:SurfacePro 1° Gen FilesPackage V.0.5.1 Trusty$ ls config.plist 
-config.plist
-
-</code></pre>
-
-<p>Now you got your installation disk OK.</p>
-
       
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/17/forward-x11-via-ssh/">Forward x11 via ssh</a>
-      </h1>
-      <span class="post-date">Nov 17, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/17/forward-x11-via-ssh/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      <p>Since the 5901 port is forbiddended via administrator of the switch, we have to forward the traffic to remote machine via ssh:</p>
 
-<p>First in our machine type following command:</p>
+<h3 id="background">Background</h3>
 
-<pre><code>ssh -L 2333:A:5901 A -l Trusty
+<p>A wordpress machine runs on DigitalOcean often sudden the mysqld database lost error.</p>
 
-</code></pre>
+<h3 id="analyze">Analyze</h3>
 
-<p>This will forward the A machines&rsquo; 5901 to local&rsquo;s 2333 port.<br />
-Then use a vncviewer software for accessing local machine&rsquo;s 2333 port:</p>
+<p>This is because the memory is exhausted in DO, so first I enable the swap for machine. This method solved the problem for a long time.<br />
+But later it seems the robots who sent the rubbish comments continue to attack the system, causing the mysqld halt again, this time, I modified the apahce2&rsquo;s works:</p>
 
-<pre><code>vncviewer localhost:2333
+<pre><code>$ grep -Ri MaxRequestWorkers /etc/apache2/
+/etc/apache2/mods-enabled/mpm_prefork.conf:# MaxRequestWorkers: maximum number of server processes allowed to start
+/etc/apache2/mods-enabled/mpm_prefork.conf:     MaxRequestWorkers         150
+/etc/apache2/mods-available/mpm_prefork.conf:# MaxRequestWorkers: maximum number of server processes allowed to start
+/etc/apache2/mods-available/mpm_prefork.conf:   MaxRequestWorkers         150
+$ vim /etc/apache2/mods-available/mpm_prefork.conf
+$ vim /etc/apache2/mods-available/mpm_worker.conf
+$ vim /etc/apache2/mods-available/mpm_itk.conf
+$ vim /etc/apache2/mods-available/mpm_event.conf
+$ service apache2 restart
 
 </code></pre>
 
-<p>Notice, the virtualbox&rsquo;s is named to vboxgtk in opensuse.</p>
+<p>The vim command is changing the MaxRequestWorkers from 150 to 10, hope this will solve the problem.</p>
+
+<h3 id="tbd">TBD</h3>
+
+<p>If the mysql runs into death again, then we must limit its connection towards apache2.</p>
 
       
     </div>
@@ -897,12 +1209,21 @@ Then use a vncviewer software for accessing local machine&rsquo;s 2333 port:</p>
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/66/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

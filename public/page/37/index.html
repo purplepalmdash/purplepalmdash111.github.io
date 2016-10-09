@@ -93,134 +93,192 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/">Use 8188eu and Hostapd For Setting Soft-AP Router</a>
+        <a href="http://purplepalmdash.github.io/2015/07/06/add-private-nat-networking-in-xenserver/">Add Private NAT Networking In XenServer</a>
       </h1>
-      <span class="post-date">Jun 11, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/#disqus_thread">Comments</a>
+      <span class="post-date">Jul 6, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/07/06/add-private-nat-networking-in-xenserver/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="hostapd">HostAPD</h3>
+<h3 id="create-networking-in-xencenter">Create Networking In XenCenter</h3>
 
-<p>Install HostAPD via following commands:</p>
+<p>Create the networking under the XenCenter UI&rsquo;s tab &ldquo;Networking&rdquo;.</p>
 
-<pre><code>$ sudo apt-get autoremove hostapd
-$ wget https://github.com/jenssegers/RTL8188-hostapd/archive/v2.0.tar.gz
-$ tar -zxvf v2.0.tar.gz
-$ cd RTL8188-hostapd-2.0/hostapd
-$ sudo make
-$ sudo make install
-$ sudo service hostapd restart
-[ ok ] Stopping advanced IEEE 802.11 management: hostapd.
-[ ok ] Starting advanced IEEE 802.11 management: hostapd.
+<h3 id="networking-setting">Networking Setting</h3>
+
+<p>Enable the ip forward:</p>
+
+<pre><code># vim /etc/sysctl.conf
+net.ipv4.ip_forward = 1
+# sysctl -p 
+# cat /proc/sys/net/ipv4/ip_forward 
+1
+</code></pre>
+
+<p>Use iptables for forwarding the network flow:</p>
+
+<pre><code># iptables -A FORWARD --in-interface xapi0 -j ACCEPT
+# iptables --table nat -A POSTROUTING --out-interface eth0 -j MASQUERADE
+</code></pre>
+
+<p>But this didn&rsquo;t bring up the internal networking, after discussing with college, edit the file:</p>
+
+<pre><code>[root@xenserver-WolfHunter ~]# cat /etc/sysconfig/iptables
++++++  *nat
++++++  :PREROUTING ACCEPT [7019:539216]
++++++  :INPUT ACCEPT [77:3825]
++++++  :OUTPUT ACCEPT [104:6495]
++++++  :POSTROUTING ACCEPT [53:3228]
++++++  -A POSTROUTING -o xenbr0 -j MASQUERADE
++++++  COMMIT
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:RH-Firewall-1-INPUT - [0:0]
+-A INPUT -j RH-Firewall-1-INPUT
+++++ -A FORWARD -i xapi0 -j ACCEPT
+-A FORWARD -j RH-Firewall-1-INPUT
+-A RH-Firewall-1-INPUT -i lo -j ACCEPT
+-A RH-Firewall-1-INPUT -p icmp --icmp-type any -j ACCEPT
+# DHCP for host internal networks (CA-6996)
+-A RH-Firewall-1-INPUT -p udp -m udp --dport 67 --in-interface xenapi -j ACCEPT
+-A RH-Firewall-1-INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+# Linux HA hearbeat (CA-9394)
+-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m udp -p udp --dport 694 -j ACCEPT
+-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 22 -j ACCEPT
+-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 80 -j ACCEPT
+-A RH-Firewall-1-INPUT -m conntrack --ctstate NEW -m tcp -p tcp --dport 443 -j ACCEPT
+-A RH-Firewall-1-INPUT -j REJECT --reject-with icmp-host-prohibited
+COMMIT
 
 </code></pre>
 
-<h3 id="dhcpd">dhcpd</h3>
-
-<p>We need a dhcp server for assigning a new IP address to the clients who joins the ap:<br />
-An example file is listed as following:</p>
-
-<pre><code>ddns-update-style none;
-ignore client-updates;
-authoritative;
-option local-wpad code 252 = text;
- 
-subnet
-10.0.0.0 netmask 255.255.255.0 {
-# --- default gateway
-option routers
-10.0.0.1;
-# --- Netmask
-option subnet-mask
-255.255.255.0;
-# --- Broadcast Address
-option broadcast-address
-10.0.0.255;
-# --- Domain name servers, tells the clients which DNS servers to use.
-option domain-name-servers
-10.0.0.1, 8.8.8.8, 8.8.4.4;
-option time-offset
-0;
-range 10.0.0.3 10.0.0.13;
-default-lease-time 1209600;
-max-lease-time 1814400;
-}
-</code></pre>
-
-<h3 id="wlan0-network">WLAN0 Network</h3>
-
-<p>The WLAN0 equipment network should be configured as following:</p>
-
-<pre><code>$ cat /etc/network/interface
-# wireless wlan0
-allow-hotplug wlan0
-iface wlan0 inet static
-address 10.0.70.1
-netmask 255.255.255.0
-
-</code></pre>
-
-<p>So next time you reboot the computer, it will automatically get the ip address for wlan0.</p>
-
-<h3 id="enable-the-ip-forwarding">Enable the ip forwarding</h3>
-
-<p>Using following 2 commands for enabling your AP.</p>
-
-<pre><code>$ sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE
-$ sudo dhcpd wlan0
-</code></pre>
-
-<p>I add these two lines into the start file of awesome(My desktop environment).</p>
-
-<h3 id="disable-hostapd">Disable hostapd</h3>
-
-<p>You should remove the definition of the dhcpd, and the iptables forwarding rules, and
-also the definition in <code>/etc/network/interfaces</code>, and the hostapd configuration in
-<code>/etc/rc*.d</code> from <code>S</code> to <code>K</code>, while the <code>rc*.d</code> ranges from rc0 to rc6.</p>
+<p>Restart XenServer and waiting for verification.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/08/a-quick-setup-for-chef-server-slash-client-slash-workstation/">A Quick Setup For Chef Server/Client/Workstation</a>
+        <a href="http://purplepalmdash.github.io/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/">Install CloudStack All-In-One On Ubuntu14.04</a>
       </h1>
-      <span class="post-date">Jun 8, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/08/a-quick-setup-for-chef-server-slash-client-slash-workstation/#disqus_thread">Comments</a>
+      <span class="post-date">Jul 5, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/07/05/install-cloudstack-all-in-one-on-ubuntu14-dot-04/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/chef">Chef</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="machine-preparation">Machine Preparation</h3>
+<p>Refers to:<br />
+<a href="http://www.greenhills.co.uk/2015/02/23/cloudstack-4.4-single-server-on-ubuntu-14.04.1-with-kvm.html">http://www.greenhills.co.uk/2015/02/23/cloudstack-4.4-single-server-on-ubuntu-14.04.1-with-kvm.html</a></p>
 
-<p>QuickServer: 172.16.0.11, QuickClient: 172.16.0.12</p>
+<h3 id="preparation-for-packages">Preparation For Packages</h3>
 
-<p>QuickServer Machine:</p>
+<p>Install reprepro:</p>
 
-<pre><code>xxx@QuickServer:~$ cat /etc/hostname
-QuickServer
-xxx@QuickServer:~$ cat /etc/hosts
-127.0.0.1       localhost
-127.0.1.1       QuickServer
-172.16.0.11     QuickServer
-172.16.0.12     QuickClient
+<pre><code># apt-get install -y reprepro
+</code></pre>
 
-# The following lines are desirable for IPv6 capable hosts
-::1     localhost ip6-localhost ip6-loopback
-ff02::1 ip6-allnodes
-ff02::2 ip6-allrouters
-xxx@QuickServer:~$ cat /etc/network/interfaces
-# This file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
+<pre><code># mkdir -p /srv/reprepro
+root@DebServer:/srv/reprepro# ls
+conf  db  dists  incoming  indices  lists  logs  pool  project  tmp
+root@DebServer:/srv/reprepro# ls conf/
+distributions  incomming  updates  uploaders
+root@DebServer:/srv/reprepro# cat conf/distributions 
+Origin: Alveonet
+Label: Alveonet
+Suite: trusty
+Codename: trusty
+Version: 14.04
+Architectures: i386 amd64 source
+Components: main cloudstack43 cloudstack44 cloudstack45 cloudstack
+Description: Alveonet specific (or backported) packages
+#SignWith: dash1982
+DebOverride: ../indices/override.trusty.main
+UDebOverride: ../indices/override.tursy.main.debian-installer
+DscOverride: ../indices/override.trusty.main.src
+DebIndices: Packages Release . .gz .bz2
+UDebIndices: Packages . .gz .bz2
+DscIndices: Sources Release .gz .bz2
+Contents: . .gz .bz2
+Update: - cloudstack45 cloudstack43 cloudstack44
+Log: packages.alveonet.org.log
+root@DebServer:/srv/reprepro# cat conf/incomming 
+Name: default
+IncomingDir: incoming
+TempDir: tmp
+Allow: trusty trusty-backports
+Cleanup: on_deny on_error
+root@DebServer:/srv/reprepro# cat conf/updates 
+Name: cloudstack44
+Method: http://cloudstack.apt-get.eu/ubuntu
+#VerifyRelease: 86C278E3
+Suite: trusty
+Architectures: amd64
+GetInRelease: no
+#Components: 4.3&gt;main
+Components: 4.4&gt;cloudstack44
 
+# Name: cloudstack44
+# Method: http://cloudstack.apt-get.eu/ubuntu
+# #VerifyRelease: 86C278E3
+# Suite: trusty
+# Architectures: amd64
+# GetInRelease: no
+# #Components: 4.3&gt;main
+# Components: 4.4&gt;main
+
+
+Name: cloudstack45
+Method: http://cloudstack.apt-get.eu/ubuntu
+#VerifyRelease: 86C278E3
+Suite: trusty
+Architectures: amd64
+GetInRelease: no
+#Components: 4.3&gt;main
+Components: 4.5&gt;cloudstack45
+
+
+Name: cloudstack43
+Method: http://cloudstack.apt-get.eu/ubuntu
+#VerifyRelease: 86C278E3
+Suite: trusty
+Architectures: amd64
+GetInRelease: no
+#Components: 4.3&gt;main
+Components: 4.3&gt;cloudstack43
+root@DebServer:/srv/reprepro# cat conf/uploaders 
+allow * by unsigned
+
+
+
+# reprepro -Vb /srv/reprepro export
+# reprepro update
+
+</code></pre>
+
+<p>By doing this you could make a local reprepro created repository.</p>
+
+<p>TBD</p>
+
+<h3 id="installation-steps">Installation Steps</h3>
+
+<h4 id="system-preparation">System Preparation</h4>
+
+<p>First install Ubuntu14.04, I use Cobbler Server&rsquo;s PXE Installation.</p>
+
+<p>Change the Root Permit login under <code>/etc/ssh/sshd_config</code> and restart the ssh service.</p>
+
+<p>Change the IP Address to 10.10.10.2 via:</p>
+
+<pre><code>root@Ubuntu-14:~# cat /etc/network/interfaces
 # The loopback network interface
 auto lo
 iface lo inet loopback
@@ -228,421 +286,568 @@ iface lo inet loopback
 # The primary network interface
 auto eth0
 iface eth0 inet static
-address 172.16.0.11
+address 10.10.10.2
 netmask 255.255.255.0
-gateway 172.16.0.1
-dns-nameservers 114.114.114.114
-
+gateway 10.10.10.1
+dns-nameservers 180.76.76.76
 </code></pre>
 
-<p>QuickClient Machine:</p>
+<p>Relogin to the system, and begin to install the packages.</p>
 
-<pre><code>xxx@QuickClient:~$ cat /etc/hosts
+<pre><code># vi /etc/apt/source.list
+deb http://192.168.1.111 amd64/
+deb http://192.168.1.111/reprepro/      trusty  cloudstack44
+# apt-get update &amp;&amp; apt-get install vim
+</code></pre>
+
+<p>I use 192.168.1.111 because I cached all of the required packages in this server, thus it could speed-up the deployment.</p>
+
+<h4 id="server-configuration">Server Configuration</h4>
+
+<p>Configure the Server&rsquo;s hostname:</p>
+
+<pre><code>root@Ubuntu-14:~# cat /etc/hostname 
+CS
+root@Ubuntu-14:~# cat /etc/hosts
 127.0.0.1       localhost
-127.0.1.1       QuickClient
-172.16.0.12     QuickClient
-172.16.0.11     QuickServer
+10.10.0.2       CS
+127.0.1.1       CS.CSDomain     CS
 
-
-# The following lines are desirable for IPv6 capable hosts
-::1     localhost ip6-localhost ip6-loopback
-ff02::1 ip6-allnodes
-ff02::2 ip6-allrouters
-xxx@QuickClient:~$ cat /etc/hostname 
-QuickClient
-xxx@QuickClient:~$ cat /etc/network/interfaces
-# This file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
-
-# The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 172.16.0.12
-netmask 255.255.255.0
-gateway 172.16.0.1
-dns-nameservers 114.114.114.114
+root@Ubuntu-14:~# reboot
+# hostname --fqdn
+CS
 </code></pre>
 
-<h3 id="quickserver-installation">QuickServer Installation</h3>
+<p>Now configure the NTP via:</p>
 
-<p>You should have following packges in this server/management node:</p>
-
-<pre><code>$ ls
-chefdk_0.6.0-1_amd64.deb  chef-server-core_12.0.8-1_amd64.deb  opscode-manage_1.13.0-1_amd64.deb
+<pre><code># apt-get purge ntp
+# apt-get install openntpd
 </code></pre>
 
-<p>Install and configuration:</p>
+<p>Configure the Network:</p>
 
-<pre><code>$ sudo dpkg -i chef-server-core_12.0.8-1_amd64.deb
-$ sudo chef-server-ctl reconfigure
+<pre><code># apt-get install bridge-utils
+# cat /etc/network/interfaces
+    
+    # The loopback network interface
+    auto lo
+    iface lo inet loopback
+    
+    # The primary network interface
+    auto eth0
+    iface eth0 inet manual
+    
+    
+    auto cloudbr0
+    iface cloudbr0 inet static
+            address 10.10.10.2
+            netmask 255.255.255.0
+            gateway 10.10.10.1
+            dns-nameservers 180.76.76.76
+            bridge-ports eth0
+            bridge_fd 5
+            bridge_stp off
+            bridge_maxwait 1
+    
+    # Private network
+    auto cloudbr1
+    iface cloudbr1 inet manual
+            bridge_ports none
+            bridge_fd 5
+            bridge_stp off
+            bridge_maxwait 1
+# reboot
 </code></pre>
 
-<p>Now configure the chefserver via following command:</p>
+<p>Now the Network Bridge is configured.</p>
 
-<pre><code>$ sudo chef-server-ctl user-create twocloud cloud Yang twocloud@gmail.com engine --filename ~/twocloud.pem
-$ sudo chef-server-ctl org-create twocloud OneCloud Software, Inc. --association_user twocloud --filename ~/twocloud_org.pem
-$ ls ~/*.pem
-/home/xxxx/twocloud_org.pem  /home/xxxx/twocloud.pem
+<h4 id="cloudstack-installation">CloudStack Installation</h4>
+
+<p>Since all of the packages are cached into LAN environment, simply type following command for installing:</p>
+
+<pre><code># apt-get install cloudstack-management
 </code></pre>
 
-<p>Install opscode:</p>
+<p>Then Install the database server:</p>
 
-<pre><code>$ sudo dpkg -i opscode-manage_1.13.0-1_amd64.deb
-$ sudo opscode-manage-ctl reconfigure
+<pre><code># apt-get install mysql-server
+# vim /etc/mysql/conf.d/cloudstack.cnf
+[mysqld]
+innodb_rollback_on_timeout=1
+innodb_lock_wait_timeout=600
+max_connections=350
+log-bin=mysql-bin
+binlog-format = 'ROW'
+root@CS:~# service mysql restart
+root@CS:~# cloudstack-setup-databases cloud:engine@localhost --deploy-as=root:engine -e file -m mymskey44 -k mydbkey00
 </code></pre>
 
-<p>Also install the chefdk via:</p>
+<h4 id="nfs-storage-preparation">NFS Storage Preparation</h4>
 
-<pre><code>$ sudo dpkg -i chefdk_0.6.0-1_amd64.deb
+<p>Add export directory:</p>
+
+<pre><code># mkdir -p /export/primary /export/secondary
+# apt-get install nfs-kernel-server
+# vim /etc/exports
+/export  *(rw,async,no_root_squash,no_subtree_check)
+# cp /etc/default/nfs-common /etc/default/nfs-common.orig
+# sed -i '/NEED_STATD=/ a NEED_STATD=yes' /etc/default/nfs-common
+# sed -i '/STATDOPTS=/ a STATDOPTS=&quot;--port 662 --outgoing-port 2020&quot;' /etc/default/nfs-common
+# diff -du /etc/default/nfs-common.orig /etc/default/nfs-common
+
+root@CS:~# cat /etc/modprobe.d/lockd.conf 
+options lockd nlm_udpport=32769 nlm_tcpport=32803
+root@CS:~# service nfs-kernel-server restart
+root@CS:~# showmount -e 127.0.0.1
+Export list for 127.0.0.1:
+/export *
 </code></pre>
 
-<p>Install the git and configure the chef-repo:</p>
+<p>Mount it via:</p>
 
-<pre><code>$ sudo apt-get install git
-$ git config --global user.name &quot;purplepalm&quot;
-$ git config --global user.email &quot;purplepalm@gmail.com&quot;
-$ git clone https://github.com/opscode/chef-repo.git
-$ mkdir .chef
-$ cd .chef/
-$ scp xxxx@127.0.0.1:/home/xxxx/*.pem ./
+<pre><code>root@CS:~# mkdir -p /mnt/primary /mnt/secondary
+root@CS:~# tail -2 /etc/fstab
+10.10.10.2:/export/primary   /mnt/primary    nfs rsize=8192,wsize=8192,timeo=14,intr,vers=3,noauto  0   2
+10.10.10.2:/export/secondary /mnt/secondary  nfs rsize=8192,wsize=8192,timeo=14,intr,vers=3,noauto  0   2
+root@CS:~# mount /mnt/primary/
+root@CS:~# mount /mnt/secondary/
+root@CS:~# mount | tail -2
+10.10.10.2:/export/primary on /mnt/primary type nfs (rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3,addr=10.10.10.2)
+10.10.10.2:/export/secondary on /mnt/secondary type nfs (rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3,addr=10.10.10.2)
 </code></pre>
 
-<p>Now under the .chef directory, create the knife.rb for letting knife using:</p>
+<h4 id="cloudstack-agent-installation">Cloudstack Agent Installation</h4>
 
-<pre><code>$ cat ~/chef-repo/.chef/knife.rb
-current_dir = File.dirname(__FILE__)
-log_level                :info
-log_location             STDOUT
-node_name                &quot;twocloud&quot;
-client_key               &quot;#{current_dir}/twocloud.pem&quot;
-validation_client_name   &quot;twocloud&quot;
-validation_key           &quot;#{current_dir}/twocloud_org.pem&quot;
-chef_server_url          &quot;https://QuickServer/organizations/twocloud&quot;
-syntax_check_cache_path  &quot;#{ENV['HOME']}/.chef/syntaxcache&quot;
-cookbook_path            [&quot;#{current_dir}/../cookbooks&quot;]
+<p>Install it via:</p>
+
+<pre><code>root@CS:~# apt-get install cloudstack-agent
+root@CS:~# cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.orig
+root@CS:~# sed -i '/#listen_tls = 0/ a listen_tls = 0' /etc/libvirt/libvirtd.conf
+root@CS:~# sed -i '/#listen_tcp = 1/ a listen_tcp = 1' /etc/libvirt/libvirtd.conf
+root@CS:~# sed -i '/#tcp_port = &quot;16509&quot;/ a tcp_port = &quot;16509&quot;' /etc/libvirt/libvirtd.conf
+root@CS:~# sed -i '/#auth_tcp = &quot;sasl&quot;/ a auth_tcp = &quot;none&quot;' /etc/libvirt/libvirtd.conf
+root@CS:~# diff -du /etc/libvirt/libvirtd.conf.orig /etc/libvirt/libvirtd.conf
+root@CS:~# cp /etc/default/libvirt-bin /etc/default/libvirt-bin.orig
+root@CS:~# sed -i -e 's/libvirtd_opts=&quot;-d&quot;/libvirtd_opts=&quot;-d -l&quot;/' /etc/default/libvirt-bin
+root@CS:~# service libvirt-bin restart
+root@CS:~# cp /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.orig
+root@CS:~# sed -i '/#vnc_listen = &quot;0.0.0.0&quot;/ a vnc_listen = &quot;0.0.0.0&quot;' /etc/libvirt/qemu.conf
+root@CS:~# diff -du /etc/libvirt/qemu.conf.orig /etc/libvirt/qemu.conf
+root@CS:~# service libvirt-bin restart
+root@CS:~# ln -s /etc/apparmor.d/usr.sbin.libvirtd /etc/apparmor.d/disable/
+root@CS:~# ln -s /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper /etc/apparmor.d/disable/
+root@CS:~# apparmor_parser -R /etc/apparmor.d/usr.sbin.libvirtd
+root@CS:~# apparmor_parser -R /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper
+root@CS:~# service libvirt-bin restart
 </code></pre>
 
-<p>Verify ssl via:</p>
+<h4 id="configure-firewall">Configure FireWall</h4>
 
-<pre><code>$ knife ssl fetch
-WARNING: Certificates from QuickServer will be fetched and placed in your trusted_cert
-directory (/home/xxxx/chef-repo/.chef/trusted_certs).
+<p>Open the following ports:</p>
 
-Knife has no means to verify these are the correct certificates. You should
-verify the authenticity of these certificates after downloading.
-
-Adding certificate for QuickServer in /home/xxxx/chef-repo/.chef/trusted_certs/QuickServer.crt
-
-$ knife ssl check
-Connecting to host QuickServer:443
-Successfully verified certificates from `QuickServer'
-$ knife client list
-twocloud-validator
-
+<pre><code>root@CS:~# ufw allow proto tcp from any to any port 22
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 1798
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 16509
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 5900:6100
+Rules updated
+Rules updated (v6)
+root@CS:~# ufw allow proto tcp from any to any port 49152:49216
+Rules updated
+Rules updated (v6)
 </code></pre>
 
-<p>Next, configure the QuickClient and add it to the Chef.</p>
+<p>Now restart and verify the NFS working.</p>
 
-<h3 id="quickclient">QuickClient</h3>
-
-<p>Install the client deb file via:</p>
-
-<pre><code>$ ls
-chef_12.3.0-1_amd64.deb
-$ sudo dpkg -i chef_12.3.0-1_amd64.deb 
+<pre><code>root@CS:~# rpcinfo -u 10.10.10.2 mount
+program 100005 version 1 ready and waiting
+program 100005 version 2 ready and waiting
+program 100005 version 3 ready and waiting
+root@CS:~# showmount -e 10.10.10.2
+Export list for 10.10.10.2:
+/export *
+root@CS:~# mount /mnt/primary/
+root@CS:~# mount /mnt/secondary/
 </code></pre>
 
-<p>Now,On !!! QuickServer !!! , bootstrap the QuickClient via:</p>
+<p>Added the System Template:</p>
 
-<pre><code>$ cd ~/chef-repo/
-$ knife bootstrap 172.16.0.12 -x xxxx -P xxxxxxxx --sudo
-Doing old-style registration with the validation key at /home/xxxx/chef-repo/.chef/twocloud_org.pem...
-Delete your validation key in order to use your user credentials instead
-
-Connecting to 172.16.0.12
-172.16.0.12 Starting first Chef Client run...
-172.16.0.12 Starting Chef Client, version 12.3.0
-172.16.0.12 Creating a new client identity for QuickClient using the validator key.
-172.16.0.12 
-172.16.0.12 ================================================================================
-172.16.0.12 Chef encountered an error attempting to create the client &quot;QuickClient&quot;
-172.16.0.12 ================================================================================
-
+<pre><code>root@CS:~# /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /mnt/secondary -u http://192.168.1.111/systemvm64template-4.4.1-7-kvm.qcow2.bz2  -h kvm -F
+......
+Successfully installed system VM template  to /mnt/secondary/template/tmpl/1/3/
 </code></pre>
 
-<p>Yes, you will meet an error, Now go back to !!! QuickClient !!! and solve it.</p>
+<h3 id="cloudstack">Cloudstack</h3>
 
-<p>First retrieve the pem file under your own home directory:</p>
+<p>First manually start the services:</p>
 
-<pre><code>$ scp xxxx@172.16.0.11:/home/xxxx/*.pem ./
-Password: 
-twocloud_org.pem                                                                                             100% 1674     1.6KB/s   00:00 
-twocloud.pem                                                                                                 100% 1674     1.6KB/s   00:00
+<pre><code>service cloudstack-management status
+service cloudstack-agent status
+service tomcat6 status
+
+service cloudstack-management stop
+service tomcat6 stop
+service cloudstack-agent stop
+ps -efl | grep java
+
+service cloudstack-management start
+service cloudstack-management status
+service cloudstack-agent start
+service cloudstack-agent status
 </code></pre>
 
-<p>Then fetch back the ssl via:</p>
+<p>Now setup the UI via visiting <code>http://10.10.10.2:8080/client</code>, usename/password: admin/password:</p>
 
-<pre><code>$ sudo knife ssl fetch --config /etc/chef/client.rb
-WARNING: Certificates from QuickServer will be fetched and placed in your trusted_cert
-directory (/etc/chef/trusted_certs).
+<pre><code>Choose &quot;Continue with basic installation&quot;. This will start a wizard that will walk through the configuration. You will need to adjust the network values for your environment, and make sure you use appropiate, free, ranges.
 
-Knife has no means to verify these are the correct certificates. You should
-verify the authenticity of these certificates after downloading.
-
-Adding certificate for QuickServer in /etc/chef/trusted_certs/QuickServer.crt
+Add a new zone named &quot;zone1&quot;, DNS1 10.10.10.1 and Internal DNS 10.10.10.1.
+Add a new pod named &quot;pod1&quot;, gateway 10.10.10.1, netmask 255.255.255.0, IP range 10.10.10.160-10.10.10.169.
+Add a guest network, gateway 10.10.10.1, netmask 255.255.255.0, IP range 10.10.10.170-192.168.77.230.
+Add a cluster named cluster1, Hypervisor KVM.
+Add a host. Host Name &quot;CS&quot;, user root, passsword for the root linux user.
+Add primary storage: name primary1, protocol NFS, Scope Cluster, server 10.10.10.10, path /export/primary.
+Add secondary storage: NFS server 10.10.10.10, path /export/secondary.
+Hit Launch and pray.
+This should go through a sequence of setup.
 </code></pre>
 
-<p>Now manually use the <code>/home/xxxx/twocloud.pem</code> for ssl checking.</p>
-
-<pre><code>$ sudo chef-client -l debug -S https://QuickServer/organizations/twocloud -K /home/xxxx/twocloud.pem 2&gt;&amp;1
-</code></pre>
-
-<p>Your terminal may encounter Garbled codes, simply quit it, and go back to !!! QuickServer !!!, Bootstrap again via:</p>
-
-<pre><code>$ knife bootstrap 172.16.0.12 -x xxxx -P xxxxxxxx --sudo
-Doing old-style registration with the validation key at /home/xxxx/chef-repo/.chef/twocloud_org.pem...
-Delete your validation key in order to use your user credentials instead
-
-Connecting to 172.16.0.12
-172.16.0.12 Starting first Chef Client run...
-172.16.0.12 Starting Chef Client, version 12.3.0
-172.16.0.12 resolving cookbooks for run list: []
-172.16.0.12 Synchronizing Cookbooks:
-172.16.0.12 Compiling Cookbooks...
-172.16.0.12 [2015-06-08T09:12:09-04:00] WARN: Node QuickClient has an empty run list.
-172.16.0.12 Converging 0 resources
-172.16.0.12 
-172.16.0.12 Running handlers:
-172.16.0.12 Running handlers complete
-172.16.0.12 Chef Client finished, 0/0 resources updated in 1.179038534 seconds
-
-</code></pre>
-
-<p>Now you could list all of the client under your workstation directory:</p>
-
-<pre><code>$ knife client list
-QuickClient
-twocloud-validator
-</code></pre>
-
-<p>QuickClient is the node we just added.</p>
-
-<p>Here provides a good start-point for following operations, next step you could do more magics on newly added nodes, also you could add more nodes for deployment.</p>
+<p>Now you could enjoy the cloudstack all-in-one</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/08/chef-troubleshooting-2/">Chef TroubleShooting 2</a>
+        <a href="http://purplepalmdash.github.io/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File For Ubuntu1404 In CobblerServer</a>
       </h1>
-      <span class="post-date">Jun 8, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/08/chef-troubleshooting-2/#disqus_thread">Comments</a>
+      <span class="post-date">Jul 4, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
-      <p>The ssl checking for adding new nodes is still a horrible procedure, following shows the correct steps for adding new node:</p>
+      
 
-<p>On Chef Workstation, add node via its ip address rather than via its hostname:</p>
+<h3 id="proseed-file">Proseed File</h3>
 
-<pre><code>$ knife bootstrap 172.16.0.12 -x username_on_12 -P password_on_12 --sudo
+<pre><code>d-i time/zone string Asia/Shanghai
+
+# Setup the installation source
+d-i mirror/country string manual
+d-i mirror/http/hostname string $http_server
+#d-i mirror/http/directory string $install_source_directory
+d-i mirror/http/directory string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
+d-i mirror/http/proxy string
+d-i apt-setup/security_host string $http_server
+d-i apt-setup/security_path string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
 </code></pre>
 
-<p>The example knife.rb file should be written like following:</p>
+<h3 id="local-repository">Local Repository</h3>
 
-<pre><code>current_dir = File.dirname(__FILE__)
-log_level                :info
-log_location             STDOUT
-node_name                &quot;nodename&quot;
-client_key               &quot;#{current_dir}/node.pem&quot;
-validation_client_name   &quot;nodename&quot;
-validation_key           &quot;#{current_dir}/node_org.pem&quot;
-chef_server_url          &quot;https://tmpChefServer/organizations/nodename&quot;
-syntax_check_cache_path  &quot;#{ENV['HOME']}/.chef/syntaxcache&quot;
-cookbook_path            [&quot;#{current_dir}/../cookbooks&quot;]
+<p>In one installed machine, do following for getting the repository of all of the installed packages:</p>
+
+<pre><code>$ sudo apt-get install dselect
+$ dpkg --get-selections | grep -v deinstall&gt;InstalledPackage.txt
+$ awk {'print $1'} InstalledPackage.txt | xargs apt-get download
 </code></pre>
 
-<p>On Chef Client, first fetching the ssl, then manually passed the verification.</p>
+<p>Use nginx for sharing the repository:</p>
 
-<pre><code>$ knife ssl fetch --config /etc/chef/client.rb
-$ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxxxx.pem
+<pre><code>$ sudo apt-get install -y nginx
+$ sudo vim /etc/nginx/site-enabled/default
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server ipv6only=on;
+
+        root /var/www/html;
+        index index.html index.htm;
+
+        # Make site accessible from http://localhost/
+        server_name localhost;
+
+        location / {
+                # First attempt to serve request as file, then
+                # as directory, then fall back to displaying a 404.
+                try_files $uri $uri/ =404;
+                autoindex on;
+                # Uncomment to enable naxsi on this location
+$ sudo service nginx restart
 </code></pre>
 
-<p>On Chef Server, bootstrap again via the same command, now you could work.</p>
+<p>Now generate the repository server:</p>
+
+<pre><code>$ mkdir -p /var/www/html/amd64
+$ mv /root/Code/*.deb /var/www/html/amd64
+$ cd /var/www/html/
+$ dpkg-scanpackages amd64/ | gzip -9c &gt; amd64/Packages.gz
+$ mv /root/Code/InstalledPackage.txt /var/www/html
+</code></pre>
+
+<h3 id="use-local-repository">Use Local Repository</h3>
+
+<p>Change the repoisoty setting:</p>
+
+<pre><code>root@Ubuntu-14:~# cat /etc/apt/sources.list
+deb http://192.168.1.111 amd64/
+root@Ubuntu-14:~# apt-get update &amp;&amp;  apt-get install -y dselect
+root@Ubuntu-14:~# dselect update
+root@Ubuntu-14:~# wget http://192.168.1.11/InstalledPackage.txt
+root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt &amp;&amp; apt-get -u dselect-upgrade 
+</code></pre>
+
+<p>After updating, you have the same system as your server.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a>
+        <a href="http://purplepalmdash.github.io/2015/07/03/try-raid0-installation-on-ubuntu/">Try raid0 installation on Ubuntu</a>
       </h1>
-      <span class="post-date">Jun 8, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/08/openvswitch-and-vxlan-how-to/#disqus_thread">Comments</a>
+      <span class="post-date">Jul 3, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/07/03/try-raid0-installation-on-ubuntu/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
         
       </span>
       
       
-
-<p>Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it.</p>
 
 <h3 id="preparation">Preparation</h3>
 
-<p>I use two VMs for this experiment, created a new virtual network, it&rsquo;s 10.94.94.0/24, every vm machines adds into this network.<br />
-VM1, VM2, both have 1G Memory. 1 Core.<br />
-VM1: 10.94.94.11, VM2: 10.94.94.12.</p>
+<p>Prepare the disks:</p>
 
-<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade
-$ sudo apt-get install build-essential$
-$ sudo reboot
-$ uname -a
-$ uname -a
-Linux OpenVSwitchVM1 3.13.0-24-generic #47-Ubuntu SMP Fri May 2 23:30:00 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux
+<pre><code>[root:/home/juju/img]# mkdir Raid0
+[root:/home/juju/img]# cd Raid0/
+[root:/home/juju/img/Raid0]# ls
+[root:/home/juju/img/Raid0]# qemu-img create -f qcow2 disk0.qcow2 10G
+Formatting 'disk0.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 
+[root:/home/juju/img/Raid0]# qemu-img create -f qcow2 disk1.qcow2 10G
+Formatting 'disk1.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 
+[root:/home/juju/img/Raid0]# qemu-img create -f qcow2 disk2.qcow2 10G
+Formatting 'disk2.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 
 </code></pre>
 
-<h3 id="generate-deb">Generate DEB</h3>
+<p>Prepare the Virtual Machine:<br />
+<img src="/images/2015_07_03_11_06_03_658x441.jpg" alt="/images/2015_07_03_11_06_03_658x441.jpg" /></p>
 
-<p>Following steps includes install dependencies, fetching source code, build, generate package, notice we use 2.3.0 version of the openvswitch.</p>
+<p><img src="/images/2015_07_03_11_06_57_556x325.jpg" alt="/images/2015_07_03_11_06_57_556x325.jpg" /></p>
 
-<pre><code>$ sudo apt-get install -y build-essential fakeroot debhelper \
-                    autoconf automake bzip2 libssl-dev \
-                    openssl graphviz python-all procps \
-                    python-qt4 python-zopeinterface \
-                    python-twisted-conch libtool
-$ wget http://openvswitch.org/releases/openvswitch-2.3.0.tar.gz
-$ tar xzvf openvswitch-2.3.0.tar.gz
-$ cd openvsiwtch-2.3.0
-$ DEB_BUILD_OPTIONS='parallel=8 nocheck' fakeroot debian/rules binary
-$ cd ..
-$ ls -al *.deb
-openvswitch-common_2.3.0-1_amd64.deb         openvswitch-ipsec_2.3.0-1_amd64.deb   openvswitch-vtep_2.3.0-1_amd64.deb
-openvswitch-datapath-dkms_2.3.0-1_all.deb    openvswitch-pki_2.3.0-1_all.deb       python-openvswitch_2.3.0-1_all.deb
-openvswitch-datapath-source_2.3.0-1_all.deb  openvswitch-switch_2.3.0-1_amd64.deb
-openvswitch-dbg_2.3.0-1_amd64.deb            openvswitch-test_2.3.0-1_all.deb
+<h3 id="partition">Partition</h3>
 
+<p><img src="/images/2015_07_03_11_12_18_615x311.jpg" alt="/images/2015_07_03_11_12_18_615x311.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_15_30_476x216.jpg" alt="/images/2015_07_03_11_15_30_476x216.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_15_36_384x205.jpg" alt="/images/2015_07_03_11_15_36_384x205.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_18_30_499x265.jpg" alt="/images/2015_07_03_11_18_30_499x265.jpg" /></p>
+
+<h3 id="raid">Raid</h3>
+
+<p>Configure the Software Raid0:</p>
+
+<p><img src="/images/2015_07_03_11_19_31_441x260.jpg" alt="/images/2015_07_03_11_19_31_441x260.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_20_41_655x244.jpg" alt="/images/2015_07_03_11_20_41_655x244.jpg" /></p>
+
+<p><img src="/images/2015_07_03_11_22_43_728x243.jpg" alt="/images/2015_07_03_11_22_43_728x243.jpg" /></p>
+
+<p>After Configuration of SoftRaid1, the screen displayed like:</p>
+
+<p><img src="/images/2015_07_03_11_28_28_687x457.jpg" alt="/images/2015_07_03_11_28_28_687x457.jpg" /></p>
+
+<p>Continue to install.</p>
+
+<h3 id="verify-raid">Verify Raid.</h3>
+
+<p>Use df and fdisk to verify the partition information:</p>
+
+<pre><code>clouder@UbuntuRaid1:~$ df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/md0        9.3G  870M  7.9G  10% /
+none            4.0K     0  4.0K   0% /sys/fs/cgroup
+udev            235M  4.0K  235M   1% /dev
+tmpfs            50M  440K   49M   1% /run
+none            5.0M     0  5.0M   0% /run/lock
+none            246M     0  246M   0% /run/shm
+none            100M     0  100M   0% /run/user
+clouder@UbuntuRaid1:~$ sudo fdisk -l
+[sudo] password for clouder: 
+
+Disk /dev/vda: 10.7 GB, 10737418240 bytes
+255 heads, 63 sectors/track, 1305 cylinders, total 20971520 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x00035942
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/vda1   *        2048    19922943     9960448   fd  Linux raid autodetect
+/dev/vda2        19924990    20969471      522241    5  Extended
+/dev/vda5        19924992    20969471      522240   fd  Linux raid autodetect
+
+Disk /dev/vdb: 10.7 GB, 10737418240 bytes
+255 heads, 63 sectors/track, 1305 cylinders, total 20971520 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x000715e9
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/vdb1   *        2048    19922943     9960448   fd  Linux raid autodetect
+/dev/vdb2        19924990    20969471      522241    5  Extended
+/dev/vdb5        19924992    20969471      522240   fd  Linux raid autodetect
+
+Disk /dev/md0: 10.2 GB, 10190979072 bytes
+2 heads, 4 sectors/track, 2488032 cylinders, total 19904256 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x00000000
+
+Disk /dev/md0 doesn't contain a valid partition table
+
+Disk /dev/md1: 534 MB, 534446080 bytes
+2 heads, 4 sectors/track, 130480 cylinders, total 1043840 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x00000000
+
+Disk /dev/md1 doesn't contain a valid partition table
 </code></pre>
 
-<p>Also copy all of the deb files into another PC.</p>
+<p>Verify the raid status:</p>
 
-<h3 id="installation">Installation</h3>
-
-<p>In two machines, do following steps for installing.</p>
-
-<pre><code>$ sudo apt-get install -y bridge-utils
-$ sudo dpkg -i openvswitch-common_2.3.1-1_amd64.deb \
-         openvswitch-switch_2.3.1-1_amd64.deb
+<pre><code>root@UbuntuRaid1:/etc/initramfs-tools/conf.d# cat /proc/mdstat 
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+md1 : active raid1 vda5[0] vdb5[1]
+      521920 blocks super 1.2 [2/2] [UU]
+      
+md0 : active raid1 vda1[0] vdb1[1]
+      9952128 blocks super 1.2 [2/2] [UU]
+      
+unused devices: &lt;none&gt;
 </code></pre>
 
-<h3 id="vm-netorking-configuration">VM Netorking Configuration</h3>
+<p>Query the status of SoftRaid1:</p>
 
-<p>For VM1:</p>
+<pre><code>root@UbuntuRaid1:/etc/initramfs-tools/conf.d# sudo mdadm --query --detail /dev/md0
+/dev/md0:
+        Version : 1.2
+  Creation Time : Fri Jul  3 11:24:46 2015
+     Raid Level : raid1
+     Array Size : 9952128 (9.49 GiB 10.19 GB)
+  Used Dev Size : 9952128 (9.49 GiB 10.19 GB)
+   Raid Devices : 2
+  Total Devices : 2
+    Persistence : Superblock is persistent
 
-<pre><code>root@OpenVSwitchVM1:~# ovs-vsctl add-br br0
-root@OpenVSwitchVM1:~# ovs-vsctl add-br br1
-# ovs-vsctl add-port br0 eth0
-# ifconfig eth0 0 up
-# ifconfig br0 10.94.94.11
-# route add default gw 10.94.94.1 br0
-# ifconfig br1 172.10.0.1
+    Update Time : Fri Jul  3 11:46:19 2015
+          State : clean 
+ Active Devices : 2
+Working Devices : 2
+ Failed Devices : 0
+  Spare Devices : 0
 
+           Name : UbuntuRaid1:0  (local to host UbuntuRaid1)
+           UUID : bc091921:c198c219:7162e35c:bfff3c4e
+         Events : 19
+
+    Number   Major   Minor   RaidDevice State
+       0     253        1        0      active sync   /dev/vda1
+       1     253       17        1      active sync   /dev/vdb1
 </code></pre>
 
-<p>For VM2:</p>
+<h3 id="remove-one-disk">Remove One Disk</h3>
 
-<pre><code># ovs-vsctl add-br br0
-# ovs-vsctl add-br br1
-# ovs-vsctl add-port br0 eth0
-# ifconfig eth0 0 up &amp;&amp; ifconfig br0 10.94.94.12
-# route add default gw 10.94.94.1
-# ifconfig br1 172.10.1.1
+<p>Remove one, and see if it could be startup.</p>
+
+<p>Result:<br />
+Done, it could start into the system.</p>
+
+<pre><code>clouder@UbuntuRaid1:~$ cat /proc/mdstat 
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+md1 : active (auto-read-only) raid1 vda5[1]
+      521920 blocks super 1.2 [2/1] [_U]
+      
+md0 : active raid1 vda1[1]
+      9952128 blocks super 1.2 [2/1] [_U]
+      
+unused devices: &lt;none&gt;
 </code></pre>
 
-<p>Ping each other, we could see br1 is not OK.</p>
+<h3 id="add-a-new-empty-disk">Add A New Empty Disk</h3>
 
-<h3 id="vxlan-setup">VXLAN Setup</h3>
+<p>Add a new disk into the system, and first partition.</p>
 
-<p>On VM1, do following operation, to set the vx1:</p>
+<pre><code>$ sudo fdisk -l 
 
-<pre><code>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.12
-root@OpenVSwitchVM1:~# ovs-vsctl show
-a1e9afb6-345a-4f79-8e0b-131cd43cfb67
-    Bridge &quot;br0&quot;
-        Port &quot;eth0&quot;
-            Interface &quot;eth0&quot;
-        Port &quot;br0&quot;
-            Interface &quot;br0&quot;
-                type: internal
-    Bridge &quot;br1&quot;
-        Port &quot;br1&quot;
-            Interface &quot;br1&quot;
-                type: internal
-        Port &quot;vx1&quot;
-            Interface &quot;vx1&quot;
-                type: vxlan
-                options: {remote_ip=&quot;10.94.94.12&quot;}
-    ovs_version: &quot;2.3.0&quot;
+Disk /dev/vdb: 10.7 GB, 10737418240 bytes
+16 heads, 63 sectors/track, 20805 cylinders, total 20971520 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x00000000
+
+Disk /dev/vdb doesn't contain a valid partition table
 </code></pre>
 
-<p>On VM2, do following operation, to set vx1</p>
+<p>Clone the partition table from the vda to the newly added partion:</p>
 
-<pre><code>root@OpenVSwitchVM2:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.11
-root@OpenVSwitchVM2:~# ovs-vsctl show
-bce3f2b5-9b77-41dc-8130-b8922dd7ac9e
-    Bridge &quot;br1&quot;
-        Port &quot;vx1&quot;
-            Interface &quot;vx1&quot;
-                type: vxlan
-                options: {remote_ip=&quot;10.94.94.11&quot;}
-        Port &quot;br1&quot;
-            Interface &quot;br1&quot;
-                type: internal
-    Bridge &quot;br0&quot;
-        Port &quot;br0&quot;
-            Interface &quot;br0&quot;
-                type: internal
-        Port &quot;eth0&quot;
-            Interface &quot;eth0&quot;
-    ovs_version: &quot;2.3.0&quot;
+<pre><code>$ sudo sfdisk -d /dev/vda &gt; vda.desc
+$ cat vda.desc 
+$ sudo sfdisk /dev/vdb&lt;./vda.desc
 </code></pre>
 
-<p>So now you could ping each other via the br1 address.</p>
+<p>Now Add the new disk for usage:</p>
 
-<h3 id="mirror-port">Mirror Port</h3>
+<pre><code>clouder@UbuntuRaid1:~$ cat /proc/mdstat 
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+md1 : active (auto-read-only) raid1 vda5[1]
+      521920 blocks super 1.2 [2/1] [_U]
+      
+md0 : active raid1 vda1[1]
+      9952128 blocks super 1.2 [2/1] [_U]
+      
+unused devices: &lt;none&gt;
+clouder@UbuntuRaid1:~$ sudo mdadm --manage /dev/md0 --add /dev/vdb1
+mdadm: added /dev/vdb1
+clouder@UbuntuRaid1:~$ sudo mdadm --manage /dev/md1 --add /dev/vdb5
+mdadm: added /dev/vdb5
+clouder@UbuntuRaid1:~$ cat /proc/mdstat 
+Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10] 
+md1 : active raid1 vdb5[2] vda5[1]
+      521920 blocks super 1.2 [2/1] [_U]
+        resync=DELAYED
+      
+md0 : active raid1 vdb1[2] vda1[1]
+      9952128 blocks super 1.2 [2/1] [_U]
+      [===&gt;.................]  recovery = 16.6% (1662144/9952128) finish=1.8min speed=75552K/sec
+      
+unused devices: &lt;none&gt;
+</code></pre>
 
-<p>Do the following things for setting up the mirror port.</p>
+<h3 id="known-bugs">Known Bugs</h3>
 
-<pre><code>#  modprobe dummy
-#  ip link set up dummy0
-root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 dummy0
-root@OpenVSwitchVM1:~# ovs-vsctl --id=@m create mirror name=mirror0 -- add bridge br1 mirrors @m
-33931f5a-008f-44cf-abc6-38afb3062b5e
-root@OpenVSwitchVM1:~# ovs-vsctl list port dummy0
-_uuid               : 5f5fe675-b1ee-4acd-a0ab-f14e952d1603
-bond_downdelay      : 0
-bond_fake_iface     : false
-bond_mode           : []
-bond_updelay        : 0
-external_ids        : {}
-fake_bridge         : false
-interfaces          : [a6fbabe9-790d-4be8-a362-b7cbdd46db89]
-lacp                : []
-mac                 : []
-name                : &quot;dummy0&quot;
-other_config        : {}
-qos                 : []
-statistics          : {}
-status              : {}
-tag                 : []
-trunks              : []
-vlan_mode           : []
+<p>Error and Solution:</p>
+
+<pre><code>error:  Diskfilter writes are not supported
+
+Edit :/etc/grub.d/10_linux
+
+Replace 'quick_boot=&quot;1&quot;' with 'quick_boot=&quot;0&quot;'
+
+Then :
+
+sudo update-grub
 
 </code></pre>
 
@@ -651,74 +856,46 @@ vlan_mode           : []
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/07/quickly-change-centos-networking/">Quickly Change CentOS Networking</a>
+        <a href="http://purplepalmdash.github.io/2015/06/29/insert-public-key-into-cobbler-deployed-system/">Insert public key into Cobbler Deployed System</a>
       </h1>
-      <span class="post-date">Jun 7, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/07/quickly-change-centos-networking/#disqus_thread">Comments</a>
+      <span class="post-date">Jun 29, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/29/insert-public-key-into-cobbler-deployed-system/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
-      
+      <p>First edit your kickstart file, add following line before the end of your kickstart:</p>
 
-<p>When adding the existing qcow2 files to a new machine, following steps needs to be done to enable the new configuration for the networking:</p>
-
-<h3 id="change-udev-rules">Change udev rules</h3>
-
-<p>Change the eth1 to eth0, and disable the previous defined eth0:</p>
-
-<pre><code>[root@CentOSVM1 ~]# cat /etc/udev/rules.d/70-persistent-net.rules
-# This file was automatically generated by the /lib/udev/write_net_rules
-# program, run by the persistent-net-generator.rules rules file.
-#
-# You can modify it, as long as you keep each rule on a single
-# line, and change only the value of the NAME= key.
-
-# PCI device 0x1af4:0x1000 (virtio-pci)
-#SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, DRIVERS==&quot;?*&quot;, ATTR{address}==&quot;52:54:00:23:14:96&quot;, ATTR{type}==&quot;1&quot;, KERNEL==&quot;eth*&quot;, NAME=&quot;eth0&quot;
-
-# PCI device 0x1af4:0x1000 (virtio-pci)
-SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, DRIVERS==&quot;?*&quot;, ATTR{address}==&quot;52:54:00:bc:c6:f5&quot;, ATTR{type}==&quot;1&quot;, KERNEL==&quot;eth*&quot;, NAME=&quot;eth0&quot;
-
+<pre><code>[root@z_WHServer kickstarts]# pwd
+/var/lib/cobbler/kickstarts
+[root@z_WHServer kickstarts]# cat sample_end.ks
+# Start final steps
++ $SNIPPET('publickey_root')
+$SNIPPET('kickstart_done')
+# End final steps
+%end
 </code></pre>
 
-<h3 id="change-the-ethernet-configuration">Change the ethernet configuration</h3>
+<p>And the <code>publickey_root</code> should be edited as following:</p>
 
-<h4 id="hostname">Hostname</h4>
-
-<p>The hostname and the gateway could be modified via:</p>
-
-<pre><code># cat /etc/sysconfig/network
-NETWORKING=yes
-+ HOSTNAME=CentOSVM1
-+ GATEWAY=172.16.0.1
+<pre><code>[root@z_WHServer snippets]# pwd
+/var/lib/cobbler/snippets
+[root@z_WHServer snippets]# cat publickey_root
+# Install CobblerServer's(10.47.58.2) public key for root user
+cd /root
+mkdir --mode=700 .ssh
+cat &gt;&gt; .ssh/authorized_keys &lt;&lt; &quot;PUBLIC_KEY&quot;
+ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA3B3GtGuKY0l2Ak9+WSkorY7R+Cx5/u3RMua/7GrvP05IPywQdkR+mqwdRydNjyhB96nHlYZtr8Fbfn5iwqn0j8dz8wmTZicBNeRqIdbe/YUje5NjXxDXjYda63VfDhpgzJ53KICTx6pBhGaeOKS/U5HqCpDbF7ODP8siU7bRhk1LkIQ6VwZYUg7b0oR+Sw6XJ31Z7gs4CWF6zfjfQQoF7EoMA+dnqvt2K4PQPXNSBJQx3qb9jyXIXvo333PcfIX6mD1TW1wDAIXLm4qz4mi7C8Ax9h+T/D98r08WX360vC5Tzr8feXMs6H4il4s4Ftq7RVoqCNKmG3AB1LTp4AQAzw== root@z_WHServer
+PUBLIC_KEY
+chmod 600 .ssh/authorized_keys
+cat &gt;&gt; .ssh/config &lt;&lt;EOF
+StrictHostKeyChecking no
+UserKnownHostsFile /dev/null
+EOF
 </code></pre>
 
-<h4 id="change-the-ip-configuration-of-the-eth0">Change the IP configuration of the eth0</h4>
-
-<pre><code>[root@CentOSVM1 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0
-DEVICE=eth0
-TYPE=Ethernet
-UUID=9d92e12c-54a3-404a-bd1c-ae033e8e968c
-ONBOOT=yes
-NM_CONTROLLED=yes
-BOOTPROTO=none
-+ IPADDR=172.16.0.20
-PREFIX=24
-GATEWAY=172.16.0.1
-DNS1=114.114.114.114
-DNS2=180.76.76.76
-DEFROUTE=yes
-IPV4_FAILURE_FATAL=yes
-IPV6INIT=no
-NAME=&quot;System eth0&quot;
-#HWADDR=52:54:00:23:14:96
-+ HWADDR=52:54:00:BC:C6:F5
-
-</code></pre>
-
-<p>By now you could customize the network configuration of the CentOS using the same qcow2 disk file.</p>
+<p>Better you run <code>cobber sync</code> after updating your kickstart file.</p>
 
       
     </div>
@@ -1136,12 +1313,21 @@ NAME=&quot;System eth0&quot;
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/38/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

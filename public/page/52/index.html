@@ -93,500 +93,544 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/16/switch-back-to-arch/">Switch Back To Arch</a>
+        <a href="http://purplepalmdash.github.io/2015/03/23/using-juju-for-deploying-opencontrail/">Using Juju for deploying OpenContrail</a>
       </h1>
-      <span class="post-date">Feb 16, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/16/switch-back-to-arch/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/23/using-juju-for-deploying-opencontrail/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
-
-<p>Since I Moved the city and changed the job, my laptop had to be returned to company, so I bought another HP 8460P which is almost the same as my old one. But this one got i7 4 core CPU and more powerful.<br />
-First I installed Ubuntu and start playing virtualization on it, after successfully installed OpenStack and OpenContrail I started to think change back to my archLinux, so following is the steps.</p>
-
-<h3 id="grub">grub</h3>
-
-<p>Use update-grub2 in Install Ubuntu, it will automatically scan all of the disks, cause I installed the archLinux in the second harddisk, it will add a new item in menu.lst, use this item we could reached ArchLinux.</p>
-
-<h3 id="libvirt">Libvirt</h3>
-
-<p>Enable the libvirtd.service via:</p>
-
-<pre><code>sudo systemctl enable libvirtd.service
-
-</code></pre>
-
-<p>Then restart the system.</p>
-
-<h3 id="nested-virtualization">Nested Virtualization</h3>
-
-<p>Manually we could do via:</p>
-
-<pre><code># modprobe -r kvm_intel
-# modprobe kvm_intel nested=1
-
-</code></pre>
-
-<p>Then check it via:</p>
-
-<pre><code>$ systool -m kvm_intel -v | grep nested
-    nested              = &quot;Y&quot;
-
-</code></pre>
-
-<p>Add it to automatically loaded kernel module:</p>
-
-<pre><code>$ cat /etc/modprobe.d/modprobe.conf
-options kvm_intel nested=1
-
-</code></pre>
-
-<p>Then next time it boots up, will enter the nested mode.</p>
-
-<p>Didn&rsquo;t solved, fuck!!!!!!!</p>
-
-<h3 id="mount-lvm-partitions">Mount LVM Partitions</h3>
-
-<p>The steps is listed as following:</p>
-
-<pre><code>[Trusty@~]$ sudo vgscan
-  Reading all physical volumes.  This may take a while...
-  Found volume group &quot;DashUbuntu-vg&quot; using metadata type lvm2
-[Trusty@~]$ sudo vgchange -ay DashUbuntu-vg
-  2 logical volume(s) in volume group &quot;DashUbuntu-vg&quot; now active
-[Trusty@~]$ sudo lvscan
-  ACTIVE            '/dev/DashUbuntu-vg/root' [690.48 GiB] inherit
-  ACTIVE            '/dev/DashUbuntu-vg/swap_1' [7.91 GiB] inherit
-[Trusty@~]$ sudo mount /dev/DashUbuntu-vg/root /mnt
-[Trusty@~]$ ls /mnt
-bin   etc         initrd.img.old  lost+found  opt   run   sys  var
-boot  home        lib             media       proc  sbin  tmp  vmlinuz
-dev   initrd.img  lib64           mnt         root  srv   usr  vmlinuz.old
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/15/libvirt-network-configuration/">Libvirt Network Configuration</a>
-      </h1>
-      <span class="post-date">Feb 15, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/15/libvirt-network-configuration/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Since I want to use bridge network in libvirt, while the standard bridge networking is not available for me to use, so following tips is for creating and managing the networking.</p>
-
-<h3 id="enable-bridge">Enable Bridge</h3>
-
-<p>In host machine(OpenSuse), create bridge via:</p>
-
-<pre><code>$ sudo brctl addbr br0
-$ sudo brctl addif br0 eth0 
-
-</code></pre>
-
-<p>This will add eth0 to bridge 0, while in startup file of OpenSuse we will do following:</p>
-
-<pre><code># pwd
-/etc/sysconfig/network
-# cat ifcfg-eth0 
-BOOTPROTO='static'
-STARTMODE='ifplugd'
-IFPLUGD_PRIORITY='1'
-NAME='RTL8111/8168B PCI Express Gigabit Ethernet controller'
-USERCONTROL='no' 
-# cat ifcfg-br0 
-BOOTPROTO='static'
-STARTMODE='auto'
-IPADDR='192.168.0.xxx/24'
-NAME='Bridge For Virtualization'
-BRIDGE='yes'
-BRIDGE_PORTS='eth0'
-BRIDGE_FORWARDDELAY='0'
-
-</code></pre>
-
-<p>So next time reboot you will see br0 hold the address of <code>192.168.0.xxx</code>, this is the bridge port we have.</p>
-
-<h3 id="virtual-machine-configuration">Virtual Machine Configuration</h3>
-
-<p>First list all of the virtual machine we have</p>
-
-<pre><code>$ sudo virsh list --all
- Id    Name                           State
-----------------------------------------------------
- 2     Ubuntu12043                    running
- -     OpenContrail                   shut off
-
-</code></pre>
-
-<p>Edit the one we want to edit via:</p>
-
-<pre><code>$ sudo virsh edit Ubuntu12043
-    &lt;interface type='bridge'&gt;
-      &lt;mac address='24:42:53:21:52:49'/&gt;
-      &lt;source bridge='br0'/&gt;
-      &lt;model type='virtio'/&gt;
-      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
-    &lt;/interface&gt;
-
-</code></pre>
-
-<p>So next time when you boot-up the machine, it will have the physical network which connecting to br0.</p>
-
-<h3 id="configure-route">Configure route</h3>
-
-<p>In virtual machine, give the fixed ip address via:</p>
-
-<pre><code>$ sudo ifconfig eth0 192.168.188.188
-$ sudo ip route add 192.168.0.0/24 dev eth0
-$ sudo route add default gw 192.168.0.xxx
-$ sudo route -n
-Destination     Gateway         Genmask         Flags Metric Ref    Use Iface                                                                 
-0.0.0.0         192.168.0.119   0.0.0.0         UG    0      0        0 eth0                                                                  
-192.168.0.0     0.0.0.0         255.255.255.0   U     0      0        0 eth0                                                                  
-192.168.188.0   0.0.0.0         255.255.255.0   U     0      0        0 eth0   
-
-</code></pre>
-
-<p>We want make it permanent via:<br />
-First make the permanent ip address:</p>
-
-<pre><code># cat /etc/network/interfaces 
-# This file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
-
-# The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-        address 192.168.188.188
-        netmask 255.255.255.0
-
-</code></pre>
-
-<p>Second we want to configure the route:</p>
-
-<pre><code>$ tail  /etc/rc.local
-ip route add 192.168.0.0/24 dev eth0
-route add default gw 192.168.0.xxx
-echo &quot;nameserver 114.114.114.114&quot;&gt;&gt;/etc/resolv.conf
-
-</code></pre>
-
-<p>This will set the route and the default gateway of your device, also the nameserver will be set.<br />
-But while in the host machine, you will add following iptables rules:</p>
-
-<pre><code># ip route add 192.168.188.0/24 dev br0
-# iptables -t nat -A POSTROUTING -s 192.168.188.0/24 -j SNAT --to 192.168.0.xxx
-# iptables -A FORWARD -s 192.168.188.188 -j ACCEPT
-
-</code></pre>
-
-<p>The iptables rules should be saved via <code>iptables-save</code>, while the route rules should be added into following file:</p>
-
-<pre><code>$  cat /etc/rc.d/after.local 
-ip route add 192.168.188.0/24 dev br0                
-
-</code></pre>
-
-<p>Now reboot the host machine, you route configuration will be saved.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/13/libvirt-on-opensuse/">Libvirt On OpenSuse</a>
-      </h1>
-      <span class="post-date">Feb 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/13/libvirt-on-opensuse/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested virtualization is not OK. So that&rsquo;s why I have to try libvirt.</p>
-
-<h3 id="installation">Installation</h3>
-
-<p>Install the virt-manager related software via:</p>
-
-<pre><code>$ sudo zypper install kvm libvirt libvirt-python qemu virt-manager
-$ sudo zypper in patterns-openSUSE-kvm_server
-
-</code></pre>
-
-<p>Now if you directly call virt-manager you will got the following hint:</p>
-
-<pre><code> error: authentication failed: Authorization requires authentication but no agent is available.
-    error: failed to connect to the hypervisor
-
-</code></pre>
-
-<p>Or if you run <code>virsh -c qemu:///system</code> you will got the same hint message.<br />
-Solution is we have to enable the polkit service, add following script:</p>
-
-<pre><code>$ sudo vim /usr/bin/polkitexec
-#! /bin/bash
-
-prg=$1
-
-[ &quot;$prg&quot; ] || exec echo &quot;missing argument&quot;
-[ -x &quot;$prg&quot; ] || which $prg &amp;&gt;/dev/null || exec echo &quot;program not found: $1&quot;
-
-shift
-args=$*
-
-[ `id -u` -eq 0 ] &amp;&amp; exec $prg $args
-
-uname -m | grep -q 64 &amp;&amp; lib=/usr/lib64 || lib=/usr/lib
-
-if [ &quot;$DESKTOP_SESSION&quot; = &quot;kde&quot; ]; then 
-        pga=polkit-kde-authentication-agent-1
-        lpga=/usr/$lib/kde4/libexec/$pka
-else
-        pga=polkit-gnome-authentication-agent-1
-        lpga=/usr/lib/$pga
-fi
-
-case $DESKTOP_SESSION in
-        gnome|gnome-shell|cinnamon*) exec $prg $args ;;
-        *) ps nc -C $pga &amp;&gt;/dev/null &amp;&amp; exec $prg $args || { [ ! -x $lpga ] &amp;&amp; exec echo &quot;program not found: $lpga&quot; || $lpga &amp; $prg $args ;} ;;
-esac
-$ sudo chmod 777 /sur/bin/polkitexec
-$ vim ~/.zshrc
-# Wrap virt-manager with polkitexec. 
-alias virt-manager='polkitexec virt-manager'
-
-</code></pre>
-
-<p>Now the virt-manager could be run correctly.</p>
-
-<h3 id="trouble-shooting">Trouble-Shooting</h3>
-
-<p>If you met following error, add root to your kvm.conf is OK.</p>
-
-<pre><code>Could not access KVM kernel module: Permission denied
-failed to initialize KVM: Permission denied
-No accelerator found!
-
-</code></pre>
-
-<p>First change the priviledge:</p>
-
-<pre><code>#chown root:kvm /dev/kvm
-
-</code></pre>
-
-<p>Then modify the /etc/libvirt/qemu.conf:</p>
-
-<pre><code>#user=&quot;root&quot;
-user=&quot;root&quot;
-#group=&quot;root&quot;
-group=&quot;root&quot;
-
-</code></pre>
-
-<p>Restart the libvirtd and restart the virt-manager:</p>
-
-<pre><code>#service libvirtd restart
-
-</code></pre>
-
-<p>Now continue to install OpenContrail.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/10/build-opencontrail-on-centos7-local/">Build OpenContrail On CentOS7(Local)</a>
-      </h1>
-      <span class="post-date">Feb 10, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/10/build-opencontrail-on-centos7-local/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      <p>Fresh steps.</p>
-
-<pre><code>$ sudo yum update
-$ sudo yum install vim
-$ sudo yum install net-tools
-$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
-$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
-$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
-$ sudo yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler 
-$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
-
-</code></pre>
-
-<p>As root, Add repositories:</p>
-
-<pre><code># wget -q -O - http://www.atomicorp.com/installers/atomic | sh
-# yum update
-# yum install dpkg dpkg-devel
-
-</code></pre>
-
-<p>Missing fakeroot, so can&rsquo;t be continue.</p>
-
-<p>Change back to CentOS 6.6.</p>
-
-<pre><code>$ sudo yum install vim net-tools
-$ wget https://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
-$ sudo rpm -ivh epel-release-6-8.noarch.rpm 
-$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
-$ sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
-$ yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler  bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel xz
-
-</code></pre>
-
-<p>Install git:</p>
-
-<pre><code>$ yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
-$ wget https://www.kernel.org/pub/software/scm/git/git-1.9.4.tar.gz
-$ sudo yum install expat-devel tar
-$ make prefix=/usr install
-$ which git
-git version 1.9.4
-
-</code></pre>
-
-<p>Using repo sync:</p>
-
-<pre><code>$ repo init -u git@github.com:Juniper/contrail-vnc
-$ repo sync
-
-</code></pre>
-
-<p>Install argparse:</p>
-
-<pre><code>$ yum install python-argparse
-$ declare -x USER=&quot;root&quot;
-
-</code></pre>
-
-<p>We should upgrade some packages to let python could fetch back the packages:</p>
-
-<pre><code>$ wget http://ftp.gnu.org/gnu/autoconf/autoconf-latest.tar.gz
-$ tar xzvf autoconf-latest.tar.gz
-$ cd autoconf-2.69/
-$ ./configure --prefix=/usr &amp;&amp; make &amp;&amp; sudo make install
-$ sudo yum install libtool
-
-</code></pre>
-
-<p>Fetch the 3rd_party packages:</p>
-
-<pre><code>$ python third_party/fetch_package.py
-
-</code></pre>
-
-<p>Then tar and export it to the host machine.</p>
-
-<p>When Building, we have to install libipfix:</p>
-
-<pre><code>$ wget http://sourceforge.net/projects/libipfix/files/libipfix/libipfix_110209.tgz/download
-$ # build it.   
-
-</code></pre>
-
-<p>Enable the epel repository and install dpkg and dpkg-devel:</p>
-
-<pre><code>$ sudo sed -i -e 's/enabled=0/enabled=1/' /etc/yum.repos.d/epel.repo
-$ sudo yum update &amp;&amp; sudo yum install -y dpkg dpkg-devel
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/09/play-docker-6-using-docker-for-building/">Play Docker(6) -- Using docker for building</a>
-      </h1>
-      <span class="post-date">Feb 9, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/09/play-docker-6-using-docker-for-building/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>The steps is for Ubuntu12.04, the purpose of this documentation is for swiftly get the source code and fetch it to local repository.</p>
 
 <h3 id="preparation">Preparation</h3>
 
-<p>Pull back the Ubuntu12.04:</p>
+<p>First we have to create 4 images which will hold our own opearating system.</p>
 
-<pre><code>$ sudo docker pull ubuntu12.04
-
-</code></pre>
-
-<p>Then run into the ubuntu12.04 via:</p>
-
-<pre><code>$ sudo docker run -it ubuntu12.04 /bin/bash
-root@7b30cc924bb0:~ #
-
-</code></pre>
-
-<p>Install following packages in Ubuntu 12.04 container:</p>
-
-<pre><code># apt-get install python-software-properties
-# apt-get install curl
-# curl https://storage.googleapis.com/git-repo-downloads/repo &gt; /bin/repo
-# chmod 777 /bin/repo
-# apt-get update
-# apt-get install python-pip
-# apt-get install git
-# git config --global user.email kkkttt@gmail.com
-# git config --global user.name kkkttt
-# ssh -T git@github.com
-# repo init -u git@github.com:Juniper/contrail-vnc
-# repo sync
-# declare -x USER=&quot;root&quot;
-# apt-get install python-lxml autoconf bzip2 libtool unzip wget 
-# python third_party/fetch_packages.py
+<pre><code> 1016  qemu-img create -f qcow2 OpenContrail0.qcow2 40G
+ 1017  qemu-img create -f qcow2 OpenContrail1.qcow2 40G
+ 1018  qemu-img create -f qcow2 OpenContrail3.qcow2 40G
+ 1019  qemu-img create -f qcow2 OpenContrail2.qcow2 40G
+ 1020  ls
+ 1021  history
+# pwd
+/home/juju/img/OpenContrail
+# qemu-img create -f qcow2 OpenContrail0.qcow2 40G
+# qemu-img create -f qcow2 OpenContrail1.qcow2 40G
+# qemu-img create -f qcow2 OpenContrail3.qcow2 40G
+# qemu-img create -f qcow2 OpenContrail2.qcow2 40G
+# ls
+OpenContrail0.qcow2  OpenContrail1.qcow2  OpenContrail2.qcow2  OpenContrail3.qcow2
 
 </code></pre>
 
-<p>Install nginx:</p>
+<p>Second, we create the four nodes in the virt-manager, each of them have 3G Memory, and have the cpu copied. Their network deployed to the newly added isolated network.<br />
+<img src="/images/2015_03_23_11_55_12_711x170.jpg" alt="/images/2015_03_23_11_55_12_711x170.jpg" /><br />
+After commission, the status should be &ldquo;ready&rdquo;.</p>
 
-<pre><code>$ sudo rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
-$ sudo rpm -ivh nginx
+<h3 id="juju">Juju</h3>
+
+<p>Copy the new environment named OpenContrail:</p>
+
+<pre><code>$ cat ~/.juju/environments.yaml 
+# This file has been generated by juju quickstart v2.0.1
+# at 2015-03-19 06:36:40 UTC.
+
+default: maas
+environments:
+  maas:
+    admin-secret: xxxx
+    default-series: trusty
+    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
+    maas-server: http://10.17.17.200/MAAS
+    type: maas
+  OpenContrail:
+    admin-secret: xxxx
+    default-series: trusty
+    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
+    maas-server: http://10.17.17.200/MAAS
+    type: maas
 
 </code></pre>
 
-<p>Change nginx&rsquo;s listenning directory to <code>/var/www/</code>, tar the directory and put it under this folder, then use firefox for downloading it.</p>
+<p>Then <code>juju switch</code> and examine you are currently operate at OpenContrail via <code>juju switch -l</code>, the result should be OpenContrail.<br />
+Bootstrap the environment via:</p>
 
-<h3 id="compile-local">Compile Local</h3>
-
-<p>Referes to :<br />
-<a href="http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/">http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/</a><br />
-Plus:</p>
-
-<pre><code>$ sudo apt-get install libglib2.0-dev libglib2.0
+<pre><code>$ juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints=&quot;mem=3G&quot;
 
 </code></pre>
+
+<p>Use <code>juju show-log</code> will display the logs for juju.</p>
+
+<p>Deploy from local repository:</p>
+
+<pre><code>$ export JUJU_REPOSITORY=/home/Trusty/Code/deployOpenContrail/contrail-deployer/charms
+$ juju deploy --to 0 juju-gui
+$ juju deploy --to lxc:0 mysql
+$ juju deploy --to lxc:0 keystone
+$ juju deploy --to lxc:0 nova-cloud-controller
+$ juju deploy --to lxc:0 glance
+$ juju deploy --to lxc:0 rabbitmq-server
+$ juju deploy --to lxc:0 openstack-Trustyboard
+$ juju deploy --to lxc:0 cinder 
+$ juju deploy --to lxc:0 neutron-api
+$ juju deploy --to lxc:0 quantum-gateway
+
+</code></pre>
+
+<h3 id="homeworking">HomeWorking</h3>
+
+<p>First I created the local charm repository, and then start deploying.<br />
+Problem is lxc template download is too time-wasting, thus I have to manually download the images and let it run as if the cache image is available.</p>
+
+<pre><code>root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# du -hs *
+178M    ubuntu-14.04-server-cloudimg-amd64-root.tar.gz
+root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# pwd
+/var/cache/lxc/cloud-trusty
+
+</code></pre>
+
+<p>Use local repository for deploying other version&rsquo;s container, then run a cassandra:</p>
+
+<pre><code>juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms local:precise/cassandra
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/19/deploy-maas-10/">Deploy MAAS(10)</a>
+      </h1>
+      <span class="post-date">Mar 19, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/19/deploy-maas-10/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>Continue to deploy OpenContrail based on OpenStack.<br />
+First we install the bzr for fetching back the charms:</p>
+
+<pre><code>$ sudo apt-get install bzr
+
+</code></pre>
+
+<p>Clone the repository to local Mass Controller Machine:</p>
+
+<pre><code>$ bzr branch lp:~robert-ayres/+junk/contrail-deployer
+
+</code></pre>
+
+<p>Install juju-deployer for deploying:</p>
+
+<pre><code>$ sudo apt-get install juju-deployer
+
+</code></pre>
+
+<p>Change the memory size.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/18/migration-of-opencontril/">Migration of OpenContril</a>
+      </h1>
+      <span class="post-date">Mar 18, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/18/migration-of-opencontril/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>This article is not for opencontril itself, but for migration of the existing environment to local machines.</p>
+
+<h3 id="environment">Environment</h3>
+
+<p>Machine configuration is listed as:</p>
+
+<pre><code>192.168.10.233 u12-control
+192.168.10.234 u12-compute1
+192.168.10.235 u12-compute2
+
+192.168.1.79   s179
+
+</code></pre>
+
+<p>The control node and 2 compute nodes are running in machine s179, the tasks for me to do is for moving them from s179 to 2 physical machine.</p>
+
+<h3 id="use-remote-kvm-server">Use Remote KVM Server</h3>
+
+<p>First we copy our ssh-key to the remote s179 machine, so next time we won&rsquo;t enter any passwd for accessing the remote libvirtd:</p>
+
+<pre><code>$ ssh-copy-id root@192.168.1.79
+
+</code></pre>
+
+<p>In our own machine, we listed remote&rsquo;s machines via:</p>
+
+<pre><code>$ virsh -c qemu+ssh://root@192.168.1.79/system list --all
+ Id    Name                           State
+----------------------------------------------------
+ 14    u14-ui                         running
+ 16    u14-compute2                   running
+ 22    u14-compute1                   running
+ 39    de1-contro                     running
+ -     centos6.4-management-01        shut off
+ -     centos6.4-management-02        shut off
+
+</code></pre>
+
+<p>Add connection via: <code>File-&gt; Add New Connection</code>, then configure like following:<br />
+<img src="/images/2015_03_18_11_53_11_380x432.jpg" alt="/images/2015_03_18_11_53_11_380x432.jpg" /></p>
+
+<h3 id="migration-static">Migration(Static)</h3>
+
+<p>First scp the image file to to destination machine, this will take a while.<br />
+Dump the xml via:</p>
+
+<pre><code>$ virsh dumpxml xxxxx&gt;xxxx.xml
+
+</code></pre>
+
+<p>Scp the xml file to destination machine and move to <code>/etc/libvirt/qemu/</code>, change the priviledge of the file:</p>
+
+<pre><code>$ sudo chmod 777 /home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img
+
+</code></pre>
+
+<p>Edit the corresponding configuration in the xml file:</p>
+
+<pre><code>$ sudo vim /etc/libvirt/qemu/xxxx.xml
+.....
+&lt;source file='/home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img'/&gt;
+.....
+
+</code></pre>
+
+<p>Define the xml under the <code>/etc/libvirt/qemu/</code> folder:</p>
+
+<pre><code>root@pc121:/etc/libvirt/qemu# virsh define ./Ubuntu1404-Newly-Installed-with-Update.xml 
+Domain Ubuntu1404-Newly-Installed-with-Update defined from ./Ubuntu1404-Newly-Installed-with-Update.xml
+
+</code></pre>
+
+<p>Install the guest tool and use it for editing the virtual machine:</p>
+
+<pre><code>$ sudo apt-get install libguestfs-tools
+$ sudo virt-edit -d Ubuntu1404-Newly-Installed-with-Update /etc/network/interfaces
+
+</code></pre>
+
+<p>After change the network configuration, we could start the machine via <code>virsh start Ubuntu1404-Newly-Installed-with-Update</code>, it will have the newly edited ip address.</p>
+
+<p>If we use different host machine, then change the following definition in xml file:</p>
+
+<pre><code>$ sudo vim /etc/libvirt/qemu/xxxx.xml
+&lt;devices&gt;
+    &lt;emulator&gt;/usr/bin/qemu-system-x86_64&lt;/emulator&gt;
+.......
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-7/">Deploy MAAS(7)</a>
+      </h1>
+      <span class="post-date">Mar 17, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-7/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>This will record the complete steps for deploying MAAS in a newly installed machine.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>The start point should be at Ubuntu14.04.</p>
+
+<pre><code>$ sudo add-apt-repository  ppa:maas-maintainers/maas-test
+$ sudo vim /etc/apt/sources.list
+# Add maas repository
+deb http://ppa.launchpad.net/maas-maintainers/testing/ubuntu trusty main
+deb-src http://ppa.launchpad.net/maas-maintainers/testing/ubuntu trusty main
+$ sudo add-apt-repository ppa:juju/stable
+$ sudo vim /etc/apt/sources.list
+# Add juju repository
+deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+$ sudo apt-get update &amp;&amp; sudo apt-get upgrade
+$ sudo apt-get install maas-test maas-dhcp maas-dns juju juju-core juju-local juju-quickstart firefox git
+
+</code></pre>
+
+<p>Tips: for enable the vncserver on Ubuntu, do following:</p>
+
+<pre><code>$ sudo apt-get install tightvncserver lxde
+$ vncserver
+$ vim ~/.vnc/xstartup
+#!/bin/sh
+
+xrdb $HOME/.Xresources
+xsetroot -solid grey
+#x-terminal-emulator -geometry 80x24+10+10 -ls -title &quot;$VNCDESKTOP Desktop&quot; &amp;
+#x-window-manager &amp;
+# Fix to make GNOME work
+export XKL_XMODMAP_DISABLE=1
+# /etc/X11/Xsession
+startlxde &amp;
+$ vncserver -kill :1 &amp;&amp; vncserver
+
+</code></pre>
+
+<p>The MAAS Controller relies on a google&rsquo;s theme which is blocked by GFW, so we have to use proxychains for acrossing it, please notice these operation could be done on host machine, or Maas Controller itself..</p>
+
+<pre><code>$ git clone https://github.com/rofl0r/proxychains-ng.git 
+$ ./configure --prefix=/usr &amp;&amp; make &amp;&amp; make install
+$ sudo cp src/proxychain4.conf /etc
+$ sudo vim /etc/proxychains4.conf
+$ sudo apt-get install midori
+$ proxychains4 midori 10.17.17.202/MAAS
+
+</code></pre>
+
+<p>Configure the MAAS Controller via:</p>
+
+<pre><code>$ sudo maas-region-admin createadmin
+[sudo] password for Trusty: 
+Username: root
+Password: 
+Again: 
+Email: root@localhost
+
+</code></pre>
+
+<p>This enabled the admin username/password, refresh the <code>10.17.17.202/MAAS</code> you could login to the MAAS Controller.</p>
+
+<h3 id="configuration">Configuration</h3>
+
+<h4 id="image-configuration">Image Configuration</h4>
+
+<p>First download the images fromt the official repository via(On MaasController):</p>
+
+<pre><code>$ sudo apt-get install simplestreams ubuntu-cloudimage-keyring apache2
+$ sudo bash
+# proxychains4 sstream-mirror --keyring=/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg http://maas.ubuntu.com/images/ephemeral-v2/daily/ /var/www/html/maas/images/ephemeral-v2/daily 'arch=amd64' 'subarch~(generic|hwe-t)' 'release~(trusty|precise)' --max=1
+^C
+$ pwd
+/var/www/html/maas/images
+$ sudo mv ephemeral-v2/ ephemeral-v2.back
+[sudo] password for Trusty: 
+$ sudo tar xjf /home/Trusty/ephemeral-v2.tar.bz2 -C ./
+
+</code></pre>
+
+<p>Then Change the configuration in browser of opened <code>http://10.17.17.202/MAAS</code>:</p>
+
+<pre><code>Click Configuration Button, and update the Ubuntu -&gt; Main archive (required) from: 
+http://archive.ubuntu.com/ubuntu 
+to: 
+http://mirrors.aliyun.com/ubuntu/ 
+This repository enable the installed system for retrieving the install packages, use aliyun we could get much more faster speed.
+
+Change the Boot Images -&gt; Sync URL (required) from: 
+http://maas.ubuntu.com/images/ephemeral-v2/releases/ 
+to 
+http://10.17.17.202/maas/images/ephemeral-v2/daily/ 
+This will enable the Boot Images Sync URLs, use local repository will greatly improve the bootup speed.
+
+</code></pre>
+
+<h4 id="network-configuration">Network Configuration</h4>
+
+<p>Since the midori&rsquo;s effect is not good, install qupzilla:</p>
+
+<pre><code>$ sudo apt-get install qupzilla
+$ proxychains4 quazilla http://10.17.17.202/MAAS
+
+</code></pre>
+
+<p>Under <code>Cluster-&gt;Interfaces-&gt;eth0-&gt;Edit</code>, change it to <code>Management(DNS and DHCP)</code>, and then modify following items:<br />
+<img src="/images/2015_03_17_11_17_28_411x358.jpg" alt="/images/2015_03_17_11_17_28_411x358.jpg" /></p>
+
+<p>MAAS ssh key should be generated via following steps:</p>
+
+<pre><code>Trusty@MassController:~$ sudo mkdir /home/maas
+[sudo] password for Trusty: 
+Trusty@MassController:~$ sudo chown maas:maas /home/maas/
+Trusty@MassController:~$ sudo chsh maas
+Changing the login shell for maas
+Enter the new value, or press ENTER for the default
+        Login Shell [/bin/false]: /bin/bash
+Trusty@MassController:~$ sudo su - maas
+maas@MassController:~$ ssh-keygen 
+Generating public/private rsa key pair.
+
+</code></pre>
+
+<p>Copy the generated key to <a href="http://10.17.17.202/MAAS/account/prefs/sshkey/add/">http://10.17.17.202/MAAS/account/prefs/sshkey/add/</a>    And remember the api-key, for later we will use it for generating nodes information.<br />
+Enable the remote control of your host&rsquo;s libvirt:</p>
+
+<pre><code>$ sudo apt-get install libvirt-bin
+maas@MassController:~$ ssh-copy-id root@10.17.17.1
+maas@MassController:~$ virsh -c qemu+ssh://root@10.17.17.1/system list  --all
+ Id    Name                           State
+----------------------------------------------------
+ 2     MaasController                 running
+ -     Ubuntu1404Maas                 shut off
+ -     Ubuntu203                      shut off
+
+</code></pre>
+
+<p>Also we have to configure the network under <a href="http://10.17.17.202/MAAS/networks/maas-eth0/edit/">http://10.17.17.202/MAAS/networks/maas-eth0/edit/</a>:<br />
+<img src="/images/2015_03_17_11_34_31_478x283.jpg" alt="/images/2015_03_17_11_34_31_478x283.jpg" /></p>
+
+<p>Also we should manually edit the MaasController&rsquo;s network configuration via:</p>
+
+<pre><code>$ cat /etc/network/interfaces
+auto lo
+iface lo inet loopback
+# The primary network interface
+auto eth0
+# iface eth0 inet dhcp
+iface eth0 inet static                                                                                                                        
+        address 10.17.17.202                                                                                                                  
+        netmask 255.255.255.0                                                                                                                 
+        network 10.17.17.0                                                                                                                    
+        broadcast 10.17.17.255                                                                                                                
+        gateway 10.17.17.1                                                                                                                    
+        # dns-* options are implemented by the resolvconf package, if installed                                                               
+        dns-nameservers 114.114.114.114 127.0.0.1 10.17.17.202
+
+</code></pre>
+
+<p>Restart and the network configuration is OK, notice only we set 127.0.0.1 as the dns server, we could enable the local FQDN.</p>
+
+<h3 id="add-nodes">Add Nodes</h3>
+
+<p>Create the vm in virt-manager, its start-up is via PXE, and with 3G Mem, 60G space, 2-Core which copies the Host CPU.<br />
+Then in browser edit like following:<br />
+<img src="/images/2015_03_17_11_47_59_511x576.jpg" alt="/images/2015_03_17_11_47_59_511x576.jpg" /><br />
+Then in the <code>Nodes</code>, select the node, and commision selected node.After commission, the status will be changed to ready.<br />
+<img src="/images/2015_03_17_11_54_29_589x157.jpg" alt="/images/2015_03_17_11_54_29_589x157.jpg" /></p>
+
+<h3 id="juju-configuration">Juju Configuration</h3>
+
+<p>Use following command for quickstart juju:</p>
+
+<pre><code>$ juju-quickstart -i
+
+</code></pre>
+
+<p>The configuration image is listed as:<br />
+<img src="/images/2015_03_17_11_57_47_559x457.jpg" alt="/images/2015_03_17_11_57_47_559x457.jpg" /></p>
+
+<p>Generate the local tools:</p>
+
+<pre><code>$ mkdir .juju/metadata
+Trusty@MassController:~$ juju metadata generate-tools -d ~/.juju/metadata
+
+</code></pre>
+
+<p>Then start the node via:</p>
+
+<pre><code>$ juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints=&quot;mem=3G&quot;
+
+</code></pre>
+
+<p>After it success, the juju and MAAS environment is ready for use.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-8/">Deploy MAAS(8)</a>
+      </h1>
+      <span class="post-date">Mar 17, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-8/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>This part is for deploying OpenStack using Juju and let it run in single node.</p>
+
+<h3 id="environment-preparation">Environment Preparation</h3>
+
+<p>2 virtual machines created using virt-manager, each of them has 2 core, 3Gigabyte Memory, around 60G Disk space.</p>
+
+<h3 id="deploy">Deploy</h3>
+
+<p>The most of the nodes are deployed in container.</p>
+
+<pre><code>$ juju deploy --to 0 juju-gui
+$ juju deploy --to lxc:0 mysql
+$ juju deploy --to lxc:0 keystone
+$ juju deploy --to lxc:0 nova-cloud-controller
+$ juju deploy --to lxc:0 glance
+$ juju deploy --to lxc:0 rabbitmq-server
+$ juju deploy --to lxc:0 openstack-Trustyboard
+$ juju deploy --to lxc:0 cinder 
+
+</code></pre>
+
+<p>The compute node is deployed in a machine which enable the nested virtualization.</p>
+
+<pre><code>$ juju deploy nova-compute
+
+</code></pre>
+
+<p>Add each other&rsquo;s relationship:</p>
+
+<pre><code>$ juju add-relation mysql keystone
+$ juju add-relation nova-cloud-controller mysql
+$ juju add-relation nova-cloud-controller rabbitmq-server
+$ juju add-relation nova-cloud-controller glance
+$ juju add-relation nova-cloud-controller keystone
+$ juju add-relation nova-compute nova-cloud-controller
+$ juju add-relation nova-compute mysql
+$ juju add-relation nova-compute rabbitmq-server:amqp
+$ juju add-relation nova-compute glance
+$ juju add-relation glance mysql
+$ juju add-relation glance keystone
+$ juju add-relation glance cinder
+$ juju add-relation mysql cinder
+$ juju add-relation cinder rabbitmq-server
+$ juju add-relation cinder nova-cloud-controller
+$ juju add-relation cinder keystone
+$ juju add-relation openstack-Trustyboard keystone
+
+</code></pre>
+
+<p>Then change the password of keystone via:</p>
+
+<pre><code>$ juju set keystone admin-password=&quot;helloworld&quot;
+
+</code></pre>
+
+<p>Detect the ipaddress of the openstack-Trustyboards via:</p>
+
+<pre><code>$ juju status openstack-Trustyboard
+$ http://ip_address_of_Trustyboard/horizon
+
+</code></pre>
+
+<p>The final result is listed like:<br />
+<img src="/images/2015_03_17_14_35_25_1037x646.jpg" alt="/images/2015_03_17_14_35_25_1037x646.jpg" /></p>
 
       
     </div>
@@ -1004,12 +1048,21 @@ Plus:</p>
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/53/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

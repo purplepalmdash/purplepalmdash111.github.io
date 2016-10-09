@@ -93,329 +93,729 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/22/dxg-screensaver-hack/">DXG ScreenSaver Hack</a>
+        <a href="http://purplepalmdash.github.io/2014/05/11/write-python-weather-app-on-heroku-7/">Write Python Weather APP on Heroku(7)</a>
       </h1>
-      <span class="post-date">Apr 22, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/04/22/dxg-screensaver-hack/#disqus_thread">Comments</a>
+      <span class="post-date">May 11, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/05/11/write-python-weather-app-on-heroku-7/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/dxg">dxg</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
         
       </span>
       
-      <p>First, download the ScreenSavers hacker form:<br />
-<a href="http://www.mobileread.com/forums/showthread.php?t=88004">http://www.mobileread.com/forums/showthread.php?t=88004</a><br />
-And unzip this file, copy the &ldquo;Update_ss_0.43.N_dxg_install.bin&rdquo; to the root directory of Kindle.</p>
+      
 
-<p>Then In kindle, [HOME] -&gt; [MENU] &gt; Settings -&gt; [MENU] &gt; Update Your Kindle. The DXG will automatically reboot.<br />
-Now mount the DXG into your computer, touch the &ldquo;last&rdquo; file under the linkss folder, as:</p>
+<p>We will continue to deploy our tasks on heroku. In this article we will finish the data retriving and database insertion.</p>
 
-<pre><code>	[root@XXXyyy mnt]# cd linkss/
-	[root@XXXyyy linkss]# ls
-	auto        backups  cover_cache  info.txt          overflow  screensavers
-	autoreboot  bin      etc          mounted_824x1200  run
-	[root@XXXyyy linkss]# touch last
+<h3 id="honcho">Honcho</h3>
+
+<p>Install and Configuration of Honcho:</p>
+
+<pre><code>$ pip install honcho
+# Regenerate requirement.txt and upload it onto heroku
+$ mv Procfile ProcfileHoncho
+# Edit the new Procfile: 
+$ vim Procfile
+web: honcho -f ProcfileHoncho start
 
 </code></pre>
 
-<p>Now reboot your Kindle Again, your Kindle will remain the last read page as the ScreenSaver.</p>
+<p>In local, we can also use following command for swiftly verifying our code:</p>
+
+<pre><code># Because our user belongs to root group, so set following variable firstly
+$ export C_FORCE_ROOT=1
+$ foreman start
+
+</code></pre>
+
+<p>Now you can visit <a href="http://localhost:5000">http://localhost:5000</a> for viewing the result.</p>
+
+<h3 id="task-py">task.py</h3>
+
+<p>Following is the script for tasks.py:</p>
+
+<pre><code>#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Set default encoding: utf-8
+import sys;
+reload(sys);
+# Setting the utf-8 format
+sys.setdefaultencoding(&quot;utf8&quot;)
+
+
+import logging
+import string
+from celery import Celery
+from celery.task import periodic_task
+from datetime import datetime,timedelta
+from os import environ
+
+
+# For retrieving temperature/humidity
+import pywapi
+import urllib2
+from urllib2 import ProxyHandler
+import re
+from BeautifulSoup import BeautifulSoup
+
+# For using database(Postgresql)
+# from flash.ext.sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Column, Table, ForeignKey
+from sqlalchemy import Integer, String, DateTime
+
+
+# redis configuration for celery
+### Local, should be change to remote when deploying to heroku
+REDIS_URL = environ.get('REDISTOGO_URL', 'redis://localhost')
+
+celery = Celery('tasks', broker=REDIS_URL)
+
+# Fetch 
+
+
+# Define Periodic Tasks
+# @periodic_task(run_every=timedelta(minutes=60))
+# Funciton for fetching data and store it in Postgres
+def fetch_and_store_data():
+    # Fetching the weather information from Yahoo. 
+    Yahoo_Result = pywapi.get_weather_from_yahoo('CHXX0099')
+    Current_Temp = string.lower(Yahoo_Result['condition']['temp'])
+    Current_Humi = string.lower(Yahoo_Result['atmosphere']['humidity'])
+    Tomorrow_Forecast = Yahoo_Result['forecasts'][0]
+    Twenty_Four_Hours = Yahoo_Result['forecasts'][1]
+    Fourty_Eight_Hours = Yahoo_Result['forecasts'][2]
+    Seventy_Two_Hours = Yahoo_Result['forecasts'][3]
+    # !!! comment proxy related for deploying to heroku !!! #
+    proxy = urllib2.ProxyHandler({'http': '192.11.236.225:8000'})
+    opener = urllib2.build_opener(proxy)
+    urllib2.install_opener(opener)
+    page = urllib2.urlopen(&quot;http://www.pm25.in/nanjing&quot;)
+    soup = BeautifulSoup(page)                      #
+    # Find the detailed table from the soup.        #
+    table = soup.find('table', {'id':'detail-data'})#
+    # Fetch the XuanWuHu, if not, use MaiGaoQiao ins#tead. 
+    rows = table.findAll('tr')                      #
+    for subrows in rows:                            #
+        if &quot;玄武湖&quot; in subrows.text:                #
+            XuanwuLake = subrows                    #
+        else:                                       #
+            if &quot;迈皋桥&quot; in subrows.text:            #
+                XuanwuLake = subrows                #
+    XuanwuLake_subitem = XuanwuLake.findAll('td')   #
+    # Here we will get an array, fetch out the text #for the content from this array.
+    # Fetched origin data, different from cnpm25.cn #
+    pm_25_orig = XuanwuLake_subitem[4].text         #
+    pm_10_orig = XuanwuLake_subitem[5].text
+    # Open the Database
+    engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb',echo=True)
+    metadata=MetaData(bind=engine)
+    
+    # Definition of the weather table
+    weather_table=Table('weather',metadata,
+    	Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+    	Column('Temperature', Integer),
+    	Column('Humidity', Integer),
+    	Column('PmTen', Integer),
+    	Column('PmTwoFive', Integer),
+    )
+
+    # Create the table in mylocaldb
+    metadata.create_all(checkfirst=True)
+
+    # Record Insertion
+    # First generate an insertion sentense:
+    ins = weather_table.insert()
+    # Really insert into the Database
+    # ins = weather_table.insert().values(Insert_Time=datetime.datetime.utcnow(), Temperature=25, Humidity=75, PmTen=100, PmTwoFive=55)   # Example
+    ins = weather_table.insert().values(Insert_Time=datetime.utcnow(), Temperature=Current_Temp, Humidity=Current_Humi, PmTen=int(pm_10_orig), PmTwoFive=int(pm_25_orig))
+    # Connect to engine and execute.
+    conn = engine.connect()
+    result = conn.execute(ins)
+
+    #return Current_Temp
+    return pm_25_orig
+
+
+
+@periodic_task(run_every=timedelta(seconds=10))
+def print_fib():
+    #logging.info(fib(30))
+    logging.info(&quot;This could be viewed in logging!&quot;)
+
+</code></pre>
+
+<p>Notice, this version only works in local.<br />
+For updating the real database on heroku, we have to do some modification on redis server and remove the proxy server, these are the works we need to done in next chapter.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/22/my-reading-digest-for-git/">My Reading Digest For Git</a>
+        <a href="http://purplepalmdash.github.io/2014/05/11/write-python-weather-app-on-heroku-8/">Write Python Weather APP on Heroku(8)</a>
       </h1>
-      <span class="post-date">Apr 22, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/04/22/my-reading-digest-for-git/#disqus_thread">Comments</a>
+      <span class="post-date">May 11, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/05/11/write-python-weather-app-on-heroku-8/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/git">git</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
         
       </span>
       
-      <p>###View Git LOG
-git log for view your activities:</p>
+      
 
-<pre><code>$ git log --pretty=oneline
-1f7ec5eaa8f37c2770dae3b984c55a1531fcc9e7 Added a comment
-582495ae59ca91bca156a3372a72f88f6261698b Added a default value
-323e28d99a07d404c04f27eb6e415d4b8ab1d615 Using ARGV
-94164160adf8faa3119b409fcfcd13d0a0eb8020 First Commit
+<h3 id="deploy-on-heroku">Deploy on Heroku</h3>
 
-</code></pre>
+<p>The deployed version is listed as following:</p>
 
-<p>git log controlling items:</p>
+<pre><code>#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Set default encoding: utf-8
+import sys;
+reload(sys);
+# Setting the utf-8 format
+sys.setdefaultencoding(&quot;utf8&quot;)
 
-<pre><code>$ git log --pretty=oneline --max-count=2
-$ git log --pretty=oneline --since='5 minutes ago'
-$ git log --pretty=oneline --until='5 minutes ago'
-$ git log --pretty=oneline --author=&lt;your name&gt;
-$ git log --pretty=oneline --all
+import os
+import logging
+import string
+from celery import Celery
+from celery.task import periodic_task
+from datetime import datetime,timedelta
+from os import environ
 
-</code></pre>
 
-<p>try man git-log for more details.<br />
-For searching last 7 days&rsquo; modification:<br />
-    $ git log &ndash;all &ndash;pretty=format:&lsquo;%h %cd %s (%an)&rsquo; &ndash;since=&lsquo;7 days ago&rsquo;
-Final command:</p>
+# For retrieving temperature/humidity
+import pywapi
+import urllib2
+from urllib2 import ProxyHandler
+import re
+from BeautifulSoup import BeautifulSoup
 
-<pre><code>	$ git log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short'
-	$ git log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
-	* 1f7ec5e 2013-04-13 | Added a comment (HEAD, master) [Jim Weirich]
-	* 582495a 2013-04-13 | Added a default value [Jim Weirich]
-	* 323e28d 2013-04-13 | Using ARGV [Jim Weirich]
-	* 9416416 2013-04-13 | First Commit [Jim Weirich]
+# For using database(Postgresql)
+# from flash.ext.sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Column, Table, ForeignKey
+from sqlalchemy import Integer, String, DateTime
 
-</code></pre>
 
-<p>Explanation:</p>
+# redis configuration for celery
+### Local, should be change to remote when deploying to heroku
+# REDIS_URL = environ.get('REDISTOGO_URL', 'redis://localhost')
+### Heroku Ways
+REDIS_URL = environ.get('REDISCLOUD_URL')
 
-<pre><code>	--pretty=&quot;...&quot; 定义输出的格式
-	%h 是提交 hash 的缩写
-	%d 是提交的装饰（如分支头或标签）
-	%ad 是创作日期
-	%s 是注释
-	%an 是作者姓名
-	--graph 使用 ASCII 图形布局显示提交树
-	--date=short 保留日期格式更好且更短
 
-</code></pre>
+celery = Celery('tasks', broker=REDIS_URL)
 
-<p>Other tools:  gitx (Mac) 和 gitk (任意平台) 在浏览日志历史时十分有用。<br />
-###Add Git TAG
-Add tag for the specified release: &ldquo;git tag v1-data&rdquo;, &ldquo;git tag&rdquo; to view all of the tags.<br />
-Revert the change via;</p>
+# Fetch 
 
-<pre><code>	git revert HEAD
 
-</code></pre>
+# Define Periodic Tasks
+@periodic_task(run_every=timedelta(minutes=60))
+# Funciton for fetching data and store it in Postgres
+def fetch_and_store_data():
+    # Fetching the weather information from Yahoo. 
+    Yahoo_Result = pywapi.get_weather_from_yahoo('CHXX0099')
+    Current_Temp = string.lower(Yahoo_Result['condition']['temp'])
+    Current_Humi = string.lower(Yahoo_Result['atmosphere']['humidity'])
+    Tomorrow_Forecast = Yahoo_Result['forecasts'][0]
+    Twenty_Four_Hours = Yahoo_Result['forecasts'][1]
+    Fourty_Eight_Hours = Yahoo_Result['forecasts'][2]
+    Seventy_Two_Hours = Yahoo_Result['forecasts'][3]
+    # !!! comment proxy related for deploying to heroku !!! #
+    # proxy = urllib2.ProxyHandler({'http': '1xx.x.xx.xxx:2xxx'})
+    # opener = urllib2.build_opener(proxy)
+    # urllib2.install_opener(opener)
+    # !!! comment out end #
+    page = urllib2.urlopen(&quot;http://www.pm25.in/nanjing&quot;)
+    soup = BeautifulSoup(page)                      #
+    # Find the detailed table from the soup.        #
+    table = soup.find('table', {'id':'detail-data'})#
+    # Fetch the XuanWuHu, if not, use MaiGaoQiao ins#tead. 
+    rows = table.findAll('tr')                      #
+    for subrows in rows:                            #
+        if &quot;玄武湖&quot; in subrows.text:                #
+            XuanwuLake = subrows                    #
+        else:                                       #
+            if &quot;迈皋桥&quot; in subrows.text:            #
+                XuanwuLake = subrows                #
+    XuanwuLake_subitem = XuanwuLake.findAll('td')   #
+    # Here we will get an array, fetch out the text #for the content from this array.
+    # Fetched origin data, different from cnpm25.cn #
+    pm_25_orig = XuanwuLake_subitem[4].text         #
+    pm_10_orig = XuanwuLake_subitem[5].text
+    # Open the Database
+    # Local Engine
+    # engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb',echo=True)
+    # Heroku Engine
+    db_conn = environ['DATABASE_URL']
+    engine = create_engine(db_conn)
 
-<p>这将带你到编辑器中。你可以编辑默认的提交信息，或直接 离开它。保存并关闭文件。Or Using the following with no editing:</p>
+    metadata=MetaData(bind=engine)
+    
+    # Definition of the weather table
+    weather_table=Table('weather',metadata,
+    	Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+    	Column('Temperature', Integer),
+    	Column('Humidity', Integer),
+    	Column('PmTen', Integer),
+    	Column('PmTwoFive', Integer),
+    )
 
-<pre><code>	$ git revert HEAD --no-edit
+    # Create the table in mylocaldb
+    metadata.create_all(checkfirst=True)
 
-</code></pre>
+    # Record Insertion
+    # First generate an insertion sentense:
+    ins = weather_table.insert()
+    # Really insert into the Database
+    # ins = weather_table.insert().values(Insert_Time=datetime.datetime.utcnow(), Temperature=25, Humidity=75, PmTen=100, PmTwoFive=55)   # Example
+    ins = weather_table.insert().values(Insert_Time=datetime.utcnow(), Temperature=Current_Temp, Humidity=Current_Humi, PmTen=int(pm_10_orig), PmTwoFive=int(pm_25_orig))
+    # Connect to engine and execute.
+    conn = engine.connect()
+    result = conn.execute(ins)
 
-<p>Using tag for reverting the changes:</p>
+    #return Current_Temp
+    return pm_25_orig
 
-<pre><code>	$ git tag oops
-	$ git reset --hard v1
-	$ git tag -d oops
 
-</code></pre>
-
-<p>More than one modification but commit once:</p>
-
-<pre><code>	$ git add hello.rb
-	$ git commit --amend -m &quot;Add an author/email comment&quot;
-
-</code></pre>
-
-<p>Change the directory structure:</p>
-
-<pre><code>	git mv hello.rb lib
-	git commit -m &quot;Moved hello.rb to lib&quot;
-
-</code></pre>
-
-<p>View the directory tree:</p>
-
-<pre><code>	git cat-file -p 4ee1119fb7519dc8298fe5d8e9329f52566afaed
-
-</code></pre>
-
-<p>###Merge
-Merge the branch with master:</p>
-
-<pre><code>	git merge master
-
-</code></pre>
-
-<p>when conflicts happens, you will manually merge it.</p>
-
-<p>Revert to specified version:</p>
-
-<pre><code>	git reset --hard &lt;hash&gt;
-
-</code></pre>
-
-<p>Clone the remote repository to local, using git clone:</p>
-
-<pre><code>	$ git clone hello cloned_hello
-	$ git branch -a
-	* master
-	  remotes/origin/HEAD -&gt; origin/master
-	  remotes/origin/greet
-	  remotes/origin/master
-
-</code></pre>
-
-<p>git fetch 命令的结果将从远程仓库取得新的提交，但它不会将这些提交合并到本地分支中。If we wnat to sync, then try following:</p>
-
-<pre><code>	[Trusty@~/code/git_learn/git_tutorial/cloned_hello]$ git merge origin/master
-	Updating 5de15b7..105a3d0
-	Fast-forward
-	 README | 1 +
-	 1 file changed, 1 insertion(+)
-	[Trusty@~/code/git_learn/git_tutorial/cloned_hello]$ cat README 
-	This is the Hello World example from the git tutorial.
-	(Changed in original)
+# Every 3 minutes we will see debug information, from heroku log
+# @periodic_task(run_every=timedelta(minutes=3))
+# @periodic_task(run_every=timedelta(seconds=3))
+# def print_fib():
+#     #logging.info(fib(30))
+#     logging.info(&quot;This could be viewed in logging!&quot;)
 
 </code></pre>
 
-<p>Clone the directory structure, mainly for backup:</p>
+<p>This version use remote service, and it will handle the fetching/updating every 60 minutes.</p>
 
-<pre><code>	$ git clone --bare hello hello.git
-	Cloning into bare repository hello.git...
-	done.
-	$ ls hello.git
-	HEAD
-	config
-	description
-	hooks
-	info
-	objects
-	packed-refs
-	refs
+<h3 id="prevent-heroku-from-sleeping">Prevent Heroku from Sleeping</h3>
 
-</code></pre>
+<p>Register a service at <a href="https://uptimerobot.com/">https://uptimerobot.com/</a>, it will automatically ping or get http(s) service from your web apps.</p>
 
-<p>If we want to push changes to the remote, just git push.<br />
-迅速跳过克隆仓库，且让我们拉下刚才推送到共享仓库的更改。</p>
-
-<pre><code>	$ cd ../cloned_hello
-	$ git remote add shared ../hello.git
-	$ git branch --track shared master
-	$ git pull shared master
-	$ cat README
-
-</code></pre>
-
-<p>###On Daemon
-####启动 Git 服务器</p>
-
-<pre><code>	# (From the work directory)
-	$ git daemon --verbose --export-all --base-path=.
-
-</code></pre>
-
-<p>现在，在分开的终端窗口中，转到你的工作目录。</p>
-
-<pre><code>	# (From the work directory)
-	$ git clone git://localhost/hello.git network_hello
-	$ cd network_hello
-	$ ls
-
-</code></pre>
-
-<p>你应当看到 hello 项目的拷贝。<br />
-####推送到 Git daemon<br />
-如果你想要推送到 Git daemon 仓库，添加 &ndash;enable=receive-pack 到 git daemon 命令。小心，因为此服务器没有授权，任何人 都能推送到你的仓库。</p>
+<p>Until now, almost all of the back-end has been set up. We can fetch the data and periodly insert into the database, and our web app will continue to run(Never sleep).<br />
+Tomorrow we will try to write a beautiful front-end for our webapp.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/18/install-xampp-on-archlinux/">Install xampp on ArchLinux</a>
+        <a href="http://purplepalmdash.github.io/2014/05/10/celery-and-rabbitmq-on-archlinux/">Celery and RabbitMQ on ArchLinux</a>
       </h1>
-      <span class="post-date">Apr 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/04/18/install-xampp-on-archlinux/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      <p>Install xampp in ArchLinux via:</p>
-
-<pre><code>	yaourt xampp
-	pacman -U xampp-1.8.1-1-x86_64.pkg.tar.xz 
-
-</code></pre>
-
-<p>Stop and disable the previous installed service:</p>
-
-<pre><code>	systemctl stop httpd.service
-	systemctl stop mysqld
-	systemctl stop vsftpd
-	systemctl disable httpd.service
-	systemctl disable mysqld
-	systemctl disable vsftpd
-
-</code></pre>
-
-<p>Start the xampp via:</p>
-
-<pre><code>	/opt/lampp/lampp start
-
-</code></pre>
-
-<p>Other commands: start/restart/stop.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/16/automatically-mount-in-archlinux/">Automatically Mount in ArchLinux</a>
-      </h1>
-      <span class="post-date">Apr 16, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/04/16/automatically-mount-in-archlinux/#disqus_thread">Comments</a>
+      <span class="post-date">May 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/05/10/celery-and-rabbitmq-on-archlinux/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
         
       </span>
       
-      <p>Use udisk/udisk2/udiskie for automatically mount usb disks.</p>
+      
 
-<pre><code>	pacman -S udisk udisk2 udiskie
+<h3 id="installation">Installation</h3>
 
-</code></pre>
+<p>Install and run rabbitmq server via:</p>
 
-<p>Add following line into the .xinitrc:</p>
-
-<pre><code>	udiskie -2 --tray &amp;
-
-</code></pre>
-
-<p>If you want to umount all media with the command:</p>
-
-<pre><code>	udiskie-umount -a
+<pre><code>$ yaourt rabbitmq
+$ rabbitmq-server
 
 </code></pre>
 
-<p>umount speicified disk partition:</p>
+<p>Install celery in python virtual enviroment:</p>
 
-<pre><code>	udiskie-umount /media/MY_USB_DRIVE
+<pre><code>$ workon venv2
+(venv2) $ pip install celery
 
 </code></pre>
+
+<h3 id="run-simple-tasks">Run Simple Tasks</h3>
+
+<p>Following python file, named &ldquo;tasks.py&rdquo; defines two tasks:</p>
+
+<pre><code>from celery import Celery
+
+app = Celery('tasks', backend='amqp', broker='amqp://')
+
+@app.task(ignore_result=True)
+def print_hello():
+    print 'hello there'
+
+@app.task
+def gen_prime(x):
+    multiples = []
+    results = []
+    for i in xrange(2, x+1):
+        if i not in multiples:
+            results.append(i)
+            for j in xrange(i*i, x+1, i):
+                multiples.append(j)
+    return results
+
+</code></pre>
+
+<p>Run it via:</p>
+
+<pre><code>celery worker -A tasks &amp;
+
+</code></pre>
+
+<p>Now in another terminal you can use python interractive window for:</p>
+
+<pre><code>from tasks import print_hello
+from tasks import gen_prime
+print_hello()
+primes = gen_prime(1000)
+primes = gen_prime(50000)
+# CTRL+C will stop it. 
+# Access the background worker
+primes = gen_prime.delay(50000)
+# by the worker executing now, because we configured the backend for application
+primes.ready()
+False
+...
+True
+print primes.get()
+
+</code></pre>
+
+<h3 id="periodic-tasks">Periodic Tasks</h3>
+
+<p>Add following lines into the tasks.py:</p>
+
+<pre><code>from celery.task import periodic_task
+from datetime import timedelta
+
+
+@periodic_task(run_every=timedelta(minutes=1))
+def print_minutes():
+    print 'Hello, 1 minute reached'
+
+@periodic_task(run_every=timedelta(seconds=3))
+def every_3_seconds():
+    print(&quot;Running periodic task!&quot;)
+
+</code></pre>
+
+<p>Now start the tasks.py via following commands:</p>
+
+<pre><code>$ celery -A tasks worker --loglevel=info --beat
+
+</code></pre>
+
+<p>You will see Celery output &ldquo;Running periodic tasks!&rdquo; every 3 seconds, while every 1 minutes the &ldquo;Hello, 1 minute reached&rdquo; will be printed out.</p>
+
+<h3 id="to-be-thought">To Be Thought</h3>
+
+<p>How to mirgrate it with our heroku web app ?<br />
+The periodic_task is good for fetching pages/datas and generate the result, then store the results into the database.</p>
+
+<p>But the webapp should response to user&rsquo;s http request, this will be the main task.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/15/customize-first-page-of-colorway-theme/">Customize First Page of Colorway Theme</a>
+        <a href="http://purplepalmdash.github.io/2014/05/10/write-python-weather-app-on-heroku-5/">Write Python Weather APP on Heroku(5)</a>
       </h1>
-      <span class="post-date">Apr 15, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/04/15/customize-first-page-of-colorway-theme/#disqus_thread">Comments</a>
+      <span class="post-date">May 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/05/10/write-python-weather-app-on-heroku-5/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/wordpress">wordpress</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
         
       </span>
       
-      <p>View picture exiv2 info via exiv2 command:</p>
+      
 
-<pre><code>	exiv2 slide-img-1.jpg
-	Image size      : 897 x 350
+<p>In fact this is a migration from sqlite3 to postgresql.</p>
+
+<h3 id="view-the-historical-sqlite3">View the historical sqlite3</h3>
+
+<p>We will refer to our own design of database. First fetch the data file, this is a sqlite3 file, so we use sqlite3 to view its structure.</p>
+
+<pre><code>$ sqlite3  
+SQLite version 3.8.4.3 2014-04-03 16:53:12
+Enter &quot;.help&quot; for usage hints.
+Connected to a transient in-memory database.
+Use &quot;.open FILENAME&quot; to reopen on a persistent database.
+sqlite&gt; .open ./weather.db
+sqlite&gt; .tables
+foo
+sqlite&gt; .schema foo
+CREATE TABLE foo (d_temper integer, d_humi integer, d_pm10 integer, d_pm25 real, d_time timestamp);
 
 </code></pre>
 
-<p>So we must cut out a 897 x 350 picture for displaying as slide show.</p>
+<p>Although sqlite3 is supported on heroku, we&rsquo;d better use heroku&rsquo;s suggestion, to use postgre for storing out database.</p>
 
-<p>Now find out some pictures from internet, and download it to local.</p>
+<h3 id="create-database-in-postgres">Create Database In Postgres</h3>
 
-<p>Use convert to fit the image?  No, it&rsquo;s not exact, I use gimp</p>
+<p>####Datatime selection:<br />
+Postgres provides a very fantanstic way for handling the datatime, it supports the timezone, comparing to GAE&rsquo;s database, this feature will let us get the current time based on timezone. So we did the following tests:</p>
+
+<pre><code># CREATE TABLE my_tbl (
+mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+mylocaldb(# CHECK(EXTRACT(TIMEZONE FROM my_timestamp) = '0')
+mylocaldb(# );
+CREATE TABLE
+mylocaldb=# \dt my_tbl
+        List of relations
+ Schema |  Name  | Type  | Owner 
+--------+--------+-------+-------
+ public | my_tbl | table | Trusty
+(1 row)
+
+</code></pre>
+
+<p>When we want to insert the datatime into table &lsquo;my_tbl&rsquo;, simply do following:</p>
+
+<pre><code>mylocaldb=# SET timezone = 'UTC';
+SET
+mylocaldb=# INSERT INTO my_tbl (my_timestamp) VALUES (NOW());
+INSERT 0 1
+
+</code></pre>
+
+<p>And for querying out the inserted records, we do following:</p>
+
+<pre><code>mylocaldb=# select * from public.my_tbl
+;
+         my_timestamp          
+-------------------------------
+ 2014-05-10 01:39:52.87532+00
+ 2014-05-10 01:42:44.130269+00
+(2 rows)
+
+mylocaldb=# SET timezone='Asia/Shanghai';
+SET
+mylocaldb=# select * from public.my_tbl
+mylocaldb-# ;
+         my_timestamp          
+-------------------------------
+ 2014-05-10 09:39:52.87532+08
+ 2014-05-10 09:42:44.130269+08
+(2 rows)
+
+mylocaldb=# SET timezone='America/Los_Angeles';
+SET
+mylocaldb=# select * from public.my_tbl;
+         my_timestamp          
+-------------------------------
+ 2014-05-09 18:39:52.87532-07
+ 2014-05-09 18:42:44.130269-07
+(2 rows)
+
+</code></pre>
+
+<p>We can see the output formats depends on our &ldquo;timezone&rdquo; value.</p>
+
+<h4 id="select-other-data-formats">Select Other Data Formats</h4>
+
+<p>We listed following table for describing the Data we inserted:<br />
+Timestamp       integer     integer    integer    integer<br />
+Insert_Time     Temperature Humidity   PMTen       PMTwoFive</p>
+
+<p>Thus the sql sentense is as following:</p>
+
+<pre><code>mylocaldb=# CREATE TABLE weather (
+mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+mylocaldb(# Temperature ^C
+mylocaldb=# CREATE TABLE weather (
+mylocaldb(# Insert_Time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+mylocaldb(# Temperature integer,
+mylocaldb(# Humidity integer,
+mylocaldb(# PMTen integer,
+mylocaldb(# PMTwoFive integer,
+mylocaldb(#  CHECK(EXTRACT(TIMEZONE FROM Insert_Time) = '0'));
+
+</code></pre>
+
+<p>Check the tables:</p>
+
+<pre><code>mylocaldb=# \dt
+        List of relations
+ Schema |  Name   | Type  | Owner 
+--------+---------+-------+-------
+ public | my_tbl  | table | Trusty
+ public | user    | table | Trusty
+ public | weather | table | Trusty
+(3 rows)
+
+</code></pre>
+
+<p>Insert one record:</p>
+
+<pre><code>mylocaldb=# INSERT INTO weather (Insert_Time, Temperature, Humidity, PMTen, PMTwoFive) VALUES(NOW(), 25, 80, 150, 75);
+INSERT 0 1
+
+</code></pre>
+
+<p>Displaying the inserted record:</p>
+
+<pre><code>mylocaldb=# SET timezone='Asia/Shanghai';
+SET
+mylocaldb=# select * from public.weather;
+          insert_time          | temperature | humidity | pmten | pmtwofive 
+-------------------------------+-------------+----------+-------+-----------
+ 2014-05-10 10:38:27.276043+08 |          25 |       80 |   150 |        75
+(1 row)
+
+</code></pre>
+
+<h4 id="database-operation">Database Operation</h4>
+
+<p>We need to create just once database, So this function should be Check_Or_Create().<br />
+We need to insert records, so Insert_Record() should be written.<br />
+Other Operation, modification or delete shouldn&rsquo;t care at the very beginning.<br />
+We will use a new file for recording all of the function.</p>
+
+<p>The code for Create and Insert record into weather table is listed as following:</p>
+
+<pre><code>from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Column, Table, ForeignKey
+from sqlalchemy import Integer, String, DateTime
+import datetime
+
+# Create the engine for connecting the local database
+# How to connect the remote engine, heroku postgres? 
+# Yes, it's possible. The DATABASE_URL environment variable provided by heroku fits perfectly as argument for create_engine. Behind the scene, it's a postgresql database, which is perfectly handled by sqlalchemy.
+# 
+# The way to do it may vary depending on the framework you use, but there shouldn't be any difficulty.
+
+engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb',echo=True)
+metadata=MetaData(bind=engine)
+
+# Definition of the weather table
+weather_table=Table('weather',metadata,
+	Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+	Column('Temperature', Integer),
+	Column('Humidity', Integer),
+	Column('PmTen', Integer),
+	Column('PmTwoFive', Integer),
+)
+
+# Create the table in mylocaldb
+metadata.create_all(checkfirst=True)
+
+# The actual SQL Language
+#CREATE TABLE weather (
+#	&quot;Insert_Time&quot; TIMESTAMP WITH TIME ZONE NOT NULL, 
+#	&quot;Temperature&quot; INTEGER, 
+#	&quot;Humidity&quot; INTEGER, 
+#	&quot;PmTen&quot; INTEGER, 
+#	&quot;PmTwoFive&quot; INTEGER, 
+#	PRIMARY KEY (&quot;Insert_Time&quot;)
+#)
+
+# mylocaldb=# select * from public.weather;
+#  Insert_Time | Temperature | Humidity | PmTen | PmTwoFive 
+# -------------+-------------+----------+-------+-----------
+# (0 rows)
+
+# Record Insertion
+# First generate an insertion sentense:
+ins = weather_table.insert()
+#&gt;&gt;&gt; str(ins)
+#'INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)'
+
+ins = weather_table.insert().values(Insert_Time=datetime.datetime.utcnow(), Temperature=25, Humidity=75, PmTen=100, PmTwoFive=55)
+
+#&gt;&gt;&gt; str(ins)
+#'INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)'
+#
+#&gt;&gt;&gt; ins.compile().params
+#{'PmTen': 100, 'PmTwoFive': 55, 'Temperature': 25, 'Insert_Time': datetime.datetime(2014, 5, 10, 5, 58, 21, 677234), 'Humidity': 75}
+
+# Connect to engine and execute. 
+conn = engine.connect()
+# &gt;&gt;&gt; conn
+# &lt;sqlalchemy.engine.base.Connection object at 0x2715890&gt;
+result = conn.execute(ins)
+# View result in psql
+# mylocaldb=# select * from public.weather;
+#           Insert_Time          | Temperature | Humidity | PmTen | PmTwoFive 
+# -------------------------------+-------------+----------+-------+-----------
+#  2014-05-10 05:58:21.677234+08 |          25 |       75 |   100 |        55
+
+</code></pre>
+
+<p>The critical functions has been pointed out in the above python file. Now we will consider how to run these functions at background. This will lead to next topic, &ldquo;Run multiple process in a single Heroku dyno&rdquo;.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/10/write-python-weather-app-on-heroku-6/">Write Python Weather APP on Heroku(6)</a>
+      </h1>
+      <span class="post-date">May 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/05/10/write-python-weather-app-on-heroku-6/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
+        
+      </span>
+      
+      
+
+<h3 id="risk">Risk</h3>
+
+<p>On Google App Engine it&rsquo;s very convinient to setup a crontab task, while in heroku setting up a crontab task will occupy the material, thus will use another dyno, each dyno will cost $30/month. For avoiding this, we will re-design our Weather App.<br />
+Following is the detailed explanation on heroku&rsquo;s dyno:<br />
+Heroku allows you to run one free dyno (or actually they give you 720 free dyno hours per month, which corresponds to one dyno constantly running). This means that if you choose to run one web dyno and one worker dyno (celery in this case), you&rsquo;ll be charged for 720 dyno hours. However, if you have a very small project, or your&rsquo;re working on a project that hasn&rsquo;t been released yet, you can avoid this cost.<br />
+A heroku dyno is like a process, and in this process you can actually spawn new processes, as long as you stay within the limit of 512 mb ram (the process also only has one CPU core). Heroku suggests that you use foreman when you run your application on your local machine, but you can actually use foreman on heroku, in order to run multiple processes in a single dyno.<br />
+On Heroku, we don’t have physical machines; in fact there isn’t the concept of “machine” at all. Instead, Heroku has Dynos, which are described as “lightweight containers” for UNIX processes. From their documentation:</p>
+
+<p>[A Dyno] can run any command available in its default environment combined with your app’s slug</p>
+
+<h3 id="solution">Solution</h3>
+
+<p>Celery<a href="www.celeryproject.org">www.celeryproject.org</a><br />
+or<br />
+Honcho<a href="https://github.com/nickstenning/honcho">https://github.com/nickstenning/honcho</a><br />
+We will try Honcho first, because it&rsquo;s based on python, so won&rsquo;t affect our code format.</p>
+
+<h4 id="celery-way">Celery Way</h4>
+
+<p>Install redis and celery:</p>
+
+<pre><code>pip install redis celery
+
+</code></pre>
+
+<p>Remember to use <code>pip freeze</code> to update the requirement.txt file.<br />
+We should also enable the RedisToGo plugin, install it via CLI:</p>
+
+<pre><code>$ heroku addons:add rediscloud
+
+</code></pre>
+
+<p>If you don&rsquo;t have a credit card, then your installation of plugin will be fail. We will register an account on <a href="www.redislabs.com/">www.redislabs.com</a>, then we will continue our setting.  ]</p>
+
+<pre><code>heroku config:set REDISCLOUD_URL=&quot;http://Resouce_Name:Redis_Passwod@pub-redis-xxxx.xxx.xxx..garantiadata.com:1xxx3&quot;
+
+</code></pre>
+
+<p>Your heroku app will restart, then we can test this redis database via following commands:</p>
+
+<pre><code>$ heroku run python
+Running `python` attached to terminal... up, run.8246
+Python 2.7.6 (default, Jan 16 2014, 02:39:37) 
+[GCC 4.4.3] on linux2
+Type &quot;help&quot;, &quot;copyright&quot;, &quot;credits&quot; or &quot;license&quot; for more information.
+&gt;&gt;&gt; import os
+&gt;&gt;&gt; import urlparse
+&gt;&gt;&gt; import redis
+&gt;&gt;&gt; url = urlparse.urlparse(os.environ.get('REDISCLOUD_URL'))
+&gt;&gt;&gt; r = redis.Redis(host=url.hostname, port=url.port, password=url.password)
+&gt;&gt;&gt; r.set('foo','bar')
+True
+&gt;&gt;&gt; r.get('foo')
+'bar'
+
+</code></pre>
+
+<p>An Article of using celery is right after this article, so we end this article and in next one we will re-design the web app to fit the celery way.</p>
 
       
     </div>
@@ -833,12 +1233,21 @@ Merge the branch with master:</p>
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/91/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

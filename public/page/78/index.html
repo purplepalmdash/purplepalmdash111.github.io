@@ -93,248 +93,885 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/27/lxc-computer-in-lab/">LXC Computer</a>
+        <a href="http://purplepalmdash.github.io/2014/10/18/embedded-environment-on-arch/">Embedded Environment on Arch</a>
       </h1>
-      <span class="post-date">Aug 27, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/08/27/lxc-computer-in-lab/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/18/embedded-environment-on-arch/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/lxc">lxc</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a>
         
       </span>
       
       
 
-<h3 id="network-configuration">Network Configuration</h3>
+<h3 id="nfs-server">NFS Server</h3>
 
-<p>Add the rules in udevd:</p>
+<p>Server Setup</p>
 
-<pre><code>linux-:~ # cd /etc/udev/rules.d/
-linux-:/etc/udev/rules.d # cat 10-network.rules
-SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth1&quot;
-SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth0&quot;
-SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth2&quot;
-SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth3&quot;
+<pre><code>$ sudo pacman -S nfs-utils
+$ sudo vim /etc/idmapd.conf
+[General]
 
-</code></pre>
+#Verbosity = 0
+Verbosity = 1
+Pipefs-Directory = /var/lib/nfs/rpc_pipefs
+Domain = localdomain
 
-<p>Add following network configuration:</p>
+[Mapping]
 
-<pre><code>linux-:/etc/sysconfig # cd network/
-linux-:/etc/sysconfig/network # cat ifcfg-eth0
-# Loopback (lo) configuration
-IPADDR=1xx.xx.xx.xxx
-NETMASK=255.255.255.0
-BROADCAST=1xx.xx.xx.xxx
-STARTMODE=auto
-USERCONTROL=yes
-FIREWALL=no
+Nobody-User = nobody
+Nobody-Group = nobody
 
-</code></pre>
+$ sudo vim /etc/conf.d/nfs-common.conf
+STATD_OPTS=&quot;-p 32765 -o 32766 -T 32803&quot;
 
-<p>Default Gateway Setup:</p>
+$ sudo vim  /etc/conf.d/nfs-server.conf
+MOUNTD_OPTS=&quot;-p 20048&quot;
 
-<pre><code>linux-:~ # cat /etc/sysconfig/network/ifroute-br0
-# Destination     Dummy/Gateway     Netmask            Device
-#
-default		xxx.xxx.xx.1	    255.255.255.255	br0
+$ sudo mkdir -p /srv/nfs4/music
+$ cat /etc/exports
+/srv/nfs4/ 10.0.0.0/24(rw,fsid=root,no_subtree_check)
+/srv/nfs4/music 10.0.0.0/24(rw,no_subtree_check,nohide) # note the nohide option which is applied to mounted directories on the file system.
+$ sudo exportfs -rav
+$ sudo systemctl restart nfs-server.service
 
 </code></pre>
 
-<p>Restart computer then you got the fixed ip address in eth0.<br />
-Add the default route so we could get outside.</p>
+<p>Testing Server:</p>
 
-<pre><code>vim routes
-xxx.xxx.xx.1 -eth0 
-or manually: 
-route add default gw xxx.xxx.xx.1 eth0
+<pre><code>$ sudo mount -t nfs 10.0.0.221:/srv/nfs4 /mnt
+$ ls /mnt
 
 </code></pre>
 
-<p>Bridge Networking Configuration:</p>
+<h3 id="tftpd-server">tftpd Server</h3>
 
-<pre><code>linux-:/etc/sysconfig/network # cat ifcfg-br0
-STARTMODE='auto'
-BOOTPROTO='static'
-DNS1=xxx.xxx.xx.1
-GATEWAY=xxx.xxx.xx.1
-IPADDR=xxx.xxx.xx.59
-NETMASK=255.255.255.0
-ONBOOT=yes
-USERCONTROL='no'
-BRIDGE='yes'
-BRIDGE_PORTS='eth0'
-BRIDGE_AGEINGTIME='20'
-BRIDGE_FORWARDDELAY='0'
-BRIDGE_HELLOTIME='2'
-BRIDGE_MAXAGE='20'
-BRIDGE_PATHCOSTS='3'
-BRIDGE_STP='on'
-linux-:/etc/sysconfig/network # cat ifcfg-eth0
-BOOTPROTO='static'
-STARTMODE='ifplugd'
-IFPLUGD_PRIORITY='1'
-NAME = '1000 mBIT ETHERNET'
+<p>Server:</p>
+
+<pre><code>$ sudo pacman -S tftp-hpa
+$ sudo vim /etc/systemd/system/tftpd.service
+[Unit]
+Description=hpa's original TFTP daemon
+
+[Service]
+ExecStart=/usr/sbin/in.tftpd -s /srv/tftp/
+StandardInput=socket
+StandardOutput=inherit
+StandardError=journal
+$ sudo systemctl start tftpd.socket
+$ sudo systemctl enable tftpd.socket
+
+</code></pre>
+
+<p>Client(10.0.0.230):</p>
+
+<pre><code>$ tftp 10.0.0.221
+tftp&gt; get abc.txt
+tftp&gt; quit
+$ ls -l abc.txt
+-rw-r--r-- 1 root root 0 Oct 18 20:23 abc.txt
+
+</code></pre>
+
+<h3 id="nfs-servers-easy">NFS Servers(Easy)</h3>
+
+<pre><code>$ sudo pacman -S nfs-utils
+$ cat /etc/exports
+/media/home/xxxx *(rw,sync,no_subtree_check)
+$ sudo systemctl enable rpcbind.service
+$ sudo systemctl start rpcbind.service
+$ sudo systemctl enable nfs-server.service
+$ sudo systemctl start nfs-server.service
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/18/ethernet-wakeup/">Ethernet Wakeup</a>
+      </h1>
+      <span class="post-date">Oct 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/18/ethernet-wakeup/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="purpose">Purpose</h3>
+
+<p>I want to wake up my laotop via RaspberryPi, since Rpi&rsquo;s power consumption is extremely low, so this will greatly save the power for laptop.</p>
+
+<h3 id="check-status">Check Status</h3>
+
+<p>On laptop, type following command to see whether your ethernet card support Wake-On-LAN or not:</p>
+
+<pre><code>[Trusty@~]$ sudo ethtool enp0s25 | grep Wake-on
+	Supports Wake-on: pumbg
+	Wake-on: g
+
+</code></pre>
+
+<p>The values define what activity to wake on: p (PHY activity), u (unicast activity), m (multicast activity), b (broadcast activity), a (ARP activity), and g (magic packet activity).We need g for WOL to work.</p>
+
+<h3 id="raspberrypi-configuration">RaspberryPI Configuration</h3>
+
+<p>Make sure <code>wol</code> is installed, then you should know the target PC&rsquo;s ipaddress and mac address.<br />
+Wakeup the remote machine via:</p>
+
+<pre><code>$ wol -i 10.0.0.230 c8:xx:xx:xx:xx:xx
+
+</code></pre>
+
+<p>You could also set this command into a alias in ~/.bashrc.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/18/linux-tips/">Linux Tips</a>
+      </h1>
+      <span class="post-date">Oct 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/18/linux-tips/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="1-know-the-system-installation-date">1. Know the System Installation Date</h3>
+
+<p>You can use tune2fs to know the installation date of your Linux System, be ware the /dev/sda[] should be the root partition of your disk. See my following example:</p>
+
+<pre><code>tune2fs -l /dev/sda1 or /dev/sdb1* | grep 'Filesystem created:'
+$ sudo tune2fs -l /dev/sda2  | grep 'Filesystem created:' 
+Filesystem created:       Mon May  5 17:31:40 2014
+
+</code></pre>
+
+<h3 id="2-view-thread-status">2. View Thread Status</h3>
+
+<p>View the thread status via proc filesystem.</p>
+
+<pre><code>$ ps -ef | grep conky
+Trusty      1396     1  0 19:15 ?        00:00:03 conky
+Trusty      7410  6161  0 19:23 pts/5    00:00:00 grep --color=always conky
+$ cd /proc/1396/task
+$ ls
+1396  1397  1398  1399  1400  1401  1402  1403
+$ cat 1396/status| grep &quot;State&quot;
+State:	S (sleeping)
+
+</code></pre>
+
+<h3 id="3-write-to-other-users">3. Write to other users</h3>
+
+<p>Use w to get the tty, then write to other users.</p>
+
+<pre><code>root@lilimarleen:/# w
+ 00:47:04 up 28 min,  2 users,  load average: 0.00, 0.01, 0.02
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+root     pts/0    1xx.xxx.xxx.xxx  00:26    0.00s  0.08s  0.00s w
+root     pts/2    18x.xxx.xxx.xx   00:40   32.00s  0.03s  0.03s -bash
+root@lilimarleen:/# echo &quot;Hi, LiliMarleen&quot;&gt;/dev/pts/2
+root@lilimarleen:/# echo &quot;Do you have lunch&quot;&gt;/dev/pts/2
+
+</code></pre>
+
+<h3 id="4-share-terminals">4. Share Terminals</h3>
+
+<p>Make sure the screen command is available on your machine, then:<br />
+Server side:</p>
+
+<pre><code>$ screen -S share
+
+</code></pre>
+
+<p>Client side:</p>
+
+<pre><code>$ screen -x share
+
+</code></pre>
+
+<p>Now both side input could be seen.</p>
+
+<h3 id="5-create-xz-file">5. Create xz file</h3>
+
+<p>xz file will greatly decrease the file size, we use following command for create a xz file:</p>
+
+<pre><code>tar cvfJ tar_xz_file.tar.xz folder_or_file
+
+</code></pre>
+
+<p>extract from xz from could be:</p>
+
+<pre><code>tar -xJf tar_xz_file.tar.xz
+
+</code></pre>
+
+<h3 id="6-login-issue">6. Login issue</h3>
+
+<p>When you met</p>
+
+<pre><code>file /home/xxx/.Xauthority does not exist
+
+</code></pre>
+
+<p>simply run following command once you login:</p>
+
+<pre><code>$ startx
+
+</code></pre>
+
+<p>Next time you won&rsquo;t met this complains.</p>
+
+<h3 id="7-execution-priviledge">7. Execution priviledge</h3>
+
+<p>Login to Opensuse, run ifconfig will complains it needs root priviledge:</p>
+
+<pre><code>Absolute path to 'ifconfig' is '/sbin/ifconfig', so running it may require superuser privileges (eg. root)
+
+</code></pre>
+
+<p>Simply add one line to the end of your ~/.bashrc file:</p>
+
+<pre><code>export PATH=/sbin/:$PATH
+
+</code></pre>
+
+<p>Next time you could directly run <code>ifconfig</code>, or if you don&rsquo;t want to change your .bashrc file, do <code>/sbin/ifconfig</code>.</p>
+
+<h3 id="8-show-history-timestap">8. Show history timestap</h3>
+
+<pre><code>[Trusty@Linux01 ~]$  export HISTTIMEFORMAT=&quot;%F %T `whoami` &quot;
+[Trusty@Linux01 ~]$ history | more
+    6  2014-10-29 03:33:01 Trusty ls | grep trb
+    7  2014-10-29 03:33:01 Trusty ./trbTest.py 
+    8  2014-10-29 03:33:01 Trusty history |grep export
+    9  2014-10-29 03:33:01 Trusty su root
+
+</code></pre>
+
+<h3 id="9-vrome-setting">9. Vrome setting</h3>
+
+<p>Chromium install the vrome then set the options of</p>
+
+<pre><code>set useletters=0
+
+</code></pre>
+
+<p>The keyshorts: go to address line Ctrl+L, in MAC Win+L.</p>
+
+<h3 id="10-replace-the-word-until-end-of-the-line">10. Replace the word until end of the line</h3>
+
+<p>In vim by following command:</p>
+
+<pre><code>:%s/\&lt;foo\&gt;.*//
+On each line, delete the whole word &quot;foo&quot; and all following text (to end of line).
+
+</code></pre>
+
+<h3 id="11-managing-all-of-the-running-vagrants">11. Managing all of the running vagrants</h3>
+
+<p>See following command:</p>
+
+<pre><code>[Trusty@/media/y/Vagrant/vccw/myproxy/vccw-1.9.1]$ VBoxManage list runningvms
+&quot;vccw-191_default_1417846604747_55987&quot; {7b802d9e-dee2-4662-9694-e7cff6cbc49b}
+[Trusty@/media/y/Vagrant/vccw/myproxy/vccw-1.9.1]$ VBoxManage controlvm vccw-191_default_1417846604747_55987 savestate
+0%...10%...20%...30%...40%...50%...60%...70%...80%...90%...100%
+
+</code></pre>
+
+<h3 id="12-battery">12. Battery</h3>
+
+<p>To know the current battery via acpi, run:</p>
+
+<pre><code>$ acpi -b
+
+</code></pre>
+
+<p>To know the more detailed info of Battery, goto:</p>
+
+<pre><code>$ cd /sys/class/power_supply/BAT0
+
+</code></pre>
+
+<h3 id="13-add-arp-entry">13. Add arp entry</h3>
+
+<p>So if you have rebooted the existing testing environment, your arp entries may be lost, simply use following command for adding it:</p>
+
+<pre><code>$ arp -s 192.168.1.10 00:01:02:03:04:05
+
+</code></pre>
+
+<p>Now you will directly reached 192.168.1.10 via the specified mac address.</p>
+
+<h3 id="14-enable-opera-proxy">14. Enable opera proxy</h3>
+
+<p>After Opera upgraded to latest version its configuration for proxy is failed, so I change the startup command from <code>opera</code> to:</p>
+
+<pre><code>$ opera --proxy-server=&quot;socks://127.0.0.1:1395&quot;
+$ alias opera='opera --proxy-server=&quot;socks://127.0.0.1:1395&quot;'
+
+</code></pre>
+
+<h3 id="15-delete-a-package-and-its-configuration-file">15. Delete a package and its configuration file</h3>
+
+<p>Use <code>pacman -R --help</code> for more detailed infos, so remove the vagrant including its configuration will be:</p>
+
+<pre><code>$ sudo pacman -R vagrant -n
+
+</code></pre>
+
+<h3 id="16-install-rar-unrar-on-centos">16. Install rar/unrar on CentOS</h3>
+
+<p>Install the rar/unrar via following command:</p>
+
+<pre><code>#  wget http://pkgs.repoforge.org/rpmforge-release/rpmforge-release-0.5.2-2.el6.rf.i686.rpm
+#  sudo rpm -ivh rpmforge-release-0.5.2-2.el6.rf.i686.rpm
+#  sudo yum install rar unrar
+
+</code></pre>
+
+<h3 id="17-zsh-history">17. zsh History</h3>
+
+<p>The default installed zsh has no history record, thus we have to enable the history via following setting:</p>
+
+<pre><code>$ touch $HOME/.zsh_history
+$ tail ~/.zshrc
+# For setting zsh history
+HISTFILE=$HOME/.zsh_history
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+HISTSIZE=5000
+SAVEHIST=5000
+
+</code></pre>
+
+<p>Now you will got the history recorded for 5000 lines, and each of them could be shared to each other.</p>
+
+<h3 id="18-calculate-code-lines">18. Calculate Code Lines</h3>
+
+<p>We could use cloc for calculate the code lines. In Ubuntu, simply run following commands for installing cloc:</p>
+
+<pre><code>$ sudo apt-get install cloc
+
+</code></pre>
+
+<p>cloc via following command:</p>
+
+<pre><code>$ cloc Your_Source_Code_Directory
+
+</code></pre>
+
+<p>After a while your statistics result will be displayed on the screen.</p>
+
+<h3 id="19-cmake-prefix">19. CMAKE prefix</h3>
+
+<p>For specify the cmake&rsquo;s prefix we use following command:</p>
+
+<pre><code>$ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ./ &amp;&amp; make &amp;&amp; sudo make install
+
+</code></pre>
+
+<h3 id="20-xclip">20. xclip</h3>
+
+<p>Sometimes we have to quickly redirect some output from the system output to system clipboard, we use xclip, add following alias to your ~/.bashrc or ~/.zshrc:</p>
+
+<pre><code># Alias the xclip for directly to my system buffer, thus we could use shift+insert for copy the content.
+alias myclip='xclip -selection clipboard'
+
+</code></pre>
+
+<h3 id="21-virtualbox-fixed-address">21. Virtualbox Fixed Address</h3>
+
+<p>The host-only adapter should have the static addresses, thus you won&rsquo;t mix each other.</p>
+
+<pre><code>$ sudo vim /etc/network/interfaces
+auto eth1
+iface eth1 inet static
+    address 192.168.56.101
+    netmask 255.255.255.0
+    gateway 192.168.56.1
+
+</code></pre>
+
+<h3 id="22-autologin-using-ssh">22. Autologin Using ssh</h3>
+
+<p>When you add the rsa content into the ~/.ssh/authorized_keys, but you still can&rsquo;t auto-login, then you have to consider the priviledge problem:</p>
+
+<pre><code>$ ls ~/.ssh/authorized_keys  -l 
+-rw-r--r--. 1 Trusty Trusty 392 Feb 11 11:36 /home/Trusty/.ssh/authorized_keys
+$ chmod g-w ~/.ssh/authorized_keys
+
+</code></pre>
+
+<p>Now you could reach the machine without inputting password.</p>
+
+<h3 id="23-change-static-address-for-centos">23. Change Static Address For CentOS</h3>
+
+<p>Change the following file:</p>
+
+<pre><code>$ sudo vim /etc/sysconfig/network-scripts/ifcfg-eth*
+DEVICE=eth0 
+BOOTPROTO=none 
+ONBOOT=yes 
+NETWORK=10.0.1.0 
+NETMASK=255.255.255.0 
+IPADDR=10.0.1.27 
 USERCTL=no
 
+</code></pre>
+
+<p>Restart and then you could find your CentOS have static address.</p>
+
+<h3 id="24-disable-touchpad">24. Disable Touchpad</h3>
+
+<p>First use <code>xinput list</code> for list all of the input devices for X, then set the property of them via:</p>
+
+<pre><code>$ xinput list
+⎡ Virtual core pointer                          id=2    [master pointer  (3)]
+⎜   ↳ Virtual core XTEST pointer                id=4    [slave  pointer  (2)]
+⎜   ↳ Logitech USB Optical Mouse                id=9    [slave  pointer  (2)]
+⎜   ↳ PS/2 Generic Mouse                        id=12   [slave  pointer  (2)]
+⎜   ↳ SynPS/2 Synaptics TouchPad                id=13   [slave  pointer  (2)]
+
+......
+
+$ xinput set-prop 13 &quot;Device Enabled&quot; 0
+
 
 </code></pre>
 
-<p>The route should changed to:</p>
+<h3 id="25-visudo">25. visudo</h3>
 
-<pre><code>route add default gw xxx.xxx.xx.1 br0
+<p>Sometimes in the visudo we set NOPASSWD, but it didn&rsquo;t take effects, why? because you are belong to some groups, while these group rules overwrite the previous rules you set, simply change all of the corresponding rules to:</p>
 
-</code></pre>
-
-<h3 id="lxc-install">LXC Install</h3>
-
-<p>Enable the free ways:</p>
-
-<pre><code>ssh -C -L 127.0.0.1:9001:1xx.xxx.2xx:2xxxx root@1xx.xx.1xx.xxx
+<pre><code>NOPASSWD:ALL
 
 </code></pre>
 
-<p>Use zypper to install the container.</p>
+<p>Save the file and now you will see <code>sudo command</code> won&rsquo;t ask you input anything.</p>
 
-<pre><code>zypper search lxc
-# zypper install lxc lxc-devel yast2-lxc libvirt-daemon-lxc libvirt-daemon-driver-lxc
-# lxc-checkconfig 
-# ls /usr/share/lxc/templates/
+<h3 id="26-youtube-download">26. Youtube download</h3>
 
-</code></pre>
+<p>Ubuntu could directly download youtube videos via install youtube-dl:</p>
 
-<p>Yes we have the opensuse specified configuraton.</p>
-
-<p>Create The first Container:</p>
-
-<pre><code>lxc-create -n ixxxxxSimulator1 -t /usr/share/lxc/templates/lxc-opensuse
+<pre><code>$ sudo apt-get install youtube-dl
 
 </code></pre>
 
-<p>List the installed Container:</p>
+<h3 id="27-perl-rename">27. perl-rename</h3>
 
-<pre><code>linux-:~ # lxc-ls
-xxxxhxxSimulator1
+<p>As ArchLinux&rsquo;s default rename tool is very simple use following rename tools provided via perl:</p>
 
-</code></pre>
+<pre><code>$ sudo pacman -S perl-rename
+$  vim ~/.zshrc
+### The default rename didn't support regex, use perl-rename instead.
+alias rename='perl-rename'
 
-<p>Username and password are <code>root</code>.</p>
-
-<p>Start the lxc machine via:</p>
-
-<pre><code>lxc-start -n xxxxxSimulator1
 
 </code></pre>
 
-<h3 id="lxc-configuration">LXC Configuration</h3>
+<h3 id="28-udiskie">28. udiskie</h3>
 
-<p>No Network, Add it!<br />
-First we remove the desktop kernel. and use the default kernel</p>
+<p>udiskie is for automatically mount/umount usb disks, but the ubuntu won&rsquo;t support it in official repository, we could install it via:</p>
 
-<pre><code># uname -a
-Linux XXXXSimulator1 3.11.6-4-desktop 
-# zypper in kernel-default
-# zypper rm kernel-desktop
-# uname -a
-Linux linux- 3.11.10-21-default
+<pre><code>$ sudo pip install udiskie
 
 </code></pre>
 
-<p>Enable the xfce4 for the default vnc server desktop:</p>
+<p>mount and umount disks via:</p>
 
-<pre><code>zypper in -t pattern xfce
-
-</code></pre>
-
-<p>Change the default lxc configuraiton of network:</p>
-
-<pre><code>$ vim /var/lib/lxc/XXXXSimulator1/config
-lxc.network.type = veth
-lxc.network.flags = up
-lxc.network.link = br0
-lxc.network.name = eth0
+<pre><code>$ sudo udiskie-mount -a
+$ sudo udiskie-umount -a
 
 </code></pre>
 
-<p>Now if you start the lxc container, the network eth0 will be automatically started.</p>
+<h3 id="29-git-merge-conflicts">29. git merge conflicts</h3>
 
-<h3 id="lxc-expand">LXC Expand</h3>
+<p>Sometimes when you <code>git pull</code> from remote repository, you will got some anoying hint messages which shows you have merge conflicts, following is the steps for solving this issue:</p>
 
-<p>Duplicate LXC Machine.<br />
-This is strange when we directly call lxc-clone will cause failed silently:</p>
-
-<pre><code> # lxc-clone -o XXXXSimulator1 -n XXXXSimulator2
-linux-:~ # echo $?
-1
+<pre><code>$ git pull
+$ git stash
+$ git pull
 
 </code></pre>
 
-<p>Then we use this:</p>
+<p>Now you are ready to work under merged trees.</p>
 
-<pre><code># bash /usr/bin/lxc-clone -o XXXXSimulator1 -n XXXXSimulator2
-Tweaking configuration
-Copying rootfs...
-Updating rootfs...
-'XXXXSimulator2' created
-linux-:~ # lxc-ls
-XXXXSimulator1  XXXXSimulator2
+<h3 id="30-git-remote-repository">30. Git remote repository</h3>
 
-</code></pre>
+<p>When first git clone to local, then git push origin master, it will complains:</p>
 
-<p>Change the XXXXSimulator2&rsquo;s configuration:</p>
-
-<pre><code>$ vim /var/lib/lxc/XXXXSimulator2/config
-lxc.network.ipv4 = xxx.xxx.xx.67
+<pre><code>[Trusty@~/Code/herokublog]$ git push origin master
+fatal: remote error: 
+  You can't push to git://github.com/xxxx/herokublog.git
+  Use https://github.com/xxxx/herokublog.git
+[Trusty@~/Code/herokublog]$ ssh -T git@github.com
+X11 forwarding request failed on channel 0
+Hi xxxx! You've successfully authenticated, but GitHub does not provide shell access.
+[Trusty@~/Code/herokublog]$ git remote set-url origin git@github.com:xxxx/herokublog.git
 
 </code></pre>
 
-<p>Now start the two LXC via:</p>
+<p>After setting this, we could use <code>git push origin master</code> for submitting our changes.</p>
 
-<pre><code># lxc-start  -n XXXXSimulator2
-# lxc-start  -n XXXXSimulator1
-[Trusty@Linux01 ~]$ ping -c 1 xxx.xxx.xx.66
-PING xxx.xxx.xx.66 (xxx.xxx.xx.66) 56(84) bytes of data.
-64 bytes from xxx.xxx.xx.66: icmp_seq=1 ttl=64 time=1.50 ms
+<h3 id="31-replace-all-of-the-strings-under-one-folder">31. Replace all of the strings under one folder</h3>
 
---- xxx.xxx.xx.66 ping statistics ---
-1 packets transmitted, 1 received, 0% packet loss, time 1ms
-rtt min/avg/max/mdev = 1.506/1.506/1.506/0.000 ms
-[Trusty@Linux01 ~]$ ping -c 1 xxx.xxx.xx.67
-PING xxx.xxx.xx.67 (xxx.xxx.xx.67) 56(84) bytes of data.
-64 bytes from xxx.xxx.xx.67: icmp_seq=1 ttl=64 time=1.56 ms
+<p>Simply use sed for replacing these strings:</p>
 
---- xxx.xxx.xx.67 ping statistics ---
-1 packets transmitted, 1 received, 0% packet loss, time 1ms
-rtt min/avg/max/mdev = 1.567/1.567/1.567/0.000 ms
+<pre><code>Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl &quot;http://archive.ubuntu.com&quot; ./ | wc -l
+3
+Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl &quot;http://archive.ubuntu.com&quot; ./ | xargs sed -i 's|http://archive.ubuntu.com|http://http://mirrors.aliyun.com|g'
+Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl &quot;http://archive.ubuntu.com&quot; ./ | wc -l
+0
+Trusty@MassTestOnUbuntu1404:~/charms/trusty$ grep -rl &quot;http://mirrors&quot; ./ | wc -l
+3
 
 </code></pre>
 
-<p>Later we could configure the LXC, to let the container start at bootup, Or control its behavior.</p>
+<h3 id="32-use-local-lxc-repository">32. Use local LXC repository</h3>
 
-<h3 id="lxc-computer-configuration">LXC Computer Configuration</h3>
-
-<p>The IP address and Default Gateway Configuration:</p>
-
-<pre><code>lxc.network.type = veth
-lxc.network.flags = up
-lxc.network.link = br0
-lxc.network.name = eth0
-lxc.network.ipv4 = xxx.xxx.xx.59/24
-lxc.network.ipv4.gateway = xxx.xxx.xx.1
+<pre><code>So, let's say you downloaded the ubuntu trusty amd64 tarballs, you need to do:
+ - mkdir -p /var/cache/lxc/download/ubuntu/trusty/amd64/default/
+ - copy rootfs.tar.xz in /var/cache/lxc/download/ubuntu/trusty/amd64/default/
+ - unpack the content of meta.tar.xz in /var/cache/lxc/download/ubuntu/trusty/amd64/default/
+ - Then run the download template with: -d ubuntu -r trusty -a amd64
 
 </code></pre>
 
-<p>Then start the LXC Container, you will see the ip address/netmask already configured.</p>
+<h3 id="33-use-rsync-for-syncing-the-files">33. Use rsync for syncing the files</h3>
 
-<h3 id="lxc-destroy">LXC Destroy</h3>
+<pre><code>$ rsync -e 'ssh -p 1234' username@hostname:SourceFile DestFile
+Example:    
+$ rsync -avH --progress '-e ssh -p 2223' Trusty@1xx.xxx.xxx.xxx:/home/Trusty/charms/trusty/ ~/charms/trusty/
 
-<p>Destroyed the unused Container2:</p>
+</code></pre>
 
-<pre><code>linux-:~ # lxc-ls
-XXXXSimulator1  XXXXSimulator2
-linux-:~ # lxc-destroy -n XXXXSimulator2
-linux-:~ # lxc-ls
-XXXXSimulator1
+<h3 id="34-use-dmidecode-to-view-your-hardware-configuration">34. Use dmidecode to view your hardware configuration</h3>
 
+<p>dmidecode is a tool-set for dump out your SMIBIOS configuration in readable format, use following command for readout the maximum support moemory of your system, and the already installed memory information on your system:</p>
+
+<pre><code>$ sudo dmidecode -t 16
+$ sudo dmidecode -t 17
+
+</code></pre>
+
+<h3 id="35-use-fslint-for-searching-out-the-duplicated-files">35. Use fslint for searching out the duplicated files</h3>
+
+<p>fslint could search the directory and find out the duplicated files.<br />
+Install it via:</p>
+
+<pre><code>$ sudo apt-get install fslint
+$ fslint-gui
+
+</code></pre>
+
+<h3 id="36-limitation-bandwidth">36. Limitation Bandwidth</h3>
+
+<p>Use following command could limit the specified userspace programs&rsquo; bandwidth:</p>
+
+<pre><code>$ trickle -s -d 50 -w 100 firefox
+http://stackoverflow.com/questions/10328568/simulate-limited-bandwidth-from-within-chrome
+
+</code></pre>
+
+<h3 id="37-grep-with-color">37. Grep with color</h3>
+
+<p>grep&rsquo;s default output is without colorful output, do following for enable the colorful output:</p>
+
+<pre><code>alias grep='grep --color=always'
+
+</code></pre>
+
+<p>Add this into your .zshrc, so everytime it boots up the grep will output with colors.</p>
+
+<h3 id="38-raspberrypi-items">38. RaspberryPI items</h3>
+
+<p>For optimize the RaspberryPI, need to do following:</p>
+
+<pre><code>relatime/atime, use relatime
+cat /sys/block/mmcblk0/queue/scheduler/
+noop deadline cfq
+use noop
+[noop] deadline cfq
+
+</code></pre>
+
+<h3 id="39-install-openstack-on-centos">39. Install OpenStack On CentOS</h3>
+
+<p>The following tips:</p>
+
+<pre><code>   35  packstack --answer-file=/root/answer.txt
+   41  cat /etc/sysconfig/selinux
+   42  vim /etc/selinux/config
+Disable selinux, then try it again
+
+</code></pre>
+
+<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</p>
+
+<h3 id="40-install-opencontrail-openstack">40. Install OpenContrail/OpenStack</h3>
+
+<p><a href="https://fosskb.wordpress.com/2014/10/18/openstack-juno-on-ubuntu-14-10/">https://fosskb.wordpress.com/2014/10/18/openstack-juno-on-ubuntu-14-10/</a></p>
+
+<h1 id="https-techwiki-juniper-net-documentation-contrail-contrail-controller-getting-started-guide-10-in-context-3a-contrail-controller-getting-started-guide-https-techwiki-juniper-net-documentation-contrail-contrail-controller-getting-started-guide-10-in-context-3a-contrail-controller-getting-started-guide"><a href="https://techwiki.juniper.net/Documentation/Contrail/Contrail_Controller_Getting_Started_Guide/10_In_Context%3A_Contrail_Controller_Getting_Started_Guide">https://techwiki.juniper.net/Documentation/Contrail/Contrail_Controller_Getting_Started_Guide/10_In_Context%3A_Contrail_Controller_Getting_Started_Guide</a></h1>
+
+<h3 id="40-docker-save-load">40. Docker save/load</h3>
+
+<p>In the server, do:</p>
+
+<pre><code>docker save ubuntu&gt;/root/myubuntu.tar
+
+</code></pre>
+
+<p>Scp it to client machine, and in client machine, do:</p>
+
+<pre><code>docker load&lt;/root/myubuntu.tar
+
+</code></pre>
+
+<p>Examine it via:</p>
+
+<pre><code>[root@10-17-17-183 ~]# docker images
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+ubuntu              latest              d0955f21bf24        2 weeks ago         188.3 MB
+
+</code></pre>
+
+<h3 id="41-build-maas-based-centos-image">41. Build Maas Based CentOS Image</h3>
+
+<p>Following is just the commands:</p>
+
+<pre><code>root@pc121:~/iso/CentOSImage/maas-image-builder# #./bin/maas-image-builder -o centos6-amd64-root-tgz centos --edition 6                        
+root@pc121:~/iso/CentOSImage/maas-image-builder# pwd
+/home/clouder/iso/CentOSImage/maas-image-builder
+
+
+</code></pre>
+
+<blockquote>
+<blockquote>
+<blockquote>
+<blockquote>
+<blockquote>
+<blockquote>
+<blockquote>
+<p>58372fecc80eeda12cddd4001534fc541cab8f30</p>
+</blockquote>
+</blockquote>
+</blockquote>
+</blockquote>
+</blockquote>
+</blockquote>
+</blockquote>
+
+<h3 id="42-view-multiply-errors">42. View multiply errors</h3>
+
+<p>For displaying all of the error/warnings.</p>
+
+<pre><code>for file in $(ls /var/log/nova/); do cat /var/log/nova/$file | grep -iE 'error|warn' ; done
+
+</code></pre>
+
+<h3 id="43-reference-for-docker-and-contrail">43. Reference for docker and contrail</h3>
+
+<p><a href="http://www.opencontrail.org/docker-with-opencontrail/">http://www.opencontrail.org/docker-with-opencontrail/</a></p>
+
+<h3 id="44-run-jobs-at-certain-time">44. Run Jobs at certain time</h3>
+
+<p>Following is an example for automatically download the iso file at the spare time of the office network.</p>
+
+<pre><code># echo &quot;wget http://mirrors.aliyun.com/ubuntu-releases/15.04/ubuntu-15.04-server-amd64.iso -O /home/juju/iso/ubuntu-15.04-server-amd64.iso &quot; | at 12:27
+
+</code></pre>
+
+<h3 id="45-check-kvm">45. Check kvm</h3>
+
+<p>We could use <code>kvm-ok</code> for checking your cpu is compatible for use kvm acceleration.</p>
+
+<pre><code>$ sudo apt-get install cpu-checker
+$ kvm-ok
+
+</code></pre>
+
+<p>The output will shows whether your cpu support kvm or not.</p>
+
+<h3 id="46-quickly-installation-the-desktop">46. Quickly Installation the Desktop</h3>
+
+<p>Turn your minimal CentOS into a full Desktop:</p>
+
+<pre><code>$  sudo yum install system-config-kickstart
+$  sudo yum install gnome-desktop
+$  sudo yum -y groupinstall &quot;X Window System&quot; &quot;Desktop&quot;
+
+</code></pre>
+
+<p>Enter the desktop via <code>startx</code></p>
+
+<h3 id="47-restart-bluetooth-in-ubuntu">47. Restart bluetooth in Ubuntu</h3>
+
+<p>Sometimes the bluetooth will fail on Ubuntu, using following command for restart the bluetooth service:</p>
+
+<pre><code>$ sudo /etc/init.d/bluetooth restart
+
+</code></pre>
+
+<p>Now you could continue to detect the devices and setup the configuration.</p>
+
+<h3 id="48-control-the-network-flow">48. Control the network flow</h3>
+
+<p>Use wondershapt for controlling the network flow:</p>
+
+<pre><code># wondershaper eth0 3000 500
+</code></pre>
+
+<p>The first parameter is the download rate, while the second parameter is the upload rate..</p>
+
+<h3 id="49-can-t-git-remote">49. Can&rsquo;t git remote</h3>
+
+<p>You should edit the remote branch like following to enable the git push origin:</p>
+
+<pre><code>$ git push origin master
+fatal: remote error: 
+  You can't push to git://github.com/User/xxx.git
+  Use https://github.com/User/xxx.git
+  Use https://github.com/purplepalmdash/NewBlog.git
+$ git remote rm origin
+$ git remote add origin git@github.com:User/xxx.git
+$ git push origin master
+
+</code></pre>
+
+<h3 id="50-quickly-setup-nfs-server">50. Quickly Setup NFS Server</h3>
+
+<p>On Ubuntu, first install the nfs-server:</p>
+
+<pre><code>$ sudo apt-get install nfs-kernel-server
+$ sudo vim /etc/exports 
+/media/repo     192.168.1.0/255.255.255.0(rw,sync,no_subtree_check)
+$ sudo /etc/init.d/nfs-kernel-server restart
+</code></pre>
+
+<p>Mount it via:</p>
+
+<pre><code>$ sudo mount -t nfs 192.168.1.13:/media/repo /mnt
+</code></pre>
+
+<h3 id="51-set-aliyun-for-centos7">51. Set Aliyun For CentOS7</h3>
+
+<p>Run following commands will update the CentOS repository and import the epel repository for CentOS7</p>
+
+<pre><code># mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup
+# wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo
+# yum makecache
+wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
+# yum  -y  update
+</code></pre>
+
+<h3 id="52-set-apt-proxy-for-ubuntu">52. Set apt-proxy for Ubuntu</h3>
+
+<p>If you have set the apt-proxy, remember the listening port is:</p>
+
+<pre><code>$ cat /etc/apt/apt.conf
+Acquire::http::Proxy &quot;http://10.3.3.5:3142&quot;
+</code></pre>
+
+<p>The configuration for apt-proxy could be found via google.</p>
+
+<h3 id="54-use-gem-taobao-source">54. Use gem taobao source</h3>
+
+<p>For avoiding the GFW.</p>
+
+<pre><code>/opt/chef/embedded/bin/gemsources -a http://ruby.taobao.org/
+</code></pre>
+
+<h3 id="53-use-aliyun-repository">53. Use Aliyun Repository</h3>
+
+<pre><code>gem source -r https://rubygems.org/
+gem source -a http://mirrors.aliyun.com/rubygems/
+</code></pre>
+
+<h3 id="54-xdmcp-error">54. XDMCP Error</h3>
+
+<pre><code> XDMCP fatal error: Session declined Maximum number of open sessions from your host reached from .
+
+[root:~]# cat /etc/gdm/custom.conf
+[xdmcp]
+Port=177
++ DisplaysPerHost=5
+Enable=true
+
+# reboot
+</code></pre>
+
+<p>Now your client will successfully login to the remote server.</p>
+
+<h3 id="55-upgrade-ubuntu14-04-2-kernel">55. Upgrade Ubuntu14.04.2 Kernel</h3>
+
+<p>For upgrade it to 3.16.xxx, simplying use following command:</p>
+
+<pre><code>$ sudo apt-get install linux-image-generic-lts-utopic
+</code></pre>
+
+<h3 id="56-install-docker-on-ubuntu">56. Install Docker on Ubuntu</h3>
+
+<pre><code>$ wget -qO- https://get.docker.com/ | sh
+</code></pre>
+
+<h3 id="57-permanent-change-hostname-on-fedora">57. Permanent Change Hostname on Fedora</h3>
+
+<pre><code>$ sudo hostnamectl set-hostname --static &quot;YOUR-HOSTNAME-HERE&quot;
+</code></pre>
+
+<h3 id="58-remote-vnc-via-ssh">58. Remote VNC via SSH</h3>
+
+<pre><code>Home machine:     
+ssh -R *:6234:localhost:5901 xxxx@1xxx.xxx.xxx.xxx -p xxxx4
+
+Server, forward 6234 to 16234:    
+ssh -NfL *:16234:localhost:6234 localhost -p xxxx4
+
+Company:    
+vncviewer 1zxxx.xxx.xxx.xxx:16234
+</code></pre>
+
+<h3 id="59-disable-byobu-from-scrolling">59. Disable byobu from scrolling</h3>
+
+<p>This is because the byobu use tmux for the backend. Change it into screen.</p>
+
+<pre><code>$ byobu-select-backend 
+# and selecting screen (option 2).
+</code></pre>
+
+<h3 id="60-add-items-into-the-host-file">60. Add items into the host file</h3>
+
+<pre><code># ifconfig | awk -v MYHOST=$(hostname) '/inet addr/{print substr($2,6),&quot;\t&quot;,MYHOST}'&gt;&gt;/etc/hosts
+</code></pre>
+
+<h3 id="61-gpg-issues">61. GPG Issues</h3>
+
+<pre><code>https://help.ubuntu.com/community/GnuPrivacyGuardHowto#Using_GnuPG_to_generate_a_key
+</code></pre>
+
+<h3 id="62-mirror-whole-website">62. Mirror Whole Website</h3>
+
+<p>Use Wget for retrieving all of the items:</p>
+
+<pre><code>[root:/home/juju/Fuel61Repository]# wget --recursive -c -np -k -L http://mirror.fuel-infra.org/
+</code></pre>
+
+<h3 id="63-grouplist-for-yum">63. Grouplist for yum</h3>
+
+<p>yum install the group of the X window System, thus we could forwarding X11.</p>
+
+<pre><code>$ sudo yum grouplist
+$ sudo yum groupinstall &quot;X Window System&quot;
 </code></pre>
 
       
@@ -342,475 +979,250 @@ XXXXSimulator1
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/13/puppet-on-archlinux-2/">Puppet on ArchLinux(2)</a>
+        <a href="http://purplepalmdash.github.io/2014/10/18/linux2-dot-6-39-for-utu2440/">Linux2.6.39 for utu2440</a>
       </h1>
-      <span class="post-date">Aug 13, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/08/13/puppet-on-archlinux-2/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/18/linux2-dot-6-39-for-utu2440/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/puppet">puppet</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
         
       </span>
       
       
 
-<h3 id="add-arch">Add Arch</h3>
+<h3 id="kernel-preparation">Kernel Preparation</h3>
 
-<p>step1, add the hosts into /etc/hosts:</p>
+<p>First download the kernel source from kernel.org:</p>
 
-<pre><code># Puppet 
-10.0.0.88	puppet
-10.0.0.89	client
-
-</code></pre>
-
-<p>step2, edit the /etc/puppet/puppet.conf:</p>
-
-<pre><code>[agent]
-    # add server
-    [agent]
-    server = puppet
+<pre><code>$ wget https://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.39.tar.bz2
+$ tar xjvf lnux-2.6.39.tar.bz2
 
 </code></pre>
 
-<p>Restart the puppet.service:</p>
+<p>Change the Makefile:</p>
 
-<pre><code>systemctl restart puppet.service
-systemctl enable puppet.service
+<pre><code>$ cat Makefile
+export KBUILD_BUILDHOST := $(SUBARCH)
+ARCH		?= $(SUBARCH)
+CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:&quot;%&quot;=%)
 
-</code></pre>
-
-<p>step3, in 10.0.0.88(server), add the ssl certification of archlinux:</p>
-
-<pre><code>root@Ubuntu88:/home/Trusty# !44
-puppet cert --list
-Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
-   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
-  &quot;XXXyyy.lan&quot; (SHA256) 8XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-root@Ubuntu88:/home/Trusty# puppet cert --sign XXXyyy.lan
-Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
-   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
-Notice: Signed certificate request for XXXyyy.lan
-Notice: Removing file Puppet::SSL::CertificateRequest XXXyyy.lan at '/var/lib/puppet/ssl/ca/requests/XXXyyy.lan.pem'
+# Added our own cross-compiler here.
+ARCH		?= arm
+CROSS_COMPILE	?= arm-linux-
+# End of added own cross-compiler. 
 
 </code></pre>
 
-<p>Now check the /tmp, we will see our test file in last chapter.</p>
+<p>Change the pltf input clock:</p>
 
-<p>For test pupose, we will disable archLinux&rsquo;s puppet via:</p>
-
-<pre><code>[root@TrustyArch tmp]# systemctl stop puppet.service
-[root@TrustyArch tmp]# systemctl disable puppet.service
-Removed symlink /etc/systemd/system/multi-user.target.wants/puppet.service.
-
-</code></pre>
-
-<h3 id="install-package">Install package</h3>
-
-<p>Add following lines into 10.0.0.88, /etc/puppet/manifests/site.pp:</p>
-
-<pre><code>package {
-    'xplot':
-        ensure =&gt; installed
+<pre><code>$ vim  arch/arm/mach-s3c2440/mach-smdk2440.c
+static void __init smdk2440_map_io(void)
+{
+	s3c24xx_init_io(smdk2440_iodesc, ARRAY_SIZE(smdk2440_iodesc));
+	//s3c24xx_init_clocks(16934400);
+	// Change the input clock adjust to utu2440
+	s3c24xx_init_clocks(12000000);
+	s3c24xx_init_uarts(smdk2440_uartcfgs, ARRAY_SIZE(smdk2440_uartcfgs));
 }
 
 </code></pre>
 
-<p>Then restart the puppetmaster, in 10.0.0.89, the package xplot will be installed.</p>
+<p>Change the machine code(this code is the same as the bootloader&rsquo;s parameter, bootloader transfer 5244 to Linux Kernel.</p>
+
+<pre><code>$ vim arch/arm/tools/mach-types 
+s3c2440			ARCH_S3C2440		S3C2440			5244
+
+</code></pre>
+
+<p>Change the Nand flash partitions:</p>
+
+<pre><code>$ vim  arch/arm/plat-s3c24xx/common-smdk.c
+static struct mtd_partition smdk_default_nand_part[] = {
+	// partition for utu2440
+	[0]= {
+		.name = &quot;bootloader&quot;, 
+		.size = 0x00040000,
+		.offset = 0x00000000,
+	},
+	[1]= {
+		.name = &quot;kernel&quot;, 
+		.size = 0x00060000,
+		.offset = 0x00200000,
+	},
+	[2]= {
+		.name = &quot;root&quot;, 
+		.size = 0x00260000,
+		.offset = 0x03dac000,
+	}
+	
+
+};
+
+static struct s3c2410_platform_nand smdk_nand_info = {
+	.tacls		= 0,
+	.twrph0		= 30,
+	.twrph1		= 0,
+
+
+</code></pre>
+
+<p>Begin to configure:</p>
+
+<pre><code># export PATH=/opt/cross/arm-linux-gcc_4.3.2/bin:$PATH
+# vim Makefile
+//ARCH                 ?= $(SUBARCH)
+//CROSS_COMPILE     ?=
+ARCH                 ?= arm
+CROSS_COMPILE     ?= arm-linux-
+# make s3c2410_defconfig
+# make menuconfig
+System Type-&gt; ARM system type(Samsung S3C2410, S3C2412, ......
+S3C2410 Machines  ---&gt;    [*] SMDK2410/A9M2410
+S3C2440 AND S3C2442 Machines ---&gt; [*] SMDK2440     [*] SMDK2440 with S3C2440 CPU module 
+Kernel Features  ---&gt;   [*] Use the ARM EABI to compile the kernel
+
+</code></pre>
+
+<p>Then <code>make all V=1</code><br />
+Generate uImage:</p>
+
+<pre><code># cp arch/arm/boot/zImage ./
+[root@TrustyArch linux-2.6.39]# mkimage -A arm -O linux -n $(date --iso-8601=seconds) -C NONE -a 0x30008000 -e 0x30008000 -d zImage uImage
+Image Name:   2014-10-18T20:27:54+0800
+Created:      Sat Oct 18 20:27:54 2014
+Image Type:   ARM Linux Kernel Image (uncompressed)
+Data Size:    2094940 Bytes = 2045.84 kB = 2.00 MB
+Load Address: 30008000
+Entry Point:  30008000
+
+</code></pre>
+
+<p>Now copy the uImage to the tftp directory for testing</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/13/virtualbox-modprobe-problem/">Virtualbox Modprobe Problem</a>
+        <a href="http://purplepalmdash.github.io/2014/10/18/tftpd-on-ubuntu/">tftpd on ubuntu</a>
       </h1>
-      <span class="post-date">Aug 13, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/08/13/virtualbox-modprobe-problem/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 18, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/18/tftpd-on-ubuntu/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualbox">virtualbox</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
         
       </span>
       
       
 
-<p>After upgrading the Linux Kernel, my virtualbox cannot automatically load the kernel modules for virtualbox. Following is the steps for finding out the problems and solving them.</p>
+<p>For updating the kernel on s3c2440 board, I have to setup the tftpd server.</p>
 
-<h3 id="locating-problem">Locating Problem</h3>
+<h3 id="tftpd-server">tftpd server</h3>
 
-<p>I could manually modprobe the virtualbox driver, but failed to load at boot, so I first check the status of the systemd&rsquo;s output.<br />
-Checking the systemd&rsquo;s modules load service status:</p>
+<p>Install tfpd-hpa:</p>
 
-<pre><code># systemctl status systemd-modules-load.service
-● systemd-modules-load.service - Load Kernel Modules
-   Loaded: loaded (/usr/lib/systemd/system/systemd-modules-load.service; static)
-   Active: failed (Result: exit-code) since Wed 2014-08-13 13:32:34 CST; 1h 24min ago
-     Docs: man:systemd-modules-load.service(8)
-           man:modules-load.d(5)
-  Process: 142 ExecStart=/usr/lib/systemd/systemd-modules-load (code=exited, status=1/FAILURE)
- Main PID: 142 (code=exited, status=1/FAILURE)
-
-Aug 13 13:32:34 XXXyyy systemd[1]: systemd-modules-load.service: main process exited, code=exited, status=1/FAILURE
-Aug 13 13:32:34 XXXyyy systemd[1]: Failed to start Load Kernel Modules.
-Aug 13 13:32:34 XXXyyy systemd[1]: Unit systemd-modules-load.service entered failed state.
-Warning: Journal has been rotated since unit was started. Log output is incomplete or unavailable.
+<pre><code>sudo apt-get install tftpd-hpa
 
 </code></pre>
 
-<p>Manually reload this service and check the status:</p>
+<p>Setup the directory name and edit the /etc/default/tftpd-hpa:</p>
 
-<pre><code>[root@XXXyyy Trusty]# systemctl restart systemd-modules-load
-Job for systemd-modules-load.service failed. See 'systemctl status systemd-modules-load.service' and 'journalctl -xn' for details.
-[root@XXXyyy Trusty]# systemctl status systemd-modules-load
-● systemd-modules-load.service - Load Kernel Modules
-   Loaded: loaded (/usr/lib/systemd/system/systemd-modules-load.service; static)
-   Active: failed (Result: exit-code) since Wed 2014-08-13 14:59:31 CST; 13s ago
-     Docs: man:systemd-modules-load.service(8)
-           man:modules-load.d(5)
-  Process: 21364 ExecStart=/usr/lib/systemd/systemd-modules-load (code=exited, status=1/FAILURE)
- Main PID: 21364 (code=exited, status=1/FAILURE)
+<pre><code>root@joggler:/etc# cat /etc/default/tftpd-hpa 
+# /etc/default/tftpd-hpa
 
-Aug 13 14:59:31 XXXyyy systemd[1]: systemd-modules-load.service: main process exited, code=exited, status=1/FAILURE
-Aug 13 14:59:31 XXXyyy systemd[1]: Failed to start Load Kernel Modules.
-Aug 13 14:59:31 XXXyyy systemd[1]: Unit systemd-modules-load.service entered failed state.
+TFTP_USERNAME=&quot;tftp&quot;
+TFTP_DIRECTORY=&quot;/media/nfs/rootfs&quot;
+TFTP_ADDRESS=&quot;0.0.0.0:69&quot;
+TFTP_OPTIONS=&quot;--secure&quot;
 
 </code></pre>
 
-<p>Use journalctl to view the PID&rsquo;s logs:</p>
+<p>Then restart the server:</p>
 
-<pre><code>[root@XXXyyy Trusty]# journalctl -b _PID=21364
--- Logs begin at Thu 2014-07-31 16:07:13 CST, end at Wed 2014-08-13 15:00:02 CST. --
-Aug 13 14:59:31 XXXyyy systemd-modules-load[21364]: Failed to find module 'vboxdrv vboxnetflt vboxnetadp'
-[root@XXXyyy Trusty]# systemctl status dkms.service 
-● dkms.service - Dynamic Kernel Modules System
-   Loaded: loaded (/usr/lib/systemd/system/dkms.service; disabled)
-   Active: inactive (dead)
+<pre><code>service tftpd-hpa restart
 
 </code></pre>
 
-<p>So the problem is quite clear: Failed to find module, and dkms service is not enabled.</p>
+<p>Other commands:</p>
 
-<h3 id="solving-problem">Solving Problem</h3>
-
-<p>First enable the dkms.service via:</p>
-
-<pre><code># systemctl enable dkms.service
-Created symlink from /etc/systemd/system/multi-user.target.wants/dkms.service to /usr/lib/systemd/system/dkms.service.
-
-</code></pre>
-
-<p>Install vboxhost-hook, this will add the hook to compile the virtualbox host modules:</p>
-
-<pre><code># yaourt -S vboxhost-hook
+<pre><code>service tftpd-hpa status
+service tftpd-hpa stop
+service tftpd-hpa start
+service tftpd-hpa restart
+service tftpd-hpa force-reload
 
 </code></pre>
 
-<p>Add vboxhost into the /etc/mkinitcpio.conf:</p>
+<h3 id="testing">Testing</h3>
 
-<pre><code>HOOKS=&quot;base udev autodetect modconf block filesystems keyboard fsck vboxhost&quot;
+<p>In the same machine, use following commands for testing the tftpd server(Make sure you have the get.txt under the root directory of your tftpd specified directory):</p>
 
-</code></pre>
-
-<p>Now recompile the initramfs via:</p>
-
-<pre><code>mkinitcpio -p linux
+<pre><code>$ tftp localhost
+tftp&gt; get get.txt
+tftp&gt; quit
 
 </code></pre>
 
-<p>dkms should also be installed:</p>
+<h3 id="utu2440">utu2440</h3>
 
-<pre><code>pacman -S linux-headers virtualbox-host-dkms viftualbox-guest-dkms
-dkms install vboxhost/4.3.14
-dkms install vboxguest/4.3.14
+<p>Test the utu2440&rsquo;s load_kernel function.<br />
+Copy the corresponding kernel file in tftpd server:</p>
 
-</code></pre>
-
-<p>Finally I found the reason:</p>
-
-<pre><code># cat /etc/modules-load.d/virtualbox.conf
-# Load virtualbox related modules at startup
-vboxdrv
-vboxnetflt
-vboxnetadp
+<pre><code>$ cp s3c_kernel/uImage_T5_480x272_ts ./uImage
+$ chmod 777 uImage
 
 </code></pre>
 
-<p>But previously I let them in one line!!!!!!!!!!!!!OMG&hellip;&hellip;.<br />
-Reboot and examine the result via <code>lsmod | grep vbox</code>.</p>
+<p>First set the ipaddr for utu2440&rsquo;s uboot:</p>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/11/puppet-on-archlinux/">Puppet On ArchLinux</a>
-      </h1>
-      <span class="post-date">Aug 11, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/08/11/puppet-on-archlinux/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/puppet">puppet</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Install via;</p>
-
-<pre><code>sudo pacman -S puppet
+<pre><code>utu-bootloader=&gt;&gt;&gt;setenv ipaddr 10.0.0.15
+utu-bootloader=&gt;&gt;&gt;ping 10.0.0.1
+dm9000 i/o: 0x18000300, id: 0x90000a46 
+MAC: 00:0c:20:02:0a:5b
+host 10.0.0.1 is alive
 
 </code></pre>
 
-<p>Configurate this machine into server mode.</p>
+<p>then set the server&rsquo;s address to 10.0.0.11(that&rsquo;s joggler with tftpd server enabled), use <code>printenv</code> for inspecting your configuration:</p>
 
-<h3 id="install-new-virtual-machine">Install new Virtual Machine</h3>
-
-<p>Install a new ubuntu14.04 using qemu, and install puppet in it.<br />
-Generate the configuration file for mirror.list of Ubuntu.</p>
-
-<p>Finally use the vdi file in the Ubuntu.</p>
-
-<p>Install puppet in Ubuntu14.04:<br />
-<a href="http://linuxconfig.org/puppet-installation-on-linux-ubuntu-14-04-trusty-tahr">http://linuxconfig.org/puppet-installation-on-linux-ubuntu-14-04-trusty-tahr</a></p>
-
-<p>Make Ubuntu use a fixed IP.</p>
-
-<pre><code>$ cat  /etc/network/interface
-# s file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
-
-# The loopback network interface
-auto lo
-iface lo inet loopback
-auto eth0
-	iface eth0 inet static
-	address 10.0.0.88
-	netmask 255.255.255.0
-	gateway 10.0.0.1
+<pre><code>utu-bootloader=&gt;&gt;&gt;setenv ipaddr 10.0.0.15
+utu-bootloader=&gt;&gt;&gt;printenv
+ipaddr=10.0.0.15
+serverip=10.0.0.11
 
 </code></pre>
 
-<p>And Copy the virtual disk, and change the UUID of the disk:</p>
+<p>View the embedded &lsquo;install-kernel&rsquo; command:</p>
 
-<pre><code>$ VBoxManage internalcommands sethduuid ./Ubuntu.vdi 
-UUID changed to: d1xxxxxxxxxxxxxxxxxxxxxxxxxx
+<pre><code>utu-bootloader=&gt;&gt;&gt;printenv
+install-kernel=tftp 30000000 uImage;nand erase 60000 200000;nand write.i 30000000 60000 0
+utu-bootloader=&gt;&gt;&gt;run install-kernel
+dm9000 i/o: 0x18000300, id: 0x90000a46 
+MAC: 00:0c:20:02:0a:5b
+TFTP from server 10.0.0.11; our IP address is 10.0.0.15
+Filename 'uImage'.
+Load address: 0x30000000
+Loading: #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         ##############################
+done
+Bytes transferred = 1483468 (16a2cc hex)
 
-</code></pre>
+NAND erase: device 0 offset 0x60000, size 0x200000
+Erasing at 0x25c000 -- 100% complete.
+OK
 
-<p>Be sure to change the ip address to 10.0.0.89.</p>
+NAND write: device 0 offset 0x60000, size 0x0
 
-<p>Now we have 2 machines.</p>
-
-<p>No password enter for ssh login:</p>
-
-<pre><code>$ cat ~/.ssh/id_rsa.pub| ssh Trusty@10.0.0.88 'cat&gt;&gt;~/.ssh/authorized_keys'
-$ cat ~/.ssh/id_rsa.pub| ssh Trusty@10.0.0.89 'cat&gt;&gt;~/.ssh/authorized_keys'
-
-</code></pre>
-
-<h3 id="server-and-client">Server and Client</h3>
-
-<p>Install Server side in 10.0.0.88:</p>
-
-<pre><code>sudo apt-get install puppetmaster
-
-</code></pre>
-
-<p>In 10.0.0.88, edit /etc/hosts:</p>
-
-<pre><code>10.0.0.89	client
+Writing data at 0x1ca200 -- 100% complete.
+ 1483776 bytes written: OK
+utu-bootloader=&gt;&gt;&gt;boot
 
 </code></pre>
 
-<p>While in 10.0.0.89, edit /etc/hosts:</p>
-
-<pre><code>10.0.0.88	puppet
-
-</code></pre>
-
-<p>In client(10.0.0.89), start the service of puppet:</p>
-
-<pre><code>$ sudo service puppet start
- * Starting puppet agent                                                                                
-puppet not configured to start, please edit /etc/default/puppet to enable
-                                                                                                 [ OK ]
-
-</code></pre>
-
-<p>In server(10.0.0.88), start the service of puppet master:<br />
-Add following lines in to /etc/puppet/puppet.conf:</p>
-
-<pre><code>dns_alt_names = puppet, master.local, puppet.terokarvinen.com
-
-</code></pre>
-
-<p>Then remove all of the generated ssl :</p>
-
-<pre><code>rm -rf /var/lib/puppet/ssl
-
-</code></pre>
-
-<p>Now restart the puppetmaster via:</p>
-
-<pre><code># service puppetmaster restart 
-
-</code></pre>
-
-<p>Change the hostname of 10.0.0.88 to Ubuntu88, 10.0.0.89 to Ubuntu89, and then restart the computer.<br />
-Now change the Ubuntu88&rsquo;s configuration
-Add following lines in 10.0.0.88(Server):
-In /etc/puppet/puppet.conf, [master] heading:</p>
-
-<pre><code>dns_alt_names = puppet, master.local, puppet.terokarvinen.com
-
-</code></pre>
-
-<p>On 10.0.0.89(Client), change the following line in /etc/default/puppet:</p>
-
-<pre><code>START=yes
-
-</code></pre>
-
-<p>Then in /etc/puppet/puppet.conf,  add following:</p>
-
-<pre><code>[agent]
-server = puppet
-
-</code></pre>
-
-<p>Restart the puppet service.</p>
-
-<p>Now on server, use following command to list the cert and add signed cert.</p>
-
-<pre><code>Trusty@Ubuntu88:~$ sudo puppet cert --list
-sudo: unable to resolve host Ubuntu88
-Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
-   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
-  &quot;ubuntu89&quot; (SHA256) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-Trusty@Ubuntu88:~$ sudo puppet cert --sign ubuntu89
-sudo: unable to resolve host Ubuntu88
-Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
-   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
-Notice: Signed certificate request for ubuntu89
-Notice: Removing file Puppet::SSL::CertificateRequest ubuntu89 at '/var/lib/puppet/ssl/ca/requests/ubuntu89.pem'
-
-</code></pre>
-
-<h3 id="create-the-site-manifest-and-a-module">Create the Site Manifest and a Module</h3>
-
-<p>Go to /etc/puppet, run following command:</p>
-
-<pre><code>Trusty@Ubuntu88:/etc/puppet$ sudo mkdir -p manifests/ modules/helloworld/manifests
-
-</code></pre>
-
-<p>Edit following file:</p>
-
-<pre><code>Trusty@Ubuntu88:/etc/puppet$ cat manifests/site.pp 
-include helloworld
-
-</code></pre>
-
-<p>Create the file:</p>
-
-<pre><code>Trusty@Ubuntu88:/etc/puppet$ sudo cat modules/helloworld/manifests/init.pp
-class helloworld {
-        file { '/tmp/helloFromMaster':
-                content =&gt; &quot;See you at http://terokarvinen.com/tag/puppet\n&quot;
-        }
-}
-
-</code></pre>
-
-<p>And Now in client, restart the puppet service:</p>
-
-<pre><code>Trusty@Ubuntu89:~$ sudo service puppet restart
-sudo: unable to resolve host Ubuntu89
-[sudo] password for Trusty: 
-no talloc stackframe at ../source3/param/loadparm.c:4864, leaking memory
- * Restarting puppet agent                                               [ OK ] 
-Trusty@Ubuntu89:~$ cat /tmp/helloFromMaster 
-See you at http://terokarvinen.com/tag/puppet
-
-</code></pre>
-
-<p>Now the basic configuration is OK.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/10/7-weeks-7-databases-reading-digest/">7 Weeks 7 Databases Reading Digest</a>
-      </h1>
-      <span class="post-date">Aug 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/08/10/7-weeks-7-databases-reading-digest/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/database">database</a>
-        
-      </span>
-      
-      
-
-<p>This chapter will introduct postgresql.</p>
-
-<h3 id="installation-in-archlinux">Installation in ArchLinux</h3>
-
-<p>Install it via:</p>
-
-<pre><code># pacman -S postgresql
-
-</code></pre>
-
-<p>Then configure the initial configuration:</p>
-
-<pre><code># su - postgres
-[postgres]$ initdb --locale en_US.UTF-8 -E UTF8 -D '/var/lib/postgres/data'
-# systemctl enable postgresql
-
-</code></pre>
-
-<p>Create the user:</p>
-
-<pre><code>[root@Arch_Container ~]# su - postgres
-[postgres@Arch_Container ~]$ createuser --interactive
-Enter name of role to add: root
-Shall the new role be a superuser? (y/n) y
-[postgres@Arch_Container ~]$ exit
-logout
-
-</code></pre>
-
-<p>Now using a test command for verifying your postgresql runs OK:</p>
-
-<pre><code># createdb myDatabaseName
-
-</code></pre>
-
-<h3 id="create-the-database">Create the Database</h3>
-
-<p>Create a database named book:</p>
-
-<pre><code># createdb book
-
-</code></pre>
-
-<p>Installing plugins cube into the database book.</p>
-
-<pre><code>[root@Arch_Container postgresql]# psql -d book
-psql (9.3.5)
-Type &quot;help&quot; for help.
-
-book=# CREATE EXTENSION cube;  
-CREATE EXTENSION
-book=# \q
-[root@Arch_Container postgresql]# psql book -c &quot;SELECT '1'::cube;&quot;
- cube 
-------
- (1)
-(1 row)
-
-</code></pre>
+<p>Yes now you could compile your own kernel for utu2440.</p>
 
       
     </div>
@@ -1228,12 +1640,21 @@ book=# \q
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/79/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

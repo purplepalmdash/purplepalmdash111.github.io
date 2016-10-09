@@ -93,9 +93,198 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/22/enable-sshd-on-2440/">Enable sshd on 2440</a>
+        <a href="http://purplepalmdash.github.io/2014/11/05/enable-nfs-server-of-53/">Enable nfs server of 53</a>
       </h1>
-      <span class="post-date">Oct 22, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/22/enable-sshd-on-2440/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 5, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/05/enable-nfs-server-of-53/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      <p>Only enabled the nfs server and use the max disk for building, the nfs server runs Redhat RHEL6.2, the same procedure could be applied to CentOS Based system.<br />
+Steps:<br />
+Query for installed packages in server:</p>
+
+<pre><code>$ rpm -qa nfs-utils
+$ rpm -qa rpcbind
+
+</code></pre>
+
+<p>Edit the nfs based directory:</p>
+
+<pre><code># cat /etc/exports
+/home/Trusty/share/       *(rw,sync,no_subtree_check,no_root_squash)
+
+</code></pre>
+
+<p>Start the service and test:</p>
+
+<pre><code># service rpcbind start
+# service nfs start
+
+</code></pre>
+
+<p>In client machine, just type following command for mount the remote nfs directory:</p>
+
+<pre><code>$ sudo mount -t nfs 1xx.xxx.xxx.xx:/home/Trusty/share /mnt/
+
+</code></pre>
+
+<p>Make nfs server automatically start when system boot:</p>
+
+<pre><code># chkconfig nfs on
+# chkconfig rpcbind on
+
+</code></pre>
+
+<p>Client Machine(59), do following for automatically mount nfs:</p>
+
+<pre><code>$ vim /etc/fstab
+# Using NFS
+1xx.xxx.xxx.xx:/home/Trusty/share /media/nfs/     nfs     rsize=8192,wsize=8192,timeo=14,intr     0       0
+$ mount -a
+
+</code></pre>
+
+<p>Then everytime this clent machine startup the remote nfs directory will be mounted to local directory.</p>
+
+<p>If you are ubuntu client, then you should install nfs-client via;</p>
+
+<pre><code>sudo apt-get install nfs-common
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/05/mysql-creashes-on-digitalocean/">MySQL creashes on DigitalOcean</a>
+      </h1>
+      <span class="post-date">Nov 5, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/05/mysql-creashes-on-digitalocean/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="problem">Problem</h3>
+
+<p>The mysql server always keep crash, with following log under /var/log/mysql/error.log:</p>
+
+<pre><code>141104 23:06:46 InnoDB: Fatal error: cannot allocate memory for the buffer pool
+
+</code></pre>
+
+<p>So this is the memory problem, we should allocate more memory for our VPS.</p>
+
+<h3 id="solution">Solution</h3>
+
+<p>Add swap partition:<br />
+First check the swap partition:</p>
+
+<pre><code>root@xxx:/var/log# free -m
+             total       used       free     shared    buffers     cached
+Mem:           490        464         25         28         61        172
+-/+ buffers/cache:        230        259
+Swap:            0          0          0
+root@xxx:/var/log# swapon -s
+Filename                                Type            Size    Used    Priority
+
+</code></pre>
+
+<p>Now create a swapfile:</p>
+
+<pre><code># dd if=/dev/zero of=/swapfile bs=1M count=1024
+1024+0 records in
+1024+0 records out
+1073741824 bytes (1.1 GB) copied, 2.16285 s, 496 MB/s
+# ls /swapfile -l -h
+-rw-r--r-- 1 root root 1.0G Nov  5 00:58 /swapfile
+
+</code></pre>
+
+<p>Setting the swapfile:</p>
+
+<pre><code>root@xxx:/var/log# chmod 600 /swapfile 
+root@xxx:/var/log# swapon /swapfile
+swapon: /swapfile: read swap header failed: Invalid argument
+root@xxx:/var/log# mkswap /swapfile
+Setting up swapspace version 1, size = 1048572 KiB
+no label, UUID=64b727dd-0d7e-45ff-9235-cd9ba84b062f
+root@xxx:/var/log# swapon /swapfile 
+
+</code></pre>
+
+<p>Now use free command you could check swap file enabled:</p>
+
+<pre><code>root@xxx:/var/log# free -m
+             total       used       free     shared    buffers     cached
+Mem:           490        458         31         28         25        229
+-/+ buffers/cache:        204        285
+Swap:         1023          0       1023
+
+</code></pre>
+
+<p>Add it permanately into the /etc/fstab:</p>
+
+<pre><code>/swapfile   none    swap    sw    0   0
+
+</code></pre>
+
+<p>Configure the parameters:</p>
+
+<pre><code>root@xxx:/var/log# cat /proc/sys/vm/swappiness
+60
+root@xxx:/var/log# sysctl vm.swappiness=10
+vm.swappiness = 10                                                                                      
+root@xxx:/var/log# cat /proc/sys/vm/swappiness                                                  
+10                                                
+root@xxx:/var/log# vim /etc/sysctl.conf
+vm.swappiness=10
+vm.vfs_cache_pressure = 50
+root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
+100                                         
+root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
+50                                                                                                     
+
+</code></pre>
+
+<p>Now the mysql server should be good.</p>
+
+<h3 id="disable-wp-admin-login-password">Disable wp-admin login password</h3>
+
+<p>Disable the login password.</p>
+
+<pre><code># vim /etc/apache2/apache2.conf
+#&lt;DirectoryMatch ^.*/wp-admin/&gt;
+#    AuthType Basic
+#    AuthName &quot;Please login to your droplet via SSH for login details.&quot;
+#    AuthUserFile /etc/apache2/.htpasswd
+#    Require valid-user
+#&lt;DirectoryMatch&gt;
+root@xxx:~# service apache2 restart
+ * Restarting web server apache2      
+
+</code></pre>
+
+<p>Change the password for login details</p>
+
+<pre><code>$ htpasswd .htpasswd user2
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/04/openwrt-on-bbb-2/">OpenWRT on BBB(2)</a>
+      </h1>
+      <span class="post-date">Nov 4, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/04/openwrt-on-bbb-2/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
@@ -104,315 +293,129 @@
       
       
 
-<h3 id="package-preparation">Package Preparation</h3>
+<h3 id="cheetsheet-for-using-nfs">Cheetsheet For Using NFS</h3>
 
-<p>For openssh requires the following packages, first we have to download them all from internet.<br />
-zlib, openssl, openssh.</p>
+<p>Following configuration use the 192.168.1.221&rsquo;s tftp server and 192.168.1.11&rsquo;s nfs server, why I use different nfs server because 192.168.1.11 runs ubuntu and could reached by nfs client easily.</p>
 
-<pre><code>$ wget http://zlib.net/zlib-1.2.8.tar.gz
-$ wget https://www.openssl.org/source/openssl-0.9.8zc.tar.gz
-$ wget http://mirror.internode.on.net/pub/OpenBSD/OpenSSH/portable/openssh-6.7p1.tar.gz
-
-</code></pre>
-
-<h3 id="building">Building</h3>
-
-<h4 id="cross-compile-zlib">Cross-compile zlib</h4>
-
-<p>We have to manually change the following line in Makefile :</p>
-
-<pre><code>LDSHARED=gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
-to
-LDSHARED=arm-linux-gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+<pre><code>setenv ipaddr 192.168.1.16
+setenv serverip 192.168.1.221
+tftpboot ${fdtaddr} am335x-boneblack.dtb
+tftpboot ${kloadaddr} uImage
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.11:/srv/nfs4/BBBrootfs ip=192.168.1.1 rootwait
+bootm ${kloadaddr} - ${fdtaddr}
 
 </code></pre>
 
-<p>Then:</p>
+<h3 id="how-to-start-more-services">How to start more services</h3>
 
-<pre><code>$ ./configure --prefix=/media/nfs/rootfs/usr/
-$ make CC=arm-linux-gcc AR=arm-linux-ar LD=arm-linux-ld
-$ make install
+<p>Current we only got following output:</p>
 
-</code></pre>
-
-<h4 id="cross-compile-openssh">Cross-compile openssh</h4>
-
-<p>Get the openssl&rsquo;s configure help menus:</p>
-
-<pre><code># ./Configure --help
-Usage: Configure [no-&lt;cipher&gt; ...] [enable-&lt;cipher&gt; ...] [experimental-&lt;cipher&gt; ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]shared] [[no-]zlib|zlib-dynamic] [enable-montasm] [no-asm] [no-dso] [no-krb5] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--with-xxx[=vvv]] [--test-sanity] os/compiler[:flags]
+<pre><code>procd: - init -
+//.......
+procd: - init complete -
 
 </code></pre>
 
-<p>Then configure the building via:</p>
+<p>From the Kernel Source code we know the init startup sequence:</p>
 
-<pre><code>$ ./Configure --prefix=/media/nfs/rootfs/usr os/compiler:/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
-$ make &amp;&amp; make install
-
-</code></pre>
-
-<h4 id="cross-compile-openssh-1">Cross-compile openssh</h4>
-
-<p>Configure the openssh via following command, the lib&rsquo;s directory should be adjust to previous installed directory:</p>
-
-<pre><code>$ /configure --host=arm-linux --with-libs --with-zlib=/media/nfs/rootfs/usr/ --with-ssl-dir=/media/nfs/rootfs/usr/ --disable-etc-default-login CC=/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
-
-</code></pre>
-
-<p>Make but don&rsquo;t install.<br />
-Install steps:</p>
-
-<pre><code>$ cp sshd /media/nfs/rootfs/usr/local/sbin/
-$ cp scp sftp ssh ssh-add ssh-agent ssh-keygen ssh-keyscan /media/nfs/rootfs/usr/local/bin/
-$ cp sftp-server ssh-keysign /media/nfs/rootfs/usr/local/libexec/
+<pre><code>$ cd /media/y/embedded/BBB/svnco/trunk/build_dir/target-arm_cortex-a9+vfpv3_uClibc-0.9.33.2_eabi/linux-omap/linux-3.14.4
+$ cd init
+$ vim main.c
+if (!try_to_run_init_process(&quot;/etc/preinit&quot;) ||
+	    !try_to_run_init_process(&quot;/sbin/init&quot;) ||
+	    !try_to_run_init_process(&quot;/etc/init&quot;) ||
+	    !try_to_run_init_process(&quot;/bin/init&quot;) ||
+	    !try_to_run_init_process(&quot;/bin/sh&quot;))
+		return 0;
 
 </code></pre>
 
-<p>In 2440 board, run:</p>
+<p>The preinit is called by <code>/etc/preinit</code>, while in this file, we found:</p>
 
-<pre><code>[root@TrustyArch busybox-1.22.1]# mkdir -p /usr/local/etc/
-[root@TrustyArch busybox-1.22.1]# mkdir -p /var/run/
-[root@TrustyArch busybox-1.22.1]# mkdir -p /var/empty/sshd
-[root@TrustyArch busybox-1.22.1]# chmod 755 /var/empty
-
-</code></pre>
-
-<p>Generate the key files:</p>
-
-<pre><code>$ ssh-keygen -t rsa -f ssh_host_rsa_key -N &quot;&quot;
-$ ssh-keygen -t rsa1 -f ssh_host_key -N &quot;&quot;
-$ ssh-keygen -t dsa -f ssh_host_dsa_key -N &quot;&quot;
-$ cp ssh_host_dsa_key ssh_host_dsa_key.pub ssh_host_key ssh_host_key.pub ssh_host_rsa_key ssh_host_rsa_key.pub /media/nfs/rootfs/usr/local/etc/
+<pre><code>for pi_source_file in /lib/preinit/*; do
+        . $pi_source_file
+done
 
 </code></pre>
 
-<p>Add lines into /etc/passwd and /etc/group in embedded system rootfs:</p>
+<p>This means all of the preinit script is listed under NFS Server&rsquo;s /lib/preinit/ folder.</p>
 
-<pre><code>$ cat /etc/passwd
-sshd:*:74:74:Privilege-separated SSH:/var/empty/sshd:/sbin/nologin
-$ cat /etc/group
-sshd:*:74:
+<p>Add our own preinit startup file:</p>
+
+<pre><code>[root@TrustyArch preinit]# ls
+02_default_set_state  30_failsafe_wait             70_initramfs_test  90_init_console~
+10_indicate_failsafe  40_run_failsafe_hook         80_mount_root      99_10_failsafe_login
+10_indicate_preinit   50_indicate_regular_preinit  90_init_console    99_10_run_init
+[root@TrustyArch preinit]# vim 90_init_console
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+init_console() {
+    preinit_echo &quot;Called 90_init_console here!&quot;
+    if [ &quot;$pi_suppress_stderr&quot; = &quot;y&quot; ]; then
+        exec &lt;$M0 &gt;$M1 2&gt;&amp;0
+    else 
+        exec &lt;$M0 &gt;$M1 2&gt;$M2
+    fi
+}
+
+boot_hook_add preinit_essential init_console
+[root@TrustyArch preinit]# chmod 777 90_init_console
+[root@TrustyArch preinit]# rm -f 90_init_console~ 
 
 </code></pre>
 
-<p>Change the sshd_config file:</p>
+<p>Now restart the BBB, to see if really take effects.<br />
+Also add a new file named 50_choose_console, with the setted M0 and M1, you could get your console.</p>
 
-<pre><code>$ cp sshd_config /media/nfs/rootfs/usr/local/etc/
-$ vim /media/nfs/rootfs/usr/local/etc/sshd_config
-HostKey /usr/local/etc/ssh_host_key
-HostKey /usr/local/etc/ssh_host_rsa_key
-HostKey /usr/local/etc/ssh_host_dsa_key
-PermitRootLogin yes
-PermitEmptyPasswords yes
-UsePrivilegeSeparation no
-Subsystem	sftp	/usr/local/libexec/sftp-server
+<pre><code>$ cat 50_choose_console
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+choose_console() {
+    # the shell really doesn't like having stdin/out closed
+    # that's why we use /dev/pty/m0 and m1 (or equivalent) as replacement
+    # for /dev/console if there's no serial console available
+
+    if grep -q devfs /proc/filesystems; then
+        M0=/dev/pty/m0
+        M1=/dev/pty/m1
+        M2=/dev/pty/m1
+    elif [ -x /sbin/hotplug2 ]; then
+        M0=/dev/ptmx
+        M1=/dev/ptmx
+        M2=/dev/ptmx
+    elif [ -x /sbin/udevd ]; then
+        M0=/dev/pty/ptmx
+        M1=/dev/pty/ptmx
+        M2=/dev/pty/ptmx
+    fi
+    dd if=/dev/console of=/dev/null bs=1 count=0 &gt;/dev/null 2&gt;/dev/null &amp;&amp; {
+        M0=/dev/console
+        M1=/dev/console
+        M2=/dev/console    
+    }
+}
+
+boot_hook_add preinit_essential choose_console
 
 </code></pre>
 
-<p>Then start the sshd via:</p>
-
-<pre><code>/usr/local/sbin/sshd
-
-</code></pre>
-
-<p>Good, we get segment fault, later will investigate this issue.</p>
+<p>But I still cannot get the terminal.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/21/install-openvpn-in-raspberrypi/">Install OpenVPN in RaspberryPI</a>
+        <a href="http://purplepalmdash.github.io/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/">Use TFTP/NFS Testing  BBB Kernel </a>
       </h1>
-      <span class="post-date">Oct 21, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/21/install-openvpn-in-raspberrypi/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 2, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="packages">Packages</h3>
-
-<p>Raspberry PI runs ArchLinux, first install related packages.</p>
-
-<pre><code>$ sudo pacman -S openvpn
-$ sudo pacman -S easy-rsa
-$ sudo pacman -S dnsmasq
-
-</code></pre>
-
-<p>openvpn is the OpenVPN&rsquo;s Kernel.<br />
-easy-rsa is used for manage the keys.<br />
-dnsmasq will acts like the domain name server.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>First Make the directory and copy the easy-rsa&rsquo;s files:</p>
-
-<pre><code># mkdir /etc/openvpn/easy-rsa
-[root@alarmpi ~]#  cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa
-[root@alarmpi ~]# ls /etc/openvpn/easy-rsa/
-build-ca	build-key-pkcs12  inherit-inter      sign-req
-build-dh	build-key-server  list-crl	     vars
-build-inter	build-req	  openssl-1.0.0.cnf  whichopensslcnf
-build-key	build-req-pass	  pkitool
-build-key-pass	clean-all	  revoke-full
-
-</code></pre>
-
-<p>Now go and run easy-rsa:</p>
-
-<pre><code>[root@alarmpi ~]# cd /etc/openvpn/easy-rsa/
-[root@alarmpi easy-rsa]# source vars
-NOTE: If you run ./clean-all, I will be doing a rm -rf on /etc/openvpn/easy-rsa/keys
-[root@alarmpi easy-rsa]# ./clean-all 
-[root@alarmpi easy-rsa]# ./build-ca
-
-
-</code></pre>
-
-<h3 id="generate-the-keys-and-certifications">Generate the keys and certifications</h3>
-
-<p>My name is <code>Trusty_delta</code>.</p>
-
-<pre><code>[root@alarmpi easy-rsa]# sh build-key-server Trusty_delta
-[root@alarmpi easy-rsa]# ls keys/Trusty_*
-keys/Trusty_delta.crt  keys/Trusty_delta.csr  keys/Trusty_delta.key
-
-</code></pre>
-
-<h3 id="diffie-hellman-parameters">Diffie-Hellman Parameters</h3>
-
-<p>This may takes extremely long time, especially on RaspberryPI, OMG&hellip;&hellip;.</p>
-
-<pre><code>[root@alarmpi easy-rsa]# sh build-dh 
-# cd keys
-# cp ca.crt delta.crt delta.key dh2048.pem /etc/openvpn
-# cd ..
-
-</code></pre>
-
-<h3 id="generate-the-private-key">Generate the private key</h3>
-
-<pre><code># source vars
-NOTE:If you run ./clean-all, I will be doing a rm -rf on /etc/openvpn/easy-rsa/keys
-root@delta:/etc/openvpn/easy-rsa# ./build-key laptop
-Generating a 1024 bit RSA private key
-
-</code></pre>
-
-<p>The private key called &ldquo;laptop&rdquo; then we could make a directory for holding private keys and copy them into that directory.</p>
-
-<pre><code># mkdir ~/ovpn-client
-# cp ca.crt laptop.crt laptop.key ~/ovpn-client
-
-</code></pre>
-
-<p>If you develier these 3 files to client, client could use them for connecting your VPN server.</p>
-
-<h3 id="openvpn-server">OpenVPN Server</h3>
-
-<p>Copy the server.conf file into /etc/openvpn/:</p>
-
-<pre><code># cd /usr/share/openvpn/examples/
-# cp server.conf /etc/openvpn/Trusty_delta.conf
-# vim Trusty_delta.conf
-cert delta.crt
-key delta.key
-dh dh2048.pem
-push &quot;redirect-gateway def1&quot;
-push &quot;dhcp-option DNS 172.8.0.1&quot;
-
-</code></pre>
-
-<p>Make service start automatically:</p>
-
-<pre><code># systemctl start openvpn@Trusty_delta.conf
-# systemctl enable openvpn@Trusty_delta.conf
-
-</code></pre>
-
-<p>Then we could test the vpn in other linux servers, using modified client.conf file.</p>
-
-<h3 id="check-service">Check service</h3>
-
-<p>Use netstat for check the status of openvpn server:</p>
-
-<pre><code>netstat -anp| grep openvpn
-
-</code></pre>
-
-<p>Following is directly copy from the ubuntu related.</p>
-
-<h3 id="dns-server">DNS Server</h3>
-
-<p>Edit the dnsmasq.conf:</p>
-
-<pre><code>listen-address = 127.0.0.1, 172.8.0.1
-bind-interfaces
-
-</code></pre>
-
-<p>Then restart the dnsmasq.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/21/make-videos-in-linux/">Make Videos in Linux</a>
-      </h1>
-      <span class="post-date">Oct 21, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/21/make-videos-in-linux/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="capture-window">Capture Window</h3>
-
-<p>Sometimes we want to record the window operation, we could use <code>gtk-recordMyDesktop</code> for doing this.
-Open the gtk-recordMyDesktop then select the window, start and it will automatically capture all of your input, and save it to ogg file.</p>
-
-<h3 id="add-background-music">Add Background Music</h3>
-
-<p>use Mencoder to add a mp3 file as the background of the captured video:</p>
-
-<pre><code>$ mencoder output.ogv -o video_final.ogv -ovc copy -oac copy -audiofile xxx.mp3
-
-</code></pre>
-
-<h3 id="convert-video-formats">Convert Video Formats</h3>
-
-<p>Using mencoder for convert the ogv to mp4 file:</p>
-
-<pre><code>$ ffmpeg -i output.ogv -vcodec libx264 -strict -2  output.mp4 
-
-</code></pre>
-
-<h3 id="7z-for-split">7z for split</h3>
-
-<p>Install 7zip, and use following command for split the big file into several 10M-size small files:</p>
-
-<pre><code>$ 7z a -v10M output.7z output.mp4
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/20/quick-start-for-setting-up-wp-and-vpn-server-on-digitalocean/">Quick-start for setting up WP and VPN Server on DigitalOcean</a>
-      </h1>
-      <span class="post-date">Oct 20, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/20/quick-start-for-setting-up-wp-and-vpn-server-on-digitalocean/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
         
       </span>
       
@@ -420,353 +423,189 @@ Open the gtk-recordMyDesktop then select the window, start and it will automatic
 
 <h3 id="prerequisite">Prerequisite</h3>
 
-<p>First you should check your Linux Version, for this tutorial is only works for ubuntu, that means, if you run archlinux/centos/debian on DigitalOcean, this tutorial won&rsquo;t be fit for your need.</p>
+<p>You have a tftp server and NFS server configured, in my environment these 2 server runs on ArchLinux, ip address is 10.0.0.221, while BBB takes another ip address, for example, 10.0.0.16.</p>
 
-<pre><code>root@justfordemo:~# cat /etc/issue
-Ubuntu 14.04.1 LTS \n \l
+<h3 id="nfs-server-preparation">NFS Server Preparation</h3>
 
-</code></pre>
+<p>Create the nfs server&rsquo;s rootfs for BBB Black ,and open all of the priviledges :</p>
 
-<p>Upgrade to the newest system via:</p>
-
-<pre><code>root@justfordemo:~# apt-get update &amp;&amp; apt-get upgrade
-
-</code></pre>
-
-<p>Enter Y if system asks you to confirm.</p>
-
-<h3 id="nginx-and-php">NGINX and PHP</h3>
-
-<p>Following commands refers to:<br />
-<a href="https://www.digitalocean.com/community/tutorials/how-to-install-linux-nginx-mysql-php-lemp-stack-on-ubuntu-14-04">https://www.digitalocean.com/community/tutorials/how-to-install-linux-nginx-mysql-php-lemp-stack-on-ubuntu-14-04</a>  and <a href="https://www.digitalocean.com/community/tutorials/how-to-install-wordpress-with-nginx-on-ubuntu-14-04">https://www.digitalocean.com/community/tutorials/how-to-install-wordpress-with-nginx-on-ubuntu-14-04</a>.</p>
-
-<h4 id="install-nginx">Install nginx</h4>
-
-<p>Install the nginx server via:</p>
-
-<pre><code># apt-get install nginx
+<pre><code># pwd
+/media/y/embedded/BBB/svnco/trunk/bin/omap
+# mkdir /srv/nfs4/BBBrootfs
+# tar xzvf openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
+# chmod 777 -R /srv/nfs4/BBBrootfs/
 
 </code></pre>
 
-<p>Get the ip address via:</p>
+<p>Now you have the NFS Server available.</p>
 
-<pre><code># ip addr show eth0 | grep inet | awk '{ print $2; }' | sed 's/\/.*$//'
-10.0.0.6
-fe80::a00:27ff:fe38:b7c5
+<h3 id="tftp-server-preparation">TFTP Server Preparation</h3>
 
-</code></pre>
+<p>Since we are using u-boot for booting, we need create uImage, but in OpenWRT, its default generated file is zImage, so we need use following command for generate our own uImage:</p>
 
-<p>Use you browser to visit <a href="http://10.0.0.6">http://10.0.0.6</a>, you will see following page which indiciates the nginx works for you.<br />
-<img src="/images/nginxworks.jpg" alt="/images/nginxworks.jpg" /></p>
-
-<h4 id="install-mysql-server">Install mysql server</h4>
-
-<p>Install it via:</p>
-
-<pre><code>apt-get install mysql-server
+<pre><code># mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d ./zImage ./uImage
+Image Name:   Linux
+Created:      Sun Nov  2 20:39:08 2014
+Image Type:   ARM Linux Kernel Image (uncompressed)
+Data Size:    1710568 Bytes = 1670.48 kB = 1.63 MB
+Load Address: 80008000
+Entry Point:  80008000
 
 </code></pre>
 
-<p>When you see following window, choose your password(You should remember this password, for it&rsquo;s for administration!!!)<br />
-<img src="/images/mysqlpasswd.jpg" alt="/images/mysqlpasswd.jpg" /></p>
+<p>Also we have to copy the dtd file into our tftp folder:</p>
 
-<p>Then you should run following commands for install the database and enable secure installation. The suggested answer is listed as following:</p>
-
-<pre><code>root@justfordemo:~# mysql_install_db
-root@justfordemo:~# mysql_secure_installation 
-Change the root password? [Y/n] n
-Remove anonymous users? [Y/n] Y
-Disallow root login remotely? [Y/n] Y
-Remove test database and access to it? [Y/n] Y
-Reload privilege tables now? [Y/n] Y
+<pre><code>[root@TrustyArch omap]# pwd
+/media/y/embedded/BBB/svnco/trunk/bin/omap
+[root@TrustyArch omap]# cp dtbs/am335x-boneblack.dtb /srv/tftp/
 
 </code></pre>
 
-<h4 id="install-php">Install PHP</h4>
+<h3 id="easy-making-script">Easy Making Script</h3>
 
-<p>Install php for processing:</p>
+<p>Following script will easy your life:</p>
 
-<pre><code># apt-get install php5-fpm php5-mysql
-
-</code></pre>
-
-<p>Open the main php5-fpm configuration file with root privileges:</p>
-
-<pre><code># nano /etc/php5/fpm/php.ini
-
-</code></pre>
-
-<p>Change</p>
-
-<pre><code>;cgi.fix_pathinfo=1
-
-</code></pre>
-
-<p>to</p>
-
-<pre><code>cgi.fix_pathinfo=0
+<pre><code>$ cat ~/autobuildnfs.sh
+# First copy the kernel and dtd files into the tftp server
+echo &quot;##### Start copy to /srv/tftp####&quot;
+cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage /srv/tftp/
+cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb /srv/tftp/
+echo &quot;###############Finished Copy!!!###############&quot;
+# Generate the uImage in /srv/tftp folder
+mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d /srv/tftp/openwrt-omap-zImage /srv/tftp/uImage
+# Remove the BBBrootfs content, all of them should be deleted. 
+rm -rf /srv/nfs4/BBBrootfs/
+mkdir -p /srv/nfs4/BBBrootfs
+# Now extract the newly generatd rootfs into the /srv/nfs4/BBBrootfs
+tar xzvf /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
 
 </code></pre>
 
-<p>Save and restart the php5-fpm service:</p>
+<h3 id="u-boot-configuration">U-boot Configuration</h3>
 
-<pre><code># service php5-fpm restart
-php5-fpm stop/waiting
-php5-fpm start/running, process 15959
+<h4 id="cheetsheet">CheetSheet</h4>
 
-</code></pre>
+<p>When system startup, click &lsquo;enter&rsquo; for getting the u-boot prompt interface, then set following:</p>
 
-<h4 id="enable-php-prcessor-in-nginx">Enable php prcessor in NGINX</h4>
-
-<p>Change the configuration file /etc/nginx/sites-available/default:</p>
-
-<pre><code>server {
-    listen 80 default_server;
-    listen [::]:80 default_server ipv6only=on;
-
-    root /usr/share/nginx/html;
-    index index.html index.htm;
-
-    server_name localhost;
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
-}
+<pre><code>setenv ipaddr 10.0.0.16
+setenv serverip 10.0.0.221
+tftpboot ${fdtaddr} am335x-boneblack.dtb
+tftpboot ${kloadaddr} uImage
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
+bootm ${kloadaddr} - ${fdtaddr}
 
 </code></pre>
 
-<p>to</p>
+<h4 id="cheetsheet2">CheetSheet2</h4>
 
-<pre><code>server {
-    listen 80 default_server;
-    listen [::]:80 default_server ipv6only=on;
-
-    root /usr/share/nginx/html;
-    index index.php index.html index.htm;
-
-    server_name server_domain_name_or_IP;
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
-
-    error_page 404 /404.html;
-    error_page 500 502 503 504 /50x.html;
-    location = /50x.html {
-        root /usr/share/nginx/html;
-    }
-
-    location ~ \.php$ {
-        try_files $uri =404;
-        fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass unix:/var/run/php5-fpm.sock;
-        fastcgi_index index.php;
-        include fastcgi_params;
-    }
-}
+<pre><code>setenv ipaddr 192.168.1.16
+setenv serverip 192.168.1.221
+tftpboot ${fdtaddr} am335x-boneblack.dtb
+tftpboot ${kloadaddr} uImage
+# For NFS
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.16:::::eth0 rootpath=/etc/preinit
+# NFS with 192.168.1.1
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.1:::::eth0 rootpath=/etc/preinit
+# For SD-Card
+setenv bootargs console=ttyO0,115200n8 root=/dev/mmcblk0p2 ro rootfstype=ext4 rootwait
+bootm ${kloadaddr} - ${fdtaddr}
 
 </code></pre>
 
-<p>Visit <a href="http://10.0.0.6/info.php(assume">http://10.0.0.6/info.php(assume</a> our ipaddress is 10.0.0.6), then the picture may seems like following:<br />
-<img src="/images/phprun.jpg" alt="/images/phprun.jpg" /></p>
+<h4 id="setting-and-testing-the-network">setting and testing the network</h4>
 
-<p>Now your webserver with php support is ready for use.</p>
+<p>Set the ipaddr, and save it into the u-boot, next time you won&rsquo;t set it again.</p>
 
-<h3 id="wordpress">Wordpress</h3>
-
-<h4 id="create-mysql-database-and-users">Create MYSQL database and users</h4>
-
-<p>The steps is quite simple, listed as following:</p>
-
-<pre><code>root@justfordemo:~# mysql -u root -p
-Enter password: 
-Welcome to the MySQL monitor.  Commands end with ; or \g.
-Your MySQL connection id is 48
-Server version: 5.5.40-0ubuntu0.14.04.1 (Ubuntu)
-
-Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
-
-Oracle is a registered trademark of Oracle Corporation and/or its
-affiliates. Other names may be trademarks of their respective
-owners.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-mysql&gt; CREATE DATABASE wordpress;
-Query OK, 1 row affected (0.00 sec)
-
-mysql&gt; CREATE USER wordpressuser@localhost IDENTIFIED BY 'password';
-Query OK, 0 rows affected (0.00 sec)
-
-mysql&gt; GRANT ALL PRIVILEGES ON wordpress.* TO wordpressuser@localhost;
-Query OK, 0 rows affected (0.00 sec)
-
-mysql&gt; FLUSH PRIVILEGES;
-Query OK, 0 rows affected (0.01 sec)
-
-mysql&gt; exit
-Bye
+<pre><code>U-Boot# setenv ipaddr 10.0.0.16
+U-Boot# printenv ipaddr
+ipaddr=10.0.0.16
+U-Boot# setenv serverip 10.0.0.221
+U-Boot# ping 10.0.0.221
+link up on port 0, speed 100, full duplex
+Using cpsw device
+host 10.0.0.221 is alive
+U-Boot# saveenv
 
 </code></pre>
 
-<h4 id="wordpress-1">Wordpress</h4>
+<h4 id="load-files-from-tftp">Load Files From TFTP</h4>
 
-<p>Download the latest wordpress installation file in home directory:</p>
+<p>Use following commands for loading uImage and dtb files from 10.0.0.221:</p>
 
-<pre><code># cd ~
-# wget http://wordpress.org/latest.tar.gz
-
-</code></pre>
-
-<p>Unzip the tar.gz file and install, but we have to install php-gd and libssh2-php first:</p>
-
-<pre><code># apt-get install php5-gd libssh2-php
-# tar xzvf latest.tar.gz
-# cd wordpress
-# cp wp-config-sample.php wp-config.php
-# nano wp-config.php
-. . .
-// ** MySQL settings - You can get this info from your web host ** //
-/** The name of the database for WordPress */
-define('DB_NAME', 'wordpress');
-
-/** MySQL database username */
-define('DB_USER', 'wordpressuser');
-
-/** MySQL database password */
-define('DB_PASSWORD', 'password');
-. . .
+<pre><code>U-Boot# tftpboot ${fdtaddr} am335x-boneblack.dtb
+U-Boot# tftpboot ${kloadaddr} uImage
 
 </code></pre>
 
-<p>Make wordpress running directory and copy the source code here:</p>
+<h4 id="set-nfs-startup-parameter">Set NFS Startup Parameter</h4>
 
-<pre><code># mkdir -p /var/www/html
-# rsync -avP ~/wordpress/ /var/www/html/
-# chown -R www-data:www-data /var/www/html/*
-# cd /var/www/html/
-root@justfordemo:/var/www/html# mkdir wp-content/uploads
-root@justfordemo:/var/www/html# chown -R :www-data /var/www/html/wp-content/uploads
+<p>Following will let the kernel startup from the nfs server.</p>
+
+<pre><code>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
 
 </code></pre>
 
-<h4 id="modify-nginx-blocks">Modify nginx blocks</h4>
+<p>Now startup:</p>
 
-<pre><code># cp /etc/nginx/sites-available/default /etc/nginx/sites-available/wordpress
-# nano /etc/nginx/sites-available/wordpress
-server {
-        listen 80 default_server;
-        listen [::]:80 default_server ipv6only=on;
-
-        root /var/www/html;
-        index index.php index.html index.htm;
-
-        server_name your_domain.com;
-
-        location / {
-                # try_files $uri $uri/ =404;
-                try_files $uri $uri/ /index.php?q=$uri&amp;$args;
-        }
-
-        error_page 404 /404.html;
-
-        error_page 500 502 503 504 /50x.html;
-        location = /50x.html {
-                root /usr/share/nginx/html;
-        }
-
-        location ~ \.php$ {
-                try_files $uri =404;
-                fastcgi_split_path_info ^(.+\.php)(/.+)$;
-                fastcgi_pass unix:/var/run/php5-fpm.sock;
-                fastcgi_index index.php;
-                include fastcgi_params;
-        }
-}
-
+<pre><code>bootm ${kloadaddr} - ${fdtaddr}
 
 </code></pre>
 
-<p>Now restart the service via:</p>
+<h3 id="start-debugging-under-nfs">Start Debugging Under NFS</h3>
 
-<pre><code># ln -s /etc/nginx/sites-available/wordpress /etc/nginx/sites-enabled/
-# service nginx restart
-# service php5-fpm restart
+<p>First we met following error:</p>
+
+<pre><code>[    1.015532] List of all partitions:
+[    1.019292] No filesystem could mount root, tried: 
+[    1.024439] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,255)
 
 </code></pre>
 
-<p>Now visit:<br />
-<a href="http://10.0.0.6">http://10.0.0.6/</a> you will get the wordpress configuration window, Enjoy it!!!</p>
+<p>This is because we don&rsquo;t enable NFS and ROOT on NFS in kernel configuration.<br />
+File System -&gt;  Network File System -&gt; NFS Client Support, etc, see following picture:<br />
+<img src="/images/nfskernelconfigure.jpg" alt="/images/nfskernelconfigure.jpg" /></p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/19/trouble-shooting-on-lxc-of-archlinux/">Trouble-Shooting on LXC of ArchLinux</a>
+        <a href="http://purplepalmdash.github.io/2014/11/02/git-under-proxy/">git under proxy</a>
       </h1>
-      <span class="post-date">Oct 19, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/19/trouble-shooting-on-lxc-of-archlinux/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 2, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/02/git-under-proxy/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
         
       </span>
       
-      
+      <p>This changes use the socks proxy for git.<br />
+Install connect-proxy in aur:</p>
 
-<p>I try to install ubuntu on ArchLinux using LXC, for the nfs server in ArchLinux seems forbidden the nfsv3&rsquo;s client request, but in my joggler(which runs 12.04 server) the nfs server works OK, so I installed this version for validation.</p>
-
-<h3 id="install-method">Install method</h3>
-
-<p>Install the ubuntu machine via following method:</p>
-
-<pre><code>lxc-create -n Ubuntu_Container -t /usr/share/lxc/templates/lxc-ubuntu
+<pre><code>yaourt -S connect-proxy
 
 </code></pre>
 
-<h3 id="trouble-shooting">Trouble Shooting</h3>
+<p>Edit the proxy definition file:</p>
 
-<h4 id="qemu-debootstrap">qemu-debootstrap</h4>
-
-<p>No debootstrap in Archlinux:</p>
-
-<pre><code>which: no qemu-debootstrap in
+<pre><code>[Trusty@~]$ cat socks5.sh 
+#!/bin/sh
+connect -S 127.0.0.1:1394 &quot;$@&quot;
 
 </code></pre>
 
-<p>Solution: create a soft link from debootstrap to qemu-debootstrap:</p>
+<p>Now directly set the</p>
 
-<pre><code>lrwxrwxrwx 1 root root            11 Oct 19 20:13 qemu-debootstrap -&gt; debootstrap
-
-</code></pre>
-
-<h4 id="keyrings">Keyrings</h4>
-
-<p>No keyring file:</p>
-
-<pre><code>I: Keyring file not available at /usr/share/keyrings/ubuntu-archive-keyring.gpg;
+<pre><code>export GIT_PROXY_COMMAND=/home/Trusty/socks5.sh
 
 </code></pre>
 
-<p>directly copy one keyring file from installed ubuntu system to local machine.</p>
+<p>Or change the proxy definition via:</p>
 
-<h4 id="gpg-checking">gpg Checking</h4>
-
-<p>gpg1v for checking signature error:</p>
-
-<pre><code>Error executing gpg1v to check Release signature
+<pre><code>[core]
+        gitproxy = /home/Trusty/socks5.sh
 
 </code></pre>
-
-<p>Solution: use &ndash;no-check-gpg<br />
-Edit the /usr/share/lxc/templates/lxc-ubuntu file, add &ndash;no-check-gpg after all of the debootstrap:</p>
-
-<pre><code>debootstrap --arch=amd64 --verbose --no-check-gpg
-
-</code></pre>
-
-<p>Now everything should goes OK, and you could enjoy the ubuntu installed on your lxc container.</p>
 
       
     </div>
@@ -1184,12 +1023,21 @@ Edit the /usr/share/lxc/templates/lxc-ubuntu file, add &ndash;no-check-gpg after
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/74/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

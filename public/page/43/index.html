@@ -93,9 +93,9 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/29/build-centos-image-for-maas/">Build CentOS Image For MAAS</a>
+        <a href="http://purplepalmdash.github.io/2015/05/25/san-jie-dian-da-jian-openstack-juno-3/">三节点搭建OpenStack Juno(3)</a>
       </h1>
-      <span class="post-date">Apr 29, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/29/build-centos-image-for-maas/#disqus_thread">Comments</a>
+      <span class="post-date">May 25, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/25/san-jie-dian-da-jian-openstack-juno-3/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
@@ -104,214 +104,869 @@
       
       
 
-<p>MAAS could only deploy Ubuntu in its official support, this artcle will introduce how to Build CentOS based images.</p>
+<h3 id="nova">Nova</h3>
 
-<h3 id="preparation">Preparation</h3>
+<h4 id="nova数据库">Nova数据库</h4>
 
-<p>First you need a Ubuntu14.04 machine with kvm enabled.</p>
+<p>创建nova数据库:</p>
 
-<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade &amp;&amp; sudo apt-get -y dist-upgrade
-$ sudo apt-get install build-essential
+<pre><code># mysql -u root -p
+	CREATE DATABASE nova;
+	GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' \
+	IDENTIFIED BY 'NOVA_DBPASS';
+	GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' \
+	IDENTIFIED BY 'NOVA_DBPASS';
+	quit;
+</code></pre>
+
+<p>创建nova用户:</p>
+
+<pre><code># source /home/dash/admin-openrc.sh
+root@Controller:~# keystone user-create --name nova --pass xxxxxx
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |                                  |
+| enabled  |               True               |
+|    id    | 4a3768e3f4754cd0b9d47c6fadb22c7e |
+|   name   |               nova               |
+| username |               nova               |
++----------+----------------------------------+
+</code></pre>
+
+<p>为admin角色添加nova用户:</p>
+
+<pre><code># keystone user-role-add --user nova --tenant service --role admin
+</code></pre>
+
+<p>添加nova服务条目:</p>
+
+<pre><code># keystone service-create --name nova --type compute --description &quot;OpenStack Compute&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |        OpenStack Compute         |
+|   enabled   |               True               |
+|      id     | 1587a46ee1e94402821398444175981f |
+|     name    |               nova               |
+|     type    |             compute              |
 
 </code></pre>
 
-<h3 id="get-build-scripts">Get Build Scripts</h3>
+<p>创建Compute服务的API endpoints:</p>
 
-<p>Get the source code from the launchpad, and run following command for preparing the building environment.</p>
+<pre><code># keystone endpoint-create --service-id $(keystone service-list | awk '/ compute / {print $2}') --publicurl http://Controller:8774/v2/%\(tenant_id\)s --internalurl http://Controller:8774/v2/%\(tenant_id\)s --adminurl http://Controller:8774/v2/%\(tenant_id\)s --region regionOne
++-------------+-----------------------------------------+
+|   Property  |                  Value                  |
++-------------+-----------------------------------------+
+|   adminurl  | http://Controller:8774/v2/%(tenant_id)s |
+|      id     |     bd439dc236c04956a11b353a7b74331c    |
+| internalurl | http://Controller:8774/v2/%(tenant_id)s |
+|  publicurl  | http://Controller:8774/v2/%(tenant_id)s |
+|    region   |                regionOne                |
+|  service_id |     1587a46ee1e94402821398444175981f    |
++-------------+-----------------------------------------+
+</code></pre>
 
-<pre><code>$  bzr branch lp:maas-image-builder
-$ cd maas-images-builder
-$ make install-dependencies
+<h4 id="nova安装及配置">Nova安装及配置</h4>
+
+<p>安装以下包:</p>
+
+<pre><code># apt-get install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
+</code></pre>
+
+<p>更改数据库链接:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[database]
+...
+connection = mysql://nova:NOVA_DBPASS@controller/nova
+</code></pre>
+
+<p>配置RabbitMQ访问:</p>
+
+<pre><code>[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>配置鉴权服务:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+[keystone_authtoken]
+...
+auth_uri = http://controller:5000/v2.0
+identity_uri = http://controller:35357
+admin_tenant_name = service
+admin_user = nova
+admin_password = NOVA_PASS
+</code></pre>
+
+<p>更改<code>my_ip</code>:</p>
+
+<pre><code>[DEFAULT]
+...
+my_ip = 10.55.55.2
+</code></pre>
+
+<p>更改VNC侦听：</p>
+
+<pre><code>[DEFAULT]
+...
+vncserver_listen = 10.55.55.2
+vncserver_proxyclient_address = 10.55.55.2
+</code></pre>
+
+<p>配置glance服务所在:</p>
+
+<pre><code>[glance]
+...
+host = controller
+</code></pre>
+
+<p>现在开始配置数据库:</p>
+
+<pre><code># su -s /bin/sh -c &quot;nova-manage db sync&quot; nova
+</code></pre>
+
+<p>重启服务以完成安装:</p>
+
+<pre><code># service nova-api restart
+# service nova-cert restart
+# service nova-consoleauth restart
+# service nova-scheduler restart 
+# service nova-conductor start
+# service nova-conductor restart
+# service nova-novncproxy
+# service nova-novncproxy restart
+</code></pre>
+
+<p>扫尾，删除不用的sqlite数据库:</p>
+
+<pre><code># rm -f /var/lib/nova/nova.sqlite
+</code></pre>
+
+<h3 id="安装和配置计算节点">安装和配置计算节点</h3>
+
+<p>在计算节点上，安装以下包:</p>
+
+<pre><code># apt-get install nova-compute sysfsutils
+</code></pre>
+
+<p>配置具体过程如下:<br />
+配置RabbitMQ:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova.conf
+[DEFAULT]
+...
+rpc_backend = rabbit
+rabbit_host = controller
+rabbit_password = RABBIT_PASS
+</code></pre>
+
+<p>配置鉴权服务:</p>
+
+<pre><code>[DEFAULT]
+...
+auth_strategy = keystone
+[keystone_authtoken]
+...
+auth_uri = http://Controller:5000/v2.0
+identity_uri = http://Controller:35357
+admin_tenant_name = service
+admin_user = nova
+admin_password = NOVA_PASS
+</code></pre>
+
+<p>配置<code>my_ip</code>:</p>
+
+<pre><code>[DEFAULT]
+...
+my_ip = 10.55.55.4
+</code></pre>
+
+<p>配置允许远程终端访问:</p>
+
+<pre><code>[DEFAULT]
+...
+vnc_enabled = True
+vncserver_listen = 0.0.0.0
+vncserver_proxyclient_address = 10.55.55.4
+novncproxy_base_url = http://Controller:6080/vnc_auto.html
 
 </code></pre>
 
-<p>For speed-up building, I use china mainland&rsquo;s repository,<br />
-Replace the <code>http://mirror.centos.org/centos/6/os/x86_64</code> like following:</p>
+<p>配置glance服务:</p>
 
-<pre><code>$ vim ./src/mib/builders/centos.py
-      #&quot;http://mirror.centos.org/centos/6/os/i386&quot;)
-      &quot;http://mirrors.aliyun.com/centos/6/os/i386&quot;)
-      #&quot;http://mirror.centos.org/centos/6/os/x86_64&quot;)
-      &quot;http://mirrors.aliyun.com/centos/6/os/x86_64&quot;)
-  #&quot;http://mirror.centos.org/centos/7/os/x86_64&quot;)
-  &quot;http://mirrors.aliyun.com/centos/7/os/x86_64/&quot;)
+<pre><code>[glance]
+...
+host = Controller
+</code></pre>
 
-$ vim ./contrib/centos/centos6/centos6-amd64.ks
-repo --name=&quot;repo0&quot; --baseurl=http://mirrors.aliyun.com/centos/6/os/x86_64/
-repo --name=&quot;repo1&quot; --baseurl=http://mirrors.aliyun.com/centos/6/updates/x86_64/
-repo --name=&quot;repo2&quot; --baseurl=http://mirrors.aliyun.com/epel/6/x86_64/
+<p>完成安装， 首先判断你的CPU是否支持硬件加速:</p>
+
+<pre><code>$ egrep -c '(vmx|svm)' /proc/cpuinfo
+</code></pre>
+
+<p>如果返回的值小于1, 则更改<code>/etc/nova/nova-compute.conf</code>配置中的[libvirt]选项，选用qemu而不是kvm:</p>
+
+<pre><code>$ sudo vim /etc/nova/nova-compute.conf
+[libvirt]
+...
+virt_type = qemu
+</code></pre>
+
+<p>重启nova-compute服务:</p>
+
+<pre><code># service nova-compute restart
+</code></pre>
+
+<p>扫尾，删除不用的nova.sqlite文件:</p>
+
+<pre><code># rm -f /var/lib/nova/nova.sqlite
+</code></pre>
+
+<h3 id="验证">验证</h3>
+
+<p>具体步骤如下:</p>
+
+<pre><code>root@Controller:~# source ~/admin-openrc.sh
+root@Controller:~# nova service-list
++----+------------------+------------+----------+---------+-------+----------------------------+-----------------+
+| Id | Binary           | Host       | Zone     | Status  | State | Updated_at                 | Disabled Reason |
++----+------------------+------------+----------+---------+-------+----------------------------+-----------------+
+| 1  | nova-cert        | Controller | internal | enabled | up    | 2015-05-25T12:00:20.000000 | -               |
+| 2  | nova-consoleauth | Controller | internal | enabled | up    | 2015-05-25T12:00:28.000000 | -               |
+| 3  | nova-scheduler   | Controller | internal | enabled | up    | 2015-05-25T12:00:23.000000 | -               |
+| 4  | nova-conductor   | Controller | internal | enabled | up    | 2015-05-25T12:00:25.000000 | -               |
+| 5  | nova-compute     | Compute    | nova     | enabled | up    | 2015-05-25T12:00:20.000000 | -               |
++----+------------------+------------+----------+---------+-------+----------------------------+-----------------+
+root@Controller:~# nova image-list
++--------------------------------------+---------------------+--------+--------+
+| ID                                   | Name                | Status | Server |
++--------------------------------------+---------------------+--------+--------+
+| 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 | cirros-0.3.3-x86_64 | ACTIVE |        |
++--------------------------------------+---------------------+--------+--------+
 
 </code></pre>
 
-<h3 id="build-images">Build Images</h3>
-
-<p>Install python-dev and begin to make:</p>
-
-<pre><code># apt-get install python-dev
-# make
-
-</code></pre>
-
-<p>Now begin to generate the image:</p>
-
-<pre><code>#./bin/maas-image-builder -o centos6-amd64-root-tgz centos --edition 6
-
-</code></pre>
-
-<p>On-Building:<br />
-<img src="/images/2015_04_29_18_00_43_674x328.jpg" alt="/images/2015_04_29_18_00_43_674x328.jpg" /></p>
-
-<p>After building the image is listed as:</p>
-
-<pre><code># ls -l centos6-amd64-root-tgz 
--rw-r--r-- 1 root root 353086181 Apr 29 13:16 centos6-amd64-root-tgz
-
-</code></pre>
-
-<h3 id="import-images">Import Images</h3>
-
-<p>First login into your own profile with following command:</p>
-
-<pre><code>$ maas login my-maas http://10.17.17.202/MAAS/api/1.0 ntQBr8QTPgeTyfYuMq:xxxxxxxxxxxxxxxxxxxxxxxxx7HNspYLch4kc6RLs
-$ maas my-maas boot-sources read
-
-</code></pre>
-
-<p>Above command will readout the boot-sources, now we need to import our newly-built images, import it via:</p>
-
-<pre><code>$ maas my-maas boot-resources create name=centos/centos6 architecture=amd64/generic content@=/home/Trusty/centos6-amd64-root-tgz
-
-</code></pre>
-
-<h3 id="login">Login</h3>
-
-<p>Use following commands:</p>
-
-<pre><code>maas@MassTestOnUbuntu1404:~$ ssh cloud-user@10.17.17.172
-The authenticity of host '10.17.17.172 (10.17.17.172)' can't be established.
-ECDSA key fingerprint is a5:57:5b:d1:ac:c0:8f:67:32:43:d8:6f:17:67:65:cb.
-Are you sure you want to continue connecting (yes/no)? yes
-Warning: Permanently added '10.17.17.172' (ECDSA) to the list of known hosts.
-[cloud-user@CentOS ~]$ ls
-[cloud-user@CentOS ~]$ cat /etc/issue
-\S
-Kernel \r on an \m
-
-[cloud-user@CentOS ~]$ uname -a
-Linux CentOS 3.10.0-229.1.2.el7.x86_64 #1 SMP Fri Mar 27 03:04:26 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
-
-</code></pre>
-
-<p>From Now on,you could use CentOS 6 for deploying!!!!!!!!!!!!!!1</p>
-
-<p>ENJOY IT!!!!!!!</p>
-
-<h3 id="trouble-shooting">Trouble Shooting</h3>
-
-<p>The version could not be speicified via &ndash;edition, everytime we got CentOS 7 based image , so we need to manually change the file:</p>
-
-<pre><code> root@BuildMaasImage:~/Code/once# vim src/mib/builders/centos.py
-    def populate_parser(self, parser):
-        &quot;&quot;&quot;Add parser options.&quot;&quot;&quot;
-        parser.add_argument(
-            #'--edition', default='7',
-            #help=&quot;CentOS edition to generate. (Default: 7)&quot;)
-            '--edition', default='6',
-            help=&quot;CentOS edition to generate. (Default: 6)&quot;)
-
-
-
-</code></pre>
-
-<p>Now re-generate the image again, we got CentOS 6.5 based images.<br />
-To-Be-Done:<br />
-How to generate the CentOS 6.<sup>5</sup>&frasl;<sub>6</sub>.<sup>4</sup>&frasl;<sub>6</sub>.3 version? we always get the newest CentOS 6 images.</p>
+<p>注意我们看到了compute节点已经被加入进来。这样我们完成了添加计算服务，接下来我们将开始添加网络组件，这可能是最难的一部分。</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/28/trouble-shooting-on-jujus-local-deployment/">Trouble Shooting On Juju&#39;s Local Deployment</a>
+        <a href="http://purplepalmdash.github.io/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM machine</a>
       </h1>
-      <span class="post-date">Apr 28, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/28/trouble-shooting-on-jujus-local-deployment/#disqus_thread">Comments</a>
+      <span class="post-date">May 25, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/25/lxcize-the-kvm-machine/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>In order to make exsiting kvm based machine to be lxc container, following is the steps.<br />
+Refers to:<br />
+<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
+
+<h3 id="convert-disk-formats">Convert Disk Formats</h3>
+
+<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
+
+<pre><code>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw
+</code></pre>
+
+<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
+
+<h3 id="lxc-the-kvm">LXC the KVM</h3>
+
+<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
+
+<pre><code> myvm.conf
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = br0
+lxc.network.name = eth0
+lxc.network.ipv4 = xxx.xxx.10.230/24
+lxc.network.ipv4.gateway = xxx.xxx.0.176
+#lxc.network.link = lxcbr0
+lxc.utsname = myvminlxc
+
+lxc.tty = 4
+lxc.pts = 1024
+lxc.rootfs = /dev/mapper/loop0p1
+lxc.arch = amd64
+lxc.cap.drop = sys_module mac_admin
+
+lxc.cgroup.devices.deny = a
+# Allow any mknod (but not using the node)
+lxc.cgroup.devices.allow = c *:* m
+lxc.cgroup.devices.allow = b *:* m
+# /dev/null and zero
+lxc.cgroup.devices.allow = c 1:3 rwm
+lxc.cgroup.devices.allow = c 1:5 rwm
+# consoles
+lxc.cgroup.devices.allow = c 5:1 rwm
+lxc.cgroup.devices.allow = c 5:0 rwm
+#lxc.cgroup.devices.allow = c 4:0 rwm
+#lxc.cgroup.devices.allow = c 4:1 rwm
+# /dev/{,u}random
+lxc.cgroup.devices.allow = c 1:9 rwm
+lxc.cgroup.devices.allow = c 1:8 rwm
+lxc.cgroup.devices.allow = c 136:* rwm
+lxc.cgroup.devices.allow = c 5:2 rwm
+# rtc
+lxc.cgroup.devices.allow = c 254:0 rwm
+#fuse
+lxc.cgroup.devices.allow = c 10:229 rwm
+#tun
+lxc.cgroup.devices.allow = c 10:200 rwm
+#full
+lxc.cgroup.devices.allow = c 1:7 rwm
+#hpet
+lxc.cgroup.devices.allow = c 10:228 rwm
+#kvm
+lxc.cgroup.devices.allow = c 10:232 rwm
+</code></pre>
+
+<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
+
+<pre><code>$ sudo kpartx -a Contrail.img
+</code></pre>
+
+<p>Now start the machine via:</p>
+
+<pre><code>$ sudo lxc-start -n myvminlxc -f ./myvm.conf
+</code></pre>
+
+<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
+
+<h3 id="troubleshooting">TroubleShooting</h3>
+
+<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
+
+<pre><code>$ sudo vim /etc/selinux/config
+#SELINUX=permissive
+SELINUX=disabled
+
+</code></pre>
+
+<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
+
+<pre><code>kpartx -a /home/xxxxx/iso/Contrail.raw
+lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/">三节点搭建OpenStack Juno(2)</a>
+      </h1>
+      <span class="post-date">May 24, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
-      <p>When deploying juju, after <code>juju bootstrap</code>, use juju ssh for login, it will hint me:</p>
+      
 
-<pre><code>$ juju ssh 1
-......
-Permission denied (publickey).
+<h3 id="mysql数据库">MySQL数据库</h3>
+
+<p>绝大多数的OpenStack服务使用SQL数据库来存储信息，一般情况下数据库运行在控制节点上，这里我们使用MariaDB或者MySQL来作为SQL数据库。</p>
+
+<p>安装, 注意安装过程中需要输入密码:</p>
+
+<pre><code># apt-get install mariadb-server python-mysqldb
+</code></pre>
+
+<p>配置, 主要是更改了bind的地址，添加了一些有用选项，并支持UTF-8编码:</p>
+
+<pre><code>$ sudo vim /etc/mysql/my.cnf
+[mysqld]
+...
+bind-address = 10.55.55.2
+...
+default-storage-engine = innodb
+innodb_file_per_table
+collation-server = utf8_general_ci
+init-connect = 'SET NAMES utf8'
+character-set-server = utf8
+</code></pre>
+
+<p>完成安装，包括重启服务及加密数据库服务:</p>
+
+<pre><code># service mysql restart
+# mysql_secure_installation 
+</code></pre>
+
+<h3 id="消息服务器">消息服务器</h3>
+
+<p>OpenStack使用message broker用来在各种服务器之间调度操作和协调状态信息，通常情况下消息服务器也运行在控制节点上，OpenStack支持RabbitMQ, Qpid和ZeroMQ, 这里使用RabbitMQ.</p>
+
+<p>安装:</p>
+
+<pre><code># apt-get install rabbitmq-server
+</code></pre>
+
+<p>配置，首先我们需要设定rabbitMQ使用的密码:</p>
+
+<pre><code># rabbitmqctl change_password guest RABBIT_PASS
+Changing password for user &quot;guest&quot; ...
+...done.
+</code></pre>
+
+<p>如果是RabbitMQ 3.3.0或者更新的版本，则需要激活guest用户的远程访问权限。</p>
+
+<p>检查RabbitMQ版本:</p>
+
+<pre><code># rabbitmqctl status | grep rabbit
+Status of node rabbit@Controller ...
+ {running_applications,[{rabbit,&quot;RabbitMQ&quot;,&quot;3.2.4&quot;},
+</code></pre>
+
+<p>这里我们的版本是3.2.4所以不需要做任何修改，直接重启RabbitMQ服务即可。若是3.3.0以后的版本，则需要参考官方文档作更为详细的配置。</p>
+
+<pre><code># service rabbitmq-server restart
+</code></pre>
+
+<h3 id="鉴权-identity-服务">鉴权(Identity)服务</h3>
+
+<p>鉴权服务的作用主要有:<br />
+1. 跟踪用户及其权限。<br />
+2. 提供可用服务的服务类别及API endpoint.</p>
+
+<p>详细的关于Identity的介绍可以参见OpenStack官方文档。只有理解了其理念后才能明了OpenStack架构中各种服务的角色和地位.</p>
+
+<p>首先创建keystone所需要的数据库:</p>
+
+<pre><code># mysql -u root -p
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 36
+Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+
+Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]&gt; CREATE DATABASE keystone;
+Query OK, 1 row affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' \
+    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
+Query OK, 0 rows affected (0.01 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' \
+    -&gt; IDENTIFIED BY 'KEYSTONE_PASSWD';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; quit;
+Bye
 
 </code></pre>
 
-<p>That could be solved by specify the id_rsa.pub key:</p>
+<p>创建一个随机值，用于管理token在初始化配置时使用:</p>
 
-<pre><code>$ ssh-keygen -t rsa -b 2048
-$ juju bootstrap
-$ juju bootstrap
-$ juju deploy wordpress
-$ juju deploy mysql
-$ juju add-relation wordpress mysql
-$ juju status
-$ juju expose wordpress
+<pre><code># openssl rand -hex 10
+760bc221f4dc966693e5
+</code></pre>
+
+<p>安装和配置组件:</p>
+
+<pre><code># apt-get install keystone python-keystoneclient
+</code></pre>
+
+<p>配置, 更改<code>admin_token</code>为刚才生成的随机数:</p>
+
+<pre><code>$ sudo vim /etc/keystone/keystone.conf
+[DEFAULT]
+...
+admin_token = 760bc221f4dc966693e5
+...
+[database]
+...
+connection = mysql://keystone:KEYSTONE_DBPASS@Controller/keystone
+...
+[token]
+...
+provider = keystone.token.providers.uuid.Provider
+driver = keystone.token.persistence.backends.sql.Token
+...
+[revoke]
+...
+driver = keystone.contrib.revoke.backends.sql.Revoke
+...
+[DEFAULT]
+...
+verbose = True
+</code></pre>
+
+<p>修改完毕后，使用以下命令来同步Identity服务数据库:</p>
+
+<pre><code># su -s /bin/sh -c &quot;keystone-manage db_sync&quot; keystone
+</code></pre>
+
+<p>重启鉴权服务，删除Ubuntu使用的默认sqlite数据库, 并完成安装:</p>
+
+<pre><code># service keystone restart
+# rm -f /var/lib/keystone/keystone.db 
+</code></pre>
+
+<p>使用下列命令来激活cron任务，以便每小时判断tokens的存活时间:</p>
+
+<pre><code># (crontab -l -u keystone 2&gt;&amp;1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush &gt;/var/log/keystone/keystone-tokenflush.log 2&gt;&amp;1' &gt;&gt; /var/spool/cron/crontabs/keystone
+</code></pre>
+
+<h4 id="创建tenants-users-roles">创建tenants, users, roles</h4>
+
+<pre><code># export OS_SERVICE_TOKEN=760bc221f4dc966693e5
+# export OS_SERVICE_ENDPOINT=http://Controller:35357/v2.0
+# keystone tenant-create --name admin --description &quot;Admin Tenant&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Admin Tenant           |
+|   enabled   |               True               |
+|      id     | 6f5f440aa9de4b2fa205f43df073ddfa |
+|     name    |              admin               |
++-------------+----------------------------------+
+# keystone user-create --name admin --pass XXXXXXXXX --email xxxxxxxx@gmail.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |        XXXXXXXX@gmail.com        |
+| enabled  |               True               |
+|    id    | 7bc9be5493e345518a384383872ab274 |
+|   name   |              admin               |
+| username |              admin               |
++----------+----------------------------------+
+# keystone role-create --name admin
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|    id    | 65b6ccaa3b434c848ccb757be43d6b41 |
+|   name   |              admin               |
++----------+----------------------------------+
+# keystone user-role-add --user admin --tenant admin --role admin
+# keystone tenant-create --name demo --description &quot;Demo Tenant&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Demo Tenant            |
+|   enabled   |               True               |
+|      id     | 459c25933274483fb01ce66d9514add6 |
+|     name    |               demo               |
++-------------+----------------------------------+
+# keystone user-create --name demo --tenant demo --pass xxxxx --email xxxxxxx@gmail.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |        xxxxxxx@gmail.com        |
+| enabled  |               True               |
+|    id    | b2f3d8a239b34edfb50fa67c5aca8f83 |
+|   name   |               demo               |
+| tenantId | 459c25933274483fb01ce66d9514add6 |
+| username |               demo               |
++----------+----------------------------------+
+# keystone tenant-create --name service --description &quot;Service Tenant&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |          Service Tenant          |
+|   enabled   |               True               |
+|      id     | 08a675be93a04cca8a74159a3eefa288 |
+|     name    |             service              |
++-------------+----------------------------------+
+# keystone service-create --name keystone --type identity --description &quot;OpenStack Identity&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |        OpenStack Identity        |
+|   enabled   |               True               |
+|      id     | bf7613d9563c47a9af80ecdb4f26f3f5 |
+|     name    |             keystone             |
+|     type    |             identity             |
++-------------+----------------------------------+
+# keystone endpoint-create --service-id $(keystone service-list | awk '/ identity / {print $2}') --publicurl http://Controller:5000/v2.0 --internalurl http://Controller:5000/v2.0 --adminurl http://Controller:35357/v2.0 --region regionOne
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |   http://Controller:35357/v2.0   |
+|      id     | c2c7a6c24b1d411b996f2e30fefc70b6 |
+| internalurl |   http://Controller:5000/v2.0    |
+|  publicurl  |   http://Controller:5000/v2.0    |
+|    region   |            regionOne             |
+|  service_id | bf7613d9563c47a9af80ecdb4f26f3f5 |
++-------------+----------------------------------+
+</code></pre>
+
+<p>验证, 详细的说明参见OpenStack官方文档:</p>
+
+<pre><code># unset OS_SERVICE_TOKEN OS_SERVICE_ENDPOINT
+# keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 token-get
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-05-24T16:43:08Z       |
+|     id    | 612b529c9c754b87a153abd39284aff6 |
+| tenant_id | 6f5f440aa9de4b2fa205f43df073ddfa |
+|  user_id  | 7bc9be5493e345518a384383872ab274 |
++-----------+----------------------------------+
+# keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 tenant-list
++----------------------------------+---------+---------+
+|                id                |   name  | enabled |
++----------------------------------+---------+---------+
+| 6f5f440aa9de4b2fa205f43df073ddfa |  admin  |   True  |
+| 459c25933274483fb01ce66d9514add6 |   demo  |   True  |
+| 08a675be93a04cca8a74159a3eefa288 | service |   True  |
++----------------------------------+---------+---------+
+# keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 user-list
++----------------------------------+-------+---------+--------------------+
+|                id                |  name | enabled |       email        |
++----------------------------------+-------+---------+--------------------+
+| 7bc9be5493e345518a384383872ab274 | admin |   True  | xxxxxxx@gmail.com |
+| b2f3d8a239b34edfb50fa67c5aca8f83 |  demo |   True  | xxxxxxx@gmail.com |
++----------------------------------+-------+---------+--------------------+
+# keystone --os-tenant-name admin --os-username admin --os-password xxxxx --os-auth-url http://Controller:35357/v2.0 role-list
++----------------------------------+----------+
+|                id                |   name   |
++----------------------------------+----------+
+| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
+| 65b6ccaa3b434c848ccb757be43d6b41 |  admin   |
++----------------------------------+----------+
+# keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 token-get
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-05-24T16:46:34Z       |
+|     id    | 0d8a9472b0f547dfabc62594b4fb146f |
+| tenant_id | 459c25933274483fb01ce66d9514add6 |
+|  user_id  | b2f3d8a239b34edfb50fa67c5aca8f83 |
++-----------+----------------------------------+
+# keystone --os-tenant-name demo --os-username demo --os-password xxxxx --os-auth-url http://controller:35357/v2.0 user-list
+You are not authorized to perform the requested action: admin_required (HTTP 403)
 
 </code></pre>
 
-<p>By doing this you could make your juju deployment on local successfully.</p>
+<h3 id="创建脚本">创建脚本</h3>
+
+<pre><code># cat admin-openrc.sh 
+export OS_TENANT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=xxxxx
+export OS_AUTH_URL=http://Controller:35357/v2.0
+# cat demo-openrc.sh
+export OS_TENANT_NAME=demo
+export OS_USERNAME=demo
+export OS_PASSWORD=xxxxx
+export OS_AUTH_URL=http://Controller:5000/v2.0
+
+</code></pre>
+
+<p>下次使用时直接用<code>source admin-openrc.sh</code>或者<code>source demo-openrc.sh</code>即可。</p>
+
+<h3 id="镜像服务">镜像服务</h3>
+
+<p>添加镜像服务:</p>
+
+<pre><code>root@Controller:~# mysql -u root -p
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 40
+Server version: 5.5.43-MariaDB-1ubuntu0.14.04.2 (Ubuntu)
+
+Copyright (c) 2000, 2015, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]&gt; CREATE DATABASE glance;
+Query OK, 1 row affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxxx';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxxx';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; quit;
+Bye
+
+</code></pre>
+
+<p>创建glance用户:</p>
+
+<pre><code># source  /home/dash/admin-openrc.sh
+# keystone user-create --name glance --pass xxxxx
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |                                  |
+| enabled  |               True               |
+|    id    | a3108e4267154acd809f3978d360e6cd |
+|   name   |              glance              |
+| username |              glance              |
++----------+----------------------------------+
+
+</code></pre>
+
+<p>赋予glance用户admin权限:</p>
+
+<pre><code># keystone user-role-add --user glance --tenant service --role admin
+</code></pre>
+
+<p>创建service entity和service end-point:</p>
+
+<pre><code> keystone service-create --name glance --type image --description &quot;OpenStack Image Service&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |     OpenStack Image Service      |
+|   enabled   |               True               |
+|      id     | 8736ca50fdf741afb5fcc2d078b1cd9b |
+|     name    |              glance              |
+|     type    |              image               |
++-------------+----------------------------------+
+# keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://Controller:9292 --internalurl http://Controller:9292 --adminurl http://Controller:9292 --region regionOne
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |      http://Controller:9292      |
+|      id     | 340f40f0558c4a5b8fa88089aee69767 |
+| internalurl |      http://Controller:9292      |
+|  publicurl  |      http://Controller:9292      |
+|    region   |            regionOne             |
+|  service_id | 8736ca50fdf741afb5fcc2d078b1cd9b |
++-------------+----------------------------------+
+
+</code></pre>
+
+<p>安装服务组件:</p>
+
+<pre><code># apt-get install glance python-glanceclient
+</code></pre>
+
+<p>配置：</p>
+
+<pre><code># vim /etc/glance/glance-api.conf
+[database]
+...
+connection = mysql://glance:GLANCE_DBPASS@controller/glance
+[keystone_authtoken]
+...
+auth_uri = http://controller:5000/v2.0
+identity_uri = http://controller:35357
+admin_tenant_name = service
+admin_user = glance
+admin_password = GLANCE_PASS
+[paste_deploy]
+...
+flavor = keystone
+[glance_store]
+...
+default_store = file
+filesystem_store_datadir = /var/lib/glance/images/
+[DEFAULT]
+...
+notification_driver = noop
+[DEFAULT]
+...
+verbose = True
+</code></pre>
+
+<p>配置<code>/etc/glance/glance-registry.conf</code>文件，完成以下配置:</p>
+
+<pre><code>[database]
+...
+connection = mysql://glance:GLANCE_DBPASS@controller/glance
+
+[keystone_authtoken]
+...
+auth_uri = http://controller:5000/v2.0
+identity_uri = http://controller:35357
+admin_tenant_name = service
+admin_user = glance
+admin_password = GLANCE_PASS
+[paste_deploy]
+...
+flavor = keystone
+[DEFAULT]
+...
+notification_driver = noop
+[DEFAULT]
+...
+notification_driver = noop
+</code></pre>
+
+<p>同步数据库:</p>
+
+<pre><code># su -s /bin/sh -c &quot;glance-manage db_sync&quot; glance
+</code></pre>
+
+<p>重启服务，删除默认的sqlite数据库:</p>
+
+<pre><code># service glance-registry restart
+# service glance-api restart
+# rm -f /var/lib/glance/glance.sqlite
+
+</code></pre>
+
+<p>验证:</p>
+
+<pre><code># wget http://download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+# source ~/admin-openrc.sh
+# glance image-create --name &quot;cirros-0.3.3-x86_64&quot; --file ~/cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
+[=============================&gt;] 100%
++------------------+--------------------------------------+
+| Property         | Value                                |
++------------------+--------------------------------------+
+| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
+| container_format | bare                                 |
+| created_at       | 2015-05-24T16:25:32                  |
+| deleted          | False                                |
+| deleted_at       | None                                 |
+| disk_format      | qcow2                                |
+| id               | 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 |
+| is_public        | True                                 |
+| min_disk         | 0                                    |
+| min_ram          | 0                                    |
+| name             | cirros-0.3.3-x86_64                  |
+| owner            | 6f5f440aa9de4b2fa205f43df073ddfa     |
+| protected        | False                                |
+| size             | 13200896                             |
+| status           | active                               |
+| updated_at       | 2015-05-24T16:25:32                  |
+| virtual_size     | None                                 |
++------------------+--------------------------------------+
+# glance image-list
++--------------------------------------+---------------------+-------------+------------------+----------+--------+
+| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
++--------------------------------------+---------------------+-------------+------------------+----------+--------+
+| 3d45ea58-731c-4eb5-bf30-db1b4bfe4f57 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
++--------------------------------------+---------------------+-------------+------------------+----------+--------+
+
+</code></pre>
+
+<p>控制节点基本上配置成功，明天继续。</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/28/use-reave-for-testing-wireless-security/">Use reave for testing wireless security</a>
+        <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno/">三节点搭建OpenStack Juno(1)</a>
       </h1>
-      <span class="post-date">Apr 28, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/28/use-reave-for-testing-wireless-security/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>For those who want to test the wireless security(Wireless Router), following is a serial of tools for automatically scan the WIFI and try to find the entrance to inner network.</p>
-
-<h3 id="preparation">Preparation</h3>
-
-<p>Install following packages:</p>
-
-<pre><code>$ sudo apt-get install macchanger  aircrack-ng reaver
-
-</code></pre>
-
-<h3 id="testing">Testing</h3>
-
-<p>Suppose the wireless port in our equipment is mlan0, following are the detailed steps:</p>
-
-<pre><code># macchanger -m 00:11:22:33:44:55 mlan0
-# airmon-ng start mlan0
-# ifconfig mlan0mon down
-# macchanger -m 00:11:22:33:44:55 mlan0mon
-# ifconfig mlan0mon up
-# airodump-ng mlan0mon
-# reaver -i mlan0mon -b xx:xx:xx:xx:xx -vv -dh-small
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/">使用Fuel部署OpenContrail(2)</a>
-      </h1>
-      <span class="post-date">Apr 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/27/shi-yong-fuelbu-shu-opencontrail-2/#disqus_thread">Comments</a>
+      <span class="post-date">May 24, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
@@ -320,199 +975,239 @@ $ juju expose wordpress
       
       
 
-<p>本节在前面部署完Fuel 控制节点的基础上，接着部署一个OpenStack HA环境，并准备好OpenContrail的三个部署节点。</p>
+<h3 id="目的">目的</h3>
 
-<h3 id="节点初始化准备">节点初始化准备</h3>
+<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
 
-<p>所有加入到Fuel控制节点里的机器，在加入前都需要进行初始化配置，而后才可以被Fuel所识别.<br />
-在所有配置好的机器里，点击Details-&gt; Boot Options, 设置如下：<br />
-<img src="/images/2015_04_27_17_14_26_532x372.jpg" alt="/images/2015_04_27_17_14_26_532x372.jpg" /><br />
-因为第一次启动的时候，磁盘里是没有内容的，机器会自动从第二选项启动(PXE). 机器将自动侦测5个网段上的PXE Server， 因为Fuel Controller接管了10.20.0.0/24 网段上的PXE请求，它将会把机器从PXE变成可部署的状态。</p>
+<h3 id="硬件及网络准备">硬件及网络准备</h3>
 
-<h3 id="openstack-ha环境创建">OpenStack HA环境创建</h3>
+<h4 id="物理服务器">物理服务器</h4>
 
-<p>创建一个OpenStack HA环境，如下步骤，因为是HA，所以需要至少三个OpenStack Controller节点和一个OpenStack Compute节点。<br />
-点击界面里的New OpenStack Environment, 在弹出的窗口中，命名需要部署的HA环境名，并选择部署所需要的镜像，这里我们选择Ubuntu作为部署OpenStack的基础镜像。<br />
-<img src="/images/2015_04_27_17_18_22_680x435.jpg" alt="/images/2015_04_27_17_18_22_680x435.jpg" /><br />
-点击下一步，选择HA模式：<br />
-<img src="/images/2015_04_27_17_20_13_681x427.jpg" alt="/images/2015_04_27_17_20_13_681x427.jpg" /><br />
-点击下一步，选择计算节点模式，这里选择qemu或者kvm问题都不大，不要选vcenter就是了:<br />
-<img src="/images/2015_04_27_17_21_48_683x435.jpg" alt="/images/2015_04_27_17_21_48_683x435.jpg" /><br />
-点击下一步，进入到网络模式选择，选择Legacy Network(nova-network), 先部署成这种形式，接下来我们会使用neutron和contrail的组合重新规划网络:<br />
-<img src="/images/2015_04_27_17_23_03_682x428.jpg" alt="/images/2015_04_27_17_23_03_682x428.jpg" /><br />
-点击下一步，Storage Backend，因为我们不打算引入任何存储节点，这里选择Default，直接进入下一步， Additional Service里我们也不打算启任何额外的服务，一路Next直到最后Create出整个OpenStack环境。</p>
+<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。<br />
+物理服务器操作系统: Ubuntu14.04</p>
 
-<p>依次创建另一个OpenStack HA环境，用来部署三台Contrail Controller的节点机.</p>
+<h4 id="虚拟机">虚拟机：</h4>
 
-<h3 id="openstack环境网络">OpenStack环境网络</h3>
+<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.<br />
+虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.<br />
+虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
 
-<p>Fuel默认的网络配置会激活三个物理端口，第一个端口接入PXE网络，第二个接入Public网络，第三个上启三个VLAN，分别接入到Management/Storage/Private网络。我认为VLAN的配置增加了配置和部署的复杂度，更改为五个物理网络，分别使用我们在Virt-Manager中创建出的五个物理网卡接入。更改方法如下:<br />
-点击Network, 更改Management下的CIDR，手动填入10.55.55.0/24，然后去掉前面的Use VLAN Tag:<br />
-<img src="/images/2015_04_27_17_32_09_465x466.jpg" alt="/images/2015_04_27_17_32_09_465x466.jpg" /></p>
+<h4 id="网络规划">网络规划</h4>
 
-<p>依次修改Storage网络和Private网络，更改完毕后，你的配置应该看起来是这样的:<br />
-<img src="/images/2015_04_27_17_34_33_387x388.jpg" alt="/images/2015_04_27_17_34_33_387x388.jpg" /></p>
+<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。<br />
+Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。<br />
+External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。<br />
+当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
 
-<p>对于Public网络我们不需要有任何修改，保持172.16网段的配置即可。</p>
+<h4 id="节点网络名规划">节点网络名规划</h4>
 
-<p>确认Network的配置为FlatDHCP Manager:<br />
-<img src="/images/2015_04_27_17_35_37_391x149.jpg" alt="/images/2015_04_27_17_35_37_391x149.jpg" /></p>
+<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.<br />
+Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
+Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
 
-<h3 id="建立openstack-ha环境">建立OpenStack HA环境</h3>
+<p>一个参考的例图如下:<br />
+<img src="/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
 
-<p>经PXE启动的虚拟机会把自己加入到&rdquo;Unallocated Nodes&rdquo;的队列里，在创建好的环境里，点击Node后，可以看到Fuel对角色的分配，添加一个OpenStack Controller的步骤如下：<br />
-在Assign Roles里选择&rdquo;Controller&rdquo;, 下面的备选节点里选择一台机器后，Apply Changes按钮会变绿，点击进入下一步.<br />
-<img src="/images/2015_04_27_17_42_34_800x530.jpg" alt="/images/2015_04_27_17_42_34_800x530.jpg" /><br />
-在切换到的页面中，点击节点最右边的齿轮，配置该节点机器的网络、存储等，这里只配置网络：<br />
-<img src="/images/2015_04_27_17_44_05_797x203.jpg" alt="/images/2015_04_27_17_44_05_797x203.jpg" /><br />
-点击Configure Network配置网络:<br />
-<img src="/images/2015_04_27_17_45_19_448x349.jpg" alt="/images/2015_04_27_17_45_19_448x349.jpg" /><br />
-可以看到前4个节点已经配置好了，我们只需要把VM(Fix)这个框从eth0拖动到eth4即可:<br />
-<img src="/images/2015_04_27_17_46_34_524x342.jpg" alt="/images/2015_04_27_17_46_34_524x342.jpg" /><br />
-添加完毕后，网络配置应该如下图:<br />
-<img src="/images/2015_04_27_17_48_22_489x436.jpg" alt="/images/2015_04_27_17_48_22_489x436.jpg" /><br />
-点击Apply后，保存当前配置，然后点击Back to node list可以顺次添加其他节点。</p>
+<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
 
-<p>下面是一个添加好的OpenStack HA环境示例(3 Controller + 2 Compute):<br />
-<img src="/images/2015_04_27_17_57_01_948x432.jpg" alt="/images/2015_04_27_17_57_01_948x432.jpg" /></p>
+<h3 id="虚拟机初始化配置">虚拟机初始化配置</h3>
 
-<p>这里要注意，因为我们要启用嵌套虚拟化，所以确保Compute节点是把Host CPU Configuration下发了的那台。<br />
-添加完三个OpenStack Controller节点和一个OpenStack Compute节点后，就可以点击Deploy Changes开始部署了。整个部署的过程至少需要1个小时，取决于机器配置和磁盘读写快慢。</p>
+<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
 
-<p>部署完毕后，Fuel会弹出提示信息，并给出可访问OpenStack HA Horizon界面的URL。</p>
-
-<h3 id="准备contrail部署节点">准备Contrail部署节点</h3>
-
-<p>在OpenStack HA节点部署的同时，我们可以准备好Contrail部署节点。<br />
-同样创建出一个新的OpenStack HA部署环境，记住我们不能在已有的OpenStack HA环境里添加节点机，因为那样部署出来的节点机都会带上OpenStack的一些包，我们需要一个纯净的Ubuntu环境进行Contrail组件的配置。<br />
-同样添加3个Compute节点，进行同样的网络配置，添加完节点后，Deploy Changes按钮是不能被点下的，因为我们的环境里没有OpenStack Controller. 一个环境示例如下:<br />
-<img src="/images/2015_04_27_17_59_13_837x489.jpg" alt="/images/2015_04_27_17_59_13_837x489.jpg" /></p>
-
-<p>我们需要登录到Fuel Controller的终端，就是10.20.0.2那台机器(用户名root,密码r00tme)，手动对添加的三个Contrail节点进行provision:</p>
-
-<pre><code># fuel --env &lt;ENVIRONMENT_ID&gt; node --list
-# fuel node --node-id &lt;NODE1_ID&gt;,&lt;NODE2_ID&gt;,&lt;NODE3_ID&gt; --env-id &lt;ENVIRONMENT_ID&gt; --provision
+<pre><code>$ pwd
+/media/repo/Image/3NodeOpenStack
+$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
+Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
+Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
+Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
 
 </code></pre>
 
-<p>如何得到当前的ENVIRONMENT_ID, 下面提供了一个例子:</p>
+<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:<br />
+<img src="/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
 
-<pre><code>[root@fuel ~]# fuel --env environment
-id | status      | name                              | mode       | release_id | changes                                                                                                                                                               | pending_release_id
----|-------------|-----------------------------------|------------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------
-36 | operational | JunoOpenStack                     | multinode  | 2          | []                                       
-[root@fuel ~]# fuel --env 36 node --list
-id | status | name             | cluster | ip        | mac               | roles      | pending_roles | online | group_id
----|--------|------------------|---------|-----------|-------------------|------------|---------------|--------|---------
-3  | ready  | Untitled (e5:f2) | 36      | 10.20.0.3 | da:98:96:c5:c3:4b | compute    |               | False  | 36      
-4  | ready  | Untitled (71:15) | 36      | 10.20.0.4 | 1a:ff:37:1f:26:44 | controller |               | False  | 36  
-[root@fuel ~]# fuel node --node-id 3 --env-id 36 --provision2
+<p>各个节点的network定义文件如下:</p>
 
-</code></pre>
+<p>控制节点:</p>
 
-<p>同样需要大约30分钟时间用来在三台Contrail Controller的节点机上部署完可用的Ubuntu系统，部署完毕后，node界面上可以看到绿色的小字&rdquo;ubuntu installed&rdquo;.</p>
+<pre><code># The loopback network interface
+auto lo
+iface lo inet loopback
 
-<p>这一节我们通过Fuel部署完毕OpenStack HA, 并准备了用于后续部署OpenContrail的三台Contrail Controller节点。接下来我们可以进入到OpenStack和OpenContrail的集成了。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/27/shi-yong-fuelbu-shu-opencontrail-3/">使用Fuel部署OpenContrail(3)</a>
-      </h1>
-      <span class="post-date">Apr 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/27/shi-yong-fuelbu-shu-opencontrail-3/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>在OpenStack HA部署好的基础上集成OpenContrail是一个比较繁琐的过程，所以这一节里我们主要做集成前的准备工作，准备网络拓扑和创建好OpenContrail本地部署仓库。</p>
-
-<h3 id="网络规划">网络规划</h3>
-
-<p>在Miranti提供的集成参考里，有如下的图，定义了整个环境的网络拓扑。<br />
-<img src="/images/2015_04_27_19_06_11_1147x804.jpg" alt="images/2015_04_27_19_06_11_1147x804.jpg" /><br />
-从图中可以看到各个节点所接入到的物理网络。我们根据这些节点接入网络的不同，来定义对应系统上的网络配置。<br />
-在安装完毕后的虚拟机里，可以看到该节点的DNS名称，例如node-19, node-20之类，在Fuel Controller上可以通过<code>ssh root@node-19</code>来登入相应角色的机器上。<br />
-以下是三个OpenStack节点的网络部署, N/A代表不需要配置，可以直接把对应的接口文件删除:<br />
-对应的接口分别是从eth0 ~ eth4.</p>
-
-<p>OS1: node-19, PXE:10.20.0.14, Public: 172.16.0.6, Management: 10.55.55.6, Storage: 10.66.66.5, Private: N/A.<br />
-OS2: node-20, PXE:10.20.0.15, Public: 172.16.0.7, Management: 10.55.55.7, Storage: 10.66.66.6, Private: N/A.<br />
-OS3: node-22, PXE:10.20.0.16, Public: 172.16.0.8, Management: 10.55.55.8, Storage: 10.66.66.7, Private: N/A.</p>
-
-<p>Compute: node-18, PXE: 10.20.0.13, Public: 172.16.0.5, Management: 10.55.55.5, Storage: 10.66.66.4, Private: N/A.</p>
-
-<p>Contrail1: node-24, PXE: 10.20.0.10, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.10
-Contrail2: node-21, PXE: 10.20.0.11, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.11
-Contrail3: node-23, PXE: 10.20.0.12, Public: N/A, Management: N/A, Storage: N/A, Private: 10.77.77.12</p>
-
-<p>OpenStack和Compute各个节点的配置是自动配置好的，Contrail节点上的Private节点则需要手动配置，具体步骤如下:</p>
-
-<pre><code>root@node-24:~# vim /etc/network/interfaces.d/ifcfg-eth4 
-auto eth4
-iface eth4 inet static
-
-address 10.77.77.10
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.55.55.2
 netmask 255.255.255.0
-gateway 10.77.77.1
+gateway 10.55.55.1
+dns-nameservers 114.114.114.114
+</code></pre>
 
-post-up  ethtool  -K  eth4  gso off  gro off || true
+<p>网络节点:</p>
+
+<pre><code># The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.55.55.3
+netmask 255.255.255.0
+gateway 10.55.55.1
+dns-nameservers 114.114.114.114
+
+
+auto eth1
+iface eth1 inet static
+address 10.66.66.3
+netmask 255.255.255.0
+
+auto eth2
+iface eth2 inet static
+address 192.168.1.3
+netmask 255.255.255.0
+</code></pre>
+
+<p>计算节点:</p>
+
+<pre><code>auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.55.55.4
+netmask 255.255.255.0
+gateway 10.55.55.1
+dns-nameservers 114.114.114.114
+
+auto eth1
+iface eth1 inet static
+address 10.66.66.4
+netmask 255.255.255.0
 
 </code></pre>
 
-<p>删除三个Contrail Controller节点上的未用端口, 并重启后得到我们要的配置:</p>
+<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:</p>
 
-<pre><code>root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth3 
-root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth2
-root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth1 
+<pre><code>$ cat /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       Controller
+10.55.55.2      Controller
+10.55.55.3      Network
+10.55.55.4      Compute
+......
 
-</code></pre>
-
-<p>到这里，我们节点机的网络单机就配置完毕了。</p>
-
-<h3 id="网间互通">网间互通</h3>
-
-<p>我们需要让Management网络和Private网络可以通过某种途径互相连通，这里为了部署的方便，直接在主机(Host机器)上用iptables加上以下规则：</p>
-
-<pre><code># iptables -D FORWARD -i virbr5 -j REJECT --reject-with icmp-port-unreachable
-# iptables -D FORWARD -o virbr5 -j REJECT --reject-with icmp-port-unreachable
-# iptables -D FORWARD -o virbr3 -j REJECT --reject-with icmp-port-unreachable
-# iptables -D FORWARD -i virbr3 -j REJECT --reject-with icmp-port-unreachable
-# iptables -t nat -A POSTROUTING -s 10.55.55.0/24 -d 10.77.77.0/24 -j MASQUERADE
-# iptables -t nat -A POSTROUTING -s 10.77.77.0/24 -d 10.55.55.0/24 -j MASQUERADE
+$ cat /etc/hostname
+Controller
 
 </code></pre>
 
-<p>值得注意的是，virbr5和virbr3就是10.55.55.0/24和10.77.77.0/24所附属的网口，具体可以在Virt-Manager的配置菜单里看到。<br />
-添加完毕后，在OpenStack的节点(OS1,OS2,OS3)ping Private网络里的地址，如<code>ping 10.77.77.10</code>, 确保可以ping通；在Contrail Controller的节点(Contrail1, Contrail2, Contrail3)上ping Management网络里的地址，如10.55.55.6，确保可以ping通。<br />
-集成OpenContrail的一个先决条件是Private网络和Management网络可以互通。</p>
+<p>网络配置完毕后，保证可以通过<code>ping Controller</code>等命令达到互通。</p>
 
-<h3 id="opencontrail安装仓库准备">OpenContrail安装仓库准备</h3>
+<p>在进入到后续步骤前，更新所有节点到最新状态:</p>
 
-<p>我们在Fuel Controller上建立OpenContrail的安装仓库，这样有利于快速部署， 具体的操作是从Juniper官方提供的deb包里释出OpenContrail安装所需要的包，形成一个本地仓库。具体步骤如下:</p>
-
-<pre><code># yum -y install dpkg-devel
-# cd ~/Deb
-# mkdir -p /var/www/nailgun/contrail
-# mv /root/contrail-install-packages_2.0-22~icehouse_all.deb  ./
-# ar vx contrail-install-packages_2.0-22~icehouse_all.deb
-# rm -f contrail-install-packages_2.0-22~icehouse_all.deb 
-# tar xf data.tar.gz
-# tar xf opt/contrail/contrail_packages/contrail_debs.tgz -C /var/www/nailgun/contrail
-# cd /var/www/nailgun/contrail
-# dpkg-scanpackages . /dev/null | gzip -9c &gt; Packages.gz
-# rm -rf ~/Deb
-
+<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get upgrade &amp;&amp; sudo apt-get dist-upgrade &amp;&amp; sudo reboot
 </code></pre>
 
-<p>这时候如果在本机上访问<br />
-<a href="http://10.20.0.2:8080/contrail/">http://10.20.0.2:8080/contrail/</a><br />
-就可以看到整个仓库的包列表及详情。这个仓库将在后面部署Contrail时被用到。</p>
+<h3 id="ntp-服务器-客户端配置">NTP 服务器/客户端配置</h3>
+
+<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
+
+<h4 id="ntp服务器">NTP服务器</h4>
+
+<pre><code># apt-get -y install ntp
+# vim /etc/ntp.conf
+    # 修改成大陆时间
+    server 2.cn.pool.ntp.org
+    server 1.asia.pool.ntp.org
+    server 2.asia.pool.ntp.org
+    # 修改 restrict 設定
+    restrict -4 default kod notrap nomodify
+    restrict -6 default kod notrap nomodify
+# service ntp restart
+</code></pre>
+
+<h4 id="ntp客户端">NTP客户端</h4>
+
+<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
+
+<pre><code># apt-get -y install ntp
+# vim /etc/ntp.conf
+    # 設定 controller 為參照的 time server
+    # 並將其他 server 開頭的設定進行註解
+    server 10.55.55.2 iburst
+# service ntp restart
+</code></pre>
+
+<p>检查结果是否正确:</p>
+
+<pre><code>root@JunoNetwork:~# ntpq -c peers
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+ Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
+</code></pre>
+
+<p>接下来真正进入OpenStack的安装和配置过程。</p>
+
+<h3 id="源设定">源设定</h3>
+
+<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:<br />
+所有节点上(Controller,Network,Compute):</p>
+
+<pre><code>$ sudo apt-get install ubuntu-cloud-keyring
+$ sudo bash
+# echo &quot;deb http://ubuntu-cloud.archive.canonical.com/ubuntu&quot; &quot;trusty-updates/juno main&quot; &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
+# apt-get update &amp;&amp; apt-get -y dist-upgrade
+</code></pre>
+
+<p>第一部分就先到这里。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/23/use-apt-cacher-for-speeding-up-deployment/">Use apt-cacher For Speeding Up Deployment</a>
+      </h1>
+      <span class="post-date">May 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/23/use-apt-cacher-for-speeding-up-deployment/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="installation">Installation</h3>
+
+<p>Install apt-cacher via following command:</p>
+
+<pre><code>$ sudo apt-get install apt-cacher
+</code></pre>
+
+<p>Choose &ldquo;Daemon&rdquo; When you see following picture:</p>
+
+<p><img src="/images/2015_05_23_08_28_39_418x264.jpg" alt="/images/2015_05_23_08_28_39_418x264.jpg" /></p>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>Make sure the configuration <code>AUTOSTART=1</code> in <code>/etc/default/apt-cacher</code>.</p>
+
+<p>Enable <code>allowed_hosts=*</code> in <code>/etc/apt-cacher/apt-cacher.conf</code>.</p>
+
+<p>Now restart the machine, and check the apt-cacher service via following command:</p>
+
+<pre><code>$ ps -ef | grep apt
+www-data   825     1  0 20:34 ?        00:00:00 /usr/bin/perl /usr/sbin/apt-cacher -R 3 -d -p /var/run/apt-cacher.pid
+$ sudo netstat -anp | grep 3142
+tcp6       0      0 :::3142                 :::*                    LISTEN      825/perl
+</code></pre>
+
+<p>Now when you setup the machines, point the http-proxy into this machine, it will automatically cache the packages.</p>
 
       
     </div>
@@ -930,12 +1625,21 @@ root@node-24:~# rm -f /etc/network/interfaces.d/ifcfg-eth1
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/44/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

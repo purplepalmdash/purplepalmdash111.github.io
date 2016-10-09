@@ -93,9 +93,9 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/24/deploy-maas-11/">Deploy MAAS(11)</a>
+        <a href="http://purplepalmdash.github.io/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1/">使用Fuel部署OpenContrail(1)</a>
       </h1>
-      <span class="post-date">Mar 24, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/24/deploy-maas-11/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 22, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/22/shi-yong-fuelbu-shu-opencontrail-1/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
@@ -104,281 +104,395 @@
       
       
 
-<p>Since the deployment meets some problem, I have to consider doing some tricks in the MAAS controller, to let the deployment much more easier and time-saving, following is the steps for setting up such environment.</p>
+<p>最近在做OpenContrail的解耦合操作，因为官方提供的OpenContrail一键安装包里诸多组件都是用的默认的推荐，通过解耦合可以做到更灵活的安装和配置，有利于更方便的部署和后续的维护。所以这一系列文章是关于如何用Fuel在部署完OpenStack的基础上完成OpenContrail的部署。</p>
 
-<h3 id="resize-maas-controller-disk">Resize Maas Controller Disk</h3>
+<h3 id="先决条件">先决条件</h3>
 
-<p>Since the Mass Controller machine only have 40G size harddisk, it will be not enough if we enable the repository cache for guest machines, thus we have to resize the disk.<br />
-First shutdown the virtual machine.<br />
-Resize the qcow2 file via:</p>
+<p>先决条件主要是用于准备用于部署的硬件环境和软件包。<br />
+硬件环境:<br />
+i5-4460(3.2GHz/4核/6M三级缓存), 32G 内存。<br />
+系统:<br />
+Ubuntu 14.04 LTS<br />
+软件:</p>
 
-<pre><code># virsh dumpxml MassController | grep qcow2
-      &lt;driver name='qemu' type='qcow2' cache='none'/&gt;
-      &lt;source file='/home/juju/img/MassController.qcow2'/&gt;
-# qemu-img resize /home/juju/img/MassController.qcow2 +40GB
-Image resized.
-# qemu-img info /home/juju/img/MassController.qcow2
-image: /home/juju/img/MassController.qcow2
-file format: qcow2
-virtual size: 80G (85899345920 bytes)
-disk size: 9.4G
-cluster_size: 65536
-# virsh start MassController
+<pre><code>$ sudo apt-get install libvirtd virt-manager
 
 </code></pre>
 
-<p>Now use a liveCD for startup the machine, this will bootup the machine into a iso booted environment.</p>
+<p>从Miranti网站下载： MirantisOpenStack-6.0.iso<br />
+从Contrail网站下载: contrail-install-packages_2.0-22~icehouse_all.deb<br />
+contrail-neutron-plugin仓库:</p>
 
-<pre><code>$ wget http://downloads.sourceforge.net/gparted/gparted-live-0.21.0-1-i586.iso
-
-</code></pre>
-
-<p>Bootup the machine and resize like following:<br />
-<img src="/images/2015_03_24_10_28_21_791x423.jpg" alt="/images/2015_03_24_10_28_21_791x423.jpg" /></p>
-
-<h3 id="squid-deb-proxy">squid-deb-proxy</h3>
-
-<p>In Mass Controller machine, install following packages:</p>
-
-<pre><code>$ sudo apt-get install squid-deb-proxy avahi-utils
-$ sudo start squid-deb-proxy
+<pre><code>git clone https://github.com/Juniper/contrail-neutron-plugin.git
 
 </code></pre>
 
-<p>Every client should install following package:</p>
+<h3 id="cpu-内存-磁盘规划">CPU/内存/磁盘规划</h3>
 
-<pre><code>$ sudo apt-get install squid-deb-proxy-client
+<p>需要构建一共8台虚拟机用于在部署好的Mirantis OpenStack上集成OpenContrail. CPU/内存/磁盘规划如下:<br />
+1台Mirantis Fuel控制节点机,2核,划分3G内存, 100G磁盘。
+3个OpenStack Controller节点, 2核,各划分3G内存, 100G磁盘。<br />
+1个OpenStack Compute节点，2核(嵌套虚拟化),划分3G内存, 100G磁盘。<br />
+3个OpenContrail节点，2核,各划分4G内存, 100G磁盘。<br />
+一共需要27G内存。磁盘格式为qcow2，实际占用远小于这个数，各个节点最大也就是在5G左右大小。<br />
+其中，关于嵌套虚拟化的CPU设置，如下图, 记得选择Copy host CPU Configuration:<br />
+<img src="/images/2015_04_27_12_20_40_598x372.jpg" alt="/images/2015_04_27_12_20_40_598x372.jpg" /><br />
+启用嵌套虚拟化需要在BIOS设置，并添加相应的内核模块。</p>
 
-</code></pre>
+<h3 id="网络规划">网络规划</h3>
 
-<p>Don&rsquo;t install squid-deb-proxy, because it will cause maas to be removed.</p>
+<p>Fuel OpenStack规划了5个网络，分别是:<br />
+Admin(PXE)<br />
+Public<br />
+Management<br />
+Storage<br />
+Private</p>
 
-<p>In fact MAAS manages its own squid, named maas-proxy, which could be examined via:</p>
+<p>我们在Virt-Manager里也同样创建出这样的五个子网:<br />
+Admin(PXE) &ndash; FuelNAT  &ndash; 10.20.0.0/24<br />
+Public &ndash; FuelPublic  &ndash; 172.16.0.0/24<br />
+Management &ndash; FuelMgmt &ndash; 10.55.55.0/24<br />
+Storage  &ndash; FuelStorage &ndash; 10.66.66.0/24<br />
+Private  &ndash; FuelPrivate &ndash; 10.77.77.0/24</p>
 
-<pre><code>$ ps -ef | grep squid
-proxy      763     1  0 Mar23 ?        00:00:07 /usr/sbin/squid3 -N -f /etc/maas/maas-proxy.conf
-Trusty      3892  3861  0 00:13 pts/5    00:00:00 grep --color=auto squid
+<p>创建网络的步骤如下，双击Virtual Machine Manager里的localhost(QEMU), 弹出下面的窗口:<br />
+<img src="/images/2015_04_27_14_57_37_499x379.jpg" alt="/images/2015_04_27_14_57_37_499x379.jpg" /><br />
+点击网络列表最下面的+号,弹出创建网络的窗口:<br />
+<img src="/images/2015_04_27_14_58_52_543x374.jpg" alt="/images/2015_04_27_14_58_52_543x374.jpg" /><br />
+命名该网络，点击下一步:<br />
+<img src="/images/2015_04_27_15_00_34_549x371.jpg" alt="/images/2015_04_27_15_00_34_549x371.jpg" /><br />
+禁用DHCP:<br />
+<img src="/images/2015_04_27_16_37_32_544x374.jpg" alt="/images/2015_04_27_16_37_32_544x374.jpg" /><br />
+选择isolated网络模式:<br />
+<img src="/images/2015_04_27_16_38_34_551x375.jpg" alt="/images/2015_04_27_16_38_34_551x375.jpg" /><br />
+接着点击下一步直到完成，这样我们的网络就创建好了。<br />
+用上面的方法创建出以上5个子网。</p>
 
-</code></pre>
+<h3 id="各个节点网络配置">各个节点网络配置</h3>
 
-<p>This may cause all of the packages, or images be cached in squid, but it will be very helpful if we want to speedup the installation speed.<br />
-configure the squide&rsquo;s cache directory size via:</p>
+<p>Miranti Fuel Node: 仅FuelNAT, 安装完毕后，自动指定地址为10.20.0.2.<br />
+其他所有节点机，在创建时，把五个网络都添加上，添加方法如下:<br />
+Details -&gt; Add Hardware -&gt; Network, 而后选择:<br />
+<img src="/images/2015_04_27_16_45_34_765x444.jpg" alt="/images/2015_04_27_16_45_34_765x444.jpg" /></p>
 
-<pre><code>$ sudo vim /etc/maas/maas-proxy.conf
+<h3 id="miranti-fuel-node安装">Miranti Fuel Node安装</h3>
 
-cache_dir ufs /var/spool/squid 100 16 256
-By default, the cache_dir directory may be commented.
+<p>安装很简单，直接用下载的MirantisOpenStack-6.0.iso作为安装光盘，在创建出来的虚拟机里安装系统。安装完毕后，在Host机器的浏览器里访问<br />
+<a href="http://10.20.0.2:8000">http://10.20.0.2:8000</a><br />
+输入用户名密码都为admin后，登录，可以看到以下界面:<br />
+<img src="/images/2015_04_27_16_55_29_717x477.jpg" alt="/images/2015_04_27_16_55_29_717x477.jpg" /><br />
+在这个界面里我们可以进行OpenStack环境的准备、部署、配置、销毁等操作。</p>
 
-/var/spool/squid – This is the directory folder where squid will use to swap cache your server web files
-100 – The amount of disk space to use in MB for your caching directory
-16 – the first-level subdirectories which will be created in your cache directory
-256 – The number of second-level subdirectories which will be created under each first level directory
-
-</code></pre>
-
-<p>We should add following configuration under the configure.yaml of the .juju/:</p>
-
-<pre><code>    maas-server: http://10.17.17.200/MAAS
-    http-proxy: http://10.17.17.200:8000
-    #https-proxy: http://10.17.17.200:3128
-    no-proxy: localhost,10.17.17.0/24
-    apt-http-proxy: http://10.17.17.200:8000
-    #apt-https-proxy: http://10.17.17.200:3128
-    apt-ftp-proxy: http://10.17.17.200:8000
-    type: maas
-
-</code></pre>
-
-<p>After configuration, the bootstrap and add-machine will succesfully deployed.</p>
+<p>到这一步，我们已经完成了Miranti Fuel Node的安装，基本的部署准备工作已经完成，接下来我们将使用Fuel来部署一个可用的OpenStack环境, 以及三台用于部署Contrail的节点机.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/23/deploy-local-service-using-juju/">Deploy Local Service Using Juju</a>
+        <a href="http://purplepalmdash.github.io/2015/04/17/glusterfs-howto/">Glusterfs Howto</a>
       </h1>
-      <span class="post-date">Mar 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/23/deploy-local-service-using-juju/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 17, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/17/glusterfs-howto/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/storage">storage</a>
         
       </span>
       
-      <p>Since the OpenContrail deploy is using local deployment, that means, directly deploy to local machine. But the lab lack of the environment of the local ubuntu based machine, so I want to deploy a service to local first, then transform the whole project from local deployment to MAAS deployment.<br />
-In a Ubuntu14.04 machine, do following steps.</p>
+      
 
-<pre><code>$ sudo add-apt-repository ppa:juju/stable 
-$ sudo vim /etc/apt/source.list
-# This is for juju
-deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
-$ sudo apt-get install juju juju-core juju-local juju-quickstart
-$ sudo apt-get install charm-tools
-$ sudo apt-get install uvtool-libvirt uvtool
+<p>I want to expand my storage size on DigitalOcean, the droplet I have on DO one have 11G, and the other have 15G size, so if I could combine them together, I could do much more development on it. Following is how-to.</p>
+
+<h3 id="glusterfs-setup">Glusterfs Setup</h3>
+
+<p>Install it under Ubuntu via:</p>
+
+<pre><code># apt-get install glusterfs-server
 
 </code></pre>
 
-<p>Configure the juju for using local:</p>
+<p>In both node, install the same software, and then add following lines into your /etc/hosts:</p>
 
-<pre><code>$ git clone https://github.com/juju/plugins.git ~/.juju-plugins
-$ vim ~/.zshrc
-# Add juju_plugins to global path
-PATH=$PATH:$HOME/.juju-plugin
-$ source ~/.zshrc
-$ juju init
-$ vim ~/.juju/environments.yaml
-local:
- type: local
-
- # &lt;Commented Section&gt;
-
- # The default series to deploy the state-server and charms on.
- #
- default-series: precise
- #
- ## ** add these lines to support KVM and LXC deployment **
- lxc-use-clone: true
- container: kvm
+<pre><code>10.17.17.195    Gluster2
+10.17.17.194    Gluster1
 
 </code></pre>
 
-<p>Start the machine via:</p>
+<p>In Gluster1, probe Gluster2:</p>
 
-<pre><code>$ juju bootstrap --debug
-
-</code></pre>
-
-<p>Add the machines via:</p>
-
-<pre><code>[Trusty@~]$  juju set-constraints mem=512M
-[Trusty@~]$  juju add-machine --constraints &quot;root-disk=16G mem=1G&quot;
-created machine 1
-[Trusty@~]$ juju status
-environment: local
-machines:
-  &quot;0&quot;:
-    agent-state: started
-    agent-version: 1.21.3.1
-    dns-name: localhost
-    instance-id: localhost
-    series: trusty
-    state-server-member-status: has-vote
-  &quot;1&quot;:
-    instance-id: pending
-    series: precise
-services: {}
+<pre><code>root@Gluster1:~# gluster peer probe Gluster2
+peer probe: success
 
 </code></pre>
 
-<p>After a long wait, it will boot a machine which have 1G and 1 Core, and let it running.</p>
+<p>Then view the gluster peer status:</p>
+
+<pre><code>root@Gluster1:~# gluster peer status
+Number of Peers: 1
+
+Hostname: Gluster2
+Port: 24007
+Uuid: 881dedb8-6cd4-4127-8c96-223daef081f5
+State: Peer in Cluster (Connected)
+
+</code></pre>
+
+<p>Create the volumn via:</p>
+
+<pre><code>root@Gluster1:~# gluster volume create vol_replica transport tcp Gluster2:/home/glustervms Gluster1:/home/glustervms force
+volume create: vol_replica: success: please start the volume to access data
+
+</code></pre>
+
+<p>Start the created vol:</p>
+
+<pre><code>root@Gluster1:~# gluster volume start vol_replica
+volume start: vol_replica: success
+
+</code></pre>
+
+<p>View volumn info:</p>
+
+<pre><code>root@Gluster1:~# gluster volume info 
+ 
+Volume Name: vol_replica
+Type: Distribute
+Volume ID: 953456f3-0c46-4d07-ac41-591d1e398be6
+Status: Started
+Number of Bricks: 2
+Transport-type: tcp
+Bricks:
+Brick1: Gluster2:/home/glustervms
+Brick2: Gluster1:/home/glustervms
+
+</code></pre>
+
+<p>Now create the folder and mount the glusterfs via:</p>
+
+<pre><code>root@Gluster1:/home# mkdir glustervmsmnt
+root@Gluster1:/home# mount -t glusterfs Gluster1:/vol_replica /home/glustervmsmnt/
+
+</code></pre>
+
+<p>View the disk filesystem info:</p>
+
+<pre><code>Gluster1:/vol_replica   39G  4.7G   32G  13% /home/glustervmsmnt
+
+</code></pre>
+
+<h3 id="glusterfs-volumn-deletion">Glusterfs Volumn deletion</h3>
+
+<p>The replica is not the one we want, for combine two partitions, I need the Distributed stripped mode, which is the one described in:<br />
+<a href="http://www.gluster.org/community/documentation/index.php/Gluster_3.2:_Creating_Distributed_Striped_Volumes">http://www.gluster.org/community/documentation/index.php/Gluster_3.2:_Creating_Distributed_Striped_Volumes</a><br />
+So first I have to delete the one I&rsquo;ve created in the above part.<br />
+First umount the one I&rsquo;ve created:</p>
+
+<pre><code>root@Gluster1:/home/glustervms# umount /home/glustervmsmnt 
+
+</code></pre>
+
+<p>checked via <code>mount</code> or <code>df -h</code> we could see the one we have mounted has been umounted.</p>
+
+<p>Second, stop the volumes we&rsquo;ve created:</p>
+
+<pre><code>root@Gluster1:/home/glustervms# gluster volume stop vol_replica
+Stopping volume will make its data inaccessible. Do you want to continue? (y/n) y
+volume stop: vol_replica: success
+
+</code></pre>
+
+<p>Third, delete volumn:</p>
+
+<pre><code>root@Gluster1:/home/glustervms# gluster volume delete vol_replica
+Deleting volume will erase all information about the volume. Do you want to continue? (y/n) y
+volume delete: vol_replica: success
+
+</code></pre>
+
+<p>Check the volume status:</p>
+
+<pre><code>root@Gluster1:/home/glustervms# gluster volume info
+No volumes present
+
+</code></pre>
+
+<h3 id="create-the-distributed-stripped-volume">Create the distributed stripped volume</h3>
+
+<p>Create the bigvolume:</p>
+
+<pre><code>root@Gluster1:/home/glustervms# gluster volume create bigvolume transport tcp Gluster2:/home/glustervms Gluster1:/home/glustervms force
+
+</code></pre>
+
+<p>Start the volume:</p>
+
+<pre><code>root@Gluster1:/home/glustervms# gluster volume start bigvolume
+volume start: bigvolume: success
+
+</code></pre>
+
+<p>View the status of the volume:</p>
+
+<pre><code>root@Gluster1:/home/glustervmsmnt# gluster volume info 
+ 
+Volume Name: bigvolume
+Type: Distribute
+Volume ID: 3e09f074-4675-46d3-873f-f00ef13fb509
+Status: Started
+Number of Bricks: 2
+Transport-type: tcp
+Bricks:
+Brick1: Gluster2:/home/glustervms
+Brick2: Gluster1:/home/glustervms
+
+</code></pre>
+
+<p>Mount it via following command:</p>
+
+<pre><code># mount -t glusterfs Gluster1:/bigvolume /home/glustervmsmnt/
+
+</code></pre>
+
+<h3 id="trouble-shooting">Trouble-Shooting</h3>
+
+<pre><code>root@Gluster1:/home/glustervms# gluster volume create bigvolume transport tcp Gluster2:/home/glustervms Gluster1:/home/glustervms force
+volume create: bigvolume: failed: /home/glustervms or a prefix of it is already part of a volume
+
+</code></pre>
+
+<p>Resolve it via:</p>
+
+<pre><code>#  apt-get install attr
+#  setfattr -x trusted.glusterfs.volume-id /home/glustervms
+#  setfattr -x trusted.gfid /home/glustervms
+#  rm -rf /home/glustervms/.glusterfs/
+
+</code></pre>
+
+<p>Re-run the gluster volome create command it will create the volume which combines two folders.</p>
+
+<h3 id="digital-ocean-scenario">Digital Ocean Scenario</h3>
+
+<p>My DO droplet runs Ubuntu and CentOS, their version is Trusty(14.04) and CentOS7, so do following:</p>
+
+<pre><code>CentOS # wget -P /etc/yum.repos.d http://download.gluster.org/pub/gluster/glusterfs/LATEST/CentOS/glusterfs-epel.repo
+CentOS # yum -y install glusterfs glusterfs-fuse glusterfs-server
+CentOS # systemctl start glusterd
+CentOS # systemctl enable glusterd
+Trusty # apt-get install glusterfs-server
+
+</code></pre>
+
+<p>Add each other&rsquo;s name and ip address into /etc/hosts, make sure they could ping each other and get responsible:</p>
+
+<pre><code>1xx.xx.xxx.xxx	CentOS
+1xx.xx.xxx.xx	Trusty
+
+</code></pre>
+
+<p>Use Trusty as the server, so on the Trusty machine, detect the CentOS&rsquo;s glusterd configuration as:</p>
+
+<pre><code>Trusty # gluster peer probe CentOS
+peer probe: success
+
+</code></pre>
+
+<p>Check the status:</p>
+
+<pre><code>Trusty # gluster peer status
+Number of Peers: 1
+
+Hostname: CentOS
+Port: 24007
+Uuid: xxxxxxxx
+State: Peer in Cluster (Connected)
+
+</code></pre>
+
+<p>Create the bigvolume, and mount it into your own directory via:</p>
+
+<pre><code>Trusty # gluster volume create bigvolume transport tcp CentOS:/home/glustervms Trusty:/home/glustervms force
+volume create: bigvolume: success: please start the volume to access data
+Trusty # gluster volume start bigvolume
+volume start: bigvolume: success
+Trusty # gluster volume info
+ 
+Volume Name: bigvolume
+Type: Distribute
+Volume ID: xxxxxxxxxxxxxxxxxxxxx
+Status: Started
+Number of Bricks: 2
+Transport-type: tcp
+Bricks:
+Brick1: CentOS:/home/glustervms
+Brick2: Trusty:/home/glustervms
+Trusty # mkdir /home/glustervmsmnt/
+Trusty # mount -t glusterfs Trusty:/bigvolume /home/glustervmsmnt/
+Trusty # df -h
+Filesystem              Size  Used Avail Use% Mounted on
+/dev/vda1                20G  9.4G  9.2G  51% /
+none                    4.0K     0  4.0K   0% /sys/fs/cgroup
+udev                    235M  8.0K  235M   1% /dev
+tmpfs                    50M  396K   49M   1% /run
+none                    5.0M     0  5.0M   0% /run/lock
+none                    246M  1.1M  244M   1% /run/shm
+none                    100M     0  100M   0% /run/user
+Trusty:/bigvolume       40G   14G   24G  37% /home/glustervmsmnt
+
+</code></pre>
+
+<p>Now you could operate under the /home/glustervmsmnt and you have 24G size partion of the disk. Enjoy them!!!</p>
+
+<h3 id="trouble-shooting-1">Trouble-Shooting 1</h3>
+
+<p>If you met <code>File change as we read it</code> in tar something, do following things:</p>
+
+<pre><code>Trusty # gluster volume set bigvolume performance.stat-prefetch off
+volume set: success
+
+</code></pre>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/23/using-juju-for-deploying-opencontrail/">Using Juju for deploying OpenContrail</a>
+        <a href="http://purplepalmdash.github.io/2015/04/16/build-fuel-icehouse-iso/">Build fuel icehouse iso</a>
       </h1>
-      <span class="post-date">Mar 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/23/using-juju-for-deploying-opencontrail/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 16, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/16/build-fuel-icehouse-iso/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
         
       </span>
       
       
 
-<h3 id="preparation">Preparation</h3>
+<p>Fuel6.0 didn&rsquo;t support icdhouse by default, so we have to build it manually, the steps are listed as following:</p>
 
-<p>First we have to create 4 images which will hold our own opearating system.</p>
-
-<pre><code> 1016  qemu-img create -f qcow2 OpenContrail0.qcow2 40G
- 1017  qemu-img create -f qcow2 OpenContrail1.qcow2 40G
- 1018  qemu-img create -f qcow2 OpenContrail3.qcow2 40G
- 1019  qemu-img create -f qcow2 OpenContrail2.qcow2 40G
- 1020  ls
- 1021  history
-# pwd
-/home/juju/img/OpenContrail
-# qemu-img create -f qcow2 OpenContrail0.qcow2 40G
-# qemu-img create -f qcow2 OpenContrail1.qcow2 40G
-# qemu-img create -f qcow2 OpenContrail3.qcow2 40G
-# qemu-img create -f qcow2 OpenContrail2.qcow2 40G
-# ls
-OpenContrail0.qcow2  OpenContrail1.qcow2  OpenContrail2.qcow2  OpenContrail3.qcow2
+<pre><code>apt-get install git
+mkdir ~/fuel
+cd ~/fuel
+git clone https://github.com/stackforge/fuel-main.git
+cd fuel-main
+ ./prepare-build-env.sh
+export MIRROR_BASE=http://mirror.fuel-infra.org/fwm/6.0-icehouse
+make iso
 
 </code></pre>
 
-<p>Second, we create the four nodes in the virt-manager, each of them have 3G Memory, and have the cpu copied. Their network deployed to the newly added isolated network.<br />
-<img src="/images/2015_03_23_11_55_12_711x170.jpg" alt="/images/2015_03_23_11_55_12_711x170.jpg" /><br />
-After commission, the status should be &ldquo;ready&rdquo;.</p>
+<p>After making the iso which have icehouse will be available.</p>
 
-<h3 id="juju">Juju</h3>
+<h3 id="troubleshooting">TroubleShooting</h3>
 
-<p>Copy the new environment named OpenContrail:</p>
+<p>Some modifications should be made before we make them:</p>
 
-<pre><code>$ cat ~/.juju/environments.yaml 
-# This file has been generated by juju quickstart v2.0.1
-# at 2015-03-19 06:36:40 UTC.
-
-default: maas
-environments:
-  maas:
-    admin-secret: xxxx
-    default-series: trusty
-    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
-    maas-server: http://10.17.17.200/MAAS
-    type: maas
-  OpenContrail:
-    admin-secret: xxxx
-    default-series: trusty
-    maas-oauth: u8HmYg24sUxerux4N8:kcYJ8mJdePBSe4DfxD:H4qFjEpLP86Lw6xnxjHG5qrHY3abPYzZ
-    maas-server: http://10.17.17.200/MAAS
-    type: maas
-
-</code></pre>
-
-<p>Then <code>juju switch</code> and examine you are currently operate at OpenContrail via <code>juju switch -l</code>, the result should be OpenContrail.<br />
-Bootstrap the environment via:</p>
-
-<pre><code>$ juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints=&quot;mem=3G&quot;
-
-</code></pre>
-
-<p>Use <code>juju show-log</code> will display the logs for juju.</p>
-
-<p>Deploy from local repository:</p>
-
-<pre><code>$ export JUJU_REPOSITORY=/home/Trusty/Code/deployOpenContrail/contrail-deployer/charms
-$ juju deploy --to 0 juju-gui
-$ juju deploy --to lxc:0 mysql
-$ juju deploy --to lxc:0 keystone
-$ juju deploy --to lxc:0 nova-cloud-controller
-$ juju deploy --to lxc:0 glance
-$ juju deploy --to lxc:0 rabbitmq-server
-$ juju deploy --to lxc:0 openstack-Trustyboard
-$ juju deploy --to lxc:0 cinder 
-$ juju deploy --to lxc:0 neutron-api
-$ juju deploy --to lxc:0 quantum-gateway
-
-</code></pre>
-
-<h3 id="homeworking">HomeWorking</h3>
-
-<p>First I created the local charm repository, and then start deploying.<br />
-Problem is lxc template download is too time-wasting, thus I have to manually download the images and let it run as if the cache image is available.</p>
-
-<pre><code>root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# du -hs *
-178M    ubuntu-14.04-server-cloudimg-amd64-root.tar.gz
-root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# pwd
-/var/cache/lxc/cloud-trusty
-
-</code></pre>
-
-<p>Use local repository for deploying other version&rsquo;s container, then run a cassandra:</p>
-
-<pre><code>juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms local:precise/cassandra
+<pre><code>Trusty@ubuntu1204:~/code/fuel6.0/fuel-main$ git checkout stable/6.0
+Branch stable/6.0 set up to track remote branch stable/6.0 from origin.
+Switched to a new branch 'stable/6.0'
+Trusty@ubuntu1204:~/code/fuel6.0/fuel-main$ git branch
+  master
+* stable/6.0
 
 </code></pre>
 
@@ -387,141 +501,139 @@ root@MassOpenContrail2:/var/cache/lxc/cloud-trusty# pwd
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/19/deploy-maas-10/">Deploy MAAS(10)</a>
+        <a href="http://purplepalmdash.github.io/2015/04/16/quickly-play-puppet/">Quickly play puppet</a>
       </h1>
-      <span class="post-date">Mar 19, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/19/deploy-maas-10/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 16, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/16/quickly-play-puppet/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/puppet">puppet</a>
         
       </span>
       
-      <p>Continue to deploy OpenContrail based on OpenStack.<br />
-First we install the bzr for fetching back the charms:</p>
+      
 
-<pre><code>$ sudo apt-get install bzr
+<h3 id="server-and-client">Server and Client</h3>
 
-</code></pre>
+<p>In server, install following packages:</p>
 
-<p>Clone the repository to local Mass Controller Machine:</p>
-
-<pre><code>$ bzr branch lp:~robert-ayres/+junk/contrail-deployer
+<pre><code>$ sudo apt-get install puppet puppetmaster
 
 </code></pre>
 
-<p>Install juju-deployer for deploying:</p>
+<p>In client, only install puppet is enough.<br />
+After installation, added the each other&rsquo;s name into <code>/etc/hosts</code>, let them ping each other via name rather than via ip address.</p>
 
-<pre><code>$ sudo apt-get install juju-deployer
+<h3 id="sign">Sign</h3>
+
+<p>In client, do following:</p>
+
+<pre><code>$ clouder@pc121:/etc/puppet$ puppet agent --test --server=pc119
+Exiting; no certificate found and waitforcert is disabled
 
 </code></pre>
 
-<p>Change the memory size.</p>
+<p>Then in server, listed all of the certification request:</p>
+
+<pre><code>root@pc119:~/Code/herokublog# sudo puppet cert list
+  &quot;pc121&quot; (SHA256) 28:23:36:3C:E4:8B:3A:15:D2:B0:8C:A2:BC:E9:A1:E5:6A:6F:76:0E:40:73:29:1F:8F:8C:D4:83:1F:92:4F:C7
+
+</code></pre>
+
+<p>sign the cert:</p>
+
+<pre><code>root@pc119:~/Code/herokublog# sudo puppet cert sign pc121
+Notice: Signed certificate request for pc121
+Notice: Removing file Puppet::SSL::CertificateRequest pc121 at '/var/lib/puppet/ssl/ca/requests/pc121.pem'
+
+</code></pre>
+
+<p>Verify it in the client:</p>
+
+<pre><code>clouder@pc121:/etc/puppet$ puppet agent --test
+Warning: Unable to fetch my node definition, but the agent run will continue:
+Warning: getaddrinfo: Name or service not known
+Info: Retrieving plugin
+Error: /File[/home/clouder/.puppet/var/lib]: Failed to generate additional resources using 'eval_generate': getaddrinfo: Name or service not known
+
+</code></pre>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>TBD</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/18/migration-of-opencontril/">Migration of OpenContril</a>
+        <a href="http://purplepalmdash.github.io/2015/04/15/fuel-build-issues/">Fuel Build Issues</a>
       </h1>
-      <span class="post-date">Mar 18, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/18/migration-of-opencontril/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 15, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/15/fuel-build-issues/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
         
       </span>
       
       
 
-<p>This article is not for opencontril itself, but for migration of the existing environment to local machines.</p>
+<p>I started to deploy OpenContrail use fuel, so following are some tips for building the plugins.</p>
 
-<h3 id="environment">Environment</h3>
+<h3 id="fule-plugin-builder">Fule-Plugin-Builder</h3>
 
-<p>Machine configuration is listed as:</p>
+<p>I encounter following errors when building the plugins of the contrail:</p>
 
-<pre><code>192.168.10.233 u12-control
-192.168.10.234 u12-compute1
-192.168.10.235 u12-compute2
-
-192.168.1.79   s179
+<pre><code># fuel-plugin-builder --build ./
+Unexpected error
+Wrong package version &quot;2.0.0&quot;
 
 </code></pre>
 
-<p>The control node and 2 compute nodes are running in machine s179, the tasks for me to do is for moving them from s179 to 2 physical machine.</p>
+<p>This is because the FPB on PyPI is too old for building the 2.0.0 version of the fuel-plugins.<br />
+Work-around is we manually create the fpb via following steps:</p>
 
-<h3 id="use-remote-kvm-server">Use Remote KVM Server</h3>
-
-<p>First we copy our ssh-key to the remote s179 machine, so next time we won&rsquo;t enter any passwd for accessing the remote libvirtd:</p>
-
-<pre><code>$ ssh-copy-id root@192.168.1.79
-
-</code></pre>
-
-<p>In our own machine, we listed remote&rsquo;s machines via:</p>
-
-<pre><code>$ virsh -c qemu+ssh://root@192.168.1.79/system list --all
- Id    Name                           State
-----------------------------------------------------
- 14    u14-ui                         running
- 16    u14-compute2                   running
- 22    u14-compute1                   running
- 39    de1-contro                     running
- -     centos6.4-management-01        shut off
- -     centos6.4-management-02        shut off
+<pre><code># git clone https://github.com/stackforge/fuel-plugins
+# cd fuel-plugins/fuel_plugin_builder
+# python setup.py sdist
+# pip install dist/fuel-plugin-builder-2.0.0.dev.tar.gz
 
 </code></pre>
 
-<p>Add connection via: <code>File-&gt; Add New Connection</code>, then configure like following:<br />
-<img src="/images/2015_03_18_11_53_11_380x432.jpg" alt="/images/2015_03_18_11_53_11_380x432.jpg" /></p>
+<p>Now your fpb could build 2.0.0 version of the packages.</p>
 
-<h3 id="migration-static">Migration(Static)</h3>
+<h3 id="build-fuel-contrail-plugin">Build Fuel Contrail plugin</h3>
 
-<p>First scp the image file to to destination machine, this will take a while.<br />
-Dump the xml via:</p>
+<p>First we install following packages on Ubuntu.</p>
 
-<pre><code>$ virsh dumpxml xxxxx&gt;xxxx.xml
-
-</code></pre>
-
-<p>Scp the xml file to destination machine and move to <code>/etc/libvirt/qemu/</code>, change the priviledge of the file:</p>
-
-<pre><code>$ sudo chmod 777 /home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img
+<pre><code># sudo apt-get install createrepo rpm dpkg-dev
+# easy_install pip
+# pip install fuel-plugin-builder
 
 </code></pre>
 
-<p>Edit the corresponding configuration in the xml file:</p>
+<p>But notice the fuel-plugin-builder is too old in pip repository, so use the git version instead.<br />
+Or in CentOS, you could install fuel-plugin-build via:</p>
 
-<pre><code>$ sudo vim /etc/libvirt/qemu/xxxx.xml
-.....
-&lt;source file='/home/clouder/iso/Ubuntu1404-Newly-Installed-with-Update.img'/&gt;
-.....
-
-</code></pre>
-
-<p>Define the xml under the <code>/etc/libvirt/qemu/</code> folder:</p>
-
-<pre><code>root@pc121:/etc/libvirt/qemu# virsh define ./Ubuntu1404-Newly-Installed-with-Update.xml 
-Domain Ubuntu1404-Newly-Installed-with-Update defined from ./Ubuntu1404-Newly-Installed-with-Update.xml
+<pre><code># yum install createrepo rpm dpkg-devel
+# pip install fuel-plugin-builder
 
 </code></pre>
 
-<p>Install the guest tool and use it for editing the virtual machine:</p>
+<p>Retrive the source code and build it via:</p>
 
-<pre><code>$ sudo apt-get install libguestfs-tools
-$ sudo virt-edit -d Ubuntu1404-Newly-Installed-with-Update /etc/network/interfaces
-
-</code></pre>
-
-<p>After change the network configuration, we could start the machine via <code>virsh start Ubuntu1404-Newly-Installed-with-Update</code>, it will have the newly edited ip address.</p>
-
-<p>If we use different host machine, then change the following definition in xml file:</p>
-
-<pre><code>$ sudo vim /etc/libvirt/qemu/xxxx.xml
-&lt;devices&gt;
-    &lt;emulator&gt;/usr/bin/qemu-system-x86_64&lt;/emulator&gt;
-.......
+<pre><code># git clone https://github.com/stackforge/fuel-plugin-contrail
+# cd fuel-plugin-contrail/
+# fpb --build . --debug
+[root:/home/juju/Code/fuel-plugin-contrail]# ls
+contrail-1.0-1.0.0-0.noarch.rpm  LICENSE         repositories
+deployment_scripts               metadata.yaml   specs
+environment_config.yaml          pre_build_hook  tasks.yaml
+install.sh                       README.md
 
 </code></pre>
+
+<p>Once the contrail-1.0xxxx.rpm is available it indicates the plugin is available for fuel to use.<br />
+Notice this plugin should be compatible for Mirantis Fuel 6.1 and Juniper Contrail 2.01.</p>
 
       
     </div>
@@ -939,12 +1051,21 @@ $ sudo virt-edit -d Ubuntu1404-Newly-Installed-with-Update /etc/network/interfac
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/49/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

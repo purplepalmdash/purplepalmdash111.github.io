@@ -93,462 +93,526 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/08/enable-bluetooth-playing/">Enable Bluetooth Playing</a>
+        <a href="http://purplepalmdash.github.io/2015/03/30/whole-process-for-deploying-contrail/">Whole Process For Deploying Contrail</a>
       </h1>
-      <span class="post-date">Mar 8, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/08/enable-bluetooth-playing/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 30, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/30/whole-process-for-deploying-contrail/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
         
       </span>
       
-      <p>First scan the bluetooth adapter via <code>lsusb</code>:</p>
+      <p>Following are the steps, enjoy them:</p>
 
-<pre><code>$ lsusb
-Bus 005 Device 002: ID 0a12:0001 Cambridge Silicon Radio, Ltd Bluetooth Dongle (HCI mode)
+<pre><code># First bootstrap the environment.   
+juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints=&quot;mem=3G&quot;
+
+#####################################################
+# Machine 0, hold 9 services. 3G mem. trusty
+# Memory: 3G
+# Service: 10
+#####################################################
+
+
+# Since machine 0 is ready for using, deploy services to this node via following commands:     
+# Juju-gui is for monitoring the status and the components
+# 1. juju-gui
+juju deploy --to 0 --repository=/home/Trusty/charms/ local:trusty/juju-gui
+# 2. rabbitmq-server
+juju deploy --to lxc:0 --repository=/home/Trusty/charms/ local:trusty/rabbitmq-server
+# 3. mysql
+juju deploy --to lxc:0 --repository=/home/Trusty/charms/ local:trusty/mysql
+# 4. keystone
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/keystone
+# 5. openstack-Trustyboard
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/openstack-Trustyboard
+
+# 6. nova-cloud-controller
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/nova-cloud-controller --config=/home/Trusty/Code/deploy/nova-cloud-controller-config.yaml 
+# 7. glance to lxc:0
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/glance
+# 8. contrail-configuration to lxc:0
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/contrail-configuration
+# 9. control-control to lxc:0
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/contrail-control
+# 10. neutron-api to lxc:0
+juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/neutron-api --config=/home/Trusty/Code/deploy/neutron-api.yaml
+
+# Now add the first node for nova-compute.   
+juju set-constraints &quot;mem=900M&quot;
+#####################################################
+# Machine 1, hold nova-compute service, 2G with nested CPU, trusty
+# Memory: 2G
+# Service: 1
+#####################################################
+
+# Add name specified machine, which memory is 2048M, with cpu nested for kvm
+juju add-machine MaasOpenContrail4
+# Machine 1 will be added into the Juju environment, deploy nova-compute into this node
+juju deploy --to 1 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/nova-compute
+
+#####################################################
+# Machine 2, hold neutron-gateway service, 1G , trusty
+# Memory: 1G
+# Service: 1
+#####################################################
+# Add neutron-gateway to 1G based machine , it may fail, so you could remove-machine, and re-add again. via `juju destroy-machine 2 --force`  
+juju add-machine MaasOpenContrail7
+juju deploy --to 4 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/quantum-gateway neutron-gateway
+
+#####################################################
+# Machine 3, hold cassandra and zookeeper serivce, 4G, precise.
+# Memory: 4G
+# Service: 2
+#####################################################
+# First we should change the default deployed system version to precise. 
+juju set-environment default-series=precise
+# Add new machine, whose memory is 4G.
+juju add-machine MaasOpenContrail5
+# Deploy cassandra to 4G Node
+juju deploy --to 5 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:precise/cassandra --config=/home/Trusty/Code/deploy/cassandra.yaml
+# Also use this machine for deploy a lxc based service, zookeeper, which is also based on precise.
+juju deploy --to lxc:5 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:precise/zookeeper
+
+
+# Well, set the default environment from precise to trusty
+juju set-environment default-series=trusty
+
+# Finally deploy  neutron-contrail
+juju deploy --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/neutron-contrail
+
+
+
+#####################################################
+#####################################################
+# Well the deploy is finished, then add relationship
+#####################################################
+#####################################################
+juju add-relation keystone mysql
+juju add-relation nova-cloud-controller mysql
+juju add-relation nova-cloud-controller rabbitmq-server
+juju add-relation nova-cloud-controller glance
+juju add-relation nova-cloud-controller keystone
+juju add-relation neutron-gateway mysql
+juju add-relation neutron-gateway:amqp rabbitmq-server:amqp
+juju add-relation neutron-gateway nova-cloud-controller
+juju add-relation nova-compute:shared-db mysql:shared-db
+juju add-relation nova-compute:amqp rabbitmq-server:amqp
+juju add-relation nova-compute glance
+juju add-relation nova-compute nova-cloud-controller
+juju add-relation glance mysql
+juju add-relation glance keystone
+juju add-relation openstack-Trustyboard keystone
+juju add-relation neutron-api mysql
+juju add-relation neutron-api rabbitmq-server
+juju add-relation neutron-api nova-cloud-controller
+juju add-relation neutron-api:identity-service keystone:identity-service
+juju add-relation neutron-api:identity-admin keystone:identity-admin
+juju add-relation contrail-configuration:cassandra cassandra:database
+juju add-relation contrail-configuration zookeeper
+juju add-relation contrail-configuration rabbitmq-server
+juju add-relation contrail-configuration keystone
+juju add-relation contrail-configuration neutron-gateway
+juju add-relation neutron-api contrail-configuration
+juju add-relation contrail-control contrail-configuration
+juju add-relation nova-compute neutron-contrail
+juju add-relation neutron-contrail contrail-control
+juju add-relation neutron-contrail neutron-gateway
+juju add-relation neutron-contrail contrail-configuration
+juju add-relation neutron-contrail keystone
+
+
+# change the passwd of OpenStack:    
+juju set keystone admin-password=&quot;helloworld&quot;
 
 </code></pre>
-
-<p>Install packages and configure bluetooth:</p>
-
-<pre><code>$ sudo apt-get install bluetooth
-$ sudo apt-get install bluez-utils
-$ sudo apt-get install blueman
-
-</code></pre>
-
-<p>Then setup the bluetooth headset in blueman&rsquo;s graphical interface.<br />
-The more detailed steps are available at:<br />
-<a href="http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/">http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/</a></p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/06/establish-ubuntu-virt-node/">Establish Ubuntu Virt Node</a>
+        <a href="http://purplepalmdash.github.io/2015/03/27/add-sbh-bluetooth-to-linux/">Add SBH BlueTooth to Linux</a>
       </h1>
-      <span class="post-date">Mar 6, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/06/establish-ubuntu-virt-node/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/27/add-sbh-bluetooth-to-linux/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
         
       </span>
       
       
 
-<p>Just some tips on how to establish an Ubuntu Virt Node from existing installed system.</p>
+<p>I bought a SBH Sony Bluetooth headset, following is the steps for adding it to system.</p>
 
-<h3 id="re-partition">Re-Partition</h3>
+<h3 id="ubuntu-installation">Ubuntu Installation</h3>
 
-<p>2T Disk has been allocated to opensuse, thus I have first umount the mounted /home/ partition and use partition from yast for adjust the partition size, I got 1.9 T size of disk for installing new system.<br />
-Umount the mounted /home/ partition is via edit /etc/fstab file.</p>
+<p>Install bluetooth related software:</p>
 
-<h3 id="install-ubuntu">Install Ubuntu</h3>
+<pre><code>$ sudo apt-get install -y blueman-manager bluetooth
+$ vim ~/.config/awesome/rc.lua
+autorunApps =
+{
+--.........
+&quot;blueman-manager&quot;,
+&quot;fcitx&quot;,
+</code></pre>
 
-<p>Download the iso file of ubuntu x86_64 version, then enable kvm via:</p>
+<h3 id="add-device">Add Device</h3>
 
-<pre><code>$ sudo modprobe kvm
-$ sudo modprobe kvm-intel
+<p>Use Blueman for adding the equiment, first click the SBH headset to let it enter discover mode, also in blueman we enable the discover mode too, when setup the equipment, the code you have to enter is 0000.<br />
+The device kindle is not headset, but the a2dp?</p>
+
+<h3 id="add-configuration-for-alsa">Add Configuration for ALSA</h3>
+
+<p>Edit the /etc/asound.conf, my configuration file is listed as following:</p>
+
+<pre><code>pcm.btheadset {
+   type plug
+   slave {
+       pcm {
+           type bluetooth
+           device xxx.xxx.xxx.xxx
+           profile &quot;auto&quot;
+       }   
+   }   
+   hint {
+       show on
+       description &quot;BT Headset&quot;
+   }   
+}
+ctl.btheadset {
+  type bluetooth
+}  
+pcm.sbhbtheadset {
+   type plug
+   slave {
+       pcm {
+           type bluetooth
+           device xxx.xxx.xxx.xxx
+           profile &quot;auto&quot;
+       }   
+   }   
+   hint {
+       show on
+       description &quot;SBH BT Headset&quot;
+   }   
+}
+ctl.sbhbtheadset {
+  type bluetooth
+}  
 
 </code></pre>
 
-<p>Install the system via following commands:</p>
+<p>The first equipment is another bluetooth headset. We define our SDH to sdhbtheadset.<br />
+Examine our added equipment via following command:</p>
 
-<pre><code>$ qemu-system-x86_64 -hda /dev/sda -m 1024 -boot d -cdrom ./install_media.iso
-
-</code></pre>
-
-<p>The above command is for installing the system into the real harddisk. It will automatically install the system onto the harddisk and over-write the MBR. Ubuntu will automatically detect the installed opensuse and generate the system description line.<br />
-In grub, the default system will be the installed ubuntu.</p>
-
-<h3 id="system-preparation">System Preparation</h3>
-
-<p>Install following packages:</p>
-
-<pre><code>$ sudo apt-get install openssh-server vim-gtk bridge-utils virt-manager git subversion sysfsutils virtualbox awesome firefox chromium-browser xinit libreoffice build-essential pidgin konsole meld  fcitx fcitx-googlepinyin git subversion wqy* zsh rox-filer smplayer cmake scrot thunderbird midori gpicview docker.io  qemu qemu-kvm bridge-utils
-
-</code></pre>
-
-<p>Configure the network via following command:</p>
-
-<pre><code>$ sudo brctl addif br0 eth0
-$ cat /etc/network/interfaces
-# This file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
-
-# The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet manual
-# If you want to enable the static, uncomment following
-# iface eth0 inet static
-#       address 192.168.0.119
-#       netmask 255.255.255.0
-
-
-# Add Bridge Interface
-iface br0 inet static
-address 192.168.0.119
-netmask 255.255.255.0
-gateway 192.168.0.236
-dns-nameservers 114.114.114.114
-bridge_ports eth0
-bridge_stp off
-auto br0
+<pre><code>$ aplay -L
+default
+    Playback/recording through the PulseAudio sound server
+null
+    Discard all samples (playback) or generate zero samples (capture)
+pulse
+    PulseAudio Sound Server
+btheadset
+    BT Headset
+sbhbtheadset
+    SBH BT Headset
 
 </code></pre>
 
-<p>Restart computer and now you got br0 enabled.</p>
+<h3 id="send-sound">Send Sound</h3>
 
-<p>Install QQ:</p>
+<p>The commands are listed as following:</p>
 
-<pre><code>$ sudo vim /etc/apt/sources.list
-deb http://ppa.launchpad.net/lainme/pidgin-lwqq/ubuntu trusty main 
-deb-src http://ppa.launchpad.net/lainme/pidgin-lwqq/ubuntu trusty main
-$ sudo apt-get update &amp;&amp; sudo apt-get upgrade
-$ sudo apt-get install pidgin-lwqq
-
-</code></pre>
-
-<p>Now you could use pidgin for chatting.</p>
-
-<p>Install xlockmore for using xlock locking screen:</p>
-
-<pre><code>$ wget http://packages.ubuntu.com/precise/amd64/xlockmore/download/*xxxx.deb
-$ sudo dpkg -i xlockmore_package.deb
+<pre><code>$ pactl load-module module-alsa-sink device=sbhbtheadset
+17
+[Trusty@~]$ pacmd load_module module-bluetooth-discover
+Welcome to PulseAudio! Use &quot;help&quot; for usage information.
+&gt;&gt;&gt; Unknown command: load_module module-bluetooth-discover
+&gt;&gt;&gt; %                                                             
+[Trusty@~]$ pactl list sinks short
+1       alsa_output.sbhbtheadset        module-alsa-sink.c      s16le 2ch 44100Hz      SUSPENDED
+[Trusty@~]$ pacmd set-default-sink 1
+Welcome to PulseAudio! Use &quot;help&quot; for usage information.
+&gt;&gt;&gt; &gt;&gt;&gt; %                  
 
 </code></pre>
 
-<p>Disable UTC time via:</p>
-
-<pre><code>$ sudo vim /etc/default/rcS
-# assume that the BIOS clock is set to UTC time (recommended)
-UTC=no
-
-</code></pre>
-
-<p>Configure ZSH:</p>
-
-<pre><code>$ sudo vim ~/.zshrc
-# For setting zsh history
-HISTFILE=$HOME/.zsh_history
-setopt INC_APPEND_HISTORY
-setopt SHARE_HISTORY
-HISTSIZE=5000
-SAVEHIST=5000
-
-</code></pre>
-
-<p>Now the history file has been created and you could navigate between command history.</p>
-
-<p>Quick setup for capturing picture:</p>
-
-<pre><code>$ cat /usr/bin/mycapscr 
-scrot -s '%Y_%m_%d_%H_%M_%S_$wx$h.jpg' -e 'mv $f ~/capscr/'
-$ mkdir -p ~/capscr
-
-</code></pre>
-
-<p>Now we got the standard development environment ready.</p>
+<p>Now you are ready for listening Music via bluetooth headset, enjoy it.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/01/rebuild-vrouter/">Rebuild Vrouter</a>
+        <a href="http://purplepalmdash.github.io/2015/03/26/juju-tips/">juju tips</a>
       </h1>
-      <span class="post-date">Mar 1, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/01/rebuild-vrouter/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 26, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/26/juju-tips/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
+        
+      </span>
+      
+      
+
+<h3 id="add-specified-machine">Add Specified Machine</h3>
+
+<p>We could add the specified name of the machine:</p>
+
+<pre><code>$ juju add-machine MaasOpenContrail6.maas
+
+</code></pre>
+
+<p>While the name of <code>MaasOpenContrail6.maas</code> is the  name which we could get from the MAAS webUI.</p>
+
+<h3 id="get-set-constraints">Get/Set Constraints</h3>
+
+<p>We could dynamically set constraints for adding/removing new machines or unit, get/set it via:</p>
+
+<pre><code>$ juju get-constraints
+mem=3072M
+$ juju set-constraints &quot;mem=1024M&quot;
+$ juju get-constraints
+mem=1024M
+
+</code></pre>
+
+<h3 id="tags">Tags</h3>
+
+<p>Sometimes we need to add tags to specified maas units, the following webpage is for reference:<br />
+<a href="http://en.community.dell.com/techcenter/os-applications/w/wiki/7432.using-tags-with-maas-and-juju-in-ubuntu-server-14-04-lts">http://en.community.dell.com/techcenter/os-applications/w/wiki/7432.using-tags-with-maas-and-juju-in-ubuntu-server-14-04-lts</a><br />
+<a href="https://maas.ubuntu.com/docs/tags.html">https://maas.ubuntu.com/docs/tags.html</a></p>
+
+<h3 id="remove-specified-service">Remove specified service</h3>
+
+<p>Get the status of the specified service via:</p>
+
+<pre><code>$ juju status neutron-api
+services:
+  neutron-api:
+    charm: cs:trusty/neutron-api-9
+    exposed: false
+    life: dying
+    units:
+      neutron-api/0:
+        agent-state: error
+        agent-state-info: 'hook failed: &quot;install&quot;'
+        agent-version: 1.21.3.1
+        life: dying
+        machine: &quot;6&quot;
+        public-address: MaasOpenContrail7.maas
+networks:
+  maas-eth0:
+    provider-id: maas-eth0
+    cidr: 10.17.17.0/24
+
+</code></pre>
+
+<p>Resolved this service&rsquo;s located units first:</p>
+
+<pre><code>Trusty@MassController:~/Code/deploy$ juju resolved neutron-api/0
+
+</code></pre>
+
+<p>Now remove the service via:</p>
+
+<pre><code>Trusty@MassController:~/Code/deploy$ juju remove-service neutron-api
+
+</code></pre>
+
+<p>Sometimes you need to type in resolved the unit for several times.<br />
+Finally, if your machine runs into error state, you could destroy it forcely via:</p>
+
+<pre><code>$ juju destroy-machine x --force
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/24/deploy-maas-11/">Deploy MAAS(11)</a>
+      </h1>
+      <span class="post-date">Mar 24, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/24/deploy-maas-11/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
-      <p>In order to dive into Vrouter&rsquo;s researching, we build the ko by following comands.</p>
+      
 
-<pre><code>$ cp /opt/contrail/contrail_install_repo/contrail-vrouter-source_1.21-74_all.deb ~/Code/
-$ cd ~/Code &amp;&amp; ar vx contrail-vrouter-source_1.21-74_all.deb 
-$ tar xzvf control.tar.gz 
-$ tar xzvf data.tar.gz 
-$ cd usr/src/modules/contrail-vrouter/
-$ tar xzvf contrail-vrouter-1.21.tar.gz 
-$ make
+<p>Since the deployment meets some problem, I have to consider doing some tricks in the MAAS controller, to let the deployment much more easier and time-saving, following is the steps for setting up such environment.</p>
+
+<h3 id="resize-maas-controller-disk">Resize Maas Controller Disk</h3>
+
+<p>Since the Mass Controller machine only have 40G size harddisk, it will be not enough if we enable the repository cache for guest machines, thus we have to resize the disk.<br />
+First shutdown the virtual machine.<br />
+Resize the qcow2 file via:</p>
+
+<pre><code># virsh dumpxml MassController | grep qcow2
+      &lt;driver name='qemu' type='qcow2' cache='none'/&gt;
+      &lt;source file='/home/juju/img/MassController.qcow2'/&gt;
+# qemu-img resize /home/juju/img/MassController.qcow2 +40GB
+Image resized.
+# qemu-img info /home/juju/img/MassController.qcow2
+image: /home/juju/img/MassController.qcow2
+file format: qcow2
+virtual size: 80G (85899345920 bytes)
+disk size: 9.4G
+cluster_size: 65536
+# virsh start MassController
 
 </code></pre>
 
-<p>After building the ko will be available under the folder</p>
+<p>Now use a liveCD for startup the machine, this will bootup the machine into a iso booted environment.</p>
+
+<pre><code>$ wget http://downloads.sourceforge.net/gparted/gparted-live-0.21.0-1-i586.iso
+
+</code></pre>
+
+<p>Bootup the machine and resize like following:<br />
+<img src="/images/2015_03_24_10_28_21_791x423.jpg" alt="/images/2015_03_24_10_28_21_791x423.jpg" /></p>
+
+<h3 id="squid-deb-proxy">squid-deb-proxy</h3>
+
+<p>In Mass Controller machine, install following packages:</p>
+
+<pre><code>$ sudo apt-get install squid-deb-proxy avahi-utils
+$ sudo start squid-deb-proxy
+
+</code></pre>
+
+<p>Every client should install following package:</p>
+
+<pre><code>$ sudo apt-get install squid-deb-proxy-client
+
+</code></pre>
+
+<p>Don&rsquo;t install squid-deb-proxy, because it will cause maas to be removed.</p>
+
+<p>In fact MAAS manages its own squid, named maas-proxy, which could be examined via:</p>
+
+<pre><code>$ ps -ef | grep squid
+proxy      763     1  0 Mar23 ?        00:00:07 /usr/sbin/squid3 -N -f /etc/maas/maas-proxy.conf
+Trusty      3892  3861  0 00:13 pts/5    00:00:00 grep --color=auto squid
+
+</code></pre>
+
+<p>This may cause all of the packages, or images be cached in squid, but it will be very helpful if we want to speedup the installation speed.<br />
+configure the squide&rsquo;s cache directory size via:</p>
+
+<pre><code>$ sudo vim /etc/maas/maas-proxy.conf
+
+cache_dir ufs /var/spool/squid 100 16 256
+By default, the cache_dir directory may be commented.
+
+/var/spool/squid – This is the directory folder where squid will use to swap cache your server web files
+100 – The amount of disk space to use in MB for your caching directory
+16 – the first-level subdirectories which will be created in your cache directory
+256 – The number of second-level subdirectories which will be created under each first level directory
+
+</code></pre>
+
+<p>We should add following configuration under the configure.yaml of the .juju/:</p>
+
+<pre><code>    maas-server: http://10.17.17.200/MAAS
+    http-proxy: http://10.17.17.200:8000
+    #https-proxy: http://10.17.17.200:3128
+    no-proxy: localhost,10.17.17.0/24
+    apt-http-proxy: http://10.17.17.200:8000
+    #apt-https-proxy: http://10.17.17.200:3128
+    apt-ftp-proxy: http://10.17.17.200:8000
+    type: maas
+
+</code></pre>
+
+<p>After configuration, the bootstrap and add-machine will succesfully deployed.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/27/single-node-openstack-startup/">Single Node OpenStack Startup</a>
+        <a href="http://purplepalmdash.github.io/2015/03/23/deploy-local-service-using-juju/">Deploy Local Service Using Juju</a>
       </h1>
-      <span class="post-date">Feb 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/27/single-node-openstack-startup/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/23/deploy-local-service-using-juju/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
-      
+      <p>Since the OpenContrail deploy is using local deployment, that means, directly deploy to local machine. But the lab lack of the environment of the local ubuntu based machine, so I want to deploy a service to local first, then transform the whole project from local deployment to MAAS deployment.<br />
+In a Ubuntu14.04 machine, do following steps.</p>
 
-<p>Following records the main steps for starting up the single node Openstack environment.</p>
-
-<h3 id="ubuntu-setup-and-configuration">Ubuntu Setup and Configuration</h3>
-
-<h4 id="setup">Setup</h4>
-
-<p>Use virt-manager, create a new virtual machine, install the system from ubuntu-12.04.3-server-amd64.iso, allocate 2 CPU and 4096 Memory, allocate the 80GB disk.<br />
-Create disk via:</p>
-
-<pre><code>Trusty@pc119:~/Code/Virt-Manager/SingleNode&gt; qemu-img create -f qcow2 SingleNode.qcow2 80G
-Formatting 'SingleNode.qcow2', fmt=qcow2 size=85899345920 encryption=off cluster_size=65536 lazy_refcounts=off
+<pre><code>$ sudo add-apt-repository ppa:juju/stable 
+$ sudo vim /etc/apt/source.list
+# This is for juju
+deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+$ sudo apt-get install juju juju-core juju-local juju-quickstart
+$ sudo apt-get install charm-tools
+$ sudo apt-get install uvtool-libvirt uvtool
 
 </code></pre>
 
-<p>Configure the networking, bridge, then beging installing.<br />
-IP address set to 192.168.188.<sup>190</sup>&frasl;<sub>255</sub>.255.255.0, gateway first we set it to 192.168.188.1, later we will change it, because it&rsquo;s a pseudo-addresses.</p>
+<p>Configure the juju for using local:</p>
 
-<h4 id="configuration">Configuration</h4>
+<pre><code>$ git clone https://github.com/juju/plugins.git ~/.juju-plugins
+$ vim ~/.zshrc
+# Add juju_plugins to global path
+PATH=$PATH:$HOME/.juju-plugin
+$ source ~/.zshrc
+$ juju init
+$ vim ~/.juju/environments.yaml
+local:
+ type: local
 
-<p>First save a snapshot, shutdown the running virtual machine, then you could clone it for back up.<br />
-Configure the network in virtual machine via:</p>
+ # &lt;Commented Section&gt;
 
-<pre><code>$ sudo ip route add default gw 192.168.0.xxx
-$ sudo ip route add 192.168.0.0/24 dev eth0
-
-</code></pre>
-
-<p>SSH fast connect:</p>
-
-<pre><code>$ sudo vi /etc/ssh/sshd_config
-UseDNS no
-$ sudo service ssh restart
-
-</code></pre>
-
-<p>Now you could ssh to the virtual machine and update corresponding configurations.</p>
-
-<p>In fact the snapshot could be made here.<br />
-Transfer the installtion media to virtual machine:</p>
-
-<pre><code>$ scp ./contrail-install-packages_1.21-74\~havana_all.deb Trusty@192.168.188.190:/home/Trusty/
+ # The default series to deploy the state-server and charms on.
+ #
+ default-series: precise
+ #
+ ## ** add these lines to support KVM and LXC deployment **
+ lxc-use-clone: true
+ container: kvm
 
 </code></pre>
 
-<h3 id="install-opencontrail">Install OpenContrail</h3>
+<p>Start the machine via:</p>
 
-<p>Set the root password:</p>
-
-<pre><code>$ sudo bash
-root@SingleNode:~# passwd
-Enter new UNIX password: 
-Retype new UNIX password: 
-passwd: password updated successfully
+<pre><code>$ juju bootstrap --debug
 
 </code></pre>
 
-<p>Install the deb file via:</p>
+<p>Add the machines via:</p>
 
-<pre><code>root@SingleNode:~# ls
-contrail-install-packages_1.21-74~havana_all.deb
-root@SingleNode:~# dpkg -i contrail-install-packages_1.21-74~havana_all.deb 
-
-</code></pre>
-
-<p>Now setup the whole packages.</p>
-
-<pre><code>root@SingleNode:/etc/apt# cd /opt/contrail/contrail_packages/
-root@SingleNode:/opt/contrail/contrail_packages# ls
-contrail_debs.tgz  preferences  setup.sh  sources.list  VERSION
-root@SingleNode:/opt/contrail/contrail_packages# ./setup.sh
-
-</code></pre>
-
-<p>Copy the example testbed file to <code>testbed.py</code>:</p>
-
-<pre><code>root@SingleNode:/opt/contrail/utils# cp fabfile/testbeds/testbed_singlebox_example.py fabfile/testbeds/testbed.py
-
-</code></pre>
-
-<p>Edit this file to, notice the + means we did modifications    :</p>
-
-<pre><code>from fabric.api import env
-
-#Management ip addresses of hosts in the cluster
-+++ host1 = 'root@127.0.0.1'
-
-#External routers if any
-#for eg. 
-#ext_routers = [('mx1', '10.204.216.253')]
-ext_routers = []
-
-#Autonomous system number
-router_asn = 64512
-
-#Host from which the fab commands are triggered to install and provision
-+++ host_build = 'root@127.0.0.1'
-
-#Role definition of the hosts.
-env.roledefs = {
-    'all': [host1],
-    'cfgm': [host1],
-    'openstack': [host1],
-    'control': [host1],
-    'compute': [host1],
-    'collector': [host1],
-    'webui': [host1],
-    'database': [host1],
-    'build': [host_build],
-    'storage-master': [host1],
-    'storage-compute': [host1],
-}
-
-#Openstack admin password
-env.openstack_admin_password = 'secret123'
-
-#Hostnames
-env.hostnames = {
-+    'all': ['SingleNode']
-}
-
-+++ env.password = 'rootpass'
-#Passwords of each host
-env.passwords = {
-+++     host1: 'rootpass',
-
-+++     host_build: 'rootpass',
-}
-
-#For reimage purpose
-env.ostypes = {
-+++    host1:'ubuntu',
-}
+<pre><code>[Trusty@~]$  juju set-constraints mem=512M
+[Trusty@~]$  juju add-machine --constraints &quot;root-disk=16G mem=1G&quot;
+created machine 1
+[Trusty@~]$ juju status
+environment: local
+machines:
+  &quot;0&quot;:
+    agent-state: started
+    agent-version: 1.21.3.1
+    dns-name: localhost
+    instance-id: localhost
+    series: trusty
+    state-server-member-status: has-vote
+  &quot;1&quot;:
+    instance-id: pending
+    series: precise
+services: {}
 
 </code></pre>
 
-<p>Now use fab to install :</p>
-
-<pre><code>root@SingleNode:/opt/contrail/utils# fab -c fabrc install_contrail
-
-</code></pre>
-
-<p>This will take some minutes.<br />
-Then setup all:</p>
-
-<pre><code># cd /opt/congrail/utils
-# fab setup_all
-
-</code></pre>
-
-<p>After installation the machine will be reboot.<br />
-A snapshot will be created when reboot done, this will be the cloned initial startpoint for OpenContrail.</p>
-
-<h3 id="start">Start</h3>
-
-<p>Create a simple web server via python:</p>
-
-<pre><code>python -m SimpleHTTPServer 8000
-
-</code></pre>
-
-<p>Then Create the image in OpenStack via:</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/18/install-opencontrail-on-virt-manager/">Install OpenContrail On Virt-Manager</a>
-      </h1>
-      <span class="post-date">Feb 18, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/18/install-opencontrail-on-virt-manager/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Recently I am studying OpenContrail(based on OpenStack), so following includes the steps for me to setup a single-node emulation environment, the host machine is ArchLinux, which is one of my favorite Linux Distribution, and using nested virtualization for setting up a basic run-time environment.</p>
-
-<h3 id="libvirt">libvirt</h3>
-
-<p>It seems the most convinient way for using nested virtualization is for using libvirt, so following is for setting up the virtualization environment.<br />
-First create libvirt user group and add current user into this group:</p>
-
-<pre><code># groupadd libvirt
-# gpasswd -a Trusty libvirt
-
-</code></pre>
-
-<p>Then uncomment following lines in <code>/etc/libvirt/libvirtd.conf</code>:</p>
-
-<pre><code>$ vim /etc/libvirt/libvirtd.conf
-unix_sock_group = &quot;libvirt&quot;
-unix_sock_ro_perms = &quot;0777&quot;
-unix_sock_rw_perms = &quot;0770&quot;
-auth_unix_ro = &quot;none&quot;
-auth_unix_rw = &quot;none&quot;
-
-</code></pre>
-
-<p>Then start and enable the libvirtd.service via following commands:</p>
-
-<pre><code>$ sudo systemctl start libvirtd.service
-$ sudo systemctl enable libvirtd.service
-
-</code></pre>
-
-<p>From here you could run <code>virt-manager</code> for using virt manager.</p>
-
-<h3 id="installtion-of-opencontrail">Installtion of OpenContrail</h3>
-
-<p>First you should download the deb file from juniper, then create a 4G Memory, at least 20G disk space virtual machine, notice your cpu selection should enable nested virtualization.<br />
-In Configuration, select &ldquo;Copy Host CPU Configuration&rdquo;, then your host machine&rsquo;s CPU configuration will be delivered to the virtualized machine.<br />
-The installation steps are:</p>
-
-<pre><code>$ sudo bash
-# passwd
-# dpkg -i contrail-install-packages_1.21-74~havana_all.deb
-# cd /opt/contrail/contrail_packages
-# ./setup.sh
-# cd /opt/contrail/
-# cp utils/fabfile/testbeds/testbed_singlebox_example.py utils/fabfile/testbeds/testbed.py
-# cd /opt/contrail/utils
-# fab -c fabrc install_contrail
-# fab setup_all
-
-</code></pre>
-
-<p>The installation will automatically restart.</p>
-
-<h3 id="openstack-and-opencontrail">OpenStack and OpenContrail</h3>
-
-<p>The access webpage are located at:<br />
-OpenStack:<br />
-<a href="http://YourIpAddress/horizon">http://YourIpAddress/horizon</a><br />
-OpenContrail:<br />
-<a href="https://YourIpAddress:8143">https://YourIpAddress:8143</a><br />
-Simply open a browser and view this.</p>
-
-<h3 id="nested">Nested</h3>
-
-<p>To check the nested virtualization, do following operations:</p>
-
-<pre><code>Trusty@Ubuntu1404:~$ cat /sys/module/kvm_intel/parameters/nested 
-Y
-Trusty@Ubuntu1404:~$ systool -m kvm_intel -v   | grep -i nested
-    nested              = &quot;Y&quot;
-
-</code></pre>
+<p>After a long wait, it will boot a machine which have 1G and 1 Core, and let it running.</p>
 
       
     </div>
@@ -966,12 +1030,21 @@ Trusty@Ubuntu1404:~$ systool -m kvm_intel -v   | grep -i nested
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/52/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

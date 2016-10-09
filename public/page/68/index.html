@@ -93,255 +93,241 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/09/wei-bbbbian-yi-nei-he-he-linux/">为BBB编译内核和Linux</a>
+        <a href="http://purplepalmdash.github.io/2014/11/22/retrieve-weather-database-for-further-analyze/">Retrieve Weather Database for further analyze</a>
       </h1>
-      <span class="post-date">Nov 9, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/09/wei-bbbbian-yi-nei-he-he-linux/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 22, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/22/retrieve-weather-database-for-further-analyze/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/apps">Apps</a>
         
       </span>
       
       
 
-<p>因为原文是英文的缘故，所以这里就直接用中文翻译，并把编译时的步骤和注意事项记载下来。<br />
-主要参考了:<br />
-<a href="https://eewiki.net/display/linuxonarm/BeagleBone+Black">https://eewiki.net/display/linuxonarm/BeagleBone+Black</a><br />
-All of the files and folder are located under <code>$BBB/201411</code> folder.</p>
+<h3 id="heroku-postgres">Heroku Postgres</h3>
 
-<h3 id="交叉编译链准备">交叉编译链准备</h3>
+<p>I wrote the weather app which holds at:<br />
+<a href="http://python-weather-app.herokuapp.com">http://python-weather-app.herokuapp.com</a><br />
+At around half a year it grows around 7MB, so I begin to think of how to back it and migrate to other platforms.</p>
 
-<p>下载、设置交叉编译链:</p>
+<p>Following is the steps for viewing and operation on postgres database:</p>
 
-<pre><code>wget -c https://releases.linaro.org/14.09/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux.tar.xz
-tar xf gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux.tar.xz
-export CC=`pwd`/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/bin/arm-linux-gnueabihf-
-
-</code></pre>
-
-<p>测试交叉编译链:</p>
-
-<pre><code># ${CC}gcc --version
-arm-linux-gnueabihf-gcc (crosstool-NG linaro-1.13.1-4.9-2014.09 - Linaro GCC 4.9-2014.09) 4.9.2 20140904 (prerelease)
-Copyright (C) 2014 Free Software Foundation, Inc.
-This is free software; see the source for copying conditions.  There is NO
-warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+<pre><code>$ heroku login
+$ heroku config
+$ heroku addons | grep POSTGRES
+$ heroku pg:info
 
 </code></pre>
 
-<h3 id="编译u-boot">编译U-Boot</h3>
+<h3 id="backup">Backup</h3>
 
-<p>下载U-Boot:</p>
+<p>Install the addons of pgbackups for backing up the existing databases:</p>
 
-<pre><code>git clone git://git.denx.de/u-boot.git
-cd u-boot/
-git checkout v2014.10 -b tmp
-
-</code></pre>
-
-<p>下载、加载补丁:</p>
-
-<pre><code>wget -c https://raw.githubusercontent.com/eewiki/u-boot-patches/master/v2014.10/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
-patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+<pre><code>$ heroku addons:add pgbackups
+$ heroku pgbackups:capture
 
 </code></pre>
 
-<p>编译U-Boot:</p>
+<p>Use following command for store the backup locally:</p>
 
-<pre><code># make ARCH=arm CROSS_COMPILE=${CC} distclean &amp;&amp; make ARCH=arm CROSS_COMPILE=${CC} am335x_evm_defconfig &amp;&amp; make ARCH=arm CROSS_COMPILE=${CC}
-
-</code></pre>
-
-<h3 id="编译内核">编译内核</h3>
-
-<p>下面的步骤将编译出内核和内核模块，编译完成后全部被拷贝到deploy文件夹中。</p>
-
-<h4 id="主线内核">主线内核</h4>
-
-<p>编译前准备， 在Ubuntu 12.04，安装下列包:</p>
-
-<pre><code>$ sudo apt-get install bc build-essential device-tree-compiler fakeroot lzma lzop man-db u-boot-tools libncurses5-dev ia32-libs wget
+<pre><code>$ curl -o latest.dump `heroku pgbackups:url`
+$ pg_restore --verbose --clean --no-acl --no-owner -h localhost -U Trusty -d weatherdb latest.dump
 
 </code></pre>
 
-<p>下载:</p>
+<h3 id="view-the-data">View the data</h3>
 
-<pre><code>$ git clone https://github.com/RobertCNelson/bb-kernel.git
-$ cd bb-kernel/
+<p>Using following commands for viewing the data:</p>
 
-</code></pre>
-
-<p>切换到v3.8.x分支(支持全面):</p>
-
-<pre><code>$ git checkout origin/am33x-v3.8 -b tmp
-
-</code></pre>
-
-<p>切换到v3.17.x分支(SGX， 更好的usb和Ethernet支持), SGX，硬件加速。</p>
-
-<pre><code>$ git checkout origin/am33x-v3.17 -b tmp
-
-</code></pre>
-
-<p>编译：</p>
-
-<pre><code>$ ./build_kernel.sh
+<pre><code>$ psql weatherdb
+weatherdb=# \dt;
+          List of relations
+ Schema |    Name     | Type  | Owner 
+--------+-------------+-------+-------
+ public | avg_weather | table | Trusty
+ public | user        | table | Trusty
+ public | weather     | table | Trusty
+(3 rows)
+weatherdb=# select * from weather;
+weatherdb=# select * from avg_weather;
 
 </code></pre>
 
-<h4 id="ti内核">TI内核</h4>
+<p>By this you could dump all of the datas which already held in this postgres database.</p>
 
-<p>完整编译步骤如下：</p>
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/22/tips-for-mac/">Tips For Mac</a>
+      </h1>
+      <span class="post-date">Nov 22, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/22/tips-for-mac/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/mac">mac</a>
+        
+      </span>
+      
+      
 
-<pre><code>git clone https://github.com/RobertCNelson/ti-linux-kernel-dev/
-cd ti-linux-kernel-dev/
-git checkout origin/ti-linux-3.14.y -b tmp
-./build_kernel.sh
+<h3 id="set-proxy">Set Proxy</h3>
 
-</code></pre>
+<p>The proxy setting method is the same as in Linux, just add following lines into the ~/.bashrc:</p>
 
-<h3 id="准备文件系统">准备文件系统</h3>
-
-<h4 id="ubuntu">Ubuntu</h4>
-
-<p>下载并解压Ubuntu文件系统:</p>
-
-<pre><code>wget -c https://rcn-ee.net/deb/minfs/trusty/ubuntu-14.04-minimal-armhf-2014-07-07.tar.xz
-tar xf ubuntu-14.04-minimal-armhf-2014-07-07.tar.xz
-
-</code></pre>
-
-<h3 id="写入存储卡">写入存储卡</h3>
-
-<h4 id="分区准备">分区准备</h4>
-
-<p>准备的TF卡容量为8G， 使用lsblk可以用于查看device id。</p>
-
-<pre><code>$ lsblk
-NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-mmcblk0     179:0    0   7.4G  0 disk 
-├─mmcblk0p1 179:1    0    48M  0 part 
-└─mmcblk0p2 179:2    0   7.4G  0 part 
+<pre><code># Set the proxy
+alias unsethome='unset http_proxy https_proxy ftp_proxy ftps_proxy'
+alias set2383='unsethome;export http_proxy=http://xxx.xx.xx238:2383;export https_proxy=http://xxx.xx.xx238:2383;export ftp_proxy=http://xxx.xx.xx238:2383;export ftps_proxy=http://xxx.xx.xx238:2383'
 
 </code></pre>
 
-<p>备份好TF卡上文件内容后，对其重新进行分区，这里使用fdisk移除掉所有分区后重新分成一个区，而后格式化为ext4分区。</p>
+<p>So next time simply run <code>set2383</code> then you could set the proxy for terminal based programs.</p>
 
-<pre><code># export DISK=/dev/mmcblk0
-# sudo dd if=/dev/zero of=${DISK} bs=1M count=10
-# sudo dd if=./u-boot/MLO of=${DISK} count=1 seek=1 conv=notrunc bs=128k
-# sudo dd if=./u-boot/u-boot.img of=${DISK} count=2 seek=1 conv=notrunc bs=384k
-# sudo sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
-1,,0x83,*
-__EOF__
-# sudo mkfs.ext4 /dev/mmcblk0p1 -L rootfs
+<h3 id="package-management">Package Management</h3>
+
+<p>brew is a very good package management tool for MAC, install it via:</p>
+
+<pre><code>ruby -e &quot;$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)&quot;
 
 </code></pre>
 
-<p>现在查看lsblk的结果应该是这样:</p>
+<p>Install packages like following:</p>
 
-<pre><code>mmcblk0     179:0    0   7.4G  0 disk 
-└─mmcblk0p1 179:1    0   7.4G  0 part 
-
-</code></pre>
-
-<h4 id="写入">写入</h4>
-
-<p>我们将使用eMMC自有的BootLoader, 所以在/media/rootfs中使用下列内容到uEnv.txtt：</p>
-
-<pre><code>##This will work with: Angstrom's 2013.06.20 u-boot.
- 
-loadaddr=0x82000000
-fdtaddr=0x88000000
-rdaddr=0x88080000
- 
-initrd_high=0xffffffff
-fdt_high=0xffffffff
- 
-loadximage=load mmc 0:1 ${loadaddr} /boot/vmlinuz-${uname_r}
-loadxfdt=load mmc 0:1 ${fdtaddr} /boot/dtbs/${uname_r}/${fdtfile}
-loadxrd=load mmc 0:1 ${rdaddr} /boot/initrd.img-${uname_r}; setenv rdsize ${filesize}
-loaduEnvtxt=load mmc 0:1 ${loadaddr} /boot/uEnv.txt ; env import -t ${loadaddr} ${filesize};
-loadall=run loaduEnvtxt; run loadximage; run loadxfdt;
- 
-mmcargs=setenv bootargs console=tty0 console=${console} ${optargs} ${cape_disable} ${cape_enable} root=${mmcroot} rootfstype=${mmcrootfstype} ${cmdline}
- 
-uenvcmd=run loadall; run mmcargs; bootz ${loadaddr} - ${fdtaddr};
+<pre><code>$ brew install wget
 
 </code></pre>
 
-<p>解压缩下载好的rootfs文件到SD卡分区：</p>
+<p>After installation the wget becomes available for using:</p>
 
-<pre><code>$ tar xvf armhf-rootfs-ubuntu-trusty.tar -C /media/rootfs/
-$ sync
-
-</code></pre>
-
-<p>拷贝kernel到SD卡分区:</p>
-
-<pre><code># cp /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32.zImage ./vmlinuz-3.14.23-ti-r32
+<pre><code>Yosemite:~ Trusty$ which wget
+/usr/local/bin/wget
 
 </code></pre>
 
-<p>拷贝Kernel Device Tree二进制文件:</p>
+<h3 id="brew-installed-packages">Brew Installed Packages</h3>
 
-<pre><code>tar xvf /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32-dtbs.tar.gz -C /media/rootfs/boot/dtbs/${kernel_version}/
+<p>Use brew to install frequently used tools:</p>
 
-</code></pre>
-
-<p>拷贝内核模块:</p>
-
-<pre><code># tar xfv /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32-modules.tar.gz -C /media/rootfs/
+<pre><code>$ brew install wget tree
 
 </code></pre>
 
-<p>配置fstab文件:</p>
+<h3 id="git-configuration-for-proxy">Git Configuration For Proxy</h3>
 
-<pre><code>sudo sh -c &quot;echo '/dev/mmcblk0p1  /  auto  errors=remount-ro  0  1' &gt;&gt; /media/rootfs/etc/fstab&quot;
+<p>Since I worked under the proxy in office, so I need to configure a tunnel which could makes me go through the firewall:</p>
 
-</code></pre>
-
-<p>配置网络：</p>
-
-<pre><code># vim /media/rootfs/etc/network/interfaces
-auto lo
-iface lo inet loopback
- 
-auto eth0
-iface eth0 inet dhcp
+<pre><code>Yosemite:Code Trusty$ git config --global user.name &quot;xxxx&quot;
+Yosemite:Code Trusty$ git config --global user.email &quot;xxxx@gmail.com&quot;
+Yosemite:Code Trusty$ cat ~/.gitconfig
+[user]
+	name = xxx
+	email = xxx@gmail.com
 
 </code></pre>
 
-<p>配置串口登录：</p>
+<p>Compile the connect.c via:</p>
 
-<pre><code>$ sudo vim /media/rootfs/etc/init/serial.conf
-start on stopped rc RUNLEVEL=[2345]
-stop on runlevel [!2345]
- 
-respawn
-exec /sbin/getty 115200 ttyO0
+<pre><code>$ pwd
+/Users/Trusty/Code/proxy
+$ gcc -o connect connect.c
 
 </code></pre>
 
-<p>进入U-boot后更改一下配置：</p>
+<p>Configure the file via:</p>
 
-<pre><code>U-Boot# setenv mmcroot /dev/mmcblk0p1 ro
-U-Boot# boot
+<pre><code>Yosemite:proxy Trusty$ cat sock5.sh
+#!/bin/bash
+/Users/Trusty/Code/proxy/connect -H 1xx.x.xx.2xx:2xxx &quot;$@&quot;
+Yosemite:proxy Trusty$ chmod 777 *
 
 </code></pre>
 
-<p>默认用户名，密码分别是: root/temppwd<br />
-进入系统以后查看系统信息：</p>
+<p>Add the following part in your ~/.gitconfig:</p>
 
-<pre><code>ubuntu@arm:~$ uname -a 
-Linux arm 3.14.23-ti-r32 #1 SMP PREEMPT Sun Nov 9 04:19:25 UTC 2014 armv7l armv7l armv7l GNU/Linux
-ubuntu@arm:~$ cat /etc/issue
-Ubuntu 14.04 LTS \n \l
+<pre><code>[core]
+	gitproxy = /Users/Trusty/Code/proxy/socks5.sh
 
-default username:password is [ubuntu:temppwd]
-ubuntu@arm:~$ ifconfig
-eth0      Link encap:Ethernet  HWaddr 90:59:af:65:d9:8c  
-          inet addr:10.0.0.122  Bcast:10.0.0.255  Mask:255.255.255.0
+</code></pre>
+
+<p>Now open a new terminal and git from a test repository via:</p>
+
+<pre><code>$ git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git linux-git
+Cloning into 'linux-git'...
+remote: Counting objects: 3857384, done.
+remote: Compressing objects: 100% (5000/5000), done.
+^Cfatal: index-pack failed95/3857384), 436.00 KiB | 152.00 KiB/s
+
+</code></pre>
+
+<p>See? You really acrossed the firewall and reached Linus Torvalds&rsquo; git tree.</p>
+
+<h3 id="iterms2-colorscheme">iterms2 Colorscheme</h3>
+
+<p>Default iterm2 is ugly, so we need to download the good style of colorschemes,<br />
+<a href="iterm2colorschemes.com">iterm2colorschemes.com</a><br />
+Also you could select whatever you like from the screen-shots.<br />
+Hit cmd+i then you got whatever you want import.</p>
+
+<h3 id="sudo-tips">sudo tips</h3>
+
+<p>For keeping the current environment, just do following:</p>
+
+<pre><code>$ sudo visudo
+Defaults	env_keep += &quot;http_proxy https_proxy ftp_proxy ftps_proxy&quot;
+
+</code></pre>
+
+<p>Restart or open a new terminal, now your sudo command won&rsquo;t fail because of the proxy configuration.</p>
+
+<h3 id="make-alias-to-chromium">Make Alias to Chromium</h3>
+
+<p>The default installation of applications in mac maybe at the random place, so we have to make alias for whatever application we want to call in shell, like following:</p>
+
+<pre><code>alias chromium=&quot;/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome 2&gt;/dev/null&quot;
+
+</code></pre>
+
+<p>So next time you could directly call <code>chromium</code> for testing. Notice, <code>2&gt;/dev/null</code> means we don&rsquo;t care about the stderr out.</p>
+
+<h3 id="call-console-in-chromium">Call Console in Chromium</h3>
+
+<p>Simply call cmd+opt+i, mapping to keyboard is win+alt+i.</p>
+
+<h3 id="list-disk-usage">List Disk Usage</h3>
+
+<p>Since &ldquo;fdisk -l&rdquo; is illegal options in MACOS, we have to use following command for displaying the disk usage:</p>
+
+<pre><code>$ diskutil list
+/dev/disk0
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:      GUID_partition_scheme                        *64.0 GB    disk0
+   1:                        EFI EFI                     209.7 MB   disk0s1
+   2:          Apple_CoreStorage                         63.2 GB    disk0s2
+   3:                 Apple_Boot Recovery HD             650.0 MB   disk0s3
+/dev/disk1
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:                  Apple_HFS Hard                   *62.8 GB    disk1
+                                 Logical Volume on disk0s2
+                                 FBBDE745-2F1F-4B7A-8870-A9031F6E24CD
+                                 Unencrypted
+
+</code></pre>
+
+<h3 id="wallpapers">Wallpapers</h3>
+
+<p>macOSx have lots of wallpapers, we could fetch it via:</p>
+
+<pre><code>scp -r /Library/Desktop\ Pictures/ xxx@10.0.0.221:/home/xxx
+
+</code></pre>
+
+<p>Then all of the pictures are now in remote machines.</p>
+
+<h3 id="updatedb">updatedb</h3>
+
+<p>For equivalent to Linux&rsquo;s updatedb, simply run:</p>
+
+<pre><code>sudo /usr/libexec/locate.updatedb
 
 </code></pre>
 
@@ -350,22 +336,335 @@ eth0      Link encap:Ethernet  HWaddr 90:59:af:65:d9:8c
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/08/install-new-image-to-sd-card-for-bbb/">Install new image to sd card for BBB</a>
+        <a href="http://purplepalmdash.github.io/2014/11/22/tips-on-30days30skills/">Tips on 30Days30Skills</a>
       </h1>
-      <span class="post-date">Nov 8, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/08/install-new-image-to-sd-card-for-bbb/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 22, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/22/tips-on-30days30skills/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
         
       </span>
       
-      <p>Mainly for installing the OpenWRT system on the BBB, following is the steps:</p>
+      
 
-<pre><code># zImage
-cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage ./zImage
-# dtb file
-cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb ./dtbs/
+<p>This series is the note for learning 30days30skills, the origin web pages could be found at:<br />
+<a href="http://segmentfault.com/a/1190000000349384">http://segmentfault.com/a/1190000000349384</a><br />
+All of these operations should be done under MACOS rather than linux.</p>
 
+<h3 id="day-1-bower">Day 1 - bower</h3>
+
+<p>First install nodejs from following position:<br />
+<a href="nodejs.org/download/">nodejs.org/download/</a><br />
+Git could be installed from APPStore.<br />
+Set npm proxy before you do everything, cause I operate under the proxy based network:</p>
+
+<pre><code>npm config set proxy http://xxx.xxx.xxx.xx:xxxx
+npm config set https-proxy http://xxx.xxx.xxx.xx:xxxx
+
+</code></pre>
+
+<p>Install bower:</p>
+
+<pre><code>$ set2383 #(For setting the proxy)
+sudo npm install -g bower
+
+</code></pre>
+
+<p>Using bower for install the jquery packages:</p>
+
+<pre><code>$ pwd
+/Users/Trusty/Code/jQuery
+$ set2383 #(For setting the proxy)
+$ bower install jquery
+
+</code></pre>
+
+<p>Query the installed package information(This need to be done after you set the git configuration on proxy, because I worked under the proxy):</p>
+
+<pre><code>Yosemite:jQuery Trusty$ bower list
+bower check-new     Checking for new versions of the project dependencies..
+jQuery /Users/Trusty/Code/jQuery
+└── jquery#2.1.1 extraneous
+
+</code></pre>
+
+<p>Uninstall packages via:</p>
+
+<pre><code>Yosemite:jQuery Trusty$ bower uninstall jquery
+bower uninstall     jquery
+Yosemite:jQuery Trusty$ ls
+bower_components	simpleHtml.html		simpleHtml.html~
+Yosemite:jQuery Trusty$ tree
+.
+├── bower_components
+├── simpleHtml.html
+└── simpleHtml.html~
+
+1 directory, 2 files
+
+</code></pre>
+
+<p>use <code>bower init</code> for creating packages:</p>
+
+<pre><code>Yosemite:jQuery Trusty$ bower init
+? name: blog
+? version: 0.0.1
+? description:
+? main file:
+? what types of modules does this package expose?: globals
+? keywords: blog written
+? authors: xxx &lt;xxx@gmail.com&gt;
+? license: MIT
+? homepage:
+? set currently installed components as dependencies?: Yes
+? add commonly ignored files to ignore list?: Yes
+? would you like to mark this package as private which prevents it from being accidentally published to the registry?: No
+
+{
+  name: 'blog',
+  version: '0.0.1',
+  authors: [
+    'xxx &lt;xxx@gmail.com&gt;'
+  ],
+  moduleType: [
+    'globals'
+  ],
+  keywords: [
+    'blog',
+    'written'
+  ],
+  license: 'MIT',
+  ignore: [
+    '**/.*',
+    'node_modules',
+    'bower_components',
+    'test',
+    'tests'
+  ]
+}
+
+</code></pre>
+
+<p>Then if you installed new packages, it will automatically calculate the dependencies and write to the json.</p>
+
+<pre><code>Yosemite:jQuery Trusty$ bower install bootstrap --save
+
+</code></pre>
+
+<h3 id="day-2-angularjs">Day 2 AngularJS</h3>
+
+<h4 id="issue">Issue</h4>
+
+<p>Seems all of the tests has been passed expect the last one, it complains:</p>
+
+<pre><code>Error: error:areq
+Bad Argument
+Argument 'BookCtrl' is not a function, got undefined
+
+</code></pre>
+
+<p>The reason is because the global constructor function is not allowed to use and use it with ng-controller since Angular&rsquo;s version upper than 1.3.x.</p>
+
+<h4 id="solution">Solution</h4>
+
+<p>Specify the AngularJS version when installing it.</p>
+
+<pre><code>$ bower list
+bower check-new     Checking for new versions of the project dependencies..
+AngularJS /Users/Trusty/Code/30Days/AngularJS
+├── angular#1.3.3 extraneous (1.3.4-build.3611+sha.e9b9421 available)
+└─┬ bootstrap#3.3.1 extraneous
+  └── jquery#2.1.1
+Yosemite:AngularJS Trusty$ bower install &quot;angular#&lt;1.3&quot;
+bower angular#&lt;1.3          not-cached https://github.com/angular/bower-angular.git#&lt;1.3
+bower angular#&lt;1.3             resolve https://github.com/angular/bower-angular.git#&lt;1.3
+bower angular#&lt;1.3            download https://github.com/angular/bower-angular/archive/v1.2.27.tar.gz
+bower angular#&lt;1.3             extract archive.tar.gz
+bower angular#&lt;1.3            resolved https://github.com/angular/bower-angular.git#1.2.27
+bower angular#&lt;1.3             install angular#1.2.27
+
+</code></pre>
+
+<p>Now re-view the index5.html in the browser, everything will be OK.</p>
+
+<h4 id="another-solution">Another Solution</h4>
+
+<p>Modify the code into following:</p>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html ng-app&gt;
+&lt;head&gt;
+    &lt;title&gt;Bookshop - Your Online Bookshop&lt;/title&gt;
+    &lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;bower_components/bootstrap/dist/css/bootstrap.min.css&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+	&lt;div class=&quot;container&quot; ng-controller=&quot;BookCtrl&quot;&gt;
+        &lt;h2&gt;Your Online Bookshop&lt;/h2&gt;
+	&lt;input type=&quot;search&quot; ng-model=&quot;criteria&quot;&gt;
+        &lt;ul class=&quot;unstyled&quot;&gt;
+            &lt;li ng-repeat=&quot;book in books | filter:criteria | orderBy :'name'&quot;&gt;
+                &lt;span&gt;{{book.name}} written by {{book.author | uppercase}}&lt;/span&gt;
+            &lt;/li&gt;
+        &lt;/ul&gt;
+    &lt;/div&gt;
+
+    &lt;script type=&quot;text/javascript&quot; src=&quot;bower_components/angular/angular.min.js&quot;&gt;&lt;/script&gt;
+
+&lt;script&gt;
+function BookCtrl($scope){
+        $scope.books = [
+                {'name': 'Effective Java', 'author':'Joshua Bloch'},
+                {'name': 'Year without Pants', 'author':'Scott Berkun'},
+                { 'name':'Confessions of public speaker','author':'Scott Berkun'},
+                {'name':'JavaScript Good Parts','author':'Douglas Crockford'}
+        ]
+}
+angular.module('ng').config(function($controllerProvider) {
+	$controllerProvider.allowGlobals();
+});
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+
+
+</code></pre>
+
+<p>I don&rsquo;t know how to set the global for seperated js file, but the above example works.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/21/gitlab-installation-and-configuration/">GitLab Installation and Configuration</a>
+      </h1>
+      <span class="post-date">Nov 21, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/21/gitlab-installation-and-configuration/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>For sharing the project and holding the status of developing Rohc project, I set this gitlab project.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>The detailed guildeline is from following URL:<br />
+<a href="https://www.digitalocean.com/community/tutorials/how-to-set-up-gitlab-as-your-very-own-private-github-clone">https://www.digitalocean.com/community/tutorials/how-to-set-up-gitlab-as-your-very-own-private-github-clone</a><br />
+But have some modifications.</p>
+
+<h3 id="modification">Modification</h3>
+
+<p>Write permission problem:</p>
+
+<pre><code>ERROR:  While executing gem ... (Gem::FilePermissionError)
+You don't have write permissions for the /usr/local/rvm/gems/ruby
+
+</code></pre>
+
+<p>Solved via:</p>
+
+<pre><code>$ sudo chmod -R 777 /usr/local/bin
+$ sudo chmod -R 777 /usr/local/rvm
+
+</code></pre>
+
+<p>We met modernizr missing problem, do following for avoiding this:</p>
+
+<pre><code>$ sudo wget http://rubygems.org/downloads/modernizr-2.6.2.gem
+$ sudo -u git -H gem install modernizr
+
+</code></pre>
+
+<p>Also you have to modify following modules in Gemfile and Gemfile.lock:</p>
+
+<pre><code>in Gemfile, line 164, change &quot;modernizr&quot;, &quot;2.6.2&quot; to &quot;modernizr-rails&quot;, &quot;2.7.1&quot;
+in Gemfile.lock, line 292, change modernizr (2.6.2) to modernizr-rails (2.7.1)
+in Gemfile.lock, line 626, change modernizr (= 2.6.2) to modernizr-rails (= 2.7.1)
+
+</code></pre>
+
+<p>Then run:</p>
+
+<pre><code>sudo -u git -H bundle install --deployment --without development test postgres aws
+
+</code></pre>
+
+<p>You could continue with your settings.</p>
+
+<p>After setting we may met smtp configuration problem, simply modify the following configuration file:</p>
+
+<pre><code>$ pwd
+/home/git/gitlab
+$ cat ./config/environments/production.rb
+  # config.action_mailer.delivery_method = :sendmail
+  # # Defaults to:
+  # # # config.action_mailer.sendmail_settings = {
+  # # #   location: '/usr/sbin/sendmail',
+  # # #   arguments: '-i -t'
+  # # # }
+  # config.action_mailer.perform_deliveries = true
+  # config.action_mailer.raise_delivery_errors = true
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.smtp_settings = {
+      :address =&gt; 'nwsxxx.xxx.xxxxxx.com',
+      :port =&gt; 25,
+      :domain =&gt; '1xx.2xx.xxx.xxx'
+      #:domain =&gt; '1xx.2xx.xxx.xxx',
+      #:authentication =&gt; :plain,
+      #:user_name =&gt; 'gitlab@yourserver.com',
+      #:password =&gt; 'yourPassword',
+      #:enable_starttls_auto =&gt; true
+  }
+
+</code></pre>
+
+<h3 id="existing-problem">Existing problem</h3>
+
+<p>The smtp method won&rsquo;t send out the letters to the external users, I mean the email could only be used intranet not internet.</p>
+
+<h3 id="git-command">Git command</h3>
+
+<p>Using different branches for holding code:</p>
+
+<pre><code>[root@Linux01 twal]# pwd
+/root/code/rohctest/twal
+[root@Linux01 twal]# git branch
+  Dev_For_ECCMU/ECCM2
+  DirectoryBasedTestcases
+  eccm2
+* master
+[root@Linux01 twal]# git checkout eccm2
+Switched to branch 'eccm2'
+[root@Linux01 twal]# git branch
+  Dev_For_ECCMU/ECCM2
+  DirectoryBasedTestcases
+* eccm2
+  master
+
+</code></pre>
+
+<p>So now you are in the eccm2 branch, do:</p>
+
+<pre><code>$ export TUT_CFG_FILE=/root/code/gencfg_114/wal_tuni_ipconn53.cfg
+$ ./rohcFun11.py
+
+</code></pre>
+
+<p>If you want to test on eccmu, simply brach back to master via:</p>
+
+<pre><code>$ git checkout master
+$ export TUT_CFG_FILE=/root/code/gencfg_117/wal_tuni_ipconn53.cfg
+$ ./rohcFun11.py
+
+</code></pre>
+
+<p>Push all of the branches to the remote repository:</p>
+
+<pre><code>$ git push --all
 
 </code></pre>
 
@@ -374,9 +673,9 @@ cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb ./dtbs/
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/08/setting-nfs-server-on-ubuntu-container/">Setting NFS Server on Ubuntu Container</a>
+        <a href="http://purplepalmdash.github.io/2014/11/20/share-mouse-between-archlinux-and-yosemite/">Share Mouse between ArchLinux &amp;amp; Yosemite</a>
       </h1>
-      <span class="post-date">Nov 8, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/08/setting-nfs-server-on-ubuntu-container/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 20, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/20/share-mouse-between-archlinux-and-yosemite/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
@@ -385,240 +684,54 @@ cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb ./dtbs/
       
       
 
-<p>Since there are some strange problems in my ArchLinux(Physical Machine), its nfs server will be ignored by the embedded board, while my joggler which runs ubuntu12.04 acts OK. So I try to find a sufficient way for dealing with this issue.</p>
+<h3 id="fixed-ip">Fixed IP</h3>
 
-<h3 id="container-configuration">Container Configuration</h3>
+<p>First configure the IP for Yosemite on router, since the Archlinux takes the 221, Yosemite may use 220 for its fixed ip.</p>
 
-<p>I&rsquo;ve installed <code>Ubuntu_Container</code> which holds 12.04 in my physical machine. So the nfs server would be configured in this container.</p>
+<h3 id="archlinux-setting">ArchLinux Setting</h3>
 
-<pre><code>$ sudo apt-get update
-$ sudo apt-get install nfs-kernel-server portmap nfs-common
+<p>I use ArchLinux as the synergy server, so first install synergy via:</p>
 
-</code></pre>
-
-<p>Then edit the /srv/nfs4, and export its configuration in /etc/exports:</p>
-
-<pre><code>/srv/nfs4 *(rw,sync,no_root_squash,no_subtree_check)
+<pre><code>$ sudo pacman -S synergy
 
 </code></pre>
 
-<p>Everytime you want to start the nfs service, just type:</p>
+<p>I want to place Yosemite at the right of the ArchLinux, So just configure the <code>/etc/hosts</code> like following.</p>
 
-<pre><code>$ /etc/init.d/nfs-kernel-server restart
-$ /etc/init.d/portmap restart
-
-</code></pre>
-
-<h3 id="test">Test</h3>
-
-<p>Client run:</p>
-
-<pre><code>sudo mount -t nfs 1xx.xx.xx.xx:/srv/nfs4/ /mnt
+<pre><code>$ tail /etc/hosts
+# For setting Synergy
+10.0.0.220      Yosemite.lan            Yosemite
 
 </code></pre>
 
-<h3 id="trouble-shooting">Trouble-Shooting</h3>
+<p>Configuration:</p>
 
-<p>The correct parameter for mounting the nfs server is:</p>
-
-<pre><code>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.1
+<pre><code>[root@kkkkttt kkkt]# cp /etc/synergy.conf.example /etc/synergy.conf
 
 </code></pre>
 
-<p>Then you won&rsquo;t have other problems, even the physical machine could also use the nfs filesystem.</p>
+<p>For easily configure the synergy, download qsynergy.</p>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/06/automatically-filter-spambot-on-digitalocean/">Automatically Filter SpamBot on DigitalOcean</a>
-      </h1>
-      <span class="post-date">Nov 6, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/06/automatically-filter-spambot-on-digitalocean/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="setup-iptables">Setup iptables</h3>
-
-<p>Install iptables-persistent, so that the iptables rules will be saved even reboot the machine:</p>
-
-<pre><code># apt-get update
-# apt-get install iptables-persistent
+<pre><code>$ sudo pacman -S qsynergy
 
 </code></pre>
 
-<h3 id="script-for-manually-add-iptables">Script for manually add iptables</h3>
+<p><img src="/images/synergyconfigure.jpg" alt="/images/synergyconfigure.jpg" /><br />
+Then store its configuration to the <code>/etc/synergy.conf</code>.</p>
 
-<p>Use following scritp for manually add iptables items:</p>
+<p>Start the server and enable the server.</p>
 
-<pre><code>#!/bin/sh
-# This script runs once per hour, Directly remove the ips which post comments
-# more than 4 times per hour. And who comments less than 3 times we should sent
-# its ip to old ips file. The old ips files will be used for analyse once per day
-# The run frequency is controlled by  crontab.   
-
-######################################################
-# Before Start, empty the deathSentence
-######################################################
-&gt;/var/log/apache2/deathSentence
-
-######################################################
-# First cat the file and try to found the bot ip list
-######################################################
-# Pipe 1: The one who called POST method should be monitored
-# Pipe 2: Get the ip address who called POST method.
-# Pipe 3: Sort the ip addresses. 
-# Pipe 4: Calculate the repeated times. First column, times; Second column, ip address.
-# Pipe 5: Sort via first column(times) numerically(Not textly!) .
-# Pipe 6: If the Call POST time bigger than 4 in one hour, catch it!
-# Pipe 7: Yes we caught this thief! Get its ipaddr.
-# Write these thieves into the death sentence
-cat /var/log/apache2/other_vhosts_access.log | grep &quot;POST&quot; | awk '{print $2}' | sort | uniq --count | sort -n | awk '$1&gt;4' | awk {'print $2'}&gt;/var/log/apache2/deathSentence
-# Those who comments but equal or more than 4 times will be append to wishList
-cat /var/log/apache2/other_vhosts_access.log | grep &quot;POST&quot; | awk '{print $2}' | sort | uniq --count | sort -n | awk '$1&lt;5' | awk {'print $2'}&gt;&gt;/var/log/apache2/wishList
-
-######################################################
-# Second we add this bot ip list into the netfilter
-######################################################
-for i in `cat /var/log/apache2/deathSentence`
-do
-	#echo $i
-	iptables -A INPUT -s $i -j DROP
-done
-
-######################################################
-# Finally empty the other_vhosts_access.log
-######################################################
-&gt;/var/log/apache2/other_vhosts_access.log
+<pre><code># systemctl enable synergys@mary
+# systemctl start synergys@mary
 
 </code></pre>
 
-<p>Oh, also add myself into the blacklist, so un-lock me:</p>
+<h3 id="yosemite-setting">Yosemite Setting</h3>
 
-<pre><code>$ iptables -A INPUT -s 1xx.x.x.x -j ACCEPT
+<p>Download the SynergyKM from <a href="http://synergykm.com/">http://synergykm.com/</a>, and configure the SynergyKM connected to 10.0.0.221.<br />
+Also you have to check <code>Start at login</code></p>
 
-</code></pre>
-
-<p>Since those wishList should also be cared, wrote following scripts for judge, every 4 hours will be make a decision.</p>
-
-<pre><code>#!/bin/sh
-# This script runs once 4 hours, used for processing the /var/log/apache2/wishList
-# ip address lists. Those bad guys who were in wishList, if their total appear times
-# bigger than 4 times, will be added to iptable's drop rules.
-&gt;/var/log/apache2/deathSentence_4hour
-
-######################################################
-# Read the ip list and store those bad guys into deathSentence_4hour
-######################################################
-cat /var/log/apache2/wishList | sort | uniq --count | sort -n | awk '$1&gt;4' | awk {'$print $2'}&gt;/var/log/apache2/deathSentence_4hour
-
-######################################################
-# Now you got the bad guys, add them into iptables
-######################################################
-for i in `cat /var/log/apache2/deathSentence_4hour`
-do
-        #echo $i
-        iptables -A INPUT -s $i -j DROP
-done
-
-######################################################
-# Finally empty the wishList
-######################################################
-&gt;/var/log/apache2/wishList
-
-</code></pre>
-
-<h3 id="crontab-it">Crontab It!</h3>
-
-<p>Run <code>auto_add_bot_ip.sh</code> at every minute 0 of 1 hour, then run <code>auto_judge_wishlist.sh</code> at every minute 10 of every 4 hours.</p>
-
-<pre><code># m h  dom mon dow   command
-0 */1 * * * /root/code/auto_add_bot_ip.sh
-10 */4 * * * /root/code/auto_judge_wishlist.sh
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/06/manually-delete-spam-comments-for-wp/">Manually delete spam comments for WP</a>
-      </h1>
-      <span class="post-date">Nov 6, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/06/manually-delete-spam-comments-for-wp/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      <p>Login to mysql commandline via:</p>
-
-<pre><code># mysql -uroot -p
-mysql&gt; use wordpress
-.........
-Database changed
-
-</code></pre>
-
-<p>Display the COLUMNS of wp_comments:</p>
-
-<pre><code>mysql&gt; SHOW COLUMNS FROM wp_comments;
-+----------------------+---------------------+------+-----+---------------------+----------------+
-| Field                | Type                | Null | Key | Default             | Extra          |
-+----------------------+---------------------+------+-----+---------------------+----------------+
-| comment_ID           | bigint(20) unsigned | NO   | PRI | NULL                | auto_increment |
-| comment_post_ID      | bigint(20) unsigned | NO   | MUL | 0                   |                |
-| comment_author       | tinytext            | NO   |     | NULL                |                |
-| comment_author_email | varchar(100)        | NO   | MUL |                     |                |
-| comment_author_url   | varchar(200)        | NO   |     |                     |                |
-| comment_author_IP    | varchar(100)        | NO   |     |                     |                |
-| comment_date         | datetime            | NO   |     | 0000-00-00 00:00:00 |                |
-| comment_date_gmt     | datetime            | NO   | MUL | 0000-00-00 00:00:00 |                |
-| comment_content      | text                | NO   |     | NULL                |                |
-| comment_karma        | int(11)             | NO   |     | 0                   |                |
-| comment_approved     | varchar(20)         | NO   | MUL | 1                   |                |
-| comment_agent        | varchar(255)        | NO   |     |                     |                |
-| comment_type         | varchar(20)         | NO   |     |                     |                |
-| comment_parent       | bigint(20) unsigned | NO   | MUL | 0                   |                |
-| user_id              | bigint(20) unsigned | NO   |     | 0                   |                |
-| comment_mail_notify  | tinyint(4)          | NO   |     | 0                   |                |
-+----------------------+---------------------+------+-----+---------------------+----------------+
-16 rows in set (0.00 sec)
-
-</code></pre>
-
-<p>If you want to display the last 30 minutes&rsquo; comments:</p>
-
-<pre><code>mysql&gt; SELECT * FROM wp_comments WHERE comment_date  BETWEEN TIMESTAMPADD(MINUTE, -30, NOW()) AND NOW();
-
-</code></pre>
-
-<p>Delete last 30 minutes&rsquo; comments:</p>
-
-<pre><code>mysql&gt; DELETE FROM wp_comments WHERE comment_date  BETWEEN TIMESTAMPADD(MINUTE, -30, NOW()) AND NOW();
-Query OK, 536 rows affected (0.18 sec)
-
-</code></pre>
-
-<p>Select and Delete 10 day&rsquo;s comments:</p>
-
-<pre><code>mysql&gt; select * from wp_comments where datediff(now(), comment_date)&lt;10;
-mysql&gt; delete from wp_comments where datediff(now(), comment_date)&lt;10;
-Query OK, 31029 rows affected (1.34 sec)
-
-</code></pre>
-
-<p>Disable postfix on startup:</p>
-
-<pre><code># update-rc.d postfix disable
-
-</code></pre>
+<p>Now place the Yosemite at the left of the ArchLinux, your mouse and keyboard could be freely switching from 2 machines.</p>
 
       
     </div>
@@ -1036,12 +1149,21 @@ Query OK, 31029 rows affected (1.34 sec)
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/69/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

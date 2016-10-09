@@ -93,9 +93,9 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno/">三节点搭建OpenStack Juno(1)</a>
+        <a href="http://purplepalmdash.github.io/2015/06/17/wh-worktips-1/">WH Worktips(1)</a>
       </h1>
-      <span class="post-date">May 24, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno/#disqus_thread">Comments</a>
+      <span class="post-date">Jun 17, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/17/wh-worktips-1/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
@@ -104,552 +104,818 @@
       
       
 
-<h3 id="目的">目的</h3>
+<h3 id="preparation">Preparation</h3>
 
-<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
+<p>Hardware: 2G Memory, 1-Core, the Cobbler Server, which runs CentOS6.6.<br />
+Network: Use a 10.47.58.0/24(Its name is WHNetwork), no dhcp server in this network.</p>
 
-<h3 id="硬件及网络准备">硬件及网络准备</h3>
+<h3 id="cobbler-server-preparation">Cobbler Server Preparation</h3>
 
-<h4 id="物理服务器">物理服务器</h4>
+<p>First Change its IP address to 10.47.58.2, gateway to 10.47.58.1.</p>
 
-<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。<br />
-物理服务器操作系统: Ubuntu14.04</p>
+<pre><code>[root@z_WHServer ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0 
+DEVICE=eth0
+TYPE=Ethernet
+UUID=a6e5b56f-661f-4128-ab8c-c575a9623245
+ONBOOT=yes
+NM_CONTROLLED=yes
+BOOTPROTO=none
+IPADDR=10.47.58.2
+GATEWAY=10.47.58.1
+......
 
-<h4 id="虚拟机">虚拟机：</h4>
+[root@z_WHServer ~]# cat /etc/sysconfig/network
+NETWORKING=yes
+HOSTNAME=z_WHServer
+# vim /etc/selinux/config
+    #SELINUX=enforcing
+    SELINUX=disabled 
+# reboot
+</code></pre>
 
-<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.<br />
-虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.<br />
-虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
+<p>Install and configure Cobbler Server via:</p>
 
-<h4 id="网络规划">网络规划</h4>
+<pre><code># yum -y update &amp;&amp; yum install -y cobbler cobbler-web
+# reboot
+# openssl passwd -1                                                                                                     │
+Password:                                                                                                                                 │
+Verifying - Password:                                                                                                                     │
+igaowugoauwgoueougo
+# vim /etc/cobbler/settings
+    default_password_crypted: &quot;agowuoguwoawoguwoe&quot;
+    # default, localhost
+    server: 10.47.58.2
+    # default, localhost
+    next_server: 10.47.58.2
+    manage_dhcp: 1
+</code></pre>
 
-<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。<br />
-Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。<br />
-External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。<br />
-当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
+<p>Edit the dhcp template:</p>
 
-<h4 id="节点网络名规划">节点网络名规划</h4>
+<pre><code># vim /etc/cobbler/dhcp.template
+####  subnet 192.168.1.0 netmask 255.255.255.0 {
+####       option routers             192.168.1.5;
+####       option domain-name-servers 192.168.1.1;
+####       option subnet-mask         255.255.255.0;
+####       range dynamic-bootp        192.168.1.100 192.168.1.254;
+####       default-lease-time         21600;
+####       max-lease-time             43200;
+####       next-server                $next_server;
+subnet 10.47.58.0 netmask 255.255.255.0 {
+     option routers             10.47.58.1; 
+     range dynamic-bootp        10.47.58.3 10.47.58.254;
+     option domain-name-servers 114.114.114.114, 180.76.76.76;     
+     option subnet-mask         255.255.255.0;         
+     filename                   &quot;/pxelinux.0&quot;;       
+     default-lease-time         21600;           
+     max-lease-time             43200;      
+     next-server                $next_server; 
 
-<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.<br />
-Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
-Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
+     class &quot;pxeclients&quot; {
+</code></pre>
 
-<p>一个参考的例图如下:<br />
-<img src="/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
+<p>Check via:</p>
 
-<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
+<pre><code>[root@z_WHServer ~]# service cobblerd start
+Starting cobbler daemon:                                   [  OK  ]
+[root@z_WHServer ~]# chkconfig cobblerd on
+[root@z_WHServer ~]# chkconfig httpd on
+[root@z_WHServer ~]# service cobblerd status
+cobblerd (pid 5421) is running...
+</code></pre>
 
-<h3 id="虚拟机初始化配置">虚拟机初始化配置</h3>
+<p>Reboot and Check via:</p>
 
-<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
+<pre><code># cobbler check
+</code></pre>
 
-<pre><code>$ pwd
-/media/repo/Image/3NodeOpenStack
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
-Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
-Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
-Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+<p>You will get lots of the errors, first solve the dhcpd issue, notice the following dhcpd configuration file is temporarily used.</p>
+
+<pre><code># yum install -y dhcp
+# vim /etc/dhcp/dhcpd.conf
+#
+# DHCP Server Configuration file.
+#   see /usr/share/doc/dhcp*/dhcpd.conf.sample
+#   see 'man 5 dhcpd.conf'
+#
+# create new
+# specify domain name
+option domain-name &quot;server.world&quot;;
+# specify name server's hostname or IP address
+option domain-name-servers dlp.server.world;
+# default lease time
+default-lease-time 600;
+# max lease time
+max-lease-time 7200;
+# this DHCP server to be declared valid
+authoritative;
+# specify network address and subnet mask
+subnet 10.47.58.0 netmask 255.255.255.0 {
+    # specify the range of lease IP address
+    range dynamic-bootp 10.47.58.200 10.47.58.254;
+    # specify broadcast address
+    option broadcast-address 10.47.58.255;
+    # specify default gateway
+    option routers 10.47.58.1;
+}
+# service dhcpd start
+# chkconfig dhcpd on
+# chkconfig xinetd on
+# reboot
+</code></pre>
+
+<p>Get loaders to download the loaders to <code>/var/lib/cobbler/loaders</code>:<br />
+!!! Notice, this step maybe failed because of networking issues!!!!</p>
+
+<pre><code>$ cobbler get-loaders
+</code></pre>
+
+<p>Change xinted:</p>
+
+<pre><code># cat  /etc/xinetd.d/rsync 
+# default: off
+# description: The rsync server is a good addition to an ftp server, as it \
+#       allows crc checksumming etc.
+service rsync
+{
+        disable = no
 
 </code></pre>
 
-<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:<br />
-<img src="/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
+<p>Edit iptables:</p>
 
-<p>各个节点的network定义文件如下:</p>
+<pre><code>$ sudo vim /etc/sysconfig/iptables
+:OUTPUT ACCEPT [0:0]
+-A INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT 
+-A INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT 
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+$ sudo reboot
+</code></pre>
 
-<p>控制节点:</p>
+<p>Install packages:</p>
 
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
+<pre><code># yum install -y debmirror pykickstart cman
+# cobbler check
+# cobbler sync
+</code></pre>
 
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.2
-netmask 255.255.255.0
-gateway 10.55.55.1
+<h3 id="import-systems">Import Systems</h3>
+
+<p>Import 2 DVD iso via:</p>
+
+<pre><code># mount -o loop -t iso9660 CentOS-6.5-x86_64-bin-DVD1.iso  /mnt1/
+# cobbler import --name=CentOS-6.5 --arch=x86_64 --path=/mnt1
+# mount -o loop -t iso9660 CentOS-6.5-x86_64-bin-DVD2.iso  /mnt2
+# rsync -a '/mnt2/' /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/ --exclude-from=/etc/cobbler/rsync.exclude --progress
+# COMPSXML=$(ls /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/repodata/*comps*.xml)
+# createrepo -c cache -s sha --update --groupfile ${COMPSXML} /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/ 
+</code></pre>
+
+<p>Verify it via:</p>
+
+<pre><code>[root@z_WHServer repodata]# cobbler distro list
+   CentOS-6.5-x86_64
+[root@z_WHServer repodata]# cobbler profile list
+   CentOS-6.5-x86_64
+[root@z_WHServer repodata]# cobbler distro report --name=CentOS-6.5-x86_64
+Name                           : CentOS-6.5-x86_64
+Architecture                   : x86_64
+TFTP Boot Files                : {}
+Breed                          : redhat
+Comment                        : 
+Fetchable Files                : {}
+Initrd                         : /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/images/pxeboot/initrd.img
+Kernel                         : /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/images/pxeboot/vmlinuz
+</code></pre>
+
+<p>Check if your tftp working:</p>
+
+<pre><code># yum install tftp-server
+# vim /etc/xinetd.d/tftp
+# /sbin/chkconfig tftp on
+# service xinetd start
+# netstat -anp | grep 69
+# tftp 10.47.58.2
+get pxelinux.0
+</code></pre>
+
+<p>If successful, the pxelinux.0 will downloaded to your directory.</p>
+
+<h3 id="install-new-systems">Install New Systems</h3>
+
+<p>Use a machine, configure to the same network, then start from pxe.</p>
+
+<h3 id="customize-the-ks-file">Customize the KS file</h3>
+
+<p>Generate kickstart configuration file via:</p>
+
+<pre><code># system-config-kickstart 
+</code></pre>
+
+<p>Add a new profile via:</p>
+
+<pre><code>[root@z_WHServer kickstarts]# cobbler profile add --name=CentOS6.5-Desktop --kickstart=/var/lib/cobbler/kickstarts/CentOS-6.5-x86_64/C
+sktop.cfg --distro=CentOS-6.5-x86_64
+[root@z_WHServer kickstarts]# cobbler profile list
+   CentOS-6.5-x86_64
+   CentOS6.5-Desktop
+</code></pre>
+
+<h3 id="cobbler-web-interface">Cobbler Web Interface</h3>
+
+<pre><code>$ htdigest /etc/cobbler/users.digest &quot;Cobbler&quot; cobbler 
+Which will prompt you for a new password. 
+Once you have updated the password remember to run
+$ cobbler sync
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/16/xenserver-tips/">XenServer Tips</a>
+      </h1>
+      <span class="post-date">Jun 16, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/16/xenserver-tips/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Recently I want to research desktop virtualization on Xen, so this blog records all of the tips for Xen Hypervisor related info.</p>
+
+<h3 id="nested-virtualization">Nested Virtualization</h3>
+
+<p>I place 4 core(Copy Host Configuration on CPU parameter), but the XenServer refuse to start, by using a none-hosted-configuration CPU configuration, it will fail on starting the machine, So I choose to install xen hypervisor on Ubuntu14.04.</p>
+
+<h3 id="ubuntu-and-xen">Ubuntu and Xen</h3>
+
+<p>Install via:</p>
+
+<pre><code>$ sudo apt-get install xen-hypervisor-amd64
+$ sudo reboot
+</code></pre>
+
+<p>The Ubuntu will automatically choose xen for startup, so verify it via:</p>
+
+<pre><code>$ sudo xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0  7832     4     r-----      72.8
+</code></pre>
+
+<h3 id="networking">Networking</h3>
+
+<p>Since the network is pretty complicated on my own machine, I decide to use openVSwitch for managing my own networking.</p>
+
+<pre><code>$ sudo apt-get install -y openvswitch-switch
+</code></pre>
+
+<p>Configuration of the networking:</p>
+
+<pre><code>$ cat /etc/network/interfaces
+###########################################
+## By using openVswitch, we enabled the following
+###########################################
+allow-hotplug ovsbr0
+iface ovsbr0 inet static
+address 192.168.0.119
+netmask 255.255.0.0
+gateway 192.168.0.176
 dns-nameservers 114.114.114.114
+dns-nameservers 180.76.76.76
+
+$ sudo ovs-vsctl add-br ovsbr0
+$ sudo ovs-vsctl set Bridge ovsbr0 stp_enable=false other_config:stp-max-age=6 other_config:stp-forward-delay=4
+$ sudo ovs-vsctl list Bridge
+$ sudo ovs-vsctl add-port ovsbr0 eth0
 </code></pre>
 
-<p>网络节点:</p>
+<p>Disable the netfilter on all bridges:</p>
 
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
+<pre><code>$ sudo vi /etc/sysctl.conf
 
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.3
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
+net.bridge.bridge-nf-call-ip6tables = 0
+net.bridge.bridge-nf-call-iptables = 0
+net.bridge.bridge-nf-call-arptables = 0
 
-
-auto eth1
-iface eth1 inet static
-address 10.66.66.3
-netmask 255.255.255.0
-
-auto eth2
-iface eth2 inet static
-address 192.168.1.3
-netmask 255.255.255.0
+$ sudo sysctl -p /etc/sysctl.conf
+# Note: These settings are created in /proc/sys/net. The bridge folder only appears to be created after first creating a bridge with the ''brctl' command.
 </code></pre>
 
-<p>计算节点:</p>
+<h3 id="administrator-tools">Administrator Tools</h3>
 
-<pre><code>auto lo
-iface lo inet loopback
+<pre><code>$ sudo apt-get install virt-manager
+$ sudo apt-get install xen-tools
+</code></pre>
 
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.4
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
+<h3 id="connect-with-virt-manager">Connect with virt-manager</h3>
 
-auto eth1
-iface eth1 inet static
-address 10.66.66.4
-netmask 255.255.255.0
+<p>Change following parameters and re-connect again.</p>
+
+<pre><code># vim /etc/xen/xend-config.sxp 
+     xend-unix-server yes
+     xend-unix-path /var/lib/xend/xend-socket
+# service libvirt-bin restart
+libvirt-bin stop/waiting
+libvirt-bin start/running, process 5345
+# service xen restart
+ * Restarting Xen daemons                                                                                                             ^[[A                                                                                                                           [ OK ]
+# service xendomains restart
 
 </code></pre>
 
-<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:</p>
+<pre><code>$ sudo virt-install --connect=xen:/// --name u14.04 --ram 1024 --disk u14.04.img,size=4 --location http://ftp.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/
 
-<pre><code>$ cat /etc/hosts
+
+# http://ftp.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/15/tips-on-ansible-for-deploying-cloudstack/">Tips on Ansible for deploying CloudStack</a>
+      </h1>
+      <span class="post-date">Jun 15, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/15/tips-on-ansible-for-deploying-cloudstack/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="background">Background</h3>
+
+<p>Use two nodes, both running CentOS6.6, the Ansible Node have 1-G memory, while the csmanger(CloudStack Manager) Node have 4-G memory.</p>
+
+<p>Install the epel on Cloudstack manager for installing ansible.</p>
+
+<pre><code>$ wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
+$ yum install -y ansible sshpass
+</code></pre>
+
+<h3 id="get-nodes">Get Nodes</h3>
+
+<p>Create the definition of the ansible characters:</p>
+
+<pre><code>[root@CentOS66Base ~]# mkdir -p ~/Code/Ansible
+[root@CentOS66Base ~]# cd Code/Ansible/
+[root@CentOS66Base Ansible]# vim ansible.cfg
+[defaults]
+hostfile=/root/Code/Ansible/hosts
+[root@CentOS66Base Ansible]# vim hosts
+[acs-manager]
+10.55.55.72
+[root@CentOS66Base Ansible]# cat /etc/hosts
+.......
+10.55.55.72 acs-manager
+[root@CentOS66Base Ansible]# ping acs-manager
+PING acs-manager (10.55.55.72) 56(84) bytes of data.
+64 bytes from acs-manager (10.55.55.72): icmp_seq=1 ttl=64 time=1.16 ms
+</code></pre>
+
+<p>Add the ssh certification:</p>
+
+<pre><code>[root@CentOS66Base Ansible]# ssh-keyscan acs-manager&gt;&gt;/root/.ssh/known_hosts 
+# acs-manager SSH-2.0-OpenSSH_5.3
+</code></pre>
+
+<p>Generate the <code>id_rsa.pub</code> locally:</p>
+
+<pre><code>[root@CentOS66Base Ansible]# ssh-keygen -t rsa -b 2048
+......
+[root@CentOS66Base Ansible]# ls -l -h /root/.ssh/id_rsa.pub 
+-rw-r--r--. 1 root root 399 Jun 14 23:59 /root/.ssh/id_rsa.pub
+</code></pre>
+
+<p>Write key installation yml file:</p>
+
+<pre><code>[root@CentOS66Base Ansible]# vim ssh-addkey.yml
+---
+- hosts: all
+  sudo: yes
+  gather_facts: no
+  remote_user: root
+
+  tasks:
+
+  - name: install ssh key
+    authorized_key: user=root
+                    key=&quot;{{ lookup('file', '/root/.ssh/id_rsa.pub') }}&quot; 
+                    state=present
+</code></pre>
+
+<p>!!! Be sure to disable the selinux on the acs-manager machine, then install the sshkey via:</p>
+
+<pre><code>root@CentOS66Base Ansible]# ansible-playbook ssh-addkey.yml --ask-pass
+SSH password: 
+
+PLAY [all] ******************************************************************** 
+
+TASK: [install ssh key] ******************************************************* 
+changed: [10.55.55.72]
+
+PLAY RECAP ******************************************************************** 
+10.55.55.72                : ok=1    changed=1    unreachable=0    failed=0   
+</code></pre>
+
+<h3 id="prepare-the-secondary-storage">Prepare the secondary storage</h3>
+
+<pre><code>$ sudo apt-get install nfs-kernel-server
+$ cd /srv 
+$ mkdir nfs4
+$ ls
+nfs4
+$ sudo chown nobody:nogroup /srv/nfs4 
+$ sudo vim /etc/exports
+# Share access to all networks
+/srv/nfs4       *(rw,sync,no_subtree_check)
+$ sudo /etc/init.d/nfs-kernel-server start
+</code></pre>
+
+<h3 id="start-deploying">Start deploying</h3>
+
+<p>Deployment sequences:</p>
+
+<pre><code>$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=base
+$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=mysql
+$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=mysql3306
+$ ansible-playbook -i /root/Code/Ansible/hosts  --limit=acs-manager ./cloudstack.yml --tags=csmanagement
+</code></pre>
+
+<h3 id="trouble-shooting">Trouble Shooting</h3>
+
+<p>Too slow connection:</p>
+
+<pre><code>Use Redsocks. 
+By pass 
+iptables -t nat -I OUTPUT -d 192.168.0.0/16 -j RETURN
+</code></pre>
+
+<p>CloudMonkey setup:</p>
+
+<pre><code>The host name of this computer does not resolve to an IP address.
+
+[root@acs-manager ~]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+10.55.55.72     acs-manager
+
+</code></pre>
+
+<p>After deployment, visit:</p>
+
+<p><a href="http://xxx.xx.x.xxx:8080/client">http://xxx.xx.x.xxx:8080/client</a></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/">Use 8188eu and Hostapd For Setting Soft-AP Router</a>
+      </h1>
+      <span class="post-date">Jun 11, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="hostapd">HostAPD</h3>
+
+<p>Install HostAPD via following commands:</p>
+
+<pre><code>$ sudo apt-get autoremove hostapd
+$ wget https://github.com/jenssegers/RTL8188-hostapd/archive/v2.0.tar.gz
+$ tar -zxvf v2.0.tar.gz
+$ cd RTL8188-hostapd-2.0/hostapd
+$ sudo make
+$ sudo make install
+$ sudo service hostapd restart
+[ ok ] Stopping advanced IEEE 802.11 management: hostapd.
+[ ok ] Starting advanced IEEE 802.11 management: hostapd.
+
+</code></pre>
+
+<h3 id="dhcpd">dhcpd</h3>
+
+<p>We need a dhcp server for assigning a new IP address to the clients who joins the ap:<br />
+An example file is listed as following:</p>
+
+<pre><code>ddns-update-style none;
+ignore client-updates;
+authoritative;
+option local-wpad code 252 = text;
+ 
+subnet
+10.0.0.0 netmask 255.255.255.0 {
+# --- default gateway
+option routers
+10.0.0.1;
+# --- Netmask
+option subnet-mask
+255.255.255.0;
+# --- Broadcast Address
+option broadcast-address
+10.0.0.255;
+# --- Domain name servers, tells the clients which DNS servers to use.
+option domain-name-servers
+10.0.0.1, 8.8.8.8, 8.8.4.4;
+option time-offset
+0;
+range 10.0.0.3 10.0.0.13;
+default-lease-time 1209600;
+max-lease-time 1814400;
+}
+</code></pre>
+
+<h3 id="wlan0-network">WLAN0 Network</h3>
+
+<p>The WLAN0 equipment network should be configured as following:</p>
+
+<pre><code>$ cat /etc/network/interface
+# wireless wlan0
+allow-hotplug wlan0
+iface wlan0 inet static
+address 10.0.70.1
+netmask 255.255.255.0
+
+</code></pre>
+
+<p>So next time you reboot the computer, it will automatically get the ip address for wlan0.</p>
+
+<h3 id="enable-the-ip-forwarding">Enable the ip forwarding</h3>
+
+<p>Using following 2 commands for enabling your AP.</p>
+
+<pre><code>$ sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE
+$ sudo dhcpd wlan0
+</code></pre>
+
+<p>I add these two lines into the start file of awesome(My desktop environment).</p>
+
+<h3 id="disable-hostapd">Disable hostapd</h3>
+
+<p>You should remove the definition of the dhcpd, and the iptables forwarding rules, and
+also the definition in <code>/etc/network/interfaces</code>, and the hostapd configuration in
+<code>/etc/rc*.d</code> from <code>S</code> to <code>K</code>, while the <code>rc*.d</code> ranges from rc0 to rc6.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/08/a-quick-setup-for-chef-server-slash-client-slash-workstation/">A Quick Setup For Chef Server/Client/Workstation</a>
+      </h1>
+      <span class="post-date">Jun 8, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/06/08/a-quick-setup-for-chef-server-slash-client-slash-workstation/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/chef">Chef</a>
+        
+      </span>
+      
+      
+
+<h3 id="machine-preparation">Machine Preparation</h3>
+
+<p>QuickServer: 172.16.0.11, QuickClient: 172.16.0.12</p>
+
+<p>QuickServer Machine:</p>
+
+<pre><code>xxx@QuickServer:~$ cat /etc/hostname
+QuickServer
+xxx@QuickServer:~$ cat /etc/hosts
 127.0.0.1       localhost
-127.0.1.1       Controller
-10.55.55.2      Controller
-10.55.55.3      Network
-10.55.55.4      Compute
-......
+127.0.1.1       QuickServer
+172.16.0.11     QuickServer
+172.16.0.12     QuickClient
 
-$ cat /etc/hostname
-Controller
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+xxx@QuickServer:~$ cat /etc/network/interfaces
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
 
-</code></pre>
+# The loopback network interface
+auto lo
+iface lo inet loopback
 
-<p>网络配置完毕后，保证可以通过<code>ping Controller</code>等命令达到互通。</p>
-
-<p>在进入到后续步骤前，更新所有节点到最新状态:</p>
-
-<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get upgrade &amp;&amp; sudo apt-get dist-upgrade &amp;&amp; sudo reboot
-</code></pre>
-
-<h3 id="ntp-服务器-客户端配置">NTP 服务器/客户端配置</h3>
-
-<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
-
-<h4 id="ntp服务器">NTP服务器</h4>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 修改成大陆时间
-    server 2.cn.pool.ntp.org
-    server 1.asia.pool.ntp.org
-    server 2.asia.pool.ntp.org
-    # 修改 restrict 設定
-    restrict -4 default kod notrap nomodify
-    restrict -6 default kod notrap nomodify
-# service ntp restart
-</code></pre>
-
-<h4 id="ntp客户端">NTP客户端</h4>
-
-<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 設定 controller 為參照的 time server
-    # 並將其他 server 開頭的設定進行註解
-    server 10.55.55.2 iburst
-# service ntp restart
-</code></pre>
-
-<p>检查结果是否正确:</p>
-
-<pre><code>root@JunoNetwork:~# ntpq -c peers
-     remote           refid      st t when poll reach   delay   offset  jitter
-==============================================================================
- Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
-</code></pre>
-
-<p>接下来真正进入OpenStack的安装和配置过程。</p>
-
-<h3 id="源设定">源设定</h3>
-
-<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:<br />
-所有节点上(Controller,Network,Compute):</p>
-
-<pre><code>$ sudo apt-get install ubuntu-cloud-keyring
-$ sudo bash
-# echo &quot;deb http://ubuntu-cloud.archive.canonical.com/ubuntu&quot; &quot;trusty-updates/juno main&quot; &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
-# apt-get update &amp;&amp; apt-get -y dist-upgrade
-</code></pre>
-
-<p>第一部分就先到这里。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/23/use-apt-cacher-for-speeding-up-deployment/">Use apt-cacher For Speeding Up Deployment</a>
-      </h1>
-      <span class="post-date">May 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/23/use-apt-cacher-for-speeding-up-deployment/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Install apt-cacher via following command:</p>
-
-<pre><code>$ sudo apt-get install apt-cacher
-</code></pre>
-
-<p>Choose &ldquo;Daemon&rdquo; When you see following picture:</p>
-
-<p><img src="/images/2015_05_23_08_28_39_418x264.jpg" alt="/images/2015_05_23_08_28_39_418x264.jpg" /></p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>Make sure the configuration <code>AUTOSTART=1</code> in <code>/etc/default/apt-cacher</code>.</p>
-
-<p>Enable <code>allowed_hosts=*</code> in <code>/etc/apt-cacher/apt-cacher.conf</code>.</p>
-
-<p>Now restart the machine, and check the apt-cacher service via following command:</p>
-
-<pre><code>$ ps -ef | grep apt
-www-data   825     1  0 20:34 ?        00:00:00 /usr/bin/perl /usr/sbin/apt-cacher -R 3 -d -p /var/run/apt-cacher.pid
-$ sudo netstat -anp | grep 3142
-tcp6       0      0 :::3142                 :::*                    LISTEN      825/perl
-</code></pre>
-
-<p>Now when you setup the machines, point the http-proxy into this machine, it will automatically cache the packages.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/22/change-cobbler-profile-for-using-local-repository/">Change Cobbler Profile For Using Local Repository</a>
-      </h1>
-      <span class="post-date">May 22, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/22/change-cobbler-profile-for-using-local-repository/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="cobbler-profiles">Cobbler Profiles</h3>
-
-<p>For getting the profiles and get the detailed information of the profile.</p>
-
-<pre><code># cobbler profile list
-   ubuntu1404-x86_64
-# cobbler profile help
-usage
-=====
-cobbler profile add
-cobbler profile copy
-cobbler profile dumpvars
-cobbler profile edit
-cobbler profile find
-cobbler profile getks
-cobbler profile list
-cobbler profile remove
-cobbler profile rename
-cobbler profile report
-# cobbler profile report ubuntu1404-x86_64
-......
-Kickstart                      : /var/lib/cobbler/kickstarts/sample.seed
-......
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 172.16.0.11
+netmask 255.255.255.0
+gateway 172.16.0.1
+dns-nameservers 114.114.114.114
 
 </code></pre>
 
-<h3 id="use-local-repository">Use Local Repository</h3>
+<p>QuickClient Machine:</p>
 
-<p>For adding the repository via following command, you could use your local repository:</p>
+<pre><code>xxx@QuickClient:~$ cat /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       QuickClient
+172.16.0.12     QuickClient
+172.16.0.11     QuickServer
 
-<pre><code>$ sudo cobbler repo add --name=local-trusty --breed=apt --arch=x86_64 --mirror=http://xxxxxxxxxxxxxx/ubuntu --apt-components=main,restricted,universe,multiverse --apt-dists=trusty,trusty-updates,trusty-security
-$ sudo cobbler repo sync
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+xxx@QuickClient:~$ cat /etc/hostname 
+QuickClient
+xxx@QuickClient:~$ cat /etc/network/interfaces
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 172.16.0.12
+netmask 255.255.255.0
+gateway 172.16.0.1
+dns-nameservers 114.114.114.114
 </code></pre>
 
-<p>After syncing, the folder will contains all of the packages:</p>
+<h3 id="quickserver-installation">QuickServer Installation</h3>
 
-<pre><code># pwd
-/var/www/cobbler/ks_mirror/ubuntu1404-x86_64
-# ls
-boot  dists  doc  EFI  install  isolinux  md5sum.txt  pics  pool  preseed  README.diskdefines  ubuntu
+<p>You should have following packges in this server/management node:</p>
+
+<pre><code>$ ls
+chefdk_0.6.0-1_amd64.deb  chef-server-core_12.0.8-1_amd64.deb  opscode-manage_1.13.0-1_amd64.deb
 </code></pre>
 
-<p>Edit the sample seed via:</p>
+<p>Install and configuration:</p>
 
-<pre><code># cp /var/lib/cobbler/kickstarts/sample.seed /var/lib/cobbler/kickstarts/local.seed
-# vim /var/lib/cobbler/kickstarts/local.seed
-
-    d-i mirror/http/hostname string $http_server
-    # d-i mirror/http/directory string $install_source_directory
-    d-i mirror/http/directory string /cobbler/ks_mirror/ubuntu1404-x86_64/ubuntu/
-    d-i mirror/http/proxy string 
-    d-i apt-setup/security_host string $http_server
-    d-i apt-setup/security_path string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
-    d-i apt-setup/services-select multiselect none
-
+<pre><code>$ sudo dpkg -i chef-server-core_12.0.8-1_amd64.deb
+$ sudo chef-server-ctl reconfigure
 </code></pre>
 
-<p>Then Modify the profile&rsquo;s kickstart via:</p>
+<p>Now configure the chefserver via following command:</p>
 
-<pre><code>#  cobbler profile edit --name=ubuntu1404-x86_64 --kickstart=/var/lib/cobbler/kickstarts/local.seed
+<pre><code>$ sudo chef-server-ctl user-create twocloud cloud Yang twocloud@gmail.com engine --filename ~/twocloud.pem
+$ sudo chef-server-ctl org-create twocloud OneCloud Software, Inc. --association_user twocloud --filename ~/twocloud_org.pem
+$ ls ~/*.pem
+/home/xxxx/twocloud_org.pem  /home/xxxx/twocloud.pem
 </code></pre>
 
-<p>After modification, next time if you re-install the compute, it will directly get the packages from the local repository.</p>
+<p>Install opscode:</p>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/20/setup-centos6-slash-7-local-repository/">Setup CentOS6/7 Local Repository</a>
-      </h1>
-      <span class="post-date">May 20, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/20/setup-centos6-slash-7-local-repository/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>For speeding up the deployment, I have to setup the local repository for CentOS6/7, following is the steps for setting up such two repositories.<br />
-The steps are followed by following URL:<br />
-<a href="https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror">https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror</a></p>
-
-<pre><code># cd /etc/yum.repos.d/
-# curl -O https://copr.fedoraproject.org/coprs/baurzhanm/mrepo/repo/epel-6/baurzhanm-mrepo-epel-6.repo
-# vim baurzhanm-mrepo-epel-6.repo
-# yum update
-# yum -y install screen lftp httpd mrepo
-# vim mrepo.conf
-    ### Configuration file for mrepo
-    
-    ### The [main] section allows to override mrepo's default settings
-    ### The mrepo-example.conf gives an overview of all the possible settings
-    [main]
-    srcdir = /var/mrepo
-    wwwdir = /var/www/mrepo
-    confdir = /etc/mrepo.conf.d
-    arch = x86_64
-    
-    mailto = root@localhost
-    smtp-server = localhost
-    
-    #rhnlogin = username:password
-    
-    ### Any other section is considered a definition for a distribution
-    ### You can put distribution sections in /etc/mrepo.conf.d/
-    ### Examples can be found in the documentation at:
-    ###     /usr/share/doc/mrepo-0.8.9/dists/.
+<pre><code>$ sudo dpkg -i opscode-manage_1.13.0-1_amd64.deb
+$ sudo opscode-manage-ctl reconfigure
 </code></pre>
 
-<p>Add the configuration files for CentOS 6:</p>
+<p>Also install the chefdk via:</p>
 
-<pre><code># vim  /etc/mrepo.conf.d/centos6.conf
-[centos6]
-name = CentOS $release ($arch)
-release = 6
-arch = x86_64
-metadata = yum repomd
-
-#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-6.6-x86_64-bin-DVD?.iso
-#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-extras = http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/
-epel = http://mirrors.aliyun.com/epel/$release/$arch/
+<pre><code>$ sudo dpkg -i chefdk_0.6.0-1_amd64.deb
 </code></pre>
 
-<p>Add configuraiton files for CentOS 7:</p>
+<p>Install the git and configure the chef-repo:</p>
 
-<pre><code># vim  /etc/mrepo.conf.d/centos7.conf
-[centos7]
-name = CentOS $release ($arch)
-release = 7
-arch = x86_64
-metadata = yum repomd
-
-#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-7.0-1406-x86_64-DVD.iso
-#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-#epel = http://mirrors.aliyun.com/epel/$release/$arch/
-extra=http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/
+<pre><code>$ sudo apt-get install git
+$ git config --global user.name &quot;purplepalm&quot;
+$ git config --global user.email &quot;purplepalm@gmail.com&quot;
+$ git clone https://github.com/opscode/chef-repo.git
+$ mkdir .chef
+$ cd .chef/
+$ scp xxxx@127.0.0.1:/home/xxxx/*.pem ./
 </code></pre>
 
-<p>Use following comands for initial sync, it will take a very~long~long~long time.</p>
+<p>Now under the .chef directory, create the knife.rb for letting knife using:</p>
 
-<pre><code># mrepo -g -u -vvv [centos6|centos7]
+<pre><code>$ cat ~/chef-repo/.chef/knife.rb
+current_dir = File.dirname(__FILE__)
+log_level                :info
+log_location             STDOUT
+node_name                &quot;twocloud&quot;
+client_key               &quot;#{current_dir}/twocloud.pem&quot;
+validation_client_name   &quot;twocloud&quot;
+validation_key           &quot;#{current_dir}/twocloud_org.pem&quot;
+chef_server_url          &quot;https://QuickServer/organizations/twocloud&quot;
+syntax_check_cache_path  &quot;#{ENV['HOME']}/.chef/syntaxcache&quot;
+cookbook_path            [&quot;#{current_dir}/../cookbooks&quot;]
 </code></pre>
 
-<p>After syncing, add definition into the apache&rsquo;s configuration:</p>
+<p>Verify ssl via:</p>
 
-<pre><code># vi /etc/httpd/conf.d/mrepo.conf
---- ADD ---
-AddDescription &quot;CentOS 6 for x86&quot; centos6-i386
-AddDescription &quot;CentOS 6 for x86_64&quot; centos6-x86_64
-AddDescription &quot;CentOS 7 for x86&quot; centos7-i386
-AddDescription &quot;CentOS 7 for x86_64&quot; centos7-x86_64
---- ADD ---
-# Add repofile for CentOS 6 mirror
-cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos6-x86_64/CentOS-local-http.repo 
-#
-# CentOS-local-http.repo
-#
- 
-[0-base]
-name=CentOS-local-base
-baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.os/
-gpgcheck=0
- 
-[0-updates]
-name=CentOS-local-updates
-baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.updates/
-gpgcheck=0
-EOF
- 
-# Add repofile for CentOS 7 mirror
-cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos7-x86_64/CentOS-local-http.repo 
-#
-# CentOS-local-http.repo
-#
- 
-[0-base]
-name=CentOS-local-base
-baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.os/
-gpgcheck=0
- 
-[0-updates]
-name=CentOS-local-updates
-baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.updates/
-gpgcheck=0
-EOF
- 
-# chkconfig httpd on
-# service httpd restart
+<pre><code>$ knife ssl fetch
+WARNING: Certificates from QuickServer will be fetched and placed in your trusted_cert
+directory (/home/xxxx/chef-repo/.chef/trusted_certs).
+
+Knife has no means to verify these are the correct certificates. You should
+verify the authenticity of these certificates after downloading.
+
+Adding certificate for QuickServer in /home/xxxx/chef-repo/.chef/trusted_certs/QuickServer.crt
+
+$ knife ssl check
+Connecting to host QuickServer:443
+Successfully verified certificates from `QuickServer'
+$ knife client list
+twocloud-validator
 
 </code></pre>
 
-<h3 id="mrepo-for-centos6-5">mrepo for CentOS6.5</h3>
+<p>Next, configure the QuickClient and add it to the Chef.</p>
 
-<pre><code>[root:/home/juju/mrepo]# cat /etc/mrepo.conf.d/centos6.5.conf  
-### URL: http://www.centos.org/
- 
-[centos6.5]
-name = CentOS $release ($arch)
-release = 6.5
-arch = x86_64
-metadata = yum repomd
+<h3 id="quickclient">QuickClient</h3>
 
-os=http://vault.centos.org/$release/os/$arch/Packages/
-updates=http://vault.centos.org/$release/updates/$arch/Packages/
-extras=http://vault.centos.org/$release/extras/$arch/Packages/
-centosplus=http://vault.centos.org/$release/centosplus/$arch/Packages/
-fasttrack=http://vault.centos.org/$release/fasttrack/$arch/Packages/
+<p>Install the client deb file via:</p>
+
+<pre><code>$ ls
+chef_12.3.0-1_amd64.deb
+$ sudo dpkg -i chef_12.3.0-1_amd64.deb 
 </code></pre>
 
-<p>sync the repository via:</p>
+<p>Now,On !!! QuickServer !!! , bootstrap the QuickClient via:</p>
 
-<pre><code># mrepo -g -u -vvv centos6.5
+<pre><code>$ cd ~/chef-repo/
+$ knife bootstrap 172.16.0.12 -x xxxx -P xxxxxxxx --sudo
+Doing old-style registration with the validation key at /home/xxxx/chef-repo/.chef/twocloud_org.pem...
+Delete your validation key in order to use your user credentials instead
+
+Connecting to 172.16.0.12
+172.16.0.12 Starting first Chef Client run...
+172.16.0.12 Starting Chef Client, version 12.3.0
+172.16.0.12 Creating a new client identity for QuickClient using the validator key.
+172.16.0.12 
+172.16.0.12 ================================================================================
+172.16.0.12 Chef encountered an error attempting to create the client &quot;QuickClient&quot;
+172.16.0.12 ================================================================================
+
 </code></pre>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/19/setup-local-repository/">Setup Local Repository</a>
-      </h1>
-      <span class="post-date">May 19, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/19/setup-local-repository/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
+<p>Yes, you will meet an error, Now go back to !!! QuickClient !!! and solve it.</p>
 
-<h3 id="ubuntu">Ubuntu</h3>
+<p>First retrieve the pem file under your own home directory:</p>
 
-<p>After using apt-mirror syncing all of the packages from the repository website, setup a ftp site:</p>
-
-<pre><code># apt-get install -y proftpd
-# cat conf.d/anonymous.conf 
-&lt;Anonymous ~ftp&gt;
-   User                    ftp
-   Group                nogroup
-   UserAlias         anonymous ftp
-   RequireValidShell        off
-#   MaxClients                   10
-   &lt;Directory *&gt;
-     &lt;Limit WRITE&gt;
-       DenyAll
-     &lt;/Limit&gt;
-   &lt;/Directory&gt;
- &lt;/Anonymous&gt;
-#  mount --bind /mnt/myrepo/mirror/mirrors.aliyun.com/ /srv/ftp/
-# service proftpd restart
+<pre><code>$ scp xxxx@172.16.0.11:/home/xxxx/*.pem ./
+Password: 
+twocloud_org.pem                                                                                             100% 1674     1.6KB/s   00:00 
+twocloud.pem                                                                                                 100% 1674     1.6KB/s   00:00
 </code></pre>
 
-<p>Now Open your browser to <code>ftp://Your_URL/</code>, you will find the repository available.</p>
+<p>Then fetch back the ssl via:</p>
 
-<h3 id="centos-proftpd">CentOS Proftpd</h3>
+<pre><code>$ sudo knife ssl fetch --config /etc/chef/client.rb
+WARNING: Certificates from QuickServer will be fetched and placed in your trusted_cert
+directory (/etc/chef/trusted_certs).
 
-<p>Just remember the default directory is located at <code>/var/ftp</code>,</p>
+Knife has no means to verify these are the correct certificates. You should
+verify the authenticity of these certificates after downloading.
 
-<pre><code># yum install -y proftpd
-# mount --bind /mirror/mirrors.aliyun.com/ /var/ftp/
-# service proftpd restart
+Adding certificate for QuickServer in /etc/chef/trusted_certs/QuickServer.crt
 </code></pre>
 
-<h3 id="client-configuration">Client Configuration</h3>
+<p>Now manually use the <code>/home/xxxx/twocloud.pem</code> for ssl checking.</p>
 
-<p>Replace the URL into your ftp url:</p>
-
-<pre><code># vim /etc/apt/sources.list
-deb ftp://YourURL/ubuntu/ trusty main restricted universe multiverse
-deb ftp://YourURL/ubuntu/ trusty-security main restricted universe multiverse
-deb ftp://YourURL/ubuntu/ trusty-updates main restricted universe multiverse
-deb ftp://YourURL/ubuntu/ trusty-proposed main restricted universe multiverse
-deb ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiverse
-deb-src ftp://YourURL/ubuntu/ trusty main restricted universe multiverse
-deb-src ftp://YourURL/ubuntu/ trusty-security main restricted universe multiverse
-deb-src ftp://YourURL/ubuntu/ trusty-updates main restricted universe multiverse
-deb-src ftp://YourURL/ubuntu/ trusty-proposed main restricted universe multiverse
-deb-src ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiverse
-# apt-get update &amp;&amp; apt-get upgrade 
+<pre><code>$ sudo chef-client -l debug -S https://QuickServer/organizations/twocloud -K /home/xxxx/twocloud.pem 2&gt;&amp;1
 </code></pre>
 
-<p>Using local repository will greately improve your development speed.</p>
+<p>Your terminal may encounter Garbled codes, simply quit it, and go back to !!! QuickServer !!!, Bootstrap again via:</p>
 
-<h3 id="use-apache-way-on-centos6-6">Use apache way(On CentOS6.6)</h3>
+<pre><code>$ knife bootstrap 172.16.0.12 -x xxxx -P xxxxxxxx --sudo
+Doing old-style registration with the validation key at /home/xxxx/chef-repo/.chef/twocloud_org.pem...
+Delete your validation key in order to use your user credentials instead
 
-<p>By using the symlinks and enable the httpd to start automatically at systemboot.</p>
+Connecting to 172.16.0.12
+172.16.0.12 Starting first Chef Client run...
+172.16.0.12 Starting Chef Client, version 12.3.0
+172.16.0.12 resolving cookbooks for run list: []
+172.16.0.12 Synchronizing Cookbooks:
+172.16.0.12 Compiling Cookbooks...
+172.16.0.12 [2015-06-08T09:12:09-04:00] WARN: Node QuickClient has an empty run list.
+172.16.0.12 Converging 0 resources
+172.16.0.12 
+172.16.0.12 Running handlers:
+172.16.0.12 Running handlers complete
+172.16.0.12 Chef Client finished, 0/0 resources updated in 1.179038534 seconds
 
-<pre><code>[root:/var/www]# cd html/
-[root:/var/www/html]# ln /home/juju/myrepo/mirror/mirrors.aliyun.com/ubuntu -s
-[root:/var/www/html]# chkconfig httpd on
 </code></pre>
+
+<p>Now you could list all of the client under your workstation directory:</p>
+
+<pre><code>$ knife client list
+QuickClient
+twocloud-validator
+</code></pre>
+
+<p>QuickClient is the node we just added.</p>
+
+<p>Here provides a good start-point for following operations, next step you could do more magics on newly added nodes, also you could add more nodes for deployment.</p>
 
       
     </div>
@@ -1067,12 +1333,21 @@ deb-src ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiver
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/41/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

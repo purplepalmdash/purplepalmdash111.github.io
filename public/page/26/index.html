@@ -93,276 +93,588 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/26/use-jenkins-for-building-packer-images/">Use Jenkins For Building Packer Images</a>
+        <a href="http://purplepalmdash.github.io/2015/10/18/cloudstackonubuntuissue/">CloudStackOnUbuntuIssue</a>
       </h1>
-      <span class="post-date">Aug 26, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/08/26/use-jenkins-for-building-packer-images/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 18, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/10/18/cloudstackonubuntuissue/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="installation-jenkins">Installation Jenkins</h3>
+<h3 id="前提">前提</h3>
 
-<p>Refers to
-<a href="https://wiki.jenkins-ci.org/display/JENKINS/Installing+Jenkins+on+Ubuntu">https://wiki.jenkins-ci.org/display/JENKINS/Installing+Jenkins+on+Ubuntu</a></p>
+<p>可能我们会碰到这样一种情形，自己的工作机位于某一很复杂的网络环境中，需要在工作
+机上搭建出一个网络资源隔离的CloudStack实验环境。而同时我们又希望能最大限度的利
+用工作机的性能，尽量让虚拟化中的性能损耗达到最小。那么以下的解决方案可能就是我
+们所需要的：物理机上启动一个CloudStack Management的虚拟机，而后在虚拟机的控制
+台里将配置好CloudStack Agent的主机加入到CloudStack环境中。而物理机和虚拟机之间
+的管理网络为物理机上的一个虚拟网络。这样既做到了硬件资源的最大利用，也有效的杜
+绝了本地环境对整个复杂网络环境的影响。</p>
 
-<pre><code>$ wget -q -O - https://jenkins-ci.org/debian/jenkins-ci.org.key | sudo apt-key add -
-$ sudo sh -c 'echo deb http://pkg.jenkins-ci.org/debian binary/ &gt; /etc/apt/sources.list.d/jenkins.list'
-$ sudo apt-get update
-$ sudo apt-get install -y jenkins
+<h3 id="硬件及网络规划">硬件及网络规划</h3>
+
+<p>物理机: 4核，支持虚拟化， 内存8G，IP地址为192.168.88.0/24网段里的某台机器。<br />
+虚拟机: 分配2核CPU，内存3G。<br />
+物理机与虚拟机之间，通过虚拟的网络桥接。地址段被规划为172.16.16.0/24，当然你可
+以更改为其他网段。</p>
+
+<h3 id="物理机准备">物理机准备</h3>
+
+<p>物理机运行Ubuntu 14.04.03 64位版本。</p>
+
+<h4 id="root登录权限">Root登录权限</h4>
+
+<p>首先打开root的ssh登录权限:</p>
+
+<pre><code>$ sudo apt-get install -y openssh-server
+$ sudo vi /etc/ssh/sshd_config
+PermitRootLogin yes
+$ sudo bash
+# passwd
+Enter new UNIX password: 
+Retype new UNIX password: 
+passwd: password updated successfully
+# service ssh restart
 </code></pre>
 
-<h3 id="install-packer-plugins">Install Packer Plugins</h3>
+<p>现在重新登录，即可以使用root直接登录进系统。</p>
 
-<p>Manually(But failed), so finally I use the web-backed for installing.</p>
+<h4 id="安装软件">安装软件</h4>
 
-<pre><code>$ wget https://ci.jenkins-ci.org/jnlpJars/jenkins-cli.jar
-$ java -jar jenkins-cli.jar -s http://localhost:8080 help
-$ java -jar jenkins-cli.jar -s http://localhost:8080 list-plugins
-$ java -jar jenkins-cli.jar -s http://localhost:8080 install-plugin \ 
-http://ftp.yz.yamagata-u.ac.jp/pub/misc/jenkins/plugins/packer/1.2/packer.hpi
+<p>安装所需要的软件:</p>
+
+<pre><code># apt-get update
+# apt-get install virt-manager qemu vim wget git nfs-kernel-server
 </code></pre>
 
-<p><img src="/images/2015_08_26_16_56_22_672x344.jpg" alt="/images/2015_08_26_16_56_22_672x344.jpg" /></p>
+<h4 id="创建两个网桥">创建两个网桥</h4>
 
-<p>After installation, restart service via <code>service restart jenkins</code>.</p>
+<p>更改Ubuntu的网络配置文件后，重新启动物理机。这里我们创建了br0和cloudbr0两个网
+桥, 注意我们设置cloudbr0的IP地址为172.16.16.1/24。这个网络将作为CloudStack
+Management虚拟机与物理机之间的管理网络。</p>
 
-<p>How to use it? later will investigate.</p>
+<pre><code># cat /etc/network/interfaces
+    # This file describes the network interfaces available on your system
+    # and how to activate them. For more information, see interfaces(5).
+    
+    # The loopback network interface
+    auto lo
+    iface lo inet loopback
+    
+    # The primary network interface
+    auto eth0
+    iface eth0 inet manual
+    
+    auto br0
+    iface br0 inet dhcp
+    bridge_ports eth0
+    
+    auto cloudbr0
+    iface cloudbr0 inet static
+    bridge_ports none
+    bridge_fd 5
+    bridge_stp off
+    bridge_maxwait 1
+    address 172.16.16.1
+    netmask 255.255.255.0
+</code></pre>
+
+<p>创建完毕后，用<code>ip addr</code>命令将可以看到5个网络，分别为
+lo/eth0/br0/cloudbr0/virbr0， 其中virbr0由libvirtd所创建，这里不用涉及。</p>
+
+<h4 id="配置cloudbr0的nat转发">配置cloudbr0的NAT转发</h4>
+
+<p>打开内核的转发功能:</p>
+
+<pre><code># vim /etc/sysctl.conf
+net.ipv4.ip_forward=1
+</code></pre>
+
+<p>由于我们的虚拟机需要访问Internet以便安装包，因而我们需要开启cloudbr0上的转发，
+配置iptables规则如下:</p>
+
+<pre><code># iptables -t nat -A POSTROUTING -s \ 
+172.16.16.0/24 ! -d 172.16.16.0/24 -j MASQUERADE
+</code></pre>
+
+<p>这样主机端就开启了172.16.16.0/24网段的转发。</p>
+
+<p>保存我们配置的iptables规则:</p>
+
+<pre><code>
+# iptables-save &gt;/etc/iptables-save
+# echo &quot;pre-up iptables-restore &lt; /etc/iptables-save&quot;&gt;&gt;/etc/network/interfaces
+
+</code></pre>
+
+<h4 id="准备nfs存储">准备NFS存储</h4>
+
+<p>NFS存储可以被用作一级存储或者二级存储,我们这里使用它作为二级存储,主存储即一级
+存储我们将使用物理机上的本地存储.</p>
+
+<p>首先准备存储共享目录:</p>
+
+<pre><code># mkdir -p /export/primary /export/secondary
+</code></pre>
+
+<p>引出该目录:</p>
+
+<pre><code># cat &gt;&gt;/etc/exports &lt;&lt;EOM
+/export  *(rw,async,no_root_squash,no_subtree_check)
+EOM
+</code></pre>
+
+<p>在指定端口配置NFS的statd:</p>
+
+<pre><code># cp /etc/default/nfs-common /etc/default/nfs-common.orig
+# sed -i '/NEED_STATD=/ a NEED_STATD=yes' /etc/default/nfs-common
+# sed -i '/STATDOPTS=/ a STATDOPTS=&quot;--port 662 \
+--outgoing-port 2020&quot;' /etc/default/nfs-common
+# diff -du /etc/default/nfs-common.orig /etc/default/nfs-common
+</code></pre>
+
+<p>配置lockd:</p>
+
+<pre><code># cat &gt;&gt; /etc/modprobe.d/lockd.conf &lt;&lt;EOM
+ options lockd nlm_udpport=32769 nlm_tcpport=32803
+ EOM
+</code></pre>
+
+<p>重启nfs server:</p>
+
+<pre><code># service nfs-kernel-server restart
+</code></pre>
+
+<h4 id="网络名配置">网络名配置</h4>
+
+<p>配置物理机的网络名如下:</p>
+
+<pre><code># vim /etc/hostname
+physicalnode
+# vim /etc/hosts
+127.0.0.1       localhost
+172.16.16.1     physicalnode
+172.16.16.2     cloudstackmgmt
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+</code></pre>
+
+<h4 id="创建cloudstack-management虚拟机">创建CloudStack Management虚拟机</h4>
+
+<p>创建一台Ubuntu 14.04 64位虚拟机，特别注意的是其网络设置， 在virt-manager中，手
+动选择如下：</p>
+
+<p><img src="/images/2015_10_18_08_16_55_654x246.jpg" alt="/images/2015_10_18_08_16_55_654x246.jpg" /></p>
+
+<p>这样虚拟机会选择将自己桥接到物理机上的cloudbr0接口。这时候如果在物理机运行
+<code>brctl show</code>可以看到如下结果:</p>
+
+<pre><code># brctl show
+bridge name     bridge id               STP enabled     interfaces
+br0             8000.52540002d56f       no              eth0
+cloudbr0                8000.fe54004d6663       no              vnet0
+virbr0          8000.000000000000       yes
+</code></pre>
+
+<p>虚拟机启动完毕后是没有IP地址的，因为cloudbr0上没有提供dhcp服务，我们可以手动配
+置IP地址如下, 这里我们把虚拟机的IP地址配置为172.16.16.2:</p>
+
+<pre><code>$ cat /etc/network/interfaces
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 172.16.16.2
+netmask 255.255.255.0
+gateway 172.16.16.1
+dns-nameservers 223.5.5.5
+</code></pre>
+
+<p>配置完IP地址后，重启后可以验证是否连接到Internet.</p>
+
+<h3 id="虚拟机配置">虚拟机配置</h3>
+
+<p>我们先配置好CloudStack Management虚拟机, 而后再将物理机加入到CloudStack虚拟机
+管理网络里.</p>
+
+<h4 id="开启root登录">开启root登录</h4>
+
+<p>步骤和上面物理机上开启root登录一样.</p>
+
+<h4 id="安装源配置">安装源配置</h4>
+
+<p>预先取得用于Ubuntu 14.04 CloudStack环境的安装包, 建立本地源,而后添加为:</p>
+
+<pre><code># vim /etc/apt/sources.list
+.....
+deb http://192.168.1.13/iso/    cloudstackdeb/
+</code></pre>
+
+<h4 id="安装包">安装包</h4>
+
+<p>安装CloudStack Management节点所需的包如下:</p>
+
+<pre><code># apt-get update
+# apt-get install vim wget openntpd cloudstack-management mysql-server
+</code></pre>
+
+<p>注意在安装mysql的时候,需要指定root用户所需的管理密码,这个密码会在后面配置
+CloudStack时被用到.</p>
+
+<h4 id="主机名配置">主机名配置</h4>
+
+<p>配置主机名:</p>
+
+<pre><code># vim /etc/hostname 
+CloudStackMgmt
+</code></pre>
+
+<p>配置FQDN所需的主机名:</p>
+
+<pre><code># vim /etc/hosts
+127.0.0.1       localhost
+172.16.16.1     physicalnode
+172.16.16.2     cloudstackmgmt
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+</code></pre>
+
+<p>重启后验证是否被设置正确:</p>
+
+<pre><code>root@cloudstackmgmt:~# hostname
+cloudstackmgmt
+root@cloudstackmgmt:~# hostname --fqdn
+cloudstackmgmt
+</code></pre>
+
+<h4 id="创建数据库">创建数据库</h4>
+
+<p>创建CloudStack所需的配置文件,并重启mysql服务:</p>
+
+<pre><code>root@cloudstackmgmt:~# cat /etc/mysql/conf.d/cloudstack.cnf 
+    [mysqld]
+    innodb_rollback_on_timeout=1
+    innodb_lock_wait_timeout=600
+    max_connections=350
+    log-bin=mysql-bin
+    binlog-format = 'ROW'
+root@cloudstackmgmt:~# service mysql restart
+    mysql stop/waiting
+    mysql start/running, process 5812
+</code></pre>
+
+<p>创建CloudStack所需的数据库:</p>
+
+<pre><code>root@cloudstackmgmt:~# cloudstack-setup-databases \
+    cloud:engine@localhost \
+    --deploy-as=root:xxxxxx \
+    -e file -m mymskey44 -k mydbkey00
+</code></pre>
+
+<p>参数说明如下:</p>
+
+<pre><code># mysql root 密码: xxxxxxx
+# cloud user 密码: engine
+# management_server_key: mymskey44
+# database_key: mydbkey00
+</code></pre>
+
+<h4 id="安装cloudstack系统虚拟机模板">安装CloudStack系统虚拟机模板</h4>
+
+<p>加载NFS共享目录到本地,而后用以下命令安装预先下载好的kvm系统虚拟机所需的模板文
+件:</p>
+
+<pre><code># mount -t nfs 172.16.16.1:/export/secondary /mnt
+# /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt \
+-m /mnt -u http://192.168.1.13/iso/systemvm64template-4.5-kvm.qcow2.bz2  -h \
+kvm -F
+# umount /mnt
+</code></pre>
+
+<h4 id="初始化配置cloudstack">初始化配置CloudStack</h4>
+
+<p>打开浏览器访问<a href="http://172.16.16.2:8080/client">http://172.16.16.2:8080/client</a></p>
+
+<p>如果碰到以下错误, 则看后面的解决步骤:</p>
+
+<p><img src="/images/2015_10_18_09_24_35_421x225.jpg" alt="/images/2015_10_18_09_24_35_421x225.jpg" /></p>
+
+<p>关闭tomcat6服务后重启cloudstack-management服务:</p>
+
+<pre><code># service tomcat6 stop
+# service cloudstack-management restart
+</code></pre>
+
+<p>下面的Workaround可以每次重启时自动重启该服务:</p>
+
+<pre><code># crontab -e
+@reboot /bin/RestartCloudStack.sh
+# vim /bin/RestartCloudStack.sh
+service tomcat6 stop &amp;&amp; service cloudstack-management start
+</code></pre>
+
+<p>我们要更改CloudStack使用本地存储,并更改其镜像下载地址:<br />
+本地存储:</p>
+
+<p><img src="/images/2015_10_18_09_33_24_669x263.jpg" alt="/images/2015_10_18_09_33_24_669x263.jpg" /></p>
+
+<p>镜像下载地址:</p>
+
+<p><img src="/images/2015_10_18_09_35_09_774x233.jpg" alt="/images/2015_10_18_09_35_09_774x233.jpg" /></p>
+
+<p>更改完毕后,<code>service cloudstack-management restart</code>重启服务</p>
+
+<h3 id="添加cloudstack-agent">添加CloudStack Agent</h3>
+
+<h4 id="物理机端配置">物理机端配置</h4>
+
+<p>在物理机上,安装和配置CloudStack Agent以及libvirtd, 同样需要配置好本地
+CloudStack安装源:</p>
+
+<pre><code># apt-get install cloudstack-agent
+</code></pre>
+
+<p>配置libvirtd:</p>
+
+<pre><code>$ cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.orig
+
+$ sed -i '/#listen_tls = 0/ a listen_tls = 0' /etc/libvirt/libvirtd.conf
+$ sed -i '/#listen_tcp = 1/ a listen_tcp = 1' /etc/libvirt/libvirtd.conf
+$ sed -i '/#tcp_port = &quot;16509&quot;/ a tcp_port = &quot;16509&quot;' /etc/libvirt/libvirtd.conf
+$ sed -i '/#auth_tcp = &quot;sasl&quot;/ a auth_tcp = &quot;none&quot;' /etc/libvirt/libvirtd.conf
+$ diff -du /etc/libvirt/libvirtd.conf.orig /etc/libvirt/libvirtd.conf
+</code></pre>
+
+<p>Patch libvirt-bin.conf:</p>
+
+<pre><code>$ cp /etc/default/libvirt-bin /etc/default/libvirt-bin.orig
+$ sed -i -e 's/libvirtd_opts=&quot;-d&quot;/libvirtd_opts=&quot;-d -l&quot;/' /etc/default/libvirt-bin
+$ diff -du /etc/default/libvirt-bin.orig /etc/default/libvirt-bin
+$ service libvirt-bin restart
+</code></pre>
+
+<p>Patch qemu.conf以监听所有端口:</p>
+
+<pre><code>$ cp /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.orig
+$ sed -i '/#vnc_listen = &quot;0.0.0.0&quot;/ a vnc_listen = &quot;0.0.0.0&quot;' /etc/libvirt/qemu.conf
+$ diff -du /etc/libvirt/qemu.conf.orig /etc/libvirt/qemu.conf
+$ service libvirt-bin restart
+</code></pre>
+
+<p>关闭AppArmor:</p>
+
+<pre><code>$ ln -s /etc/apparmor.d/usr.sbin.libvirtd /etc/apparmor.d/disable/
+$ ln -s /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper /etc/apparmor.d/disable/
+$ apparmor_parser -R /etc/apparmor.d/usr.sbin.libvirtd
+$ apparmor_parser -R /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper
+$ service libvirt-bin restart
+</code></pre>
+
+<p>配置防火墙并打开以下端口:</p>
+
+<pre><code>$ ufw allow proto tcp from any to any port 22
+$ ufw allow proto tcp from any to any port 1798
+$ ufw allow proto tcp from any to any port 16509
+$ ufw allow proto tcp from any to any port 5900:6100
+$ ufw allow proto tcp from any to any port 49152:49216
+</code></pre>
+
+<h4 id="配置cloudstack">配置CloudStack</h4>
+
+<p>访问<code>http://172.16.16.2:8080/client</code>, 点击<code>I have used CloudStack before, skip
+this guide</code>.</p>
+
+<p>Infrastructure -&gt; Zones(View All), 在点开的页面里,点击<code>Add Zone</code>.</p>
+
+<p>选择<code>Basic</code>, Next</p>
+
+<p><img src="/images/2015_10_18_10_20_49_521x551.jpg" alt="/images/2015_10_18_10_20_49_521x551.jpg" /></p>
+
+<p>选择本地存储,Next:</p>
+
+<p><img src="/images/2015_10_18_10_21_48_484x289.jpg" alt="/images/2015_10_18_10_21_48_484x289.jpg" /></p>
+
+<p>跳过配置网络后, 配置Pod IP:</p>
+
+<p><img src="/images/2015_10_18_10_23_02_474x419.jpg" alt="/images/2015_10_18_10_23_02_474x419.jpg" /></p>
+
+<p>Guest Traffic配置:</p>
+
+<p><img src="/images/2015_10_18_10_24_04_477x337.jpg" alt="/images/2015_10_18_10_24_04_477x337.jpg" /></p>
+
+<p>Cluster名字为:</p>
+
+<p><img src="/images/2015_10_18_10_25_05_504x207.jpg" alt="/images/2015_10_18_10_25_05_504x207.jpg" /></p>
+
+<p>添加Host:</p>
+
+<p><img src="/images/2015_10_18_10_26_18_469x345.jpg" alt="/images/2015_10_18_10_26_18_469x345.jpg" /></p>
+
+<p>添加二级存储:</p>
+
+<p><img src="/images/2015_10_18_10_27_50_501x341.jpg" alt="/images/2015_10_18_10_27_50_501x341.jpg" /></p>
+
+<p>点击<code>Enable Zone</code>后可以激活该Zone.</p>
+
+<p>等待系统虚拟机启动完毕后就可以使用了.</p>
+
+<h3 id="已知问题">已知问题</h3>
+
+<p>CloudStack Agent启动时, 会添加iptables规则,这会造成我们前面加入的转发链失效.</p>
+
+<p>解决方案: 手动运行命令:</p>
+
+<pre><code># iptables -t nat -A POSTROUTING -s 172.16.16.0/24 ! -d 172.16.16.0/24 -j \ 
+MASQUERADE &amp;&amp; iptables -t filter -I FORWARD -j ACCEPT
+</code></pre>
+
+<p>这将使能转发.从而172.16.16.0/24网段的机器能上网.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/25/enable-trusty-kickstart-for-spacewalk/">Enable Trusty KickStart For SpaceWalk</a>
+        <a href="http://purplepalmdash.github.io/2015/10/17/tips-on-setting-virtual-machine-networking/">Tips On Setting Virtual Machine Networking</a>
       </h1>
-      <span class="post-date">Aug 25, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/08/25/enable-trusty-kickstart-for-spacewalk/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 17, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/10/17/tips-on-setting-virtual-machine-networking/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="import-distro-tree">Import distro-tree</h3>
+<h3 id="目的">目的</h3>
 
-<p>Copy iso content into the distro-tree:</p>
+<p>主要涉及到CloudStack的网络模型，最近在搭建一个环境时有诸多不了解，索性开始做实
+验，在虚拟机里验证虚拟机的网络模型。</p>
 
-<pre><code># mount -t  iso9660 -o loop /mnt/iso/ubuntu-14.04.3-server-amd64.iso /mnt1/
-# mkdir /var/distro-trees/ubuntu-14.04.3-amd64
-# chmod 755 /var/distro-trees/ubuntu-14.04.3-amd64/
-# cp -ar /mnt1/* /var/distro-trees/ubuntu-14.04.3-amd64/
+<h3 id="环境准备">环境准备</h3>
+
+<p>内存 16G 的嵌套虚拟机一台，安装<code>Ubuntu 14.04 x86_64</code>版本。 安装完毕后，开启桌
+面环境Xubuntu，及安装virt-manager等常用的管理虚拟机的组件。</p>
+
+<p>网络配置如下:</p>
+
+<pre><code>$ sudo vim /etc/network/interfaces
+    # The loopback network interface
+    auto lo
+    iface lo inet loopback
+    
+    # The primary network interface
+    auto eth0
+    iface eth0 inet manual
+    
+    auto br0
+    iface br0 inet dhcp
+    bridge_ports eth0
+    
+    auto isolationbr
+    iface isolationbr inet static
+    bridge_ports none
+    bridge_fd 5
+    bridge_stp off
+    bridge_maxwait 1
+    address 172.16.0.1
+    netmask 255.255.0.0
 </code></pre>
 
-<p>We will copy the pxeboot startup file from CentOS7 into ubuntu14.04 distro tree for
-cheating the spacewalk:</p>
+<p>这里我们将eth0桥接到br0，并建立一个物理上隔绝的网桥isolationbr, 手动配置其地址
+为172.16.0.1/16。</p>
 
-<pre><code># mount -t iso9660 -o loop /mnt/iso/CentOS-7-x86_64-Everything-1503-01.iso /mnt2/
-# mkdir -p /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/
-# cp /mnt2/images/pxeboot/{initrd.img,vmlinuz} /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/
-# ls /var/distro-trees/ubuntu-14.04.3-amd64/images/pxeboot/ -l -h
-....
-</code></pre>
+<p>开启嵌套虚拟机的内核包转发功能:</p>
 
-<h3 id="kickstarting">Kickstarting</h3>
-
-<p>Now in spacewalk go to Systems-&gt;Kickstart-&gt;Distributions, with the parameters like
-following picture:</p>
-
-<p><img src="/images/2015_08_25_16_17_53_595x352.jpg" alt="/images/2015_08_25_16_17_53_595x352.jpg" /><br />
-We copy the CentOS Kernel and initrd, so Spacewalk use redhat parameters for this
-distribution, later we will fix this.</p>
-
-<p>Now create a profile via go to Systems-&gt;Kickstart-&gt;Profiles and &ldquo;upload a new kickstart
-file&rdquo;, just like following picture.</p>
-
-<p><img src="/images/2015_08_25_16_22_53_617x590.jpg" alt="/images/2015_08_25_16_22_53_617x590.jpg" /></p>
-
-<p>We fix the hardcoded breed from redhat to ubuntu via following steps:</p>
-
-<p>Get the list info via <code>cobbler list</code>:</p>
-
-<p><img src="/images/2015_08_25_16_27_12_515x205.jpg" alt="/images/2015_08_25_16_27_12_515x205.jpg" /></p>
-
-<p>Report the selected distro info:</p>
-
-<pre><code># cobbler distro report --name=trustyamd64:1:SpacewalkDefaultOrganization
-</code></pre>
-
-<p><img src="/images/2015_08_25_16_28_48_990x256.jpg" alt="/images/2015_08_25_16_28_48_990x256.jpg" /></p>
-
-<p>Edit it like following:</p>
-
-<pre><code># cobbler distro edit --name trustyamd64:1:SpacewalkDefaultOrganization --breed=ubuntu --os-version=jaunty --initrd=/var/distro-trees/ubuntu-14.04.3-amd64/install/netboot/ubuntu-installer/amd64/initrd.gz --kernel=/var/distro-trees/ubuntu-14.04.3-amd64/install/vmlinuz 
-</code></pre>
-
-<p>We should notice the initrd file and kernel has been modified!!!</p>
-
-<p><img src="/images/2015_08_25_16_32_24_933x261.jpg" alt="/images/2015_08_25_16_32_24_933x261.jpg" /></p>
-
-<p>Now edit the <code>/var/lib/tftpboot/pxelinux.cfg/default</code> file, find the item and modify it like following:</p>
-
-<pre><code>LABEL trustykickstart:1:SpacewalkDefaultOrganization
-        kernel /images/trustyamd64:1:SpacewalkDefaultOrganization/vmlinuz
-        MENU LABEL trustykickstart:1:SpacewalkDefaultOrganization
-        append initrd=/images/trustyamd64:1:SpacewalkDefaultOrganization/initrd.gz  ks=http://192.168.0.79/trustykickstart.cfg ksdevice=eth0 --
-        ipappend 2
-</code></pre>
-
-<p>Now you could kickstart your ubuntu trusty now.</p>
-
-<h3 id="register-to-spacewalk">Register to SpaceWalk</h3>
-
-<p>First create a key under spacewalk for activating all of the trusty clients:<br />
-<img src="/images/2015_08_26_11_10_35_378x489.jpg" alt="/images/2015_08_26_11_10_35_378x489.jpg" /></p>
-
-<p>Register the client via:</p>
-
-<pre><code># apt-get install apt-transport-spacewalk rhnsd
-# vim /usr/lib/python2.7/xmlrpclib.py
-    def dump_nil (self, value, write):
-    - if not self.allow_none:
-    - raise TypeError, &quot;cannot marshal None unless allow_none is enabled&quot;
-    +# if not self.allow_none:
-    +# raise TypeError, &quot;cannot marshal None unless allow_none is enabled&quot;
-# apt-get install python-libxml2
-# mkdir /var/lock/subsys
-# vim /etc/hosts
-10.11.11.3      spacewalk
-# rhnreg_ks --activationkey=1-trustyamd64 --serverUrl=http://spacewalk/XMLRPC
-Warning: unable to enable rhnsd with chkconfig
-</code></pre>
-
-<p>Register to the main channel:</p>
-
-<pre><code># cat /etc/apt/sources.list.d/spacewalk.list
-deb spacewalk://spacewalk channels: main
-# apt-get update
-</code></pre>
-
-<p>Added more software channels in the spacewalk web.</p>
-
-<p><img src="/images/2015_08_26_11_22_13_607x454.jpg" alt="/images/2015_08_26_11_22_13_607x454.jpg" /></p>
-
-<p>Update it via:</p>
-
-<pre><code># apt-get update &amp;&amp; apt-get update
-Apt-Spacewalk: Updating sources.list
-WARNING:root:could not open file '/etc/apt/sources.list'
-
-Ign spacewalk://spacewalk channels: InRelease
-Ign spacewalk://spacewalk channels: Release.gpg
-Ign spacewalk://spacewalk channels: Release
-Ign spacewalk://spacewalk channels:/main amd64 Packages/DiffIndex
-Ign spacewalk://spacewalk channels:/main i386 Packages/DiffIndex
-Get:1 spacewalk://spacewalk channels:/trusty-amd64-updates amd64 Packages [829 kB]
-Get:2 spacewalk://spacewalk channels:/trusty-amd64-backports amd64 Packages [5,177 B]
-Get:3 spacewalk://spacewalk channels:/trusty-amd64-security amd64 Packages [437 kB]
-Get:4 spacewalk://spacewalk channels:/trusty-amd64-updates i386 Packages [829 kB]
-Get:5 spacewalk://spacewalk channels:/trusty-amd64-backports i386 Packages [5,177 B]
-Get:6 spacewalk://spacewalk channels:/trusty-amd64-security i386 Packages [437 kB]
-Get:7 spacewalk://spacewalk channels:/main amd64 Packages [2,017 kB]
-Get:8 spacewalk://spacewalk channels:/main i386 Packages [2,017 kB]
-Ign spacewalk://spacewalk channels:/main Translation-en_US
-Ign spacewalk://spacewalk channels:/main Translation-en
-Ign spacewalk://spacewalk channels:/trusty-amd64-backports Translation-en_US
-Ign spacewalk://spacewalk channels:/trusty-amd64-backports Translation-en
-Ign spacewalk://spacewalk channels:/trusty-amd64-security Translation-en_US
-Ign spacewalk://spacewalk channels:/trusty-amd64-security Translation-en
-Ign spacewalk://spacewalk channels:/trusty-amd64-updates Translation-en_US
-Ign spacewalk://spacewalk channels:/trusty-amd64-updates Translation-en
-Fetched 6,577 kB in 1s (5,320 kB/s)
-</code></pre>
-
-<p>Met many problems, perhaps the repository error.</p>
-
-<p>Fix Bug, In spacewalk server, change following items:</p>
-
-<pre><code>[root@spacewalk trusty-ia32]# cat Packages | grep -i &quot;Package: python$&quot; -A2
-Package: python
-Version: 2.7.5-5ubuntu3
-Multi-Arch: allowed
-[root@spacewalk trusty-ia32]# cat Packages | grep -i &quot;Package: python3$&quot; -A2
-Package: python3
-Version: 3.4.0-0ubuntu2
-Multi-Arch: allowed
-[root@spacewalk trusty-ia32]# pwd
-/var/cache/rhn/repodata/trusty-ia32
-</code></pre>
-
-<p>And regenerate the Packages.gz via:</p>
-
-<pre><code># rm -f Packages.gz
-# gzip -c Packages Packages.gz
-</code></pre>
-
-<p>Now re-install firefox you won&rsquo;t meet problem.</p>
-
-<h3 id="enable-push">Enable &ldquo;Push&rdquo;</h3>
-
-<p>Install the packages, precise&rsquo;s package will also be OK for trusty.</p>
-
-<p>Notice, the Trusty could use saucy based deb.</p>
-
-<pre><code>$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/rhncfg_5.10.14-1ubuntu1%7Esaucy2_all.deb
-$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/osad_5.11.27-1ubuntu1%7Esaucy5_all.deb
-$ wget https://launchpad.net/~mj-casalogic/+archive/ubuntu/spacewalk-ubuntu/+files/pyjabber_0.5.0-1.4ubuntu3%7Esaucy1_all.deb
-$ sudo dpkg -i osad_5.11.27-1ubuntu1~saucy5_all.deb
-$ sudo dpkg -i pyjabber_0.5.0-1.4ubuntu3~saucy1_all.deb
-</code></pre>
-
-<p>Import the certification file and modify the osad&rsquo;s certification file:</p>
-
-<pre><code># cd /usr/share/rhn
-# wget http://spacewalk.example.com/pub/RHN-ORG-TRUSTED-SSL-CERT
-# vim /etc/sysconfig/rhn/up2date
-sslCACert=/usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
-# vim /etc/sysconfig/rhn/osad.conf
-osa_ssl_cert = /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
-# service osad start
-# update-rc.d osad defaults
+<pre><code># vim /etc/sysctl.conf
+net.ipv4.ip_forward=1
+# sysctl -w net.ipv4.ip_forward=1
 # reboot
 </code></pre>
 
-<p>If you encounter problem, check the version of the osad/pyjabber, remove the precise
-version and install saucy version on Trusty via <code>dpkg -P osad &amp;&amp; dpkg -P pyjabber</code>,
-install the right version, then everything will becomes OK.</p>
+<p>重启后验证内核包转发功能:</p>
 
-<h3 id="enable-remote-command">Enable Remote Command</h3>
-
-<p>Install and Configure it via:</p>
-
-<pre><code># dpkg -i rhncfg_5.10.14-1ubuntu1~saucy2_all.deb 
-# rhn-actions-control --enable-run
-# mkdir /var/spool/rhn
+<pre><code># cat /proc/sys/net/ipv4/ip_forward 
+1
+# sysctl -p
+net.ipv4.ip_forward = 1
 </code></pre>
 
-<p>Also add configuration:<br />
-<img src="/images/2015_08_27_15_09_31_375x346.jpg" alt="/images/2015_08_27_15_09_31_375x346.jpg" /></p>
+<h3 id="验证网桥1">验证网桥1</h3>
 
-<p>Now you could run command in spacewalk backend.</p>
+<p>用已经创建好的qcow2文件创建一台虚拟机，选择网络配置如下：</p>
 
-<h3 id="errata">Errata</h3>
+<p><img src="/images/2015_10_17_08_47_08_808x488.jpg" alt="/images/2015_10_17_08_47_08_808x488.jpg" /></p>
 
-<p>Following the tips on <a href="http://cefs.steve-meier.de/">http://cefs.steve-meier.de/</a><br />
-Import erratas into the system.</p>
+<p>注意我们将虚拟机的第一块网卡桥接到我们刚才创建的isolationbr网桥上，当然这时候
+虚拟机启动时是没有IP地址的，我们手动配置如下:</p>
 
-<pre><code># ./errata-import.pl --server spacewalk --errata ./errata.latest.xml  --rhsa-oval \
-./com.redhat.rhsa-all.xml --channel centos6-i386 --os-version 6 --publish
+<pre><code>$ sudo vim /etc/network/interfaces
+    # The primary network interface
+    auto eth0
+    iface eth0 inet static
+    address 172.16.0.2
+    netmask 255.255.0.0
+    gateway 172.16.0.1
 </code></pre>
+
+<p>重新启动虚拟机后，我们可以ping通嵌套虚拟机<code>172.16.0.1</code>但是无法ping通局域网内其
+他机器。</p>
+
+<h3 id="验证转发">验证转发</h3>
+
+<p>在嵌套虚拟机上，打开iptables的转发规则即可实现创建出的虚拟机与Internet的连接:</p>
+
+<pre><code># iptables -t nat -A POSTROUTING -s 172.16.0.0/16 ! -d 172.16.0.0/16 -j
+MASQUERADE
+</code></pre>
+
+<p>虚拟机上，ping外网地址:</p>
+
+<pre><code>$ ping 223.5.5.5
+PING 223.5.5.5 (223.5.5.5) 56(84) bytes of data.
+64 bytes from 223.5.5.5: icmp_seq=1 ttl=50 time=37.1 ms
+64 bytes from 223.5.5.5: icmp_seq=2 ttl=50 time=35.4 ms
+64 bytes from 223.5.5.5: icmp_seq=3 ttl=50 time=35.6 ms
+</code></pre>
+
+<h3 id="存储转发规则">存储转发规则</h3>
+
+<p>Ubuntu14.04可以用下列命令将iptables设置的规则永久保存，每次开机启动:</p>
+
+<pre><code># iptables-save&gt;/etc/iptables.rules
+# vim /etc/network/interfaces
+	pre-up iptables-restore &lt; /etc/iptables.rules
+</code></pre>
+
+<p>这样在重启宿主机后，我们设置的转发规则依然生效。</p>
+
+<p>如果需要动态配置IP地址，则启动嵌套虚拟机端的dhcpd或者dnsmasq服务即可。</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/25/add-centos-client-into-spacewalk/">Add CentOS Client into SpaceWalk</a>
+        <a href="http://purplepalmdash.github.io/2015/10/15/use-openwrt-router-for-lan-forwarding/">Use OpenWRT Router For Lan Forwarding</a>
       </h1>
-      <span class="post-date">Aug 25, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/08/25/add-centos-client-into-spacewalk/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 15, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/10/15/use-openwrt-router-for-lan-forwarding/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
@@ -371,205 +683,158 @@ Import erratas into the system.</p>
       
       
 
-<h3 id="installation">Installation</h3>
+<h3 id="usb-ethernet">USB Ethernet</h3>
 
-<p>Take i386 architecture for example, first download the rpm package then install it:</p>
+<p>Insert the USB Ethernet Dongle into the Ubuntu14.04, it will be automatically
+recognized and initialized.</p>
 
-<pre><code>$ wget /yum.spacewalkproject.org/2.3-client/RHEL/6/i386/spacewalk-client-repo-2.3-2.el6.noarch.rpm
-$ rpm -ivh spacewalk-client-repo-2.3-2.el6.noarch.rpm 
+<pre><code>$ dmesg | tail 
+    [10323.307662] asix 2-2.2:1.0 eth1: register 'asix' at usb-0000:00:1d.7-2.2, ASIX
+    AX88772B USB 2.0 Ethernet, 84:xx:xx:xx:xx
+    [10323.307704] usbcore: registered new interface driver asix
+    [10324.285425] IPv6: ADDRCONF(NETDEV_UP): eth1: link is not ready
+$ ifconfig eth1
+    eth1      Link encap:Ethernet  HWaddr 84:xx:xx:xx:
 </code></pre>
 
-<p>If your architecture is x86_64, then select x86_64 corresponding rpm and install it.</p>
+<p>Be care to see the udev rules definition:</p>
 
-<p>Enable EPEL:</p>
+<pre><code>$ cat /etc/udev/rules.d/70-persistent-net.rules 
 
-<pre><code># BASEARCH=$(uname -i)
-# rpm -Uvh http://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
+# USB device 0x:0x (asix)
+SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, DRIVERS==&quot;?*&quot;, ATTR{address}==&quot;84:xx:xx:xx:xx&quot;,
+ATTR{dev_id}==&quot;0x0&quot;, ATTR{type}==&quot;1&quot;, KERNEL==&quot;eth*&quot;, NAME=&quot;eth1&quot;
 </code></pre>
 
-<p>Now install the spacewalk client via:</p>
+<h3 id="ip-configuration">IP Configuration</h3>
 
-<pre><code># yum install -y rhn-client-tools rhn-check rhn-setup rhnsd m2crypto yum-rhn-plugin
+<p>Add the following items into the network configuration file:</p>
+
+<pre><code># vim /etc/network/interfaces 
+    # usb network eth1
+    allow-hotplug eth1
+    iface eth1 inet static
+    address 10.0.80.1
+    netmask 255.255.255.0
 </code></pre>
 
-<h3 id="configuration">Configuration</h3>
+<p>Now restart the network, to see the ethernet has been enabled.</p>
 
-<p>Install Spacewalk server&rsquo;s CA certificate on the server to enable SSL communication:</p>
+<h3 id="dhcpd-configuration">DHCPD Configuration</h3>
 
-<pre><code># wget http://10.11.11.3/pub/rhn-org-trusted-ssl-cert-1.0-1.noarch.rpm
-# rpm -ivh rhn-org-trusted-ssl-cert-1.0-1.noarch.rpm
+<p>Add following configuration to the /etc/dhcp/dhcpd.conf:</p>
+
+<pre><code>### this is for USB NET
+
+subnet
+10.0.80.0 netmask 255.255.255.0 {
+# --- default gateway
+option routers
+10.0.80.1;
+# --- Netmask
+option subnet-mask
+255.255.255.0;
+# --- Broadcast Address
+option broadcast-address
+10.0.80.255;
+# --- Domain name servers, tells the clients which DNS servers to use.
+option domain-name-servers
+223.5.5.5,180.76.76.76;
+option time-offset 0;
+range 10.0.80.3 10.0.80.13;
+default-lease-time 1209600;
+max-lease-time 1814400;
+}
 </code></pre>
 
-<p>Add following item into the <code>/etc/hosts</code> and test its reachable:</p>
+<h3 id="iptables-and-dhcpd">IPtables and dhcpd</h3>
 
-<pre><code># vim /etc/hosts
-....
-10.11.11.3      spacewalk
-# ping spacewalk
-PING spacewalk (10.11.11.3) 56(84) bytes of data.
-64 bytes from spacewalk (10.11.11.3): icmp_seq=1 ttl=64 time=0.214 ms
-...
+<p>Add following items into the ~/.config/awesome/rc.lua</p>
+
+<pre><code>autorunApps =
+{
+--.........
+&quot;blueman-manager&quot;,
+&quot;fcitx&quot;,
+&quot;/home/dash/Downloads/what/whatpulse&quot;,
+-- &quot;pidgin&quot;,
+&quot;sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE&quot;,
+&quot;sudo iptables -t nat -A POSTROUTING -s 10.0.80.0/24 ! -d 10.0.80.0/24 -j MASQUERADE&quot; 
+&quot;sudo dhcpd wlan0 eth1&quot;,
 </code></pre>
 
-<p>Now register your machine into the server:</p>
-
-<pre><code>#  rhnreg_ks --serverUrl=https://spacewalk/XMLRPC --sslCACert=/usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT --activationkey=1-centos6-i386
-</code></pre>
-
-<p>Verify it in SpaceWalk&rsquo;s system details view.</p>
-
-<h3 id="enable-osad">Enable osad</h3>
-
-<p>Install and configure it via:</p>
-
-<pre><code># yum install osad
-# vim /etc/sysconfig/rhn/osad.conf
-osa_ssl_cert = /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT
-# yum install python-hashlib
-# service osad start
-</code></pre>
-
-<p>After osad has been installed, the installation of packages will be done almost
-instantly.</p>
+<p>Now everytime we reboot the system, it will automatically start the dhcpd server and
+let OpenWRT as the access Point.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/24/enable-game-keyboard-rapoo-v5-pro-in-ubuntu-trusty/">Enable Game-KeyBoard Rapoo V5 Pro In Ubuntu Trusty</a>
+        <a href="http://purplepalmdash.github.io/2015/10/14/tips-for-20151014/">Tips For 20151014</a>
       </h1>
-      <span class="post-date">Aug 24, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/08/24/enable-game-keyboard-rapoo-v5-pro-in-ubuntu-trusty/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 14, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/10/14/tips-for-20151014/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/tips">tips</a>
         
       </span>
       
-      
+      <p>Things to be done in tomorrow:</p>
 
-<h3 id="problem">Problem</h3>
+<p>1. Install CloudStack On Ubuntu:<br />
+<a href="http://www.greenhills.co.uk/2015/02/23/cloudstack-4.4-single-server-on-ubuntu-14.04.1-with-kvm.html">http://www.greenhills.co.uk/2015/02/23/cloudstack-4.4-single-server-on-ubuntu-14.04.1-with-kvm.html</a></p>
 
-<p>A Game KeyBoard Rapoo V5 Pro could work propery under windows, but in
-Ubuntu 14.04(Trusty) it could not be identified. Following are the steps for enable it.<br />
-The dmesg shows following message(similar message):</p>
+<p>2. Create local repository for specified DEBs:<br />
+<a href="http://askubuntu.com/questions/170348/how-to-make-my-own-local-repository">http://askubuntu.com/questions/170348/how-to-make-my-own-local-repository</a></p>
 
-<pre><code>[ 272.865245] hid-generic 0003:04D9:A04A.0007: input,hidraw4: USB HID v1.10 Keyboard
-[xxxxxxxxxxxxxx] on usb-0000:00:1d.0-1/input0
-[ 272.874127] hid-generic 0003:04D9:A04A.0008: usage index exceeded
-[ 272.874142] hid-generic 0003:04D9:A04A.0008: item 0 2 2 2 parsing failed
-[ 272.874187] hid-generic: probe of 0003:04D9:A04A.0008 failed with error -22
-</code></pre>
+<p><a href="http://linuxconfig.org/easy-way-to-create-a-debian-package-and-local-package-repository">http://linuxconfig.org/easy-way-to-create-a-debian-package-and-local-package-repository</a></p>
 
-<h3 id="reason">Reason</h3>
+<p><a href="http://unix.stackexchange.com/questions/87130/how-to-quickly-create-a-local-apt-repository-for-random-packages-using-a-debian">http://unix.stackexchange.com/questions/87130/how-to-quickly-create-a-local-apt-repository-for-random-packages-using-a-debian</a></p>
 
-<p>This is an known bug which we could found at:<br />
-<a href="https://bugs.archlinux.org/task/33322">https://bugs.archlinux.org/task/33322</a><br />
-Or:<br />
-<a href="https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1064490">https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1064490</a></p>
+<p>3. All-In-One CloudStack Environment On Ubuntu14.04.</p>
 
-<p>The reason is because &ldquo;usage index exceeded&rdquo; because the source code definition in
-kernel only 12288:</p>
+<p>4. OpenWRT Based Wireless AP, and Synergy for Surface Pro and WorkingMachine.<br />
+<a href="https://synergy-project.org/nightly">https://synergy-project.org/nightly</a></p>
 
-<pre><code>$ cat include/hid.c
-....
-#define HID_MAX_USAGES			12288
-</code></pre>
-
-<h3 id="solution">Solution</h3>
-
-<p>We need to re-compile the kernel with the modified code, then install it we could get
-this keyboard working.</p>
-
-<p>Download the kernel source:</p>
-
-<pre><code>$ mkdir ~/Code/Kernel_Enable_Keyboard &amp;&amp; ce ~/Code/Kernel_Enable_Keyboard
-$ apt-get source linux-image-$(uname -r)
-</code></pre>
-
-<p>Now prepare the building environment:</p>
-
-<pre><code>$ sudo apt-get install kernel-package
-$ sudo apt-get build-dep linux-image-$(uname -r)
-$ sudo apt-get install libncurses5 libncurses5-dev
-</code></pre>
-
-<p>Modify the code:</p>
-
-<pre><code>$ vim linux-lts-utopic-3.16.0/include/hid.h
-- #define HID_MAX_USAGES			12288
-+ #define HID_MAX_USAGES			42288
-</code></pre>
-
-<p>Configure the kernel using your current running configuration and build it:</p>
-
-<pre><code>$ sudo make oldconfig
-$ sudo make-kpkg -j N --initrd --append-to-version=my-very-own-kernel kernel-image
-kernel-headers
-</code></pre>
-
-<p>You will get the deb file generated under the folder, <code>sudo dpkg -i *.deb</code> them, reboot
-the system, now insert your USB Keyboard, it will be identified and runs OK.</p>
-
-<h3 id="known-issue">Known Issue</h3>
-
-<p>My 8188eu usb wifi dongle could not be identified, so <code>modprobe r8188eu</code> could solve
-the problem, Later add it into the system startup script.</p>
-
-<pre><code>$ sudo vim /etc/modules
-r8188eu
-</code></pre>
+<p>Use the nightly built synergy you could got the keyboard sharing working well.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/22/customize-kickstart-for-spacewalk/">Customize Kickstart For SpaceWalk</a>
+        <a href="http://purplepalmdash.github.io/2015/10/14/tips-on-cloud-init-and-cloudstack/">Tips on Cloud-Init and CloudStack(2)</a>
       </h1>
-      <span class="post-date">Aug 22, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/08/22/customize-kickstart-for-spacewalk/#disqus_thread">Comments</a>
+      <span class="post-date">Oct 14, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/10/14/tips-on-cloud-init-and-cloudstack/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="software-selection">Software Selection</h3>
+<h3 id="cloudmonkey-resize">Cloudmonkey Resize</h3>
 
-<p>An example is listed as:</p>
+<p>First deploy the VM in <code>stopped</code> status:</p>
 
-<pre><code>@ Base
-firefox
-@ Gnome
-ibus-table-cangjie
-ibus-table-erbi
-ibus-table-wubi
-python-dmidecode
-python-hwdata
-@X Window System
-@gnome-desktop
-@graphics
-@input-methods
-@remote-desktop-clients
-@internet-browser
-@multimedia
-@web-server
-@x11
+<pre><code>(local) mycloudmonkey&gt; deploy virtualmachine startvm=false
+serviceofferingid=683f31f8-a939-468e-b4de-4512a8ccff8e
+templateid=13fb2961-533e-4a7d-80f9-21d860269aad
+zoneid=78509dc3-c828-429c-8154-9fffbc09384c
+networkids=7c6e7e6b-6aa2-4f95-a835-8d18bf930061 name=testuserdata50G userdata='...`
+
 </code></pre>
 
-<p>Defined in:</p>
+<p>Now resize the root volume into 50G size:</p>
 
-<p><img src="/images/2015_08_22_18_54_00_563x587.jpg" alt="/images/2015_08_22_18_54_00_563x587.jpg" /></p>
-
-<p>More detailed configuration could be found at the DVD-ROM of the CentOS7:</p>
-
-<pre><code># ls /var/distro-trees/centos7_64/repodata
-175ddec2056ec6b5ef267cea35f8ec679314afbfb019957e53f71725bcc5d829-c7-x86_64-comps.xml
+<pre><code>
+deploy virtualmachine serviceofferingid=ff775183-282b-48d7-b08e-eff51fef7683
+templateid=67ca66ea-b021-4f91-ac8c-ff95f2576c9d
+zoneid=1a258852-831c-4612-94f4-2551a98667bb name=testuserdata
+userdata='Q29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0iCk1JTUUtVmVyc2lvbjogMS4wCgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQveC1zaGVsbHNjcmlwdDsgY2hhcnNldD0idXMtYXNjaWkiCk1JTUUtVmVyc2lvbjogMS4wCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQKQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9ImhlbGxvX3dvcmxkLnNoIgoKIyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQhIiA+PiAvcm9vdC90ZXN0CgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQvY2xvdWQtY29uZmlnOyBjaGFyc2V0PSJ1cy1hc2NpaSIKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibXktdXNlci1kYXRhIgoKI2Nsb3VkLWNvbmZpZwpncm93cGFydDoKICBtb2RlOiBhdXRvCmNocGFzc3dkOiB7IGV4cGlyZTogRmFsc2UgfQpzc2hfcHdhdXRoOiBUcnVlCgpzc2hfYXV0aG9yaXplZF9rZXlzOgogLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUUNzMFA4aFNCM05qN2tmd2lRT01PQ0Z2RXVqd3JLZjVuUFdmdzdzbmplVzd3TnhCYi9pTHhqbGxIK0tJdjdpS0dRaGI5WGtpZ3dXelhjdktSRk9OQTF0UU5CUHBsUE9RQXhHYUpoYzcxYlhZTVRabWsxcmZ5L0U4bUZIQmJ3U0trdm04Z3oxaFVqQWFITHdiZ21iaUE3eUNDUkVXbVR1SWpudm1FZnJXYU92WERRZFFPb2RkSzFhZThKM3BnRUNtQ21mRldrQmR3Y1JaN05jTUxBSkVkYTNpYWtJbWdaR2NqTWNCc1hjUUNOcjN1RGlKbERvc1V6Mjg4L3grTnZteTlzcHZnc2x4RXVUV0VQWFRGY1l5eVBrUHdkTnlpQm5TaWFoZTExcUdUZkk0Z2IyWllEb3JDZU5Ca1QxdkVaY0psL1JqT3NKRUFXT04rbno3Nm16MmdhZCByb290QHItOS1WTSAKCnRpbWV6b25lOiBBc2lhL0Nob25ncWluZwoKLS09PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0tLQo='
 </code></pre>
-
-<p>This xml file include all of the possible groups.</p>
 
       
     </div>
@@ -987,12 +1252,21 @@ python-hwdata
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/27/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

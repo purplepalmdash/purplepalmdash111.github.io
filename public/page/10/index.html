@@ -93,422 +93,66 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-4/">Tips on V-USB and Arduino(4)</a>
+        <a href="http://purplepalmdash.github.io/2016/04/01/nodemcu-and-1602i2c-1/">NodeMCU and 1602I2C(1)</a>
       </h1>
-      <span class="post-date">Mar 7, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-4/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 1, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/04/01/nodemcu-and-1602i2c-1/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
         
       </span>
       
-      
+      <p>今天更新了一下代码，实现了两行显示，第一行显示CPU Load，第二行显示剩余内存数。</p>
 
-<p>前面把玩了一下ebuddy, 回去想了一下, 觉得基于v-usb和arduino来实现
-一个自己的ebuddy也不是特别难的事情.</p>
+<p>只是部分替代数据显示部分，这个代码还是有BUG的，譬如说最后一位在下一次显示时不会被清零。</p>
 
-<h3 id="思路">思路</h3>
-
-<p>还是参考:</p>
-
-<p><a href="http://coopermaa2nd.blogspot.tw/2011/10/v-usb-examples-for-arduino.html">V-USB examples for Arduino</a></p>
-
-<p>以<code>hid_custom_rq</code>项目来改. 例子里已经实现了Arduino板载的LED亮/灭. 我们只需要在
-原例上修改, 添加自定义命令和硬件即可.</p>
-
-<h3 id="代码">代码</h3>
-
-<p>示例代码我做完后放到了github上, 可以通过以下命令获得:</p>
-
-<pre><code>$ git clone git@github.com:purplepalmdash/arduino-usb-led.git
-</code></pre>
-
-<h3 id="主要修改">主要修改</h3>
-
-<h4 id="request-h">request.h</h4>
-
-<p>这个头文件被USB固件和主机所共享, 定义了USB的request number数字, request number
-被用于主机和设备之间的通信.</p>
-
-<p>添加:</p>
-
-<pre><code>#define CUSTOM_RQ_BLINK    3
-</code></pre>
-
-<h4 id="hid-custom-rq-h">hid_custom_rq.h</h4>
-
-<p>这个文件是Arduino板上固件程序中对各种来自主机的request信息的响应, 或者说, 消息
-处理函数.</p>
-
-<p>针对上面在<code>requst.h</code>文件中添加的消息, 我们需要在<code>usbFunctionSetup()</code>函数中添加
-对应的消息处理代码, 为简单起见, 直接添加在函数的入口处就好.</p>
-
-<pre><code>
-usbMsgLen_t usbFunctionSetup(uchar data[8])
-{
-    usbRequest_t    *rq = (usbRequest_t *)((void *)data);    
-
-+    if(rq-&gt;bRequest == CUSTOM_RQ_BLINK){ /* blink -- used for blink the LED */
-+            /* First set the led pin to high  */
-+             unsigned char i = 6;
-+             while(i &gt;= 1)
-+             {
-+             digitalWrite(hid_custom_rq.ledPin, HIGH);
-+             delay(1000);
-+             digitalWrite(hid_custom_rq.ledPin, LOW);
-+             delay(1000);
-+             i--;
-+             }
-+    }
-
-    if((rq-&gt;bmRequestType &amp; USBRQ_TYPE_MASK) == USBRQ_TYPE_VENDOR){
-        if(rq-&gt;bRequest == CUSTOM_RQ_SET_STATUS){
-</code></pre>
-
-<p>上面添加的代码, 在监测到<code>CUSTOM_RQ_BLINK</code>消息后, 会将led闪烁6次.</p>
-
-<h4 id="set-led-c">set-led.c</h4>
-
-<p><code>set-led.c</code>文件用于编译出主机端程序, 编译出来的程序将接受用户输入, 将对应的输
-入发送给USB设备.</p>
-
-<p>在<code>set-led.c</code>文件中我们添加一条命令,用于发送<code>CUSTOM_RQ_BLINK</code>消息:</p>
-
-<pre><code>$ vim examples/hid_custom_rq_demo/commandline/set-led.c
-int main(int argc, char **argv)
-{
-
-//.......
-
-+ else if(strcasecmp(argv[1], &quot;blink&quot;) == 0){ /* set blink goes here */
-+         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_BLINK, 0, 0, buffer, 0, 5000);
-+         if(cnt &lt; 0){
-+             fprintf(stderr, &quot;USB error: %s\n&quot;, usb_strerror());
-+         }
-+ }
-
-//.......
-
-}
-</code></pre>
-
-<h3 id="验证">验证</h3>
-
-<p>将代码拷贝到Arduino IDE的<code>libraries</code>目录下:</p>
-
-<pre><code>$ pwd
-/media/y/arduino/1.0.5/libraries/hid_custom_rq
-</code></pre>
-
-<p>IDE菜单里的<code>File -&gt; Examples -&gt; hid_custom_rq</code>下将出现<code>hid_custom_rq_demo</code>, 点
-击, 开始编译. 编译完以后, 上传到Arduino板.</p>
-
-<p>按
-<a href="http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/">http://purplepalmdash.github.io/blog/2016/02/26/tips-on-v-usb-and-arduino-2/</a>
-设置并检查Arduino连线.</p>
-
-<p>现在拔掉Arduino串口的USB线, 插上我们新加的USB连线, 而后运行以下验证例程:</p>
-
-<pre><code>➜  hid_custom_rq git:(master) cd examples/hid_custom_rq_demo/commandline 
-➜  commandline git:(master) ./set-led blink
-USB error: Connection timed out
-</code></pre>
-
-<p>出现USB error是因为在板子上的服务例程中耗费了太多时间. 问题不大. 每次运行
-<code>./set-led blink</code>命令将使得板子上13口的led闪烁6次.</p>
-
-<p>做到这里, 我们已经能模拟出ebuddy的心脏灯光效果了. 通过编写不同的request消息,发
-送给Arduino板子即可.</p>
-
-<p>下面将研究添加一个新的LED灯, 等同于ebuddy的头灯.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/05/ba-wan-ebuddy-3/">把玩ebuddy(3)</a>
-      </h1>
-      <span class="post-date">Mar 5, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/05/ba-wan-ebuddy-3/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>早上起来刷微信, 觉得网页版微信的提示信息大可用ebuddy来响应. 说干就干,以下是解
-决方案.</p>
-
-<h3 id="gnotifier">gnotifier</h3>
-
-<p>写作时,我的firefox版本是44.0.2, 需要安装gnotifier这个插件,从而把firefox的提示
-消息转为系统提示信息, 下载地址在:</p>
-
-<p><a href="https://addons.mozilla.org/en-US/firefox/addon/gnotifier/">https://addons.mozilla.org/en-US/firefox/addon/gnotifier/</a></p>
-
-<p>点击<code>Add to Firefox</code>即完成安装:</p>
-
-<p><img src="/images/2016_03_05_21_50_12_766x490.jpg" alt="/images/2016_03_05_21_50_12_766x490.jpg" /></p>
-
-<h3 id="查看dbus消息">查看dbus消息</h3>
-
-<p>gnotifier将网页版微信的提示消息转为了系统提示消息, 那么只需要获取到系统消息总
-线里的提示信息, 筛选出我们要的类型后, 给ebuddy发送相应的指令即可.</p>
-
-<p><code>dbus-monitor</code>工具可用于侦听dbus总线里的消息, 我们来运行一下,如下:</p>
-
-<pre><code>$  dbus-monitor --session
-interface='org.freedesktop.Notifications',member='Notify'
-
-signal time=1457186062.137082 sender=org.freedesktop.DBus -&gt;
-destination=:1.163 serial=2 path=/org/freedesktop/DBus;
-interface=org.freedesktop.DBus; member=NameAcquired
-   string &quot;:1.163&quot;
-signal time=1457186062.137154 sender=org.freedesktop.DBus -&gt;
-destination=:1.163 serial=4 path=/org/freedesktop/DBus;
-interface=org.freedesktop.DBus; member=NameLost
-   string &quot;:1.163&quot;
-method call time=1457186083.405690 sender=:1.39 -&gt; destination=:1.14
-serial=220 path=/org/freedesktop/Notifications;
-interface=org.freedesktop.Notifications; member=Notify
-   string &quot;Firefox&quot;
-   uint32 0
-   string &quot;/tmp/gnotifier-3Fh5Sa&quot;
-   string &quot;yfp&quot;
-   string &quot;[Sticker][Sticker][Sticker]&quot;
-   array [
-   ]
-   array [
-   ]
-   int32 -1
-method call time=1457186086.866000 sender=:1.39 -&gt; destination=:1.14
-serial=221 path=/org/freedesktop/Notifications;
-interface=org.freedesktop.Notifications; member=Notify
-   string &quot;Firefox&quot;
-   uint32 0
-   string &quot;/tmp/gnotifier-9kaLsI&quot;
-   string &quot;yfp&quot;
-   string &quot;test&quot;
-   array [
-   ]
-   array [
-   ]
-   int32 -1
-</code></pre>
-
-<p>以上是两条从微信号为<code>yfp</code>的用户发送给网页端微信的dbus总线消息, 我们要注意的是,
-需要从dbus session总线取得此信息(system bus和session bus的差别可以自行Google).</p>
-
-<h3 id="python2-dbus">python2-dbus</h3>
-
-<p>ArchLinux下有<code>python-dbus</code>和<code>python2-dbus</code>两个关于dbus的python绑定库, 个人比较
-习惯python2的缘故,安装<code>python2-dbus</code></p>
-
-<pre><code>$ sudo pacman -Ss python2-dbus
-extra/python2-dbus 1.2.0-5 [installed]
-    Python 2.7 bindings for DBUS
-</code></pre>
-
-<p>用于过滤/提取dbus总线消息的python代码如下, 另存为<code>DbusEbuddy.py</code>:</p>
-
-<pre><code>import glib
-import dbus
-import subprocess
-from dbus.mainloop.glib import DBusGMainLoop
-
-def notifications(bus, message):
-    if (len(message.get_args_list()) &gt; 0):
-        if ('Firefox' == message.get_args_list()[0]):
-                if ('yfp' == message.get_args_list()[3]):
-                    bashCommand = 'echo 01 &gt; /dev/udp/127.0.0.1/8888'
-                    output = subprocess.check_output(['bash','-c',bashCommand])
-
-DBusGMainLoop(set_as_default=True)
-
-bus = dbus.SessionBus()
-bus.add_match_string_non_blocking(&quot;eavesdrop=true,\
-    interface='org.freedesktop.Notifications', member='Notify'&quot;)
-bus.add_message_filter(notifications)
-
-mainloop = glib.MainLoop()
-mainloop.run()
-</code></pre>
-
-<p>简单解释一下, 这几行代码首先attach到dbus的sessionbus总线,
-<code>org.freedesktop.Notification</code>端口上所有<code>Notify</code>的成员, 如果匹配到这种消息, 则
-通过<code>add_message_filter()</code>调用回调函数.</p>
-
-<p><code>notifications</code>是我们定义的回调函数,这个回调函数同样很简单, 如果消息长度大于
-0(消息非空), 则检查消息的来源(<code>message.get_args_list()[0]</code>), 选取来自Firefox的
-, 由yfp(<code>messages.get_args_list()[3]</code>)用户发来的消息, 作出对应的动作
-(<code>echo 01 &gt; /dev/udp/127.0.0.1/8888</code>).</p>
-
-<h3 id="使用">使用</h3>
-
-<p>首先开启pybuddyDX库(注意要先安装python2版本的pyusb, 上一篇文章有讲):</p>
-
-<pre><code>$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
-$ sudo python2 ~/Code/python/pybuddy-dx/pybuddyDX.py
-</code></pre>
-
-<p>此时系统在8888端口监听ebuddy动作, 直接运行<code>DbusEbuddy.py</code></p>
-
-<pre><code>$ sudo python2 ~/Code/python/DbusEbuddy.py
-</code></pre>
-
-<p>以后每条由用户yfp发来的消息,都将引发ebuddy人偶执行01指令对应的动作.</p>
-
-<h3 id="延伸">延伸</h3>
-
-<p>可以匹配不同的人名, 执行不同的动作. 例如:</p>
-
-<pre><code>李四	执行02指令
-王五	执行12指令
-某某群	执行08指令
-</code></pre>
-
-<p>当然,根据需要,也可以制定一些规则,譬如某VIP用户, 就是微信里你特别看重的那个人
-,TA发消息来以后, 人偶心跳不止(指令19即是). 但这样一来,就引入了清零问题, 即重置
-人偶状态, 很简单,我们用<code>notify-send</code>这条命令, 发送出指令17给人偶让它重置状态
-即可.</p>
-
-<p>代码的修改:</p>
-
-<pre><code>def notifications(bus, message):
-    if (len(message.get_args_list()) &gt; 0):
-        if ('Firefox' == message.get_args_list()[0]):
-                if ('yfp' == message.get_args_list()[3]):
-                    bashCommand = 'echo 19 &gt; /dev/udp/127.0.0.1/8888'
-                    output = subprocess.check_output(['bash','-c', bashCommand])
-        if ('notify-send' == message.get_args_list()[0]):
-                if ('Clear' == message.get_args_list()[3]):
-                    bashCommand = 'echo 17 &gt; /dev/udp/127.0.0.1/8888'
-                    output = subprocess.check_output(['bash','-c', bashCommand])
-</code></pre>
-
-<p>而对应的清空命令则可以写成alias形式(我用的是zsh, bash类似):</p>
-
-<pre><code>$ vim ~/.zshrc
-alias clearnotify=&quot;notify-send 'Clear' 'This is a clear ebuddy notification.' --icon=dialog-information&quot;
-$ source ~/.zshrc
-$ clearnotify
-</code></pre>
-
-<h3 id="测试">测试</h3>
-
-<p>现在开始测试, 首先让yfp发微信给浏览器里登录的微信用户, 可以看到, 当浏览器收到
-消息后, 系统桌面出现提示, 人偶心脏处的红灯开始狂闪, 不会停止.</p>
-
-<p><img src="/images/1039489558.jpg" alt="/images/1039489558.jpg" /></p>
-
-<p>输入<code>clearnotify</code>命令后, 人偶恢复正常.</p>
-
-<h3 id="下一步需要做的">下一步需要做的</h3>
-
-<ol>
-<li>Windows响应?<br /></li>
-<li>如何通过微信的API获取到好友列表,从而动态指定需要监听的人和事件?<br /></li>
-<li>图形界面的配置?<br /></li>
-</ol>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/03/ba-wan-ebuddy-2/">把玩ebuddy(2)</a>
-      </h1>
-      <span class="post-date">Mar 3, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/03/ba-wan-ebuddy-2/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="archlinux配置过程">ArchLinux配置过程</h3>
-
-<p>因为ArchLinux默认python版本为python3, 使用python2激活e-buddy人偶:</p>
-
-<pre><code>$ sudo pacman -S python2-pip
-$ sudo pip2 install pyusb
-$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
-$ sudo python2 ~/Code/ebuddy/pybuddy-dx/pybuddyDX.py
-$ sudo netstat -anp | grep 8888
-udp        0      0 127.0.0.1:8888          0.0.0.0:*                           14635/python2 
-</code></pre>
-
-<p>接下来就是往<code>127.0.0.1:8888</code>发送指令控制人偶的干活了。具体的指令可以见上一篇文章。</p>
-
-<h3 id="定期检查邮件控制人偶">定期检查邮件控制人偶</h3>
-
-<p>先安装用于检查imap服务端状态的python模块:</p>
-
-<pre><code>$ sudo pip2 install imapclient
-</code></pre>
-
-<p>检查邮件的脚本如下, 该脚本检查163邮箱的IMAP服务器，如果有新邮件，人偶的头就会出现颜色渐
-变，否则，则显示绿灯闪烁:</p>
-
-<pre><code>#!/usr/bin/env python
-import imaplib 
-from imapclient import IMAPClient
+<pre><code>import psutil
+import serial
 import time
-import subprocess
-import thread
 
-DEBUG = True
- 
-HOSTNAME = 'imap.163.com'
-USERNAME = 'XXXXXXXX'
-PASSWORD = 'XXXXXXXX'
-MAILBOX = 'Inbox'
-newmails = 0
- 
-NEWMAIL_OFFSET = 0   # my unread messages never goes to zero, yours might
-MAIL_CHECK_FREQ = 60 # check mail every 60 seconds
 
-# Define a function for checking email
-def check_mail( threadName):
-    while True:
-        # Login into the imap server and check the numbers for the new mail.
-        server = IMAPClient(HOSTNAME, use_uid=True, ssl=True)
-        server.login(USERNAME, PASSWORD)
-        if DEBUG:
-            print('Logging in as ' + USERNAME)
-            select_info = server.select_folder(MAILBOX)
-            print('%d messages in INBOX' % select_info['EXISTS'])
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = '/dev/ttyUSB0'
+ser.open()
+## Todo, to check if the port is opened.
 
-        folder_status = server.folder_status(MAILBOX, 'UNSEEN')
-        global newmails
-        newmails = int(folder_status['UNSEEN'])
+# Really talks to the i2c LCD.
 
-        if DEBUG:
-            print &quot;You have&quot;, newmails, &quot;new emails!&quot;
-        time.sleep(MAIL_CHECK_FREQ)
+# Setup the wiring
+ser.write(b'i2c.setup(0, 4, 3, i2c.SLOW)\r\n')
 
-def loop():
- 
-    if newmails &gt; NEWMAIL_OFFSET:
-        bashCommand = 'echo 12 &gt; /dev/udp/127.0.0.1/8888'
-        output = subprocess.check_output(['bash','-c', bashCommand])
-        time.sleep(8)
-    else:
-        bashCommand = 'echo 08 &gt; /dev/udp/127.0.0.1/8888'
-        output = subprocess.check_output(['bash','-c', bashCommand])
-        time.sleep(5)
- 
-if __name__ == '__main__':
-    try:
-        print 'Press Ctrl-C to quit.'
-        thread.start_new_thread( check_mail, (&quot;Thread-1&quot;, ) )
-        while True:
-            loop()
-    finally:
-        print &quot;finally comes here!&quot;
+# dofile, load the lcd library
+ser.write(b'lcd = dofile(&quot;lcd1602.lua&quot;)()\r\n')
+
+# Now Refresh the LCD. 
+ser.write(b'lcd.clear()\r\n')
+#ser.write(b'lcd.put(lcd.light(on))\r\n')
+ser.write(b'lcd.put(lcd.locate(0, 0), &quot;CPU Load: &quot;)\r\n')
+ser.write(b'lcd.put(lcd.locate(1, 0), &quot;Mem Free: &quot;)\r\n')
+ser.write(b'lcd.put(lcd.locate(0, 14), &quot;%&quot;)\r\n')
+ser.write(b'lcd.put(lcd.locate(1, 14), &quot;MB&quot;)\r\n')
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    #ser.write(b'lcd.clear()\r\n')
+    currentPer = str(psutil.cpu_percent()).encode('ascii')
+    memFree = str(int(psutil.virtual_memory().free/1024/1024)).encode('ascii')
+    oneLine = b'lcd.put(lcd.locate(0, 9), &quot;' + currentPer + b'&quot;)\r\n'
+    SecondLine = b'lcd.put(lcd.locate(1, 9), &quot;' + memFree + b'&quot;)\r\n'
+    # Format oneLine
+    #ser.write(b'lcd.put(lcd.locate(0, 0), &quot;CPU Load: &quot;)\r\n')
+    #ser.write(b'lcd.put(lcd.locate(1, 0), &quot;Mem Free: &quot;)\r\n')
+    #ser.write(b'lcd.put(lcd.locate(0, 14), &quot;%&quot;)\r\n')
+    #ser.write(b'lcd.put(lcd.locate(1, 14), &quot;MB&quot;)\r\n')
+    #time.sleep(0.2)
+    ser.write(oneLine)
+    time.sleep(0.2)
+    ser.write(SecondLine)
+    time.sleep(1)
 </code></pre>
 
       
@@ -516,45 +160,9 @@ if __name__ == '__main__':
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/02/conntrack-tools-usage/">conntrack-tools usage</a>
+        <a href="http://purplepalmdash.github.io/2016/03/31/nodemcu-and-1602i2c/">NodeMCU And 1602I2C</a>
       </h1>
-      <span class="post-date">Mar 2, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/02/conntrack-tools-usage/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="参考">参考</h3>
-
-<p><a href="https://blogs.it.ox.ac.uk/networks/2014/09/30/linux-and-eduroam-nat-logging-perl-and-regular-expressions/">https://blogs.it.ox.ac.uk/networks/2014/09/30/linux-and-eduroam-nat-logging-perl-and-regular-expressions/</a></p>
-
-<h3 id="安装">安装</h3>
-
-<p>ArchLinux下:</p>
-
-<pre><code>$ sudo pacman -S conntrack-tools
-</code></pre>
-
-<h3 id="使用">使用</h3>
-
-<p>记录新建/销毁连接数至文件:</p>
-
-<pre><code>$ sudo touch /var/log/conntrack-data.log
-$ sudo chmod 777 /var/log/conntrack-data.log
-$ sudo conntrack -E -eNEW,DESTROY --src-nat -otimestamp,extended --buffer-size=104857600 &gt; /var/log/conntrack-data.log
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/">e-buddy消息提醒服务设计思路(1)</a>
-      </h1>
-      <span class="post-date">Mar 1, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/01/e-buddyxiao-xi-ti-xing-fu-wu-she-ji-si-lu-1/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 31, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/31/nodemcu-and-1602i2c/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
@@ -563,18 +171,354 @@ $ sudo conntrack -E -eNEW,DESTROY --src-nat -otimestamp,extended --buffer-size=1
       
       
 
-<h3 id="设计目的">设计目的</h3>
+<p>最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
+验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
+用来做一个WIFI显示屏.</p>
 
-<p>设计为一个系统通用的? 还是特定应用的?</p>
+<p>今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, 如下图所示,这里简单记录
+一下制作过程.</p>
 
-<h3 id="监控-vs-告警">监控 vs 告警</h3>
+<p><img src="/images/1009950725.jpg" alt="/images/1009950725.jpg" /></p>
 
-<p>监控某项指标? 然后告警?</p>
+<p><img src="/images/1162591797.jpg" alt="/images/1162591797.jpg" /></p>
 
-<h3 id="总线">总线?</h3>
+<h3 id="连线图">连线图</h3>
 
-<p>DBUS 总线?<br />
-D-Bus For Python.</p>
+<p>1602 I2C上有四个口,分别是GND/VCC/SDA/SCL.<br />
+GND自然不用多说,连接NodeMCU上的GND即可.<br />
+VCC我们使用5V输入,在NodeMCU上则是VIN口. 在下图里我用红色做了标注.<br />
+SDA接GPIO0, SDC接GPIO2,在图中我用橙色做了标识.</p>
+
+<p><img src="/images/2016_03_31_21_46_54_644x477.jpg" alt="/images/2016_03_31_21_46_54_644x477.jpg" /></p>
+
+<h3 id="软件准备">软件准备</h3>
+
+<p>我这里参考了
+<a href="http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/">http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/</a>
+上的实例, 所以用ESPlorer来写入1602的库文件. ESPlorer的下载地址在:</p>
+
+<p><a href="http://esp8266.ru/esplorer/#download">http://esp8266.ru/esplorer/#download</a></p>
+
+<p>如果你使用的是ArchLinux的话,一行命令就够了:</p>
+
+<pre><code>$ yaourt esplorer
+</code></pre>
+
+<p>如果你运行上述网址上的示例, 故事的结尾你会获得一个Hallo的显示,以及跑马灯式的显
+示效果.</p>
+
+<h3 id="cpu-load-program">CPU Load Program</h3>
+
+<p>先上代码, 用Python写的, 如果你看过上面的示例程序就会明白, 往串口写入1602的lua
+脚本,就能获得对应的显示效果,那么以下的Python代码就是每分钟读取CPU的负载值, 将
+它封装在一个字符串中发送到NodeMCU连接的串口.</p>
+
+<pre><code>import psutil
+import serial
+import time
+
+
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = '/dev/ttyUSB0'
+ser.open()
+## Todo, to check if the port is opened.
+
+# Really talks to the i2c LCD.
+
+# Setup the wiring
+ser.write(b'i2c.setup(0, 4, 3, i2c.SLOW)\r\n')
+
+# dofile, load the lcd library
+ser.write(b'lcd = dofile(&quot;lcd1602.lua&quot;)()\r\n')
+
+# Now Refresh the LCD. 
+ser.write(b'lcd.clear()\r\n')
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    ser.write(b'lcd.clear()\r\n')
+    currentPer = str(psutil.cpu_percent()).encode('ascii')
+    # Format oneLine
+    ser.write(b'lcd.put(lcd.locate(0, 5), &quot;CPU Load&quot;)\r\n')
+    oneLine = b'lcd.put(lcd.locate(1, 6), &quot;' + currentPer + b'&quot;)\r\n'
+    # Write oneLine
+    ser.write(oneLine)
+    time.sleep(1)
+</code></pre>
+
+<p>代码运行的前提条件是,在ArchLinux上,安装pyserial库和psutil库,
+而后运行<code>sudo python WriteLoadToLCD.py</code>.</p>
+
+<pre><code>$ sudo pacman -S python-psutil
+$ sudo pacman -S python-pyserial
+</code></pre>
+
+<p>可以看到你的系统CPU使用率已经显示在1602 LCD上了,每分钟更新一次.<br />
+当然你也可以将显示
+值从CPU使用率换成内存占用率,或是CPU温度,或是PM2.5的值等等. 你要做的就是构建自
+己的数据<code>CurrentPer</code>和写入的格式<code>oneLine</code>.</p>
+
+<p>通过串口发送数据, 通过NodeMCU驱动1602, 这功能对NodeMCU而言太小儿科了,所以接下
+来我会继续做一个WIFI驱动的LCD.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/29/tips-on-shrinking-vhd-file/">Tips On Shrinking VHD File</a>
+      </h1>
+      <span class="post-date">Mar 29, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/29/tips-on-shrinking-vhd-file/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="uncleaned-templates-generation">UnCleaned Templates Generation</h3>
+
+<p>Before remove big files:</p>
+
+<pre><code>[root@fwgwg ~]# df -h
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/mapper/VolGroup00-LogVol00
+                       18G  5.1G   12G  31% /
+/dev/xvda1             99M   14M   80M  15% /boot
+tmpfs                 128M     0  128M   0% /dev/shm
+</code></pre>
+
+<p>Create the vhd file in CloudStack:</p>
+
+<p><img src="source/images/2016_03_29_18_17_10_634x380.jpg" alt="source/images/2016_03_29_18_17_10_634x380.jpg" /></p>
+
+<p>Name it:</p>
+
+<p><img src="source/images/2016_03_29_18_17_55_301x382.jpg" alt="source/images/2016_03_29_18_17_55_301x382.jpg" /></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/29/monitoring-xenserver/">Monitoring XenServer</a>
+      </h1>
+      <span class="post-date">Mar 29, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/29/monitoring-xenserver/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="prerequisition">Prerequisition</h3>
+
+<p>Refers
+to<a href="https://github.com/crashdump/collectd-xenserver">https://github.com/crashdump/collectd-xenserver</a></p>
+
+<ul>
+<li>Collected 4.9 or later</li>
+<li>Python2.4 Or Later</li>
+<li>sudo pip install XenAPI</li>
+<li>sudo pip install collectd</li>
+</ul>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>The plugin could not working. to be investigated.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/29/use-debmirror-for-setup-local-repository/">Use Debmirror For Setup Local Repository</a>
+      </h1>
+      <span class="post-date">Mar 29, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/29/use-debmirror-for-setup-local-repository/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
+        
+      </span>
+      
+      
+
+<h3 id="setup-repository">Setup Repository</h3>
+
+<p>Install debmirror via:</p>
+
+<pre><code>$ sudo apt-get install -y debmirror
+$ sudo mkdir /home/UbuntuMirror
+$ sudo vim /usr/local/bin/mirrorbuild.sh
+</code></pre>
+
+<p>The mirrorbuild.sh file listed as following:</p>
+
+<pre><code>#### Start script to automate building of Ubuntu mirror #####
+## THE NEXT LINE IS NEEDED THE REST OF THE LINES STARTING WITH A # CAN BE DELETED
+
+#!/bin/bash
+
+## Setting variables with explanations.
+
+#
+# Don't touch the user's keyring, have our own instead
+#
+export GNUPGHOME=/home/mirrorkeyring
+
+# Arch=         -a      # Architecture. For Ubuntu can be i386, powerpc or amd64.
+# sparc, only starts in dapper, it is only the later models of sparc.
+#
+arch=i386,amd64
+
+# Minimum Ubuntu system requires main, restricted
+# Section=      -s      # Section (One of the following -
+main/restricted/universe/multiverse).
+# You can add extra file with $Section/debian-installer. ex:
+main/debian-installer,universe/debian-installer,multiverse/debian-installer,restricted/debian-installer
+#
+section=main,restricted,universe,multiverse
+
+# Release=      -d      # Release of the system (...Hardy, Intrepid... Lucid, Precise,
+Quantal, Saucy, Trusty ), and the -updates and -security ( -backports can be added if
+desired)
+# List of updated releases in: https://wiki.ubuntu.com/Releases
+#
+
+release=trusty,trusty-security,trusty-updates
+
+# Server=       -h      # Server name, minus the protocol and the path at the end
+# CHANGE &quot;*&quot; to equal the mirror you want to create your mirror from. au. in Australia
+ca. in Canada.
+# This can be found in your own /etc/apt/sources.list file, assuming you have Ubuntu
+installed.
+#
+server=archive.ubuntu.com
+
+# Dir=          -r      # Path from the main server, so http://my.web.server/$dir,
+Server dependant
+#
+inPath=/ubuntu
+
+# Proto=        --method=       # Protocol to use for transfer (http, ftp, hftp, rsync)
+# Choose one - http is most usual the service, and the service must be avaialbe on the
+server you point at.
+#
+proto=http
+
+# Outpath=              # Directory to store the mirror in
+# Make this a full path to where you want to mirror the material.
+#
+outPath=/home/UbuntuMirror
+
+# The --nosource option only downloads debs and not deb-src's
+# The --progress option shows files as they are downloaded
+# --source \ in the place of --no-source \ if you want sources also.
+# --nocleanup  Do not clean up the local mirror after mirroring is complete. Use this
+option to keep older repository
+# Start script
+#
+debmirror       -a $arch \
+                --no-source \
+                -s $section \
+                -h $server \
+                -d $release \
+                -r $inPath \
+                --progress \
+                --method=$proto \
+                $outPath
+
+
+#### End script to automate building of Ubuntu mirror ####
+</code></pre>
+
+<p>Modify the related priviledge:</p>
+
+<pre><code>$ sudo chmod +x /usr/local/bin/mirrorbuild.sh
+$ sudo chown -R root:dash /home/UbuntuMirror/
+$ sudo chmod -R 571 /home/UbuntuMirror/
+$ sudo chmod 777 -R /home/mirrorkeyring/
+$ gpg --no-default-keyring --keyring /home/mirrorkeyring/pubring.gpg --import
+/usr/share/keyrings/ubuntu-archive-keyring.gpg
+$ gpg --no-default-keyring --keyring /home/mirrorkeyring/trustedkeys.gpg --import
+/usr/share/keyrings/ubuntu-archive-keyring.gpg
+</code></pre>
+
+<p>Now you could build the local repository via:</p>
+
+<pre><code>$ mirrorbuild.sh
+</code></pre>
+
+<h3 id="resize-repository">Resize Repository</h3>
+
+<p>First we syncing all of the Repositries, to see its size:</p>
+
+<pre><code>$ ➜  UbuntuMirror du -hs *
+72M	dists
+192G	pool
+12K	project
+</code></pre>
+
+<p>Now we add some regex for restrict :</p>
+
+<pre><code>$ sudo vim /usr/local/bin/mirrorbuild.sh
+debmirror       -a $arch \
+                --no-source \
+                -s $section \
+                -h $server \
+                -d $release \
+                -r $inPath \
+                --progress \
+                --method=$proto \
+                --exclude-deb-section=admin \
+                --exclude-deb-section=base \
+                --exclude-deb-section=comm \
+                --exclude-deb-section=devel \
+                --exclude-deb-section=doc \
+                --exclude-deb-section=electronics \
+                --exclude-deb-section=embedded \
+                --exclude-deb-section=games \
+                --exclude-deb-section=gnome \
+                --exclude-deb-section=graphics \
+                --exclude-deb-section=hamradio \
+                --exclude-deb-section=interpreters \
+                --exclude-deb-section=kde \
+                --exclude-deb-section=libdevel \
+                --exclude-deb-section=libs \
+                --exclude-deb-section=mail \
+                --exclude-deb-section=math \
+                --exclude-deb-section=misc \
+                --exclude-deb-section=net \
+                --exclude-deb-section=news \
+                --exclude-deb-section=oldlibs \
+                --exclude-deb-section=otherosfs \
+                --exclude-deb-section=perl \
+                --exclude-deb-section=python \
+                --exclude-deb-section=science \
+                --exclude-deb-section=shells \
+                --exclude-deb-section=sound \
+                --exclude-deb-section=tex \
+                --exclude-deb-section=text \
+                --exclude-deb-section=utils \
+                --exclude-deb-section=web \
+                --exclude-deb-section=x11 \
+</code></pre>
+
+<p>which will deduce the size for syncing, but this won&rsquo;t reduce much.</p>
+
+<pre><code>➜  UbuntuMirror du -hs *
+22M	dists
+33G	pool
+12K	project
+</code></pre>
+
+<p>I think this is only works for debian.</p>
 
       
     </div>
@@ -992,12 +936,21 @@ D-Bus For Python.</p>
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/11/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

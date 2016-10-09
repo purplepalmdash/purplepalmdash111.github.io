@@ -93,9 +93,9 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/">Use TFTP/NFS Testing  BBB Kernel </a>
+        <a href="http://purplepalmdash.github.io/2014/11/16/i2c-and-bbb/">EBC Exercises on BBB -i2c and BBB</a>
       </h1>
-      <span class="post-date">Nov 2, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 16, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/16/i2c-and-bbb/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
@@ -104,374 +104,357 @@
       
       
 
-<h3 id="prerequisite">Prerequisite</h3>
+<h3 id="connection">Connection</h3>
 
-<p>You have a tftp server and NFS server configured, in my environment these 2 server runs on ArchLinux, ip address is 10.0.0.221, while BBB takes another ip address, for example, 10.0.0.16.</p>
+<p>HMC5883L magnetometer runs in 400KHZ I2C bus, it&rsquo;s for measuring the magnetic field vector in 3 dimensions.<br />
+We use its 4 ports: VCC,GND,SDA, SCL. SDA is for Data, while SCL is for Clock.</p>
 
-<h3 id="nfs-server-preparation">NFS Server Preparation</h3>
+<p>Use P9 for connecting the HMC5883L.</p>
 
-<p>Create the nfs server&rsquo;s rootfs for BBB Black ,and open all of the priviledges :</p>
-
-<pre><code># pwd
-/media/y/embedded/BBB/svnco/trunk/bin/omap
-# mkdir /srv/nfs4/BBBrootfs
-# tar xzvf openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
-# chmod 777 -R /srv/nfs4/BBBrootfs/
+<pre><code>P9_02(GND) &lt;----&gt; GND    
+P9_04(VCC) &lt;----&gt; VCC
+P9_19(I2C2_SCL) &lt;----&gt; SCL	 I2C bus 2(pin 19 on header p9 to SCL) 
+P9_20(I2C2_SDA) &lt;----&gt; SDA	 
 
 </code></pre>
 
-<p>Now you have the NFS Server available.</p>
+<h3 id="i2c-detect">I2C Detect</h3>
 
-<h3 id="tftp-server-preparation">TFTP Server Preparation</h3>
+<p>First you should install i2cdetect, then list the avaiable i2c bus via following command:</p>
 
-<p>Since we are using u-boot for booting, we need create uImage, but in OpenWRT, its default generated file is zImage, so we need use following command for generate our own uImage:</p>
-
-<pre><code># mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d ./zImage ./uImage
-Image Name:   Linux
-Created:      Sun Nov  2 20:39:08 2014
-Image Type:   ARM Linux Kernel Image (uncompressed)
-Data Size:    1710568 Bytes = 1670.48 kB = 1.63 MB
-Load Address: 80008000
-Entry Point:  80008000
+<pre><code>root@arm:~# i2cdetect -l
+i2c-0   i2c             OMAP I2C adapter                        I2C adapter
+i2c-1   i2c             OMAP I2C adapter                        I2C adapter
 
 </code></pre>
 
-<p>Also we have to copy the dtd file into our tftp folder:</p>
+<p>We choose i2c bus2, thus the command for detecting the connected device should be:</p>
 
-<pre><code>[root@TrustyArch omap]# pwd
-/media/y/embedded/BBB/svnco/trunk/bin/omap
-[root@TrustyArch omap]# cp dtbs/am335x-boneblack.dtb /srv/tftp/
-
-</code></pre>
-
-<h3 id="easy-making-script">Easy Making Script</h3>
-
-<p>Following script will easy your life:</p>
-
-<pre><code>$ cat ~/autobuildnfs.sh
-# First copy the kernel and dtd files into the tftp server
-echo &quot;##### Start copy to /srv/tftp####&quot;
-cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage /srv/tftp/
-cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb /srv/tftp/
-echo &quot;###############Finished Copy!!!###############&quot;
-# Generate the uImage in /srv/tftp folder
-mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d /srv/tftp/openwrt-omap-zImage /srv/tftp/uImage
-# Remove the BBBrootfs content, all of them should be deleted. 
-rm -rf /srv/nfs4/BBBrootfs/
-mkdir -p /srv/nfs4/BBBrootfs
-# Now extract the newly generatd rootfs into the /srv/nfs4/BBBrootfs
-tar xzvf /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
+<pre><code>root@arm:~# i2cdetect -y -r 1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- 1e -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- UU UU UU UU -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --     
 
 </code></pre>
 
-<h3 id="u-boot-configuration">U-boot Configuration</h3>
+<p>The address should be 0x1e.</p>
 
-<h4 id="cheetsheet">CheetSheet</h4>
+<h3 id="communicate-with-hmc5883l">Communicate with HMC5883L</h3>
 
-<p>When system startup, click &lsquo;enter&rsquo; for getting the u-boot prompt interface, then set following:</p>
+<p>The registers are listed as following, notice eavh value for each axis are 16-bits, thus we have to read them seperately and combine them:</p>
 
-<pre><code>setenv ipaddr 10.0.0.16
-setenv serverip 10.0.0.221
-tftpboot ${fdtaddr} am335x-boneblack.dtb
-tftpboot ${kloadaddr} uImage
-setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
-bootm ${kloadaddr} - ${fdtaddr}
+<pre><code>Address	Name	Access
+00	Configuration Register A	Read/Write
+01	Configuration Register B	Read/Write
+02	Mode Register	Read/Write
+03	Data Output X MSB Register	Read
+04	Data Output X LSB Register	Read
+05	Data Output Z MSB Register	Read
+06	Data Output Z LSB Register	Read
+07	Data Output Y MSB Register	Read
+08	Data Output Y LSB Register	Read
+09	Status Register	Read
+10	Identification register A	Read
+11	Identification register B	Read
+12	Identification register C	Read
 
 </code></pre>
 
-<h4 id="cheetsheet2">CheetSheet2</h4>
+<p>Thus we could read out the X MSB Restier and X LSB Register via:</p>
+
+<pre><code>root@arm:~# i2cget -y 1 0x1e 3
+0xfe
+root@arm:~# i2cget -y 1 0x1e 4
+0x91
+
+</code></pre>
+
+<h4 id="different-mode">Different Mode</h4>
+
+<p>Notice Mode Register, this will set the mesurement mode.<br />
+<img src="/images/moderegister.jpg" alt="/images/moderegister.jpg" /></p>
+
+<p>From the above table, we know for setting the lower 2 bits we could enable the operation mode of HMC5883L.<br />
+Now we set to single measurement mode, for one-time measure.</p>
+
+<pre><code># i2cset -y 1 0x1e 2 1
+
+</code></pre>
+
+<p>2 means we set the register 2, and its number equals to 01(Single-Measurement Mode). After one-time measurement, it wil fall back to idle Mode.<br />
+After one-time measurement, get the register mode:</p>
+
+<pre><code>root@arm:~# i2cget -y 1 0x1e 2
+0x03
+
+</code></pre>
+
+<p>Get the value of x-axis:</p>
+
+<pre><code>root@arm:~# i2cget -y 1 0x1e 3
+0xfe
+root@arm:~# i2cget -y 1 0x1e 4
+0x77
+
+</code></pre>
+
+<h3 id="c-code">C Code</h3>
+
+<p>Running Result:</p>
+
+<pre><code>root@arm:~/code/i2c# ./myi2cget 1 30 2
+0x03 (3)
+root@arm:~/code/i2c# ./myi2cget 1 30 34
+0x00 (0)
+root@arm:~/code/i2c# ./myi2cget 1 30 4
+0x77 (119)
+
+</code></pre>
+
+<p>Critical Code:<br />
+Open the i2c-xxx:</p>
+
+<pre><code>        sprintf(filename, &quot;/dev/i2c-%d&quot;, i2cbus);
+        file = open(filename, O_RDWR);
+
+</code></pre>
+
+<p>ioctl for setting the address:</p>
+
+<pre><code>        if (ioctl(file, I2C_SLAVE, address) &lt; 0) {
+
+</code></pre>
+
+<p>Now read the byte from:</p>
+
+<pre><code>        res = i2c_smbus_read_byte_data(file, daddress);
+
+</code></pre>
+
+<p>Comparing the official i2cget, myi2cget could print out the human-readable format of data.</p>
+
+<h3 id="web-displaying">Web Displaying</h3>
+
+<p>Git clone the following project form github.com:</p>
+
+<pre><code># git clone https://github.com/duganje/ECE497_duganje.git
+# cd  ECE497_duganje/
+# ls
+MiniProject01  MiniProject02  MiniProject03  MiniProject04  README.md
+
+</code></pre>
+
+<p>Upload the project MiniProject04 to the BBB board.<br />
+Notice change the code in buttonBox.js from <code>i2cset -y 3</code> to <code>i2cset -y 1 and</code>i2cget -y 3<code>to</code>i2cget -y 1`</p>
+
+<p>After modification, run buttonBox.js via:</p>
+
+<pre><code>$ node buttonBox.js
+
+</code></pre>
+
+<p>Now visit the <code>http://xx.xx.xx.xxx:8081/buttonBox.html</code> you could see the data displayed as following:</p>
+
+<p><img src="/images/magnetometer.jpg" alt="/images/magnetometer.jpg" /></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb/">EBC Exercises on BBB</a>
+      </h1>
+      <span class="post-date">Nov 13, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="tips-on-building-kenrel">Tips on Building Kenrel</h3>
+
+<p>Via following commands you could build the 3.8 kernel for BBB:</p>
+
+<pre><code>$ git clone git://github.com/RobertCNelson/linux-dev.git
+$ cd linux-dev
+$ git checkout origin/am33x-v3.8 -b am33x-v3.8
+$ time git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+$ cp system.sh.sample system.sh
+$ diff system.sh*
+15c15
+&lt; CC=arm-linux-gnueabi-
+---
+&gt; #CC=arm-linux-gnueabi-
+21c21
+&lt; LINUX_GIT=~/BeagleBoard/linux-stable/
+---
+&gt; #LINUX_GIT=/home/user/linux-stable/
+31c31
+&lt; ZRELADDR=0x80008000
+---
+&gt; #ZRELADDR=0x80008000
+$ ./build_kernel.sh
+
+</code></pre>
+
+<h3 id="u-boot-cross-compile">U-boot Cross-compile</h3>
+
+<p>Download the U-boot and cross-compile it.</p>
+
+<pre><code># git clone git://git.denx.de/u-boot.git
+# cd u-boot/
+# git checkout v2013.07 -b tmp
+# wget https://raw.github.com/eewiki/u-boot-patches/master/v2013.07/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+# patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+# setpogo	# For setting my cross-compiler to arm-linux-gnueabi-
+# export ARCH=arm
+# export CROSS_COMPILE=arm-linux-gnueabi-
+# make
+
+</code></pre>
+
+<p>After building you will get MLO and u-boot.img.</p>
+
+<h3 id="test-on-nfs">Test on NFS</h3>
+
+<p>Prepare the NFS File System.</p>
+
+<pre><code>mkdir dtbs
+tar xzvf 3.8.13-bone53-dtbs.tar.gz -C ./dtbs
+cp dtbs/am335x-boneblack.dtb /srv/tftp/
+cp 3.8.13-bone53.zImage /srv/tftp/
+mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d /srv/tftp/3.8.13-bone53.zImage  /srv/tftp/uImage
+tar xJvf ubuntu-14.04-console-armhf-2014-08-13.tar.xz -C /srv/nfs4/
+cd /srv/nfs4/ubuntu-14.04-console-armhf-2014-08-13
+tar xvf armhf-rootfs-ubuntu-trusty.tar -C ../Ubuntu_fs/
+chmod 777 -R Ubuntu_fs/
+
+</code></pre>
+
+<p>Then boot the system from U-boot Via:</p>
 
 <pre><code>setenv ipaddr 192.168.1.16
 setenv serverip 192.168.1.221
 tftpboot ${fdtaddr} am335x-boneblack.dtb
 tftpboot ${kloadaddr} uImage
-# For NFS
-setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.16:::::eth0 rootpath=/etc/preinit
-# NFS with 192.168.1.1
-setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.221:/srv/nfs4/BBBrootfs ip=192.168.1.1:::::eth0 rootpath=/etc/preinit
-# For SD-Card
-setenv bootargs console=ttyO0,115200n8 root=/dev/mmcblk0p2 ro rootfstype=ext4 rootwait
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rootfstype=nfs rw nfsroot=192.168.1.221:/srv/nfs4/Ubuntu_fs ip=192.168.1.1 
 bootm ${kloadaddr} - ${fdtaddr}
 
 </code></pre>
 
-<h4 id="setting-and-testing-the-network">setting and testing the network</h4>
+<p>Now boot the BBB and we got the ssh enabled, via ssh ubuntu@192.168.1.1, password is temppwd.</p>
 
-<p>Set the ipaddr, and save it into the u-boot, next time you won&rsquo;t set it again.</p>
+<p>Sometimes you will meet sudo problem, just chown and chmod is OK</p>
 
-<pre><code>U-Boot# setenv ipaddr 10.0.0.16
-U-Boot# printenv ipaddr
-ipaddr=10.0.0.16
-U-Boot# setenv serverip 10.0.0.221
-U-Boot# ping 10.0.0.221
-link up on port 0, speed 100, full duplex
-Using cpsw device
-host 10.0.0.221 is alive
-U-Boot# saveenv
+<pre><code># chmod 4755 some_related_file
+# chown root some_related_file
 
 </code></pre>
 
-<h4 id="load-files-from-tftp">Load Files From TFTP</h4>
+<p>Since NFS gonna the write priviledge error, go back for SD card.</p>
 
-<p>Use following commands for loading uImage and dtb files from 10.0.0.221:</p>
+<h3 id="sd-card">SD Card</h3>
 
-<pre><code>U-Boot# tftpboot ${fdtaddr} am335x-boneblack.dtb
-U-Boot# tftpboot ${kloadaddr} uImage
+<p>FileSystem Preparation:</p>
 
-</code></pre>
-
-<h4 id="set-nfs-startup-parameter">Set NFS Startup Parameter</h4>
-
-<p>Following will let the kernel startup from the nfs server.</p>
-
-<pre><code>setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.221:/srv/nfs4/BBBrootfs ip=10.0.0.16:::::eth0
-
-</code></pre>
-
-<p>Now startup:</p>
-
-<pre><code>bootm ${kloadaddr} - ${fdtaddr}
+<pre><code>$ export DISK=/dev/mmcblk0
+$ dd if=/dev/zero of=${DISK} bs=1M count=10
+$ dd if=./u-boot/MLO of=${DISK} count=1 seek=1 conv=notrunc bs=128k
+$ dd if=./u-boot/u-boot.img of=${DISK} count=2 seek=1 conv=notrunc bs=384k
+ sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
+1,,0x83,*
+__EOF__
+$ mkfs.ext4 /dev/mmcblk0p1 -L rootfs
 
 </code></pre>
 
-<h3 id="start-debugging-under-nfs">Start Debugging Under NFS</h3>
+<p>Copy the Operating system into the sd card partition 1, later we will use /mnt for mounting the partition 1:</p>
 
-<p>First we met following error:</p>
-
-<pre><code>[    1.015532] List of all partitions:
-[    1.019292] No filesystem could mount root, tried: 
-[    1.024439] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,255)
-
-</code></pre>
-
-<p>This is because we don&rsquo;t enable NFS and ROOT on NFS in kernel configuration.<br />
-File System -&gt;  Network File System -&gt; NFS Client Support, etc, see following picture:<br />
-<img src="/images/nfskernelconfigure.jpg" alt="/images/nfskernelconfigure.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/02/git-under-proxy/">git under proxy</a>
-      </h1>
-      <span class="post-date">Nov 2, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/02/git-under-proxy/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      <p>This changes use the socks proxy for git.<br />
-Install connect-proxy in aur:</p>
-
-<pre><code>yaourt -S connect-proxy
+<pre><code># mount /dev/mmcblk0p1 /mnt
+# cd ubuntu-14.04.1-console-armhf-2014-10-29
+# tar xvf armhf-rootfs-ubuntu-trusty.tar -C /mnt/
+# sync
 
 </code></pre>
 
-<p>Edit the proxy definition file:</p>
+<p>Now install the kernel image into the ubuntu system. Imagine your SD is mount to /mnt/</p>
 
-<pre><code>[Trusty@~]$ cat socks5.sh 
-#!/bin/sh
-connect -S 127.0.0.1:1394 &quot;$@&quot;
-
-</code></pre>
-
-<p>Now directly set the</p>
-
-<pre><code>export GIT_PROXY_COMMAND=/home/Trusty/socks5.sh
+<pre><code>cp /media/y/embedded/BBB/EBC/3.8Kernel/linux-dev/deploy/3.8.13-bone53.zImage /mnt/boot/vmlinuz-3.8.13-bone53
+tar xzvf /media/y/embedded/BBB/EBC/3.8Kernel/linux-dev/deploy/3.8.13-bone53-dtbs.tar.gz -C /mnt/boot/dtbs/
 
 </code></pre>
 
-<p>Or change the proxy definition via:</p>
+<p>Now create the following uEnv.txt located in /mnt/boot/ and /mnt/:</p>
 
-<pre><code>[core]
-        gitproxy = /home/Trusty/socks5.sh
+<pre><code>##This will work with: Angstrom's 2013.06.20 u-boot.
+ 
+loadaddr=0x82000000
+fdtaddr=0x88000000
+rdaddr=0x88080000
+ 
+initrd_high=0xffffffff
+fdt_high=0xffffffff
 
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/01/openwrt-on-bbb/">OpenWRT on BBB</a>
-      </h1>
-      <span class="post-date">Nov 1, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/01/openwrt-on-bbb/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<p>This article will try to build and run OpenWRT on BBB(BeagleBone Black)</p>
-
-<h3 id="checkout-code">Checkout Code</h3>
-
-<p>Checkout the code from openwrt.org:</p>
-
-<pre><code>[Trusty@/media/y/embedded/BBB/OpenWRT]$ svn checkout -r 40887 svn://svn.openwrt.org/openwrt/trunk/
-......
-Checked out revision 40887.
-
-</code></pre>
-
-<p>Since the wiki said the only workable version for BBB is r40887, we just checkout this specified version.</p>
-
-<pre><code>Currently only runs with openwrt/trunk (r40887) and kernel 3.14.4. Kernel 3.13.7 (as in r40887 on target/linux/omap) will boot the device, but as soon as you attach a USB device, it will freeze.
-
-</code></pre>
-
-<h3 id="patches">Patches</h3>
-
-<p>Download the patch file from:<a href="http://bpaste.net/show/322887/">http://bpaste.net/show/322887/</a></p>
-
-<pre><code>$ wget https://bpaste.net/raw/322887
-$ wget https://bpaste.net/raw/322885
-$ wget https://bpaste.net/raw/322902
-$ mv 322885 Config_Kernel
-$ mv 322902 Config_WRT
-$ mv 322887 Patch_r40887
-
-</code></pre>
-
-<p>Notice, the first file should remove the unnecessary lines(patch for the source code).<br />
-Apply the patch:</p>
-
-<pre><code>[Trusty@/media/y/embedded/BBB/OpenWRT_r40887]$ ls
-Patch_r40887  Patch_r40887~  trunk
-[Trusty@/media/y/embedded/BBB/OpenWRT_r40887]$ cd trunk 
-[Trusty@/media/y/embedded/BBB/OpenWRT_r40887/trunk]$ patch -p1 &lt;../Patch_r40887
-patching file target/linux/omap/Makefile
-patching file target/linux/omap/config-default
-
-</code></pre>
-
-<p>Now your source file has been patched with the file that you downloaded.</p>
-
-<h3 id="build-openwrt">Build OpenWRT</h3>
-
-<p>In ArchLinux install quilt:</p>
-
-<pre><code>$ sudo pacman -S quilt
-
-</code></pre>
-
-<p>Then initialize the kernel building via:</p>
-
-<pre><code>$ make target/linux/{clean,prepare} V=99
-$ make kernel_oldconfig
-$ make kernel_menuconfig # kernel config
-$ make menuconfig # OpenWRT  config
-
-</code></pre>
-
-<p>When make target/linux/{clean, prepare} you should notice configure like this:<br />
-<img src="/images/parametersKernel.jpg" alt="/images/parametersKernel.jpg" /><br />
-Then Load the downloaded .config file:<br />
-<img src="/images/saveKernelConfig.jpg" alt="/images/saveKernelConfig.jpg" /><br />
-Save to .config file:<br />
-<img src="/images/save2KernelConfig.jpg" alt="/images/save2KernelConfig.jpg" /><br />
-Your configuration should be seem like this:<br />
-<img src="/images/yourKernelconfig.jpg" alt="/images/yourKernelconfig.jpg" /></p>
-
-<p>When make the menuconfigs,  load our configured kernel patch file.<br />
-Make:</p>
-
-<pre><code>$ make V=99 -j4
-
-</code></pre>
-
-<p>During building it will hint for some errors, solution is listed as:</p>
-
-<pre><code>1. Enable the network support during make kernel_menuconfig
-2. Configure the git under proxy.     
-
-</code></pre>
-
-<h3 id="flash-into-sd-card">Flash into SD Card</h3>
-
-<p>After building, the result should be available at:</p>
-
-<pre><code>$ pwd
-/media/y/embedded/BBB/OpenWRT_r40887/trunk/bin/omap
-$ ls
-dtbs  md5sums  openwrt-omap-Default-rootfs.tar.gz  openwrt-omap-squashfs.img  openwrt-omap-zImage  packages  uboot-omap-am335x_evm  uboot-omap-omap3_beagle  uboot-omap-omap3_overo  uboot-omap-omap4_panda
-
-</code></pre>
-
-<p>Now insert a SD card and make the bootable sd card for BBB:<br />
-Since the Card we inserted has a Disklabel type of gpt, like following:</p>
-
-<pre><code>Disk /dev/sdd: 7.4 GiB, 7948206080 bytes, 15523840 sectors
-Units: sectors of 1 * 512 = 512 bytes
-Sector size (logical/physical): 512 bytes / 512 bytes
-I/O size (minimum/optimal): 512 bytes / 512 bytes
-Disklabel type: gpt
-Disk identifier: F2D07CAF-BDA3-426B-AD79-DB2F3F27B3B8
-
-</code></pre>
-
-<p>So first we want to change it from gpt to dos, just like:</p>
-
-<pre><code>Disklabel type: dos
-
-</code></pre>
-
-<p>Use gdisk for converting the partition type from &ldquo;GPT&rdquo; to &ldquo;MBR&rdquo;, the command should be r(reovery and transformation options)-&gt; g(convert GPT into MBR and exit) -&gt; w(write the MBR partition table to disk and exit) -&gt; y(Confirum).<br />
-Now the partition should be:</p>
-
-<pre><code>Device     Boot  Start      End  Sectors  Size Id Type
-/dev/sdd1         2048   100351    98304   48M  e W95 FAT16 (LBA)
-/dev/sdd2       100352 15523839 15423488  7.4G 83 Linux
-
-</code></pre>
-
-<p>Make filesystems via:</p>
-
-<pre><code># mkfs.vfat -n boot /dev/sdd1
-# mkfs.ext4 /dev/sdd2
-
-</code></pre>
-
-<p>Copy the existing boot partition (other sd cards) to newly created SD card.</p>
-
-<pre><code># pwd
-/run/media/Trusty/boot
-# cp /media/y/embedded/BBB/OpenWRT_r40887/trunk/bin/omap/openwrt-omap-zImage ./zImage
-
-</code></pre>
-
-<p>In the second partition(/dev/sdd2), unextract the filesystem:</p>
-
-<pre><code>$ cp /media/y/embedded/BBB/OpenWRT_r40887/trunk/bin/omap/openwrt-omap-Default-rootfs.tar.gz  ./
-$ tar xzvf openwrt-omap-Default-rootfs.tar.gz 
-$ ls
-bin  dev  etc  lib  lost+found  mnt  openwrt-omap-Default-rootfs.tar.gz  overlay  proc  rom  root  sbin  sys  tmp  usr  var  www
-
-</code></pre>
-
-<p>Besure your start-up parameter are like:</p>
-
-<pre><code># For just using the same mmc part 2
 console=ttyO0,115200n8
-mmcroot=/dev/mmcblk0p2 ro
-mmcrootfstype=ext4 rootwait fixrtc
+mmcroot=/dev/mmcblk0p1 ro
+ 
+loadximage=load mmc 0:1 ${loadaddr} /boot/vmlinuz-3.8.13-bone53
+loadxfdt=load mmc 0:1 ${fdtaddr} /boot/dtbs/3.8.13-bone53/am335x-boneblack.dtb
+loadxrd=load mmc 0:1 ${rdaddr} /boot/initrd.img-${uname_r}; setenv rdsize ${filesize}
+loaduEnvtxt=load mmc 0:1 ${loadaddr} /boot/uEnv.txt ; env import -t ${loadaddr} ${filesize};
+loadall=run loaduEnvtxt; run loadximage; run loadxfdt;
+ 
+mmcargs=setenv bootargs console=tty0 console=${console} ${optargs} ${cape_disable} ${cape_enable} root=${mmcroot} rootfstype=${mmcrootfstype} ${cmdline}
+ 
+uenvcmd=run loadall; run mmcargs; bootz ${loadaddr} - ${fdtaddr};
+optargs=&quot;debug&quot;
 
 </code></pre>
 
-<p>After started the kernel, it will stucked.</p>
+<p>Enable the dhcp, /mnt/etc/network/interfaces:</p>
+
+<pre><code>auto lo
+iface lo inet loopback
+ 
+auto eth0
+iface eth0 inet dhcp
+
+</code></pre>
+
+<p>Enable the serial port:</p>
+
+<pre><code>$ sudo vim /mnt/etc/init/serial.conf
+start on stopped rc RUNLEVEL=[2345]
+stop on runlevel [!2345]
+ 
+respawn
+exec /sbin/getty 115200 ttyO0
+
+</code></pre>
+
+<p>Now restart and you got the 3.8 kernel enabled, so next time if you want to change the kernel, simply change the uEnv.txt file is OK.</p>
+
+<pre><code>ubuntu@arm:/boot$ uname -a
+Linux arm 3.8.13-bone53 #1 SMP Tue Nov 11 18:40:19 CST 2014 armv7l armv7l armv7l GNU/Linux
+
+</code></pre>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/29/arduino-performance/">Arduino Performance</a>
+        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-control-led/">EBC Exercises on BBB - Control LED</a>
       </h1>
-      <span class="post-date">Oct 29, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/29/arduino-performance/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 13, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-control-led/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
@@ -480,735 +463,221 @@ mmcrootfstype=ext4 rootwait fixrtc
       
       
 
-<h3 id="program-storage">Program Storage</h3>
+<h3 id="using-sysfs">Using Sysfs</h3>
 
-<p>Classical Blink program:</p>
+<p>The easiest way to do general purpose I/O(gpio) on BBB is through the terminal and shell command.  sysfs is the virtual file system which exposes the drivers for the hardware so you can directly use them.</p>
 
-<pre><code>/*
-  Blink
-  Turns on an LED on for one second, then off for one second, repeatedly.
-
-  Most Arduinos have an on-board LED you can control. On the Uno and
-  Leonardo, it is attached to digital pin 13. If you're unsure what
-  pin the on-board LED is connected to on your Arduino model, check
-  the documentation at http://arduino.cc
-
-  This example code is in the public domain.
-
-  modified 8 May 2014
-  by Scott Fitzgerald
- */
-
-
-// the setup function runs once when you press reset or power the board
-void setup() {
-  // initialize digital pin 13 as an output.
-  pinMode(13, OUTPUT);
-}
-
-// the loop function runs over and over again forever
-void loop() {
-  digitalWrite(13, HIGH);   // turn the LED on (HIGH is the voltage level)
-  delay(1000);              // wait for a second
-  digitalWrite(13, LOW);    // turn the LED off by making the voltage LOW
-  delay(1000);              // wait for a second
-}
+<pre><code># cd /sys/class/leds
+# ls
+# beaglebone:green:usr0  beaglebone:green:usr1  beaglebone:green:usr2  beaglebone:green:usr3
+# cd beaglebone\:green\:usr0
+# cat trigger 
+none nand-disk mmc0 mmc1 timer oneshot [heartbeat] backlight gpio cpu0 default-on transient 
 
 </code></pre>
 
-<p>Compilation size:</p>
+<p>If you want to disable the heartbeat:</p>
 
-<pre><code>Binary sketch size: 1,082 bytes (of a 32,256 byte maximum)
-
-</code></pre>
-
-<p>Comment the pinMode(13, OUTPUT), then the compilation size would be:</p>
-
-<pre><code>Binary sketch size: 948 bytes (of a 32,256 byte maximum)
+<pre><code># echo none &gt; trigger
+# cat trigger 
+[none] nand-disk mmc0 mmc1 timer oneshot heartbeat backlight gpio cpu0 default-on transient 
 
 </code></pre>
 
-<p>Since PB5 is the output pin for 13, One command for replacing pinMode():</p>
+<p>Turn on/off the led via:</p>
 
-<pre><code>void setup() {
-  // initialize digital pin 13 as an output.
-  //pinMode(13, OUTPUT);
-  bitSet(DDRB, 5);
-}
+<pre><code># echo 1 &gt; brightness
+# echo 0 &gt; brightness
 
 </code></pre>
 
-<p>Further:</p>
+<p>More trigger options via:</p>
 
-<pre><code>void loop() {
-  //digitalWrite(13, HIGH);   // turn the LED on (HIGH is the voltage level)
-  bitSet(PINB, 5);
-  delay(1000);              // wait for a second
-  //digitalWrite(13, LOW);    // turn the LED off by making the voltage LOW
-  bitSet(PINB, 5);
-  delay(1000);              // wait for a second
-}
-Binary sketch size: 680 bytes (of a 32,256 byte maximum)
+<pre><code># echo timer&gt;trigger 
+# cat trigger 
+none nand-disk mmc0 mmc1 [timer] oneshot heartbeat backlight gpio cpu0 default-on transient 
 
 </code></pre>
 
-<p>Use bitSet() for reverse the bit, then the size will greatly reduced.</p>
+<p>Set the deplay frequency:</p>
 
-<p>Further reduction will consider replace the delay(1000) with an empty for() loop, which is listed as following:</p>
-
-<pre><code>  //delay(1000);              // wait for a second
-  for (int i=0; i&lt;32000; i++);
+<pre><code>echo 100&gt;delay_on
+echo 900&gt;delay_off
 
 </code></pre>
 
-<p>The binary size is:</p>
+<h3 id="adding-own-led">Adding Own LED</h3>
 
-<pre><code>Binary sketch size: 478 bytes (of a 32,256 byte maximum)
+<p>Add the connection of LED.<br />
+P9 Pin1 &ndash;&gt; 220 ohm  &ndash;&gt; LED Negative Pin
+P9 Pin 12 -&gt; Led Positive Pin</p>
 
-</code></pre>
+<p>Pin 12 in the table is shown in table as GPIO1_28. Bank of 32 each, so find the gpio number via:<br />
+1*32+28=60.</p>
 
-<p>We could add following declaration:</p>
+<p>We have to turn this pin on.</p>
 
-<pre><code>  for (volatile int i=0; i&lt;32000; i++);
+<h4 id="turn-it-on">Turn it ON</h4>
 
-</code></pre>
+<p>export/unexport, turn on/off of the LED via following command:</p>
 
-<h3 id="serial-communication">Serial Communication</h3>
-
-<p>Origin serial communication source code:</p>
-
-<pre><code>void setup()
-{
-  Serial.begin(9600);
-  Serial.println(&quot;Hello World!&quot;);
-}
-
-void loop()
-{
-  // Do Nothing.
-}
-
-</code></pre>
-
-<p>Size is:</p>
-
-<pre><code>Binary sketch size: 2,034 bytes (of a 32,256 byte maximum)
+<pre><code>$ cd /sys/class/gpio/
+$ echo 60 &gt; export
+$ cd gpio60/
+$ echo out &gt; direction
+$ echo 1 &gt; value
+$ echo 0 &gt; value
+$ cd ..
+$ ls
+export  gpio60  gpiochip0  gpiochip32  gpiochip64  gpiochip96  unexport
+$ echo 60 &gt; unexport
+$ ls -F
+export  gpiochip0@  gpiochip32@  gpiochip64@  gpiochip96@  unexport
 
 </code></pre>
 
-<p>Remove all of the functionality, then the size is:</p>
+<h3 id="add-own-key">Add Own Key</h3>
 
-<pre><code>Binary sketch size: 472 bytes (of a 32,256 byte maximum)
+<p>Connection for the key:<br />
+P9 Pin 3(3.3V) &ndash;&gt;220 ohm &ndash;&gt; Key 1<br />
+P9 Pin 42 &ndash;&gt; Key 2<br />
+Pin 42 is GPIO0_7, then the actual gpio number is Just 7.</p>
 
-</code></pre>
+<h4 id="read-value">Read Value</h4>
 
-<p>Directly manuplate the serial port hardware:</p>
+<p>export/unexport, read value via following command:</p>
 
-<pre><code>#define BAUD_RATE 9600
-#define BAUD_RATE_DIVISOR (F_CPU/16/BAUD_RATE -1 )
-
-void usart_putc(char c)
-{
-  loop_until_bit_is_set(UCSR0A, UDRE0);
-  UDR0 = c;
-}
-
-void setup()
-{
-  //Serial.begin(9600);
-  //Serial.println(&quot;Hello World!&quot;);
-  UCSR0A = 0;
-  UCSR0B = 1&lt;&lt;TXEN0;
-  UCSR0C = 1&lt;&lt;UCSZ01 | 1&lt;&lt;UCSZ00;
-  UBRR0 = BAUD_RATE_DIVISOR;
-  usart_putc('!');
-    usart_putc('m');
-}
-
-void loop()
-{
-  // Do Nothing.
-}
+<pre><code># cd /sys/class/gpio/
+# echo 7 &gt; export
+# cd gpio7/
+# echo in &gt; direction
+# cat value
+# cat value 
+0
+Hold down the button and see the result: 
+# cat value 
+1
 
 </code></pre>
 
-<p>Now the size is:</p>
+<p>The script for reading the gpio value:</p>
 
-<pre><code>Binary sketch size: 528 bytes (of a 32,256 byte maximum)
-
-</code></pre>
-
-<p>Add one function for output sentence:</p>
-
-<pre><code>#define BAUD_RATE 9600
-#define BAUD_RATE_DIVISOR (F_CPU/16/BAUD_RATE -1 )
-
-void usart_putc(char c)
-{
-  loop_until_bit_is_set(UCSR0A, UDRE0);
-  UDR0 = c;
-}
-
-void usart_puts(char *s)
-{
-  while(*s)
-  {
-    usart_putc(*s);
-    s++;
-  }
-}
-
-void setup()
-{
-  //Serial.begin(9600);
-  //Serial.println(&quot;Hello World!&quot;);
-  UCSR0A = 0;
-  UCSR0B = 1&lt;&lt;TXEN0;
-  UCSR0C = 1&lt;&lt;UCSZ01 | 1&lt;&lt;UCSZ00;
-  UBRR0 = BAUD_RATE_DIVISOR;
-  usart_puts(&quot;Hello, World!\n&quot;);
-  //usart_putc('!');
-  //usart_putc('m');
-}
-
-void loop()
-{
-  // Do Nothing.
-}
+<pre><code># ./readgpio.sh 7
+sh: echo: I/O error
+trap: SIGINT: bad trap
+__________________________|^^^^^^^^^^^^^^^^^^^^^^^|__________|^^^^^^^^^^|___
+___|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|____|^^^^^^^^|____|^^|__|^^|_|^^^^^^|___|^^
+|__|^|__|^|__|^|__|^^|___|^|_|^|___|^|_|^|_|^|_|^^|_|^|_|^|_|^^|_|^^^^^^^^^^^^^|______|^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^|____|^^^^^^^^^^^|_____|^^^^^^^^^^^^^^|____|^^^^^^^^^^
+^^^|___|^^^^^^^^^^^^|____|^^^^^^^^^^^^|__|^^^^^^^^^^|__|^^^^^^^^|__|^^^^^^^|___|^^^^
+^|_____|^^^^^|____|^^^^^^^^^^^^^^^^^^^^^^^|___|^^^^^^^^^^^^^^^^^|___|^^^^^^^^^^^
+|_^C
 
 </code></pre>
 
-<p>The size changes to:</p>
-
-<pre><code>Binary sketch size: 542 bytes (of a 32,256 byte maximum)
-
-</code></pre>
-
-<p>Add version for output integers:</p>
-
-<pre><code>#define BAUD_RATE 9600
-#define BAUD_RATE_DIVISOR (F_CPU/16/BAUD_RATE -1 )
-
-void usart_putc(char c)
-{
-  loop_until_bit_is_set(UCSR0A, UDRE0);
-  UDR0 = c;
-}
-
-void usart_puts(char *s)
-{
-  while(*s)
-  {
-    usart_putc(*s);
-    s++;
-  }
-}
-
-void usart_puti(long i)
-{
-  char s[25];
-  itoa(i, s, 10);
-  usart_puts(s);
-}
-
-void setup()
-{
-  //Serial.begin(9600);
-  //Serial.println(&quot;Hello World!&quot;);
-  UCSR0A = 0;
-  UCSR0B = 1&lt;&lt;TXEN0;
-  UCSR0C = 1&lt;&lt;UCSZ01 | 1&lt;&lt;UCSZ00;
-  UBRR0 = BAUD_RATE_DIVISOR;
-  usart_puts(&quot;Hello, World!\n&quot;);
-  usart_puti(1000);
-  //usart_putc('!');
-  //usart_putc('m');
-}
-
-void loop()
-{
-  // Do Nothing.
-}
-
-</code></pre>
-
-<p>Because we called itoa(), so in this version the size will greatly improved to:</p>
-
-<pre><code>Binary sketch size: 782 bytes (of a 32,256 byte maximum)
-
-</code></pre>
-
-<h3 id="sram">SRAM</h3>
-
-<p>Edit the preference of Arduino, under the <code>/root/.arduino/preference.txt</code>:</p>
-
-<pre><code>build.verbose=true
-
-</code></pre>
-
-<p>Then build and you will see the tmp file.</p>
-
-<p>Install following packages on Archlinux:</p>
-
-<pre><code>$ sudo pacman -S avr-gcc
-$ sudo pacman -S avr-gdb avrdude simavr avr-libc
-
-</code></pre>
-
-<p>Then you can use avr-size to view the generated elf file size:</p>
-
-<pre><code>$ avr-size /tmp/build7485065177781002113.tmp/BareMinimum.cpp.elf
-   text    data     bss     dec     hex filename
-    472       0       9     481     1e1 /tmp/build7485065177781002113.tmp/BareMinimum.cpp.elf
-
-</code></pre>
-
-<p>Or more detailed:</p>
-
-<pre><code>$ avr-size -C --mcu=atmega328p /tmp/build7485065177781002113.tmp/BareMinimum.cpp.elf
-AVR Memory Usage
-----------------
-Device: atmega328p
-
-Program:     472 bytes (1.4% Full)
-(.text + .data + .bootloader)
-
-Data:          9 bytes (0.4% Full)
-(.data + .bss + .noinit)
-
-</code></pre>
-
-<p>Add  some definition of global variables:</p>
-
-<pre><code>char c;
-char msg[]=&quot;This is a message&quot;;
-void setup() {
-  // put your setup code here, to run once:
-  c = msg[0];
-
-</code></pre>
-
-<p>Check the size:</p>
-
-<pre><code>$ avr-size -C --mcu=atmega328p /tmp/build7485065177781002113.tmp/BareMinimum.cpp.elf
-AVR Memory Usage
-----------------
-Device: atmega328p
-
-Program:     498 bytes (1.5% Full)
-(.text + .data + .bootloader)
-
-Data:         28 bytes (1.4% Full)
-(.data + .bss + .noinit)
-
-</code></pre>
-
-<h3 id="use-pgmspace">Use pgmspace</h3>
-
-<p>If we use pgmspace, then the source code would be:</p>
-
-<pre><code>/*
- PROGMEM string demo
- How to store a table of strings in program memory (flash), 
- and retrieve them.
-
- Information summarized from:
- http://www.nongnu.org/avr-libc/user-manual/pgmspace.html
-
- Setting up a table (array) of strings in program memory is slightly complicated, but
- here is a good template to follow. 
-
- Setting up the strings is a two-step process. First define the strings.
-
-*/
-
-#include &lt;avr/pgmspace.h&gt;
-prog_char string_0[] PROGMEM = &quot;String 0&quot;;   // &quot;String 0&quot; etc are strings to store - change to suit.
-prog_char string_1[] PROGMEM = &quot;String 1&quot;;
-prog_char string_2[] PROGMEM = &quot;String 2&quot;;
-prog_char string_3[] PROGMEM = &quot;String 3&quot;;
-prog_char string_4[] PROGMEM = &quot;String 4&quot;;
-prog_char string_5[] PROGMEM = &quot;String 5&quot;;
-
-
-// Then set up a table to refer to your strings.
-
-PROGMEM const char *string_table[] = 	   // change &quot;string_table&quot; name to suit
-{   
-  string_0,
-  string_1,
-  string_2,
-  string_3,
-  string_4,
-  string_5 };
-
-char buffer[30];    // make sure this is large enough for the largest string it must hold
-
-void setup()			  
-{
-  Serial.begin(9600);
-}
-
-
-void loop()			  
-{
-  /* Using the string table in program memory requires the use of special functions to retrieve the data.
-     The strcpy_P function copies a string from program space to a string in RAM (&quot;buffer&quot;). 
-     Make sure your receiving string in RAM  is large enough to hold whatever
-     you are retrieving from program space. */
-
-
-  for (int i = 0; i &lt; 6; i++)
-  {
-    strcpy_P(buffer, (char*)pgm_read_word(&amp;(string_table[i]))); // Necessary casts and dereferencing, just copy. 
-    Serial.println( buffer );
-    delay( 500 );
-  }
-}
-
-</code></pre>
-
-<p>Check the size:</p>
-
-<pre><code>$ avr-size -C --mcu=atmega328p /tmp/build7485065177781002113.tmp/sketch_oct29b.cpp.elf
-AVR Memory Usage
-----------------
-Device: atmega328p
-
-Program:    2324 bytes (7.1% Full)
-(.text + .data + .bootloader)
-
-Data:        225 bytes (11.0% Full)
-(.data + .bss + .noinit)
-
-</code></pre>
-
-<p>Replace back to ordinary conditions:</p>
-
-<pre><code>/*
- PROGMEM string demo
- How to store a table of strings in program memory (flash), 
- and retrieve them.
-
- Information summarized from:
- http://www.nongnu.org/avr-libc/user-manual/pgmspace.html
-
- Setting up a table (array) of strings in program memory is slightly complicated, but
- here is a good template to follow. 
-
- Setting up the strings is a two-step process. First define the strings.
-
-*/
-
-char string_0[] = &quot;String 0&quot;;   // &quot;String 0&quot; etc are strings to store - change to suit.
-char string_1[] = &quot;String 1&quot;;
-char string_2[] = &quot;String 2&quot;;
-char string_3[] = &quot;String 3&quot;;
-char string_4[] = &quot;String 4&quot;;
-char string_5[] = &quot;String 5&quot;;
-
-
-// Then set up a table to refer to your strings.
-
-const char *string_table[] = 	   // change &quot;string_table&quot; name to suit
-{   
-  string_0,
-  string_1,
-  string_2,
-  string_3,
-  string_4,
-  string_5 };
-
-char buffer[30];    // make sure this is large enough for the largest string it must hold
-
-void setup()			  
-{
-  Serial.begin(9600);
-}
-
-
-void loop()			  
-{
-  /* Using the string table in program memory requires the use of special functions to retrieve the data.
-     The strcpy_P function copies a string from program space to a string in RAM (&quot;buffer&quot;). 
-     Make sure your receiving string in RAM  is large enough to hold whatever
-     you are retrieving from program space. */
-
-
-  for (int i = 0; i &lt; 6; i++)
-  {
-    //strcpy_P(buffer, (char*)pgm_read_word(&amp;(string_table[i]))); // Necessary casts and dereferencing, just copy. 
-    strcpy(buffer, (char*)(&amp;(string_table[i]))); // Necessary casts and dereferencing, just copy. 
-    Serial.println( buffer );
-    delay( 500 );
-  }
-}
-
-</code></pre>
-
-<p>Then the size would be:</p>
-
-<pre><code>$ avr-size -C --mcu=atmega328p /tmp/build7485065177781002113.tmp/sketch_oct29c.cpp.elf
-AVR Memory Usage
-----------------
-Device: atmega328p
-
-Program:    2320 bytes (7.1% Full)
-(.text + .data + .bootloader)
-
-Data:        291 bytes (14.2% Full)
-(.data + .bss + .noinit)
-
-
-</code></pre>
-
-<h3 id="performance">Performance</h3>
-
-<p>Use Arduino for test the performance of Arduino:</p>
-
-<pre><code>void setup()
-{
-  Serial.begin(9600);
-  Serial.println(&quot;Arduino performance test begins now.&quot;);
-}
-extern volatile unsigned long timer0_millis;
-
-void loop()
-{
-  unsigned long i = 0;
-  unsigned long stop_time;
-  
-  stop_time= millis() + 1000;
-  
-  while(timer0_millis &lt;stop_time) i++;
-  
-  Serial.print(i);
-  Serial.println(&quot; loops in one second.&quot;);
-  while(1);
-}
-
-</code></pre>
-
-<p>The result from the serial port:</p>
-
-<pre><code>Arduino performance test begins now.
-836912 loops in one second.
-
-</code></pre>
-
-<p>Test for digitalwrite():</p>
-
-<pre><code>  while(timer0_millis &lt;stop_time) 
-  {
-    digitalWrite(13, HIGH);
-    digitalWrite(13, LOW);
-    i++;
-  }
-
-</code></pre>
-
-<p>Output:</p>
-
-<pre><code>Arduino performance test begins now.
-111198 loops in one second.
-
-</code></pre>
-
-<p>If we change the functionality into:</p>
-
-<pre><code>  while(timer0_millis &lt;stop_time) 
-  {
-    //digitalWrite(13, HIGH);
-    //digitalWrite(13, LOW);
-    bitSet(PORTB, 5);
-    bitClear(PORTB, 5);
-    i++;
-  }
-
-</code></pre>
-
-<p>Then the performance result will be:</p>
-
-<pre><code>Arduino performance test begins now.
-691362 loops in one second.
-
-</code></pre>
-
-<h3 id="slow-down-cpu">Slow Down CPU</h3>
-
-<p>We change the prescale clock frequency, thus we could get a power-saving mode, which will consume less power.</p>
-
-<pre><code>/* Slow down the avr cpu speed*/
-void setup()
-{
-  Serial.begin(9600);
-  Serial.println(&quot;Normal serial communiation at 9600 bps&quot;);
-  
-  pinMode(13, OUTPUT);
-  
-  noInterrupts();  //disable interrupts temporarily
-  CLKPR = 1&lt;&lt;CLKPCE;  // enable clock prescaler write sequence
-  CLKPR = 8;  // 62,500(0.0625MHZ), comparing to 16, 000, 000(16MHZ)
-  interrupts();  //re-enable interrupts
-}
-
-void loop()
-{
-  digitalWrite(13, HIGH);  //LED is on
-  delay(10);  //0.01 second delay
-  digitalWrite(13, LOW);  // LED is off
-  delay(10);
-}
-
-</code></pre>
-
-<h3 id="let-cpu-sleep">Let CPU sleep</h3>
-
-<p>Via set_sleep_mode() and sleep_mode() we could let CPU sleep for power-saving.</p>
-
-<pre><code>/* putting CPU into sleep */
-#include &lt;avr/sleep.h&gt;
-extern volatile unsigned long timer0_millis;
-
-void setup()
-{
-  pinMode(13, OUTPUT);   // an LED is attached to D13
-  Serial.begin(9600);
-}
-
-void loop()
-{
-  while(timer0_millis&lt;1000)
-  {
-    set_sleep_mode(SLEEP_MODE_IDLE);  // select &quot;lightly napping &quot;
-    sleep_mode();  // go to sleep
-  }
-  timer0_millis = 0;   // reset millisecond counter
-  bitSet(PINB, 5);    // toggle LED
-  Serial.println(&quot;I am waked!&quot;);
-}
-
-</code></pre>
+<p>This seems like a little game.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/28/expand-storage-in-59/">Expand storage in 59</a>
+        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-device-tree/">EBC Exercises on BBB - Device Tree</a>
       </h1>
-      <span class="post-date">Oct 28, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/28/expand-storage-in-59/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 13, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-device-tree/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
         
       </span>
       
-      <p>I have 2 Servers in LAB, one had only 120G Harddisk, but with powerful CPU/Memory, the other have larger disk, but CPU/mem are not power enough, thus I use samba for sharing its storage.<br />
-The samba server runs:</p>
+      
 
-<pre><code># cat /etc/issue
-Red Hat Enterprise Linux Server release 6.3 (Santiago)
-Kernel \r on an \m
+<h3 id="install-js-wrapped-bonescript">Install js wrapped bonescript</h3>
 
-</code></pre>
+<p>For using the javascript wrapped library, first we have to install following packages:</p>
 
-<p>Query if samba installed:</p>
-
-<pre><code># rpm -qa samba
-samba-3.5.10-125.el6.i686
+<pre><code>$ sudo apt-get install nodejs npm nodejs-legacy
+$ npm config set proxy http://1xx.xx.xx.xxx:2xxx
+$ npm config set https-proxy http://1xx.xx.xx.xx:2xxx
+$ npm install bonescript
 
 </code></pre>
 
-<p>Then configure it.</p>
+<p>Because my network environment is under the firewall, so I need to set the proxy, if you directly connect to internet, you could ignore the <code>npm config set</code> commands.</p>
 
-<pre><code># df -h 
-.....
-/dev/mapper/vg_linux01-lv_home
-                      405G   37G  349G  10% /home
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-read-analog/">EBC Exercises on BBB - Read Analog</a>
+      </h1>
+      <span class="post-date">Nov 13, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-read-analog/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
 
-</code></pre>
+<h3 id="connection">Connection</h3>
 
-<p>Make the directory for sharing:</p>
+<p>The wired connection is listed as following:<br />
+Pin 34(analog ground) &mdash;&gt; Negative Pin<br />
+Pin 32(1.8 V) &mdash;&gt; Positive Pin<br />
+Pin 36(AIN5) &mdash;&gt; Wiper<br />
+Pin 32: VADC, Pin 34: AGND, Pin36, AIN5.</p>
 
-<pre><code>mkdir -p /home/Trusty/share
+<h3 id="operation">Operation</h3>
 
-</code></pre>
-
-<p>Add following share directory in /etc/samba/smb.conf:</p>
-
-<pre><code>[myshare]
-   comment = Mary's and Fred's stuff
-   path = /home/Trusty/share
-   valid users = Trusty
-   public = no
-   writable = yes
-   printable = no
-   create mask = 0765
-
-</code></pre>
-
-<p>Then add samba user:</p>
-
-<pre><code>smbpasswd -a Trusty
-
-</code></pre>
-
-<p>Now <code>Trusty</code> become usable for samba.<br />
-Restart samba service:</p>
-
-<pre><code>service smb restart
-
-</code></pre>
-
-<p>And add samba as the start-up service:</p>
-
-<pre><code>[root@Linux01 Trusty]# chkconfig smb on
-[root@Linux01 Trusty]# chkconfig nmb on
-[root@Linux01 Trusty]# chkconfig winbind on
-
-</code></pre>
-
-<p>In powerful server, listed the samba server&rsquo;s sharing directories:</p>
-
-<pre><code>Trusty@Linux59:~&gt; smbclient -L 1xx.xxx.xxx.53 -U Trusty
-Enter Trusty's password: 
-Domain=[MYGROUP] OS=[Unix] Server=[Samba 3.5.10-125.el6]
-
-        Sharename       Type      Comment
-        ---------       ----      -------
-        myshare         Disk      Mary's and Fred's stuff
-        IPC$            IPC       IPC Service (Samba Server Version 3.5.10-125.el6)
-        Trusty            Disk      Home Directories
-Domain=[MYGROUP] OS=[Unix] Server=[Samba 3.5.10-125.el6]
-
-        Server               Comment
-        ---------            -------
-
-        Workgroup            Master
-        ---------            -------
+<pre><code>root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# cat /sys/devices/bone_capemgr.*/slots
+ 0: 54:PF--- 
+ 1: 55:PF--- 
+ 2: 56:PF--- 
+ 3: 57:PF--- 
+ 4: ff:P-O-L Bone-LT-eMMC-2G,00A0,Texas Instrument,BB-BONE-EMMC-2G
+ 5: ff:P-O-L Bone-Black-HDMI,00A0,Texas Instrument,BB-BONELT-HDMI
+root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# SLOTS=/sys/devices/bone_capemgr.*/slots
+root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# PINS=/sys/kernel/debug/pinctrl/44e10800.pinmux/pins
+root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# echo cape-bone-iio &gt; $SLOTS
+root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# cat $SLOTS
+ 0: 54:PF--- 
+ 1: 55:PF--- 
+ 2: 56:PF--- 
+ 3: 57:PF--- 
+ 4: ff:P-O-L Bone-LT-eMMC-2G,00A0,Texas Instrument,BB-BONE-EMMC-2G
+ 5: ff:P-O-L Bone-Black-HDMI,00A0,Texas Instrument,BB-BONELT-HDMI
+ 7: ff:P-O-L Override Board Name,00A0,Override Manuf,cape-bone-iio
+root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# find /sys -name &quot;*AIN*&quot;
+/sys/devices/ocp.3/helper.15/AIN0
+/sys/devices/ocp.3/helper.15/AIN1
+/sys/devices/ocp.3/helper.15/AIN2
+/sys/devices/ocp.3/helper.15/AIN3
+/sys/devices/ocp.3/helper.15/AIN4
+/sys/devices/ocp.3/helper.15/AIN5
+/sys/devices/ocp.3/helper.15/AIN6
+/sys/devices/ocp.3/helper.15/AIN7
 
 </code></pre>
 
-<p>Now add it in /etc/fstab:</p>
+<p>Now try to read the value out:</p>
 
-<pre><code>//1xx.xxx.xxx.xx/myshare         /media/samba/  cifs defaults,username=Trusty,password=xxxx,ip=1xx.xxx.xxx.xx,_netdev 0 0
-
-</code></pre>
-
-<p>But this won&rsquo;t OK, because cifs depends on the network, we should add following line in root&rsquo;s crontab:</p>
-
-<pre><code>@reboot sleep 10;mount -a
+<pre><code># cd /sys/devices/ocp.3/helper.15
+# ls
+AIN0  AIN1  AIN2  AIN3  AIN4  AIN5  AIN6  AIN7  driver  modalias  power  subsystem  uevent
+# cat AIN5
+537
 
 </code></pre>
 
-<p>Next time you will see the remote samba sharing directory available at  /media/samba. Use mount to see the result.</p>
+<p>In the origin material it said should plus 1, to read AIN5 you have to look at AIN6, but it seems wrong, because the table and the interface all starts from 0.</p>
 
-<p>Change the uid/gid in mount:</p>
+<p>AIN pins are sampled at 12bits and 100k samples per time. while the input voltage is between 0 and 1.8V.</p>
 
-<pre><code>ip=1xx.xxx.xxx.53,uid=1001,gid=100,_netdev
-
-</code></pre>
+<p>It&rsquo;s very easy to use anlog read value for controlling some variables, like volumn, brightness, etc.</p>
 
       
     </div>
@@ -1626,12 +1095,21 @@ Domain=[MYGROUP] OS=[Unix] Server=[Samba 3.5.10-125.el6]
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/71/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

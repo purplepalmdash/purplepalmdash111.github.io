@@ -6,8 +6,264 @@
     <description>Recent content in Web on Dash</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Fri, 30 Jan 2015 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Tue, 12 Jul 2016 15:26:23 +0800</lastBuildDate>
     <atom:link href="http://purplepalmdash.github.io/categories/web/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>用Flask框架搭建Web App</title>
+      <link>http://purplepalmdash.github.io/blog/2016/07/12/%E7%94%A8flask%E6%A1%86%E6%9E%B6%E6%90%AD%E5%BB%BAweb-app/</link>
+      <pubDate>Tue, 12 Jul 2016 15:26:23 +0800</pubDate>
+      
+      <guid>http://purplepalmdash.github.io/blog/2016/07/12/%E7%94%A8flask%E6%A1%86%E6%9E%B6%E6%90%AD%E5%BB%BAweb-app/</guid>
+      <description>
+
+&lt;p&gt;拥有Web界面的好处是显而易见的，譬如说，我们可能需要下载Youtube上的某一段视频。传统的操
+作方式是这样的：登录位于国外的vps-&amp;gt; 下载youtube视频到VPS -&amp;gt; 退出vps登录 -&amp;gt;采用某种手段
+(ftp/scp?)传送到本地。这时候如果有一个运行于远端VPS上的Web App，本地输入Youtube视频链接
+，下载完毕后直接生成下载链接，这该有多好！这里我们来实现这个功能。&lt;/p&gt;
+
+&lt;h3 id=&#34;flask&#34;&gt;Flask&lt;/h3&gt;
+
+&lt;h4 id=&#34;运行环境&#34;&gt;运行环境&lt;/h4&gt;
+
+&lt;p&gt;远程VPS位于Digital Ocean上，运行Ubuntu14.04。 这里我们基于python virtualenv来构建Flask
+开发框架.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ sudo apt-get install -y python-virtualenv
+$ virtualenv myflask
+$ source ~/myflask/bin/activate
+$ mkdir ~/flask_youtube
+$ vim requirements.txt
+Flask==0.10.1
+$ pip install -r requirements.txt
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行完上述命令后，flask运行环境就已经就绪了。&lt;/p&gt;
+
+&lt;h4 id=&#34;flask-app&#34;&gt;Flask App&lt;/h4&gt;
+
+&lt;p&gt;这里我们参考了以下链接（实际上是照搬):&lt;br /&gt;
+&lt;a href=&#34;http://charlesleifer.com/blog/a-flask-front-end-and-chrome-extension-for-youtube-dl/&#34;&gt;http://charlesleifer.com/blog/a-flask-front-end-and-chrome-extension-for-youtube-dl/&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;也参考了(关于virtualenv):&lt;br /&gt;
+&lt;a href=&#34;https://realpython.com/blog/python/setting-up-a-simple-ocr-server/&#34;&gt;https://realpython.com/blog/python/setting-up-a-simple-ocr-server/&lt;/a&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ vim youtube.py
+import subprocess
+import sys
+
+from flask import Flask, flash, redirect, request, render_template, url_for
+
+DEBUG = False
+SECRET_KEY = &#39;this is needed for flash messages&#39;
+
+BINARY = &#39;/usr/bin/youtube-dl&#39;
+DEST_DIR = &#39;/home/dash/videos&#39;
+OUTPUT_TEMPLATE = &#39;%s/%%(title)s-%%(id)s.%%(ext)s&#39; % DEST_DIR
+
+app = Flask(__name__)
+app.config.from_object(__name__)
+
+@app.route(&#39;/&#39;, methods=[&#39;GET&#39;, &#39;POST&#39;])
+def download():
+    if request.method == &#39;POST&#39;:
+        url = request.form[&#39;url&#39;]
+        p = subprocess.Popen([BINARY, &#39;-o&#39;, OUTPUT_TEMPLATE, &#39;-q&#39;, url])
+        p.communicate()
+        flash(&#39;Successfully downloaded!&#39;, &#39;success&#39;)
+        return redirect(url_for(&#39;download&#39;))
+    return render_template(&#39;download.html&#39;)
+
+if __name__ == &#39;__main__&#39;:
+    app.run(host=&#39;0.0.0.0&#39;, port=8801)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;实例中用到了flask里的模版，为此我们需要创建template目录:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ mkdir templates
+$ vim templates/download.html
+&amp;lt;!doctype html&amp;gt;
+&amp;lt;html&amp;gt;
+  &amp;lt;head&amp;gt;
+    &amp;lt;title&amp;gt;youtuber&amp;lt;/title&amp;gt;
+    &amp;lt;link rel=stylesheet type=text/css href=&amp;quot;{{ url_for(&#39;static&#39;, filename=&#39;css/youtuber.min.css&#39;) }}&amp;quot; /&amp;gt;
+    &amp;lt;script src=&amp;quot;{{ url_for(&#39;static&#39;, filename=&#39;js/jquery-1.11.0.min.js&#39;) }}&amp;quot; type=&amp;quot;text/javascript&amp;quot;&amp;gt;&amp;lt;/script&amp;gt;
+    &amp;lt;script src=&amp;quot;{{ url_for(&#39;static&#39;, filename=&#39;js/bootstrap.min.js&#39;) }}&amp;quot;&amp;gt;&amp;lt;/script&amp;gt;
+  &amp;lt;/head&amp;gt;
+  &amp;lt;body&amp;gt;
+    &amp;lt;div class=&amp;quot;container&amp;quot;&amp;gt;
+      {% for category, message in get_flashed_messages(with_categories=true) %}
+        &amp;lt;div class=&amp;quot;alert alert-{{ category }} alert-dismissable&amp;quot;&amp;gt;
+          &amp;lt;button type=&amp;quot;button&amp;quot; class=&amp;quot;close&amp;quot; data-dismiss=&amp;quot;alert&amp;quot; aria-hidden=&amp;quot;true&amp;quot;&amp;gt;×&amp;lt;/button&amp;gt;
+          &amp;lt;p&amp;gt;{{ message }}&amp;lt;/p&amp;gt;
+        &amp;lt;/div&amp;gt;
+      {% endfor %}
+
+      &amp;lt;h1&amp;gt;Download&amp;lt;/h1&amp;gt;
+      &amp;lt;form action=&amp;quot;{{ url_for(&#39;download&#39;) }}&amp;quot; method=&amp;quot;post&amp;quot;&amp;gt;
+        &amp;lt;div class=&amp;quot;form-group&amp;quot;&amp;gt;
+          &amp;lt;label for=&amp;quot;url&amp;quot;&amp;gt;URL&amp;lt;/label&amp;gt;
+          &amp;lt;input type=&amp;quot;text&amp;quot; name=&amp;quot;url&amp;quot; class=&amp;quot;form-control&amp;quot; id=&amp;quot;url&amp;quot; placeholder=&amp;quot;url&amp;quot; /&amp;gt;
+        &amp;lt;/div&amp;gt;
+        &amp;lt;button type=&amp;quot;submit&amp;quot; class=&amp;quot;btn btn-primary&amp;quot;&amp;gt;Download&amp;lt;/button&amp;gt;
+      &amp;lt;/form&amp;gt;
+    &amp;lt;/div&amp;gt;
+  &amp;lt;/body&amp;gt;
+&amp;lt;/html&amp;gt; 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;因为我们这里有指定用&lt;code&gt;static/js&lt;/code&gt;下的静态文件，所以需要手动创建目录并下载文件:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ mkdir -p static/js
+$ cd static/js
+$ wget https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css
+$ wget https://code.jquery.com/jquery-1.11.0.js
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;youtuber.min.css&lt;/code&gt;是样式表文件，这里先不加入，除了效果差一点，没啥副作用。&lt;/p&gt;
+
+&lt;h4 id=&#34;运行&#34;&gt;运行&lt;/h4&gt;
+
+&lt;p&gt;键入&lt;code&gt;python youtube.py&lt;/code&gt;即可运行该Web App. 访问&lt;code&gt;http://YourIPAddress:8801&lt;/code&gt;即可访问到该WebApp的界面:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_07_12_15_59_39_272x160.jpg&#34; alt=&#34;/images/2016_07_12_15_59_39_272x160.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;输入下载链接后，点击submit按钮后，VPS将自动下载该youtube影片。&lt;/p&gt;
+
+&lt;h3 id=&#34;下载结果页面&#34;&gt;下载结果页面&lt;/h3&gt;
+
+&lt;p&gt;下载结果页面需要在static目录下新建一个用于存放视频的&lt;code&gt;videos/&lt;/code&gt;目录夹. 同时需要添加一个模
+板文件.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ tree
+.
+└── down
+    ├── requirements.txt
+    ├── static
+    │   ├── js
+    │   │   ├── bootstrap-3.0.0.min.js
+    │   │   ├── bootstrap.min.js
+    │   │   ├── jquery-1.10.2.min.js
+    │   │   └── jquery-1.11.0.min.js
+    │   └── videos
+    │       ├── abc.mp4
+    │       └── ccc.mp4
+    ├── templates
+    │   ├── download.html
+    │   └── videos.html
+    └── youtube.py
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;其中&lt;code&gt;templates/videos.html&lt;/code&gt;文件是用于渲染下载视频文件的模版，内容如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;!doctype html&amp;gt;
+&amp;lt;html&amp;gt;
+  &amp;lt;head&amp;gt;
+    &amp;lt;title&amp;gt;Video download info&amp;lt;/title&amp;gt;
+  &amp;lt;/head&amp;gt;
+  &amp;lt;body&amp;gt;
+    &amp;lt;div class=&amp;quot;container&amp;quot;&amp;gt;
+      &amp;lt;h1&amp;gt;All Downloadable Videos&amp;lt;/h1&amp;gt;
+      {% for video in video_url %}
+      &amp;lt;a href=&amp;quot;/static/videos/{{ video }}&amp;quot;&amp;gt;{{ video }}&amp;lt;/a&amp;gt;&amp;lt;br /&amp;gt;
+      {% endfor %}
+      &amp;lt;h1&amp;gt;Click Following Links For Downloading!&amp;lt;/h1&amp;gt;
+      &amp;lt;a href=&amp;quot;/&amp;quot;&amp;gt;Go Back To Download Page&amp;lt;/a&amp;gt;&amp;lt;br /&amp;gt;
+    &amp;lt;/div&amp;gt;
+  &amp;lt;/body&amp;gt;
+&amp;lt;/html&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在&lt;code&gt;youtube.py&lt;/code&gt;文件中添加&lt;code&gt;/videos&lt;/code&gt;路由，及相关处理函数:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import subprocess
+import sys
+import os
+from flask import Flask, flash, redirect, request, render_template, url_for
+
+DEBUG = False
+SECRET_KEY = &#39;this is needed for flash messages&#39;
+
+BINARY = &#39;/usr/bin/youtube-dl&#39;
+DEST_DIR = &#39;/home/dash/down/static/videos/&#39;
+OUTPUT_TEMPLATE = &#39;%s/%%(title)s-%%(id)s.%%(ext)s&#39; % DEST_DIR
+
+app = Flask(__name__)
+app.config.from_object(__name__)
+
+@app.route(&#39;/&#39;, methods=[&#39;GET&#39;, &#39;POST&#39;])
+def download():
+    if request.method == &#39;POST&#39;:
+        url = request.form[&#39;url&#39;]
+        print url
+        p = subprocess.Popen([BINARY, &#39;-o&#39;, OUTPUT_TEMPLATE, &#39;-q&#39;, url])
+        p.communicate()
+        flash(&#39;Successfully downloaded!&#39;, &#39;success&#39;)
+        return redirect(url_for(&#39;videos&#39;))
+    return render_template(&#39;download.html&#39;)
+
+# For holding all of the videos
+@app.route(&#39;/videos&#39;)
+def videos():
+    names = os.listdir(os.path.abspath(DEST_DIR))
+    return render_template(&#39;videos.html&#39;, video_url=names)
+
+if __name__ == &#39;__main__&#39;:
+    app.run(host=&#39;0.0.0.0&#39;, port=8801)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;下载流程&#34;&gt;下载流程&lt;/h3&gt;
+
+&lt;p&gt;首先，访问&lt;code&gt;http://YourIpAddress:8801/&lt;/code&gt;, 得到的结果如下:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_07_12_19_34_59_309x177.jpg&#34; alt=&#34;/images/2016_07_12_19_34_59_309x177.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;填入youtube上的视频地址以后，下载完毕后，可以看到videos页面变成了:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_07_12_19_38_03_582x271.jpg&#34; alt=&#34;/images/2016_07_12_19_38_03_582x271.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;删除功能&#34;&gt;删除功能&lt;/h3&gt;
+
+&lt;p&gt;&lt;code&gt;youtube.py&lt;/code&gt;添加一个函数和路由:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;# For deleting specified file
+@app.route(&#39;/delete/&amp;lt;filename&amp;gt;&#39;)
+def remove_file(filename):
+    filename_full = os.path.join(DEST_DIR, filename)
+    print filename_full
+    os.remove(filename_full)
+    return redirect(url_for(&#39;videos&#39;))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;模版文件更改:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ vim templates/videos.html 
+&amp;lt;!doctype html&amp;gt;
+&amp;lt;html&amp;gt;
+  &amp;lt;head&amp;gt;
+    &amp;lt;title&amp;gt;Video download info&amp;lt;/title&amp;gt;
+  &amp;lt;/head&amp;gt;
+  &amp;lt;body&amp;gt;
+    &amp;lt;div class=&amp;quot;container&amp;quot;&amp;gt;
+      &amp;lt;h1&amp;gt;All Downloadable Videos&amp;lt;/h1&amp;gt;
+      {% for video in video_url %}
+      &amp;lt;a href=&amp;quot;/static/videos/{{ video }}&amp;quot;&amp;gt;{{ video }}&amp;lt;/a&amp;gt;
+      &amp;lt;a href=&amp;quot;/delete/{{ video }}&amp;quot;&amp;gt;&amp;lt;img src=&amp;quot;/static/img/fuck.png&amp;quot; alt=&amp;quot;FuckYou&amp;quot;&amp;gt;&amp;lt;/a&amp;gt;
+      &amp;lt;a href=&amp;quot;/delete/{{ video }}&amp;quot;&amp;gt; Delete this video&amp;lt;/a&amp;gt;
+      &amp;lt;br /&amp;gt;
+      &amp;lt;hr&amp;gt;
+      {% endfor %}
+...........
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;fuck.png&lt;/code&gt;是从网上下载的图片，更改完毕后，页面如下:&lt;br /&gt;
+&lt;img src=&#34;http://purplepalmdash.github.io/images/2016_07_12_20_27_39_748x382.jpg&#34; alt=&#34;/images/2016_07_12_20_27_39_748x382.jpg&#34; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&#34;todo&#34;&gt;ToDo&lt;/h3&gt;
+
+&lt;p&gt;添加权限，只有认证过后的用户才能使用删除功能。&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>Speed-Up the WP website in TianChao</title>
@@ -1388,92 +1644,6 @@ Date: Wed, 03 Dec 2014 09:40:24 GMT
 &lt;/code&gt;&lt;/pre&gt;
 
 &lt;p&gt;我们可以把出错时返回的错误号从401改变为403,这样返回的就是forbidden错误。&lt;/p&gt;
-</description>
-    </item>
-    
-    <item>
-      <title>Virtual Node Environment For PhoneGap Development</title>
-      <link>http://purplepalmdash.github.io/2014/12/01/virtual-node-environment-for-phonegap-development/</link>
-      <pubDate>Mon, 01 Dec 2014 00:00:00 +0000</pubDate>
-      
-      <guid>http://purplepalmdash.github.io/2014/12/01/virtual-node-environment-for-phonegap-development/</guid>
-      <description>
-
-&lt;h3 id=&#34;background&#34;&gt;Background&lt;/h3&gt;
-
-&lt;p&gt;I met some tutorials which were write one or two years ago, while at that time the corresponding plugins are in an old version, so I need to find a whole &amp;ldquo;virtual&amp;rdquo; environment for developing these tutorials.&lt;/p&gt;
-
-&lt;h3 id=&#34;install-nodeenv&#34;&gt;Install Nodeenv&lt;/h3&gt;
-
-&lt;p&gt;&amp;ldquo;Node.js virtual environment builder&amp;rdquo; &amp;mdash; is the introduction for Nodeenv.&lt;br /&gt;
-Install it via:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;$ virtualenv2 venv
-source venv/bin/activate
-(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ 
-$ pip install nodeenv
-(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ which nodeenv
-/home/Trusty/code/30days/PhoneGap2.9.0/venv/bin/nodeenv
-(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ nodeenv --version
-0.11.1
-
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;With this nodeenv we could setup all kinds of the dev environments.&lt;/p&gt;
-
-&lt;h3 id=&#34;wrok-with-nodeenv&#34;&gt;Wrok With Nodeenv&lt;/h3&gt;
-
-&lt;p&gt;Install the node.js first, this may cause long time:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ nodeenv nodeenv 
- * Install node.js (0.10.33 
-[Trusty@~/code/30days/PhoneGap2.9.0]$ du -hs *
-170M    nodeenv
-8.9M    venv
-(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ ls
-nodeenv  npm-debug.log  venv
-(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ . nodeenv/bin/activate 
-(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ which npm
-/home/Trusty/code/30days/PhoneGap2.9.0/nodeenv/bin/npm
-(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ which node
-/home/Trusty/code/30days/PhoneGap2.9.0/nodeenv/bin/node
-
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;Now we could install the specified version of PhoneGap, first we should find the specified versions:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;$ npm view phonegap
-
-
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;This will returns the specified versions of all of the phonegap.&lt;br /&gt;
-Choose whichever you want.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;$ npm install phonegap@2.9.0-rc1-0.12.2
-
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;This will install the phonegap around Dec,2013, which should be fit well to the tutorial.&lt;br /&gt;
-Then re-activate , or manually modify the PATH as:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;$ export PATH=/home/Trusty/code/30days/PhoneGap2.9.0/nodeenv/bin:$PATH
-(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ phonegap -v
-2.9.0-rc1-0.12.2
-
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;h3 id=&#34;run-tutorial&#34;&gt;Run Tutorial&lt;/h3&gt;
-
-&lt;h4 id=&#34;create-apps&#34;&gt;Create Apps&lt;/h4&gt;
-
-&lt;p&gt;Create the app via following command:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ npm config set https_proxy http://1xx.x.xx.xxx:2xxxx
-(nodeenv)(venv)[Trusty@~/code/30days/PhoneGap2.9.0]$ npm config set proxy http://1xx.x.xx.xxx:2xxx
-$ phonegap create audero-feed-reade com.audero.free.utility.auderofeedreader &amp;quot;Audero Feed Reader&amp;quot;
-
-&lt;/code&gt;&lt;/pre&gt;
 </description>
     </item>
     

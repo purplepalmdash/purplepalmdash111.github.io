@@ -93,9 +93,9 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-1/">安装Icehouse@Ubuntu14.04(1)</a>
+        <a href="http://purplepalmdash.github.io/2015/05/06/shi-yong-fuelbu-shu-opencontrail-6/">使用Fuel部署OpenContrail(6)</a>
       </h1>
-      <span class="post-date">Apr 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-1/#disqus_thread">Comments</a>
+      <span class="post-date">May 6, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/06/shi-yong-fuelbu-shu-opencontrail-6/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
@@ -104,1222 +104,275 @@
       
       
 
-<p>项目的需要，手动基于多台Ubuntu虚拟机部署OpenStack Icehouse, 然后在部署好的Icehouse的基础上，部署OpenContrail, 最终达到OpenContrail解耦的过程。</p>
+<p>前面在HA类型的Fuel OpenStack基础上集成了OpenContrail，然而在实际的开发和测试中，用HA类型比较浪费硬件资源，因此这次我把部署节点从7个压缩到3个，做多节点上非HA类型的OpenStack集成OpenContrail.</p>
 
-<h3 id="环境准备">环境准备</h3>
+<h3 id="先决条件">先决条件</h3>
 
-<p>物理机: i7-3770/24G Memory/CentOS 6.6<br />
-软件: virt-manager/qemu等<br />
-节点机(虚拟机):<br />
-节点机1: 控制节点(JunoController), 2 CPU+3G内存+单网卡(管理网络,10.17.17.211).<br />
-节点机2: 网络节点(JunoNetwork), 1 CPU+1G内存+3 网卡(管理网络:10.17.17.212, GRE Tunnel网络:10.19.19.212, 外部网络:10.22.22.212).<br />
-节点机3: 计算节点(JunoCompute), 2 CPU(Nested)+2G内存+2 网卡(管理网络:10.17.17.213, GRE Tunnel网络:10.19.19.213).<br />
-网络配置:<br />
-Virt-manager里需要配置三个网络，一个是管理网络10.17.17.0/24, 另一个GRE Tunnel网络10.19.19.0/24, 外部网络为10.22.22.0/24.<br />
-参考资料:<br />
-不错的指南文件:<a href="http://godleon.github.io/blog/2015/02/10/install-openstack-juno-in-ubuntu-basic-environment-setting/">http://godleon.github.io/blog/2015/02/10/install-openstack-juno-in-ubuntu-basic-environment-setting/</a><br />
-官方文档:<a href="http://docs.openstack.org/icehouse/install-guide/install/apt/content/">http://docs.openstack.org/icehouse/install-guide/install/apt/content/</a></p>
+<p>这次只用三台机器来做部署，分别为:<br />
+2-Core, 3G内存, 100G硬盘, 用于安装OpenStack Controller.<br />
+2-Core, 2G内存, 100G硬盘, 用于安装OpenStack Compute. 注意这台机器需要Copy Host CPU configuration, 以激活KVM。<br />
+2-Core, 3G内存, 100G硬盘, 用于安装Contrail.<br />
+创建出来的两个用于部署的OpenStack环境如下:<br />
+<img src="/images/2015_05_06_15_36_20_383x194.jpg" alt="/images/2015_05_06_15_36_20_383x194.jpg" /><br />
+值得注意的是，在OpenStack的配置中，我们激活了Ceilometer，用于统计，所以需要额外增加一台2G内存大小的虚拟机。<br />
+<img src="/images/2015_05_06_09_40_34_608x385.jpg" alt="/images/2015_05_06_09_40_34_608x385.jpg" /></p>
 
-<h3 id="虚拟机准备">虚拟机准备</h3>
+<h3 id="安装">安装</h3>
 
-<p>用以下命令创建三台虚拟机的磁盘，而后按照上面的节点机配置完毕后，启动三台虚拟机。</p>
+<p>安装过程和HA的过程大同小异，配置好网络以后，现在I3OpenStack中部署好OpenStack，而后用provision的方式将I3Contrail中的Contrail部署节点机器安装为Ubuntu的格式。<br />
+这里的具体配置过程可以参考《使用Fuel部署OpenContrail(1)》到《使用Fuel部署OpenContrail(3)》.<br />
+一切就绪后，我们进入到配置过程.</p>
 
-<pre><code># pwd
-/home/juju/img/OpenStack
-# qemu-img create -f qcow2 -b ./UbuntuBase1404.qcow2 JunoController.qcow2
-# qemu-img create -f qcow2 -b ./UbuntuBase1404.qcow2 JunoNetwork.qcow2
-# qemu-img create -f qcow2 -b ./UbuntuBase1404.qcow2 JunoCompute.qcow2
+<h3 id="配置">配置</h3>
 
-</code></pre>
+<p>详细配置如下:</p>
 
-<p>更改节点机的/etc/hostname文件，更改各自的名字为JunoController, JunoNetwork和JunoCompute.<br />
-每台机器的/etc/network/interfaces文件配置如下:<br />
-JunoController:</p>
+<h4 id="contrail-配置contrail部署节点">(Contrail) 配置Contrail部署节点</h4>
 
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
+<p>删除不用的网络端口, 并配置ifccfg-eth4后重启:</p>
 
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.17.17.211
-netmask 255.255.255.0
-gateway 10.17.17.1
-dns-nameservers 114.114.114.114
-
-</code></pre>
-
-<p>JunoNetwork:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-# auto eth0
-# iface eth0 inet dhcp
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.17.17.212
-netmask 255.255.255.0
-#gateway 10.17.17.1
-dns-nameservers 114.114.114.114
-
-# Network, have the tunnel, which locates at the 10.19.19.0/24
-auto eth1
-iface eth1 inet static
-address 10.19.19.212
-netmask 255.255.255.0
-up route add -net 10.19.19.0/24 dev eth1
-
-# Directly to internet, used for ovs
-auto eth2
-iface eth2 inet dhcp
-
-</code></pre>
-
-<p>JunoCompute:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.17.17.213
-netmask 255.255.255.0
-gateway 10.17.17.1
-dns-nameservers 114.114.114.114
-
-# Network, have the tunnel, which locates at the 10.19.19.0/24
-auto eth1
-iface eth1 inet static
-address 10.19.19.213
-netmask 255.255.255.0
-up route add -net 10.19.19.0/24 dev eth1
-
-</code></pre>
-
-<p>把下列条目添加到各台节点机的 /etc/hosts文件中:</p>
-
-<pre><code>10.17.17.211    JunoController
-10.17.17.212    JunoNetwork
-10.17.17.213    JunoCompute
-
-</code></pre>
-
-<h3 id="ntp服务部署">NTP服务部署</h3>
-
-<h4 id="ntp-服务器">NTP 服务器</h4>
-
-<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将JunoController作为NTP服务器,在JunoController上，安装和配置NTP服务器：</p>
-
-<pre><code>root@JunoController:~# apt-get -y install ntp
-root@JunoController:~# vim /etc/ntp.conf
-    # 修改成大陆时间
-    server 2.cn.pool.ntp.org
-    server 1.asia.pool.ntp.org
-    server 2.asia.pool.ntp.org
-    # 修改 restrict 設定
-    restrict -4 default kod notrap nomodify
-    restrict -6 default kod notrap nomodify
-root@JunoController:~# service ntp restart
-
-</code></pre>
-
-<h4 id="ntp客户端">NTP客户端</h4>
-
-<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 設定 controller 為參照的 time server
-    # 並將其他 server 開頭的設定進行註解
-    server 10.17.17.211 iburst
-# service ntp restart
-
-</code></pre>
-
-<p>检查结果是否正确:</p>
-
-<pre><code>root@JunoNetwork:~# ntpq -c peers
-     remote           refid      st t when poll reach   delay   offset  jitter
-==============================================================================
- JunoController  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
-
-</code></pre>
-
-<h3 id="添加软件仓库">添加软件仓库</h3>
-
-<p>官方文档中说icehouse已经在14.04的官方仓库中了，所以下面的步骤并不是必须的。<br />
-在所有节点上，执行以下操作:</p>
-
-<pre><code># apt-get install python-software-properties
-# add-apt-repository cloud-archive:icehouse
-# apt-get update &amp;&amp; apt-get -y dist-upgrade &amp;&amp; reboot
-
-</code></pre>
-
-<h3 id="安装-配置数据库">安装/配置数据库</h3>
-
-<p>OpenStack需要一个数据库用于存储相关数据，一般情况下采用MySQL. &ldquo;你问我支持不支持MySQL？我说不支持，我就明确告诉你，你们呀，我感觉你们开源界也要学习，你们非常熟悉MYSQL被Oracle这一套的，你们毕竟是Too Young，明白这意思吗？&rdquo;&mdash;-所以装一个MariaDB来代替它.</p>
-
-<pre><code>root@JunoController:~# apt-get -y install mariadb-server python-mysqldb
-root@JunoController:~# vim /etc/mysql/my.cnf 
-    [mysqld]
-    # 修改 bind-address 設定
-    bind-address = 10.17.17.211
+<pre><code># cd /etc/network/interfaces.d/
+# rm -f ifcfg-eth1 
+# rm -f ifcfg-eth2 
+# rm -f ifcfg-eth3
+# vim ifcfg-eth4
+    auto eth4
+    iface eth4 inet static
     
-    # 加入以下 UTF-8 的相關設定
-    default-storage-engine = innodb
-    innodb_file_per_table
-    collation-server = utf8_general_ci
-    init-connect = 'SET NAMES utf8'
-    character-set-server = utf8
-
-</code></pre>
-
-<p>重启服务:</p>
-
-<pre><code>root@JunoController:~# service mysql restart
-
-</code></pre>
-
-<h3 id="安装消息服务器">安装消息服务器</h3>
-
-<p>同样在控制节点上安装，OpenStack使用rabbitmq作为消息服务器：</p>
-
-<pre><code>root@JunoController:~# apt-get install -y rabbitmq-server
-
-</code></pre>
-
-<p>修改初始化guest密码:</p>
-
-<pre><code>root@JunoController:~# rabbitmqctl change_password guest RABBITMQ_PASSWD
-
-</code></pre>
-
-<p>第一部分跑完，这里我们完成了OpenStack创建的基本设定，接下来就可以挨个搭建OpenStack的服务了。</p>
-
-      
-    </div>
+    address 10.77.77.100
+    netmask 255.255.255.0
+    gateway 10.77.77.1
     
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-2/">安装Icehouse@Ubuntu14.04(2)</a>
-      </h1>
-      <span class="post-date">Apr 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-2/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="安装identity服务">安装Identity服务</h3>
-
-<p>首先创建keystone所需数据库:</p>
-
-<pre><code>root@JunoController:~# mysql -u root -p
-Enter password: 
-Welcome to the MariaDB monitor.  Commands end with ; or \g.
-Your MariaDB connection id is 28
-Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-
-Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-MariaDB [(none)]&gt; CREATE DATABASE keystone;
-Query OK, 1 row affected (0.00 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY 'KEYSTONE_PASS';
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'KEYSTONE_PASS';
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; flush privileges;
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; exit;
-Bye
+    post-up  ethtool  -K  eth4  gso off  gro off || true
+# reboot
 
 </code></pre>
 
-<p>安装keystone相关套件:</p>
+<p>确保在Contrail部署节点上，可以ping通OpenStack Controller的10.55.55.0/24网络。<br />
+配置本地安装源:</p>
 
-<pre><code>root@JunoController:~# apt-get -y install keystone python-keystoneclient
-
-</code></pre>
-
-<p>创建一个admin token用于做初始化配置:</p>
-
-<pre><code>root@JunoController:~# openssl rand -hex 10
-5c3b5cd66a7dfa8e33e5
-
-</code></pre>
-
-<p>使用上面取得的admin token和mysql设置用于更新/etc/keystone.conf文件，更改如下:</p>
-
-<pre><code>root@JunoController:~# vim /etc/keystone/keystone.conf 
-[DEFAULT]
-admin_token=5c3b5cd66a7dfa8e33e5
-verbose=True
-log_dir = /var/log/keystone
-
-[database]
-connection=mysql://keystone:KEYSTONE_DBPASS@10.17.17.211/keystone
-
-
+<pre><code># echo 'deb http://10.20.0.2:8080/contrail/ /' &gt; /etc/apt/sources.list.d/contrail.list
+# echo -e &quot;Package: *\nPin: release l=Ubuntu\nPin-Priority: 100&quot; &gt; /etc/apt/preferences
+# &gt;/etc/apt/sources.list
+# apt-get update
+# apt-get install -y python-paramiko contrail-fabric-utils contrail-setup
+# pip install --upgrade --no-deps --index-url=”” /opt/contrail/python_packages/Fabric-1.7.0.tar.gz
 
 </code></pre>
 
-<p>部署数据库并重新启动Keystone服务:</p>
-
-<pre><code>root@JunoController:~# su -s /bin/sh -c &quot;keystone-manage db_sync&quot; keystone
-root@JunoController:~# service keystone restart
-
-</code></pre>
-
-<p>删除不需要的sqlite数据库, 并设定crontab任务:</p>
-
-<pre><code>root@JunoController:~# rm -f /var/lib/keystone/keystone.db
-root@JunoController:~# (crontab -l -u keystone 2&gt;&amp;1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush &gt;/var/log/keystone/keystone-tokenflush.log 2&gt;&amp;1' &gt;&gt; /var/spool/cron/crontabs/keystone
-
-</code></pre>
-
-<h3 id="建立-user-role-tenant">建立 user / role / tenant</h3>
-
-<p>环境变量设置:</p>
-
-<pre><code>root@JunoController:~# export OS_SERVICE_TOKEN=5c3b5cd66a7dfa8e33e5
-root@JunoController:~# export OS_SERVICE_ENDPOINT=http://10.17.17.211:35357/v2.0
-
-</code></pre>
-
-<h4 id="tenant创建">tenant创建</h4>
-
-<p>创建admin tenant:</p>
-
-<pre><code>root@JunoController:~#  keystone tenant-create --name admin --description &quot;Admin Tenant&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |           Admin Tenant           |
-|   enabled   |               True               |
-|      id     | ea1f0a6b15dc4796958f087c38756ed1 |
-|     name    |              admin               |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<p>创建demo tenant:</p>
-
-<pre><code>root@JunoController:~# keystone tenant-create --name demo --description &quot;Demo Tenant&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |           Demo Tenant            |
-|   enabled   |               True               |
-|      id     | 2ac9cae777014d3d94458f521b013e94 |
-|     name    |               demo               |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<h4 id="建立user">建立user</h4>
-
-<p>建立admin用户:</p>
-
-<pre><code>root@JunoController:~# keystone user-create --name admin --pass xxxx --email kkkttt@gmail.com
-+----------+----------------------------------+
-| Property |              Value               |
-+----------+----------------------------------+
-|  email   |        kkkttt@gmail.com        |
-| enabled  |               True               |
-|    id    | 055dd9b7b1564df5bf9e9c511f32978b |
-|   name   |              admin               |
-| username |              admin               |
-+----------+----------------------------------+
-
-</code></pre>
-
-<p>在demo tenant下建立demo用户:</p>
-
-<pre><code>root@JunoController:~# keystone user-create --name demo --tenant demo --pass engine --email kkkttt@gmail.com
-+----------+----------------------------------+
-| Property |              Value               |
-+----------+----------------------------------+
-|  email   |        kkkttt@gmail.com        |
-| enabled  |               True               |
-|    id    | e8f2c2bdaee34f3895147f26a924e010 |
-|   name   |               demo               |
-| tenantId | 2ac9cae777014d3d94458f521b013e94 |
-| username |               demo               |
-+----------+----------------------------------+
-
-</code></pre>
-
-<h4 id="admin-role">admin role</h4>
-
-<p>建立admin role:</p>
-
-<pre><code>root@JunoController:~# keystone role-create --name admin
-+----------+----------------------------------+
-| Property |              Value               |
-+----------+----------------------------------+
-|    id    | 4af914913e154a599deb1b78a0751c1a |
-|   name   |              admin               |
-+----------+----------------------------------+
-
-</code></pre>
-
-<h4 id="链接user-role-tenant">链接user/role/tenant</h4>
-
-<pre><code>root@JunoController:~# keystone user-role-add --user admin --tenant admin --role admin
-
-</code></pre>
-
-<h4 id="创建一个service-tenant">创建一个Service Tenant</h4>
-
-<p>先建立Service Tenant:</p>
-
-<pre><code>root@JunoController:~# keystone tenant-create --name service --description &quot;Service Tenant&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |          Service Tenant          |
-|   enabled   |               True               |
-|      id     | 4b22bf4e6a68419aa91da6e0ffaca2dc |
-|     name    |             service              |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<h4 id="定义services-api-服务挂载点">定义services &amp; API 服务挂载点</h4>
-
-<p>所有安装好的服务都需要向Identity Service注册，甚至是Identity Service本身，都需要先注册上才可以被使用:<br />
-首先注册Identity Service:</p>
-
-<pre><code>root@JunoController:~# keystone service-create --name keystone --type identity --description &quot;OpenStack Identity&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |        OpenStack Identity        |
-|   enabled   |               True               |
-|      id     | 27bf7f70deac429d8d28623d99939ae6 |
-|     name    |             keystone             |
-|     type    |             identity             |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<p>而后，设定Identity Service的服务端点:</p>
-
-<pre><code>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ identity / {print $2}') --publicurl http://10.17.17.211:5000/v2.0 --internalurl http://10.17.17.211:5000/v2.0 --adminurl http://10.17.17.211:35357/v2.0 --region regionOne                      
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-|   adminurl  |  http://10.17.17.211:35357/v2.0  |
-|      id     | fb4c17d5c1414a7e852c6f7db552dd89 |
-| internalurl |  http://10.17.17.211:5000/v2.0   |
-|  publicurl  |  http://10.17.17.211:5000/v2.0   |
-|    region   |            regionOne             |
-|  service_id | 27bf7f70deac429d8d28623d99939ae6 |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<p>验证Identity服务是否安装成功,首先，unset环境变量:</p>
-
-<pre><code>root@JunoController:~# unset OS_SERVICE_TOKEN OS_SERVICE_ENDPOINT
-
-</code></pre>
-
-<p>以 tenant(admin) &amp; user(admin) 的身份取得 token:</p>
-
-<pre><code>keystone --os-tenant-name admin --os-username admin --os-password ADMIN_PASS --os-auth-url http://10.17.17.211:35357/v2.0 token-get
-
-</code></pre>
-
-<p>以 tenant(admin) &amp; user(admin) 的身分查詢 tenant 清單:</p>
-
-<pre><code># keystone --os-tenant-name admin --os-username admin --os-password  xxxxxx --os-auth-url http://10.17.17.211:35357/v2.0 tenant-list
-+----------------------------------+---------+---------+
-|                id                |   name  | enabled |
-+----------------------------------+---------+---------+
-| ea1f0a6b15dc4796958f087c38756ed1 |  admin  |   True  |
-| 2ac9cae777014d3d94458f521b013e94 |   demo  |   True  |
-| 4b22bf4e6a68419aa91da6e0ffaca2dc | service |   True  |
-+----------------------------------+---------+---------+
-
-</code></pre>
-
-<p>查询user清单：</p>
-
-<pre><code>root@JunoController:~# keystone --os-tenant-name admin --os-username admin --os-password xxxx --os-auth-url http://10.17.17.211:35357/v2.0 user-list
-+----------------------------------+-------+---------+--------------------+
-|                id                |  name | enabled |       email        |
-+----------------------------------+-------+---------+--------------------+
-| 055dd9b7b1564df5bf9e9c511f32978b | admin |   True  | kkkttt@gmail.com |
-| e8f2c2bdaee34f3895147f26a924e010 |  demo |   True  | kkkttt@gmail.com |
-+----------------------------------+-------+---------+--------------------+
-
-</code></pre>
-
-<p>查询role清单:</p>
-
-<pre><code>root@JunoController:~# keystone --os-tenant-name admin --os-username admin --os-password xxxx --os-auth-url http://10.17.17.211:35357/v2.0 role-list
-+----------------------------------+----------+
-|                id                |   name   |
-+----------------------------------+----------+
-| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
-| 4af914913e154a599deb1b78a0751c1a |  admin   |
-+----------------------------------+----------+
-
-</code></pre>
-
-<p>以demo用户身份去的token</p>
-
-<pre><code>root@controller:~# keystone --os-tenant-name demo --os-username demo --os-password DEMO_PASS --os-auth-url http://10.17.17.211:35357/v2.0 token-get
-
-</code></pre>
-
-<p>以demo身份取得用户清单会被提示权限不足:</p>
-
-<pre><code>root@JunoController:~# keystone --os-tenant-name demo --os-username demo --os-password xxxx --os-auth-url http://10.17.17.211:35357/v2.0 user-list
-You are not authorized to perform the requested action, admin_required. (HTTP 403)
-
-</code></pre>
-
-<p>现在keystone服务已经挂载完毕了，接下来就是逐个挂载组件。</p>
-
-<h3 id="快速切换脚本">快速切换脚本</h3>
-
-<p>快速切换脚本如下，记得加上执行权限:</p>
-
-<pre><code>root@JunoController:~# cat openstack/admin-openrc.sh
-export OS_TENANT_NAME=admin
-export OS_USERNAME=admin
-export OS_PASSWORD=xxxx
-export OS_AUTH_URL=http://10.17.17.211:35357/v2.0
-root@JunoController:~# cat openstack/demo-openrc.sh 
-export OS_TENANT_NAME=demo
-export OS_USERNAME=demo
-export OS_PASSWORD=xxxx
-export OS_AUTH_URL=http://10.17.17.211:5000/v2.0
-
-</code></pre>
-
-      
-    </div>
+<p>开始配置用于部署的testbed.py文件，可以看到，比起HA部署方式来看，我们减少了一些节点定义，去掉了HA有关的配置:</p>
+
+<pre><code># vim  /opt/contrail/utils/fabfile/testbeds/testbed.py
+    from fabric.api import env
+    #Management ip addresses of hosts in the cluster
+    #os_ctrl01 = 'root@10.55.55.6'
+    #os_ctrl02 = 'root@10.55.55.7'
+    #os_ctrl03 = 'root@10.55.55.8'
+    os_ctrl01 = 'root@10.55.55.7'
     
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/">安装Icehouse@Ubuntu14.04(3)</a>
-      </h1>
-      <span class="post-date">Apr 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Image Service 用于提供给用户用于快速启动虚拟机的镜像文件，这样的服务称为glance服务。</p>
-
-<h3 id="glance服务数据库设定">Glance服务数据库设定</h3>
-
-<p>在mysql中创建glance数据库:</p>
-
-<pre><code>root@JunoController:~#  mysql -u root -p
-Enter password: 
-Welcome to the MariaDB monitor.  Commands end with ; or \g.
-Your MariaDB connection id is 33
-Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-
-Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-MariaDB [(none)]&gt; CREATE DATABASE glance;
-Query OK, 1 row affected (0.01 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxx'
-    -&gt; ;
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxx';
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; flush privileges;
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; quit;
-Bye
-
-</code></pre>
-
-<h3 id="创建glance的user-role-tenant权限">创建Glance的user/role/tenant权限</h3>
-
-<p>用admin的权限，创建以下权限：</p>
-
-<pre><code>root@JunoController:~#  source ~/openstack/admin-openrc.sh
-
-</code></pre>
-
-<p>创建glance用户:</p>
-
-<pre><code>root@JunoController:~# keystone user-create --name glance --pass engine
-+----------+----------------------------------+
-| Property |              Value               |
-+----------+----------------------------------+
-|  email   |                                  |
-| enabled  |               True               |
-|    id    | c706febbcc8843fb97383c9fdfba6214 |
-|   name   |              glance              |
-| username |              glance              |
-+----------+----------------------------------+
-
-</code></pre>
-
-<p>用户glance属于admin角色，使用service tanant:</p>
-
-<pre><code>keystone user-role-add --user glance --tenant service --role admin
+    c_ctrl01 = 'root@10.77.77.100'
+    #c_ctrl02 = 'root@10.77.77.11'
+    #c_ctrl03 = 'root@10.77.77.12'
+    c_db01 = 'root@10.77.77.100'
+    #c_db02 = 'root@10.77.77.11'
+    #c_db03 = 'root@10.77.77.12'
+    #External routers
+    # ext_routers = [('gateway01', '&lt;Gateway_node1_LOOPBACK_ip&gt;'), ('gateway02', '&lt;Gateway_node2_LOOPBACK_ip&gt;')]
+    #Autonomous system number
+    router_asn = 64512
+    #Host from which the fab commands are triggered to install and provision
+    deploy_node = 'root@10.77.77.100'
+    #Role definition of the hosts.
+    env.roledefs = {
+    'all': [c_ctrl01, c_db01],
+    'cfgm': [c_ctrl01],
+    'openstack': [os_ctrl01],
+    'control': [c_ctrl01],
+    'compute': [],
+    'collector': [c_ctrl01],
+    'webui': [c_ctrl01],
+    'database': [c_db01],
+    'build': [deploy_node],
+    'storage-master': [],
+    'storage-compute': [],
+    }
+    #Openstack admin password
+    env.openstack_admin_password = 'admin'
+    env.password = 'r00tme'
+    #Passwords of each host
+    env.passwords = {
+    os_ctrl01: 'r00tme',
+    # os_ctrl02: 'r00tme',
+    # os_ctrl03: 'r00tme',
+    c_ctrl01: 'r00tme',
+    #c_ctrl02: 'r00tme',
+    #c_ctrl03: 'r00tme',
+    c_db01: 'r00tme',
+    # c_db02: 'r00tme',
+    # c_db03: 'r00tme',
+    deploy_node: 'r00tme',
+    }
+    #For reimage purpose
+    env.ostypes = {
+    os_ctrl01: 'ubuntu',
+    # os_ctrl02: 'ubuntu',
+    # os_ctrl03: 'ubuntu',
+    c_ctrl01: 'ubuntu',
+    # c_ctrl02: 'ubuntu',
+    # c_ctrl03: 'ubuntu',
+    c_db01: 'ubuntu',
+    # c_db02: 'ubuntu',
+    # c_db03: 'ubuntu',
+    deploy_node: 'ubuntu',
+    }
+    env.openstack = {
+    'service_token' : 'xqnCCCs2'
+    }
+    # env.ha = {
+    # 'internal_vip': '10.55.55.4',
+    # 'external_vip': '172.16.0.4',
+    # 'contrail_internal_vip': '10.77.77.9',
+    # 'contrail_external_vip': '10.77.77.9',
+    # }
+    env.keystone = {
+    'service_tenant': 'services',
+    'admin_token': 'xqnCCCs2',
+    }
+    multi_tenancy = True
 
 </code></pre>
 
-<p>在keystone注册glance服务:</p>
+<p>从Fuel节点控制机上拷贝公钥文件，用于快速部署</p>
 
-<pre><code>root@JunoController:~# keystone service-create --name glance --type image --description &quot;OpenStack Image Service&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |     OpenStack Image Service      |
-|   enabled   |               True               |
-|      id     | 3d52d2992b9f423eb9868304e4405fab |
-|     name    |              glance              |
-|     type    |              image               |
-+-------------+----------------------------------+
+<pre><code># scp 10.20.0.2:/root/.ssh/id_rsa /root/.ssh/id_rsa
+# chmod 0600 /root/.ssh/id_rsa
 
 </code></pre>
 
-<p>在keystone创建服务的end-point:</p>
+<p>在节点上部署仓库，安装必要包，同意SUN协议:</p>
 
-<pre><code>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://10.17.17.211:9292 --internalurl http://10.17.17.211:9292 --adminurl http://10.17.17.211:9292 --region regionOne
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-|   adminurl  |     http://10.17.17.211:9292     |
-|      id     | f44400bebc07408d8e0f4e70a0d18475 |
-| internalurl |     http://10.17.17.211:9292     |
-|  publicurl  |     http://10.17.17.211:9292     |
-|    region   |            regionOne             |
-|  service_id | 3d52d2992b9f423eb9868304e4405fab |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<h3 id="安装glance服务">安装Glance服务</h3>
-
-<p>安装:</p>
-
-<pre><code>apt-get -y install glance python-glanceclient
+<pre><code># fab -P -R control -w -- 'ls /etc/apt/preferences || echo -e &quot;Package: *\nPin: release \
+l=Ubuntu\nPin-Priority: 100&quot; &gt; /etc/apt/preferences'
+# fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+--allow-unauthenticated install python-crypto python-netaddr python-paramiko \
+contrail-fabric-utils contrail-setup'
+# fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url=&quot;&quot; \
+/opt/contrail/python_packages/ecdsa-0.10.tar.gz'
+# fab -P -R control -w -- 'pip install --upgrade --no-deps --index-url=&quot;&quot; \
+/opt/contrail/python_packages/Fabric-1.7.0.tar.gz'
+# fab -P -R control -w -- 'echo &quot;sun-java6-plugin shared/accepted-sun-dlj-v1-1 boolean \
+true&quot; | /usr/bin/debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo &quot;sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean \
+ true&quot; | /usr/bin/debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo &quot;debconf shared/accepted-oracle-license-v1-1 select \
+true&quot; | sudo debconf-set-selections' &amp;&amp; fab -P -R control -w -- 'echo &quot;debconf shared/accepted-oracle-license-v1-1 seen \
+ true&quot; | sudo debconf-set-selections'
 
 </code></pre>
 
-<p>配置:</p>
+<p>安装特定版本的tzdata， 安装和配置数据库，并检查状态：</p>
 
-<pre><code># vim /etc/glance/glance-api.conf
-[database]
-# sqlite_db = /var/lib/glance/glance.sqlite
-backend = sqlalchemy
-connection = mysql://glance:engine@10.17.17.211/glance
-
-[keystone_authtoken]
-auth_uri = http://10.17.17.211:5000
-auth_host = 10.17.17.211
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = glance
-admin_password = engine
-#  vim /etc/glance/glance-registry.conf
-[database]
-# The file name to use with SQLite (string value)
-#sqlite_db = /var/lib/glance/glance.sqlite
-backend = sqlalchemy
-connection = mysql://glance:engine@10.17.17.211/glance
-
-[keystone_authtoken]
-auth_uri = http://10.17.17.211:5000
-auth_host = 10.17.17.211
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = glance
-admin_password = engine
-# rm -f /var/lib/glance/glance.sqlite
-# su -s /bin/sh -c &quot;glance-manage db_sync&quot; glance
+<pre><code># fab -P -R control -w -- 'DEBIAN_FRONTEND=noninteractive apt-get -y --force-yes \
+ --allow-unauthenticated install tzdata=2014e-0ubuntu0.12.04' &amp;&amp; fab install_database &amp;&amp; fab setup_database &amp;&amp; fab -R database -w -- &quot;contrail-status&quot;
+# nodetool status
 
 </code></pre>
 
-<p>这里会碰到一个问题，解决方案如下:</p>
+<p>安装和配置cfgm, control, collector, webui，keepalived等, 并配置tenant服务:</p>
 
-<pre><code>root@JunoController:~# su -s /bin/sh -c &quot;glance-manage db_sync&quot; glance
-2015-04-13 17:20:22.637 9455 CRITICAL glance [-] ValueError: Tables &quot;migrate_version&quot; have non utf8 collation, please make sure all tables are CHARSET=utf8
-
-root@JunoController:~# mysql -u root -p glance
-Enter password: 
-Reading table information for completion of table and column names
-You can turn off this feature to get a quicker startup with -A
-
-Welcome to the MariaDB monitor.  Commands end with ; or \g.
-Your MariaDB connection id is 29
-Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-
-Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-MariaDB [glance]&gt; alter table migrate_version convert to character set utf8 collate utf8_unicode_ci;
-Query OK, 1 row affected (0.09 sec)                
-Records: 1  Duplicates: 0  Warnings: 0
-
-MariaDB [glance]&gt; flush privileges;
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [glance]&gt; quit;
-Bye
+<pre><code># fab install_cfgm &amp;&amp; fab install_control &amp;&amp; fab install_collector &amp;&amp; fab install_webui &amp;&amp; fab setup_contrail_keepalived
+# fab -P -R control -w -- 'service keepalived restart'
+# fab -P -R control -w -- &quot;sed -i '49s/service/services/g' \
+/usr/local/lib/python2.7/dist-packages/contrail_provisioning/config/quantum_in_keystone_setup.py&quot;
+# fab setup_cfgm
+# fab setup_control &amp;&amp; fab setup_collector &amp;&amp; fab setup_webui
 
 </code></pre>
 
-<p>重启服务，</p>
+<p>(OpenStack Controller节点)检查neutron endpoint的方法，看是否有10.77.77.100的字段出现：</p>
 
-<pre><code>root@JunoController:~# service glance-registry restart
-root@JunoController:~# service glance-api restart
-
-</code></pre>
-
-<h3 id="验证glance服务">验证Glance服务</h3>
-
-<p>首先下载镜像:</p>
-
-<pre><code># wget http://cdn.download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+<pre><code># keystone service-list
+# keystone endpoint-list
 
 </code></pre>
 
-<p>创建Glance可见镜像:</p>
+<p>(OpenStack Controller节点)顺便，我们要拿到rabbit_hosts的密码，供下面使用:</p>
 
-<pre><code># glance image-create --name &quot;cirros-0.3.3-x86_64&quot; --file cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
-[=============================&gt;] 100%
-+------------------+--------------------------------------+
-| Property         | Value                                |
-+------------------+--------------------------------------+
-| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
-| container_format | bare                                 |
-| created_at       | 2015-04-13T09:27:54                  |
-| deleted          | False                                |
-| deleted_at       | None                                 |
-| disk_format      | qcow2                                |
-| id               | 68f14900-8b25-4329-ad56-8fbd497c6812 |
-| is_public        | True                                 |
-| min_disk         | 0                                    |
-| min_ram          | 0                                    |
-| name             | cirros-0.3.3-x86_64                  |
-| owner            | ea1f0a6b15dc4796958f087c38756ed1     |
-| protected        | False                                |
-| size             | 13200896                             |
-| status           | active                               |
-| updated_at       | 2015-04-13T09:27:54                  |
-| virtual_size     | None                                 |
-+------------------+--------------------------------------+
+<pre><code># cat /etc/rabbitmq/rabbitmq.config | grep default_pass
+    {default_pass,        &lt;&lt;&quot;nFyBhsrP&quot;&gt;&gt;},
 
 </code></pre>
 
-<p>检查镜像:</p>
+<p>配置rabbit:</p>
 
-<pre><code>root@JunoController:~# ls /var/lib/glance/images/
-68f14900-8b25-4329-ad56-8fbd497c6812
-
-</code></pre>
-
-<p>列出可用镜像:</p>
-
-<pre><code>root@JunoController:~# glance image-list
-+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
-+--------------------------------------+---------------------+-------------+------------------+----------+--------+
-| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
-+--------------------------------------+---------------------+-------------+------------------+----------+--------+
+<pre><code># fab -P -R control -w -- 'openstack-config --del /etc/neutron/neutron.conf DEFAULT rabbit_host'
+# fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_hosts 10.55.55.7:5672'
+# fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT rabbit_userid \
+   nova'
+# fab -P -R control -w -- 'openstack-config --set /etc/neutron/neutron.conf DEFAULT \
+  rabbit_password nFyBhsrP'
+# fab -P -R control -w -- 'service neutron-server restart'
 
 </code></pre>
 
-<p>好了，现在glance服务可以使用了，接下来将创建compute节点和网络节点。</p>
+<p>配置contrail-api使用OpenStack Controller上的rabbit服务:</p>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/">安装Icehouse@Ubuntu14.04(4)</a>
-      </h1>
-      <span class="post-date">Apr 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>这里将配置计算节点。计算节点我们使用了一台2G内存的虚拟机，并使用了嵌套虚拟化，可以通过<code>lscpu</code>来看到CPU的VMX/VT-X标志都已经被下发到虚拟机中。</p>
-
-<h3 id="数据库准备">数据库准备</h3>
-
-<p>使用下列命令来创建nova所需数据库:</p>
-
-<pre><code>root@JunoController:~# mysql -u root -p
-Enter password: 
-Welcome to the MariaDB monitor.  Commands end with ; or \g.
-Your MariaDB connection id is 35
-Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-
-Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-MariaDB [(none)]&gt; CREATE DATABASE nova;
-Query OK, 1 row affected (0.00 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'xxxx';
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' IDENTIFIED BY 'xxxx';
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; flush privileges;
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; quit
-Bye
+<pre><code># fab -P -R control -w -- 'perl -pi -e \
+ &quot;s/rabbit_server.*$/rabbit_server=10.55.55.7/&quot; /etc/contrail/contrail-api.conf'
+# fab -P -R control -w -- 'perl -pi -e &quot;s/rabbit_port.*$/rabbit_port=5672/&quot; \
+ /etc/contrail/contrail-api.conf'
+# fab -R control -w -- &quot;perl -pi -e 'print \&quot;rabbit_password=nFyBhsrP\n\&quot; \
+ if \$_ =~ rabbit_port' /etc/contrail/contrail-api.conf&quot;
+# fab -P -R control -w -- &quot;perl -pi -e 'print \&quot;rabbit_user=nova\n\&quot; if \$_ =~ rabbit_port' \
+ /etc/contrail/contrail-api.conf&quot;
+# fab -P -R control -w -- &quot;service contrail-api restart&quot;
 
 </code></pre>
 
-<h3 id="nova用户">nova用户</h3>
+<p>替换neutron的插件为OpenContrail：</p>
 
-<p>创建nova用户:</p>
-
-<pre><code>root@JunoController:~# source ~/openstack/admin-openrc.sh
-root@JunoController:~# keystone user-create --name nova --pass xxxx
-+----------+----------------------------------+
-| Property |              Value               |
-+----------+----------------------------------+
-|  email   |                                  |
-| enabled  |               True               |
-|    id    | 845c22d1a781458a8b28ba54534b73dd |
-|   name   |               nova               |
-| username |               nova               |
-+----------+----------------------------------+
+<pre><code># cp -r contrail-repo/neutron_plugin_contrail/plugins/opencontrail /usr/share/pyshared/neutron_plugin_contrail/plugins/
+# cd /opt/contrail/utils
+# fab -P -R cfgm -w -- 'service neutron-server restart'
 
 </code></pre>
 
-<p>制定nova属于service tenant, 并赋予admin权限:</p>
+<p>重启BGP,METADATA,ENCAPSULATION:</p>
 
-<pre><code>root@JunoController:~# keystone user-role-add --user nova --tenant service --role admin
-
-</code></pre>
-
-<p>在keystone注册nova:</p>
-
-<pre><code>root@JunoController:~# keystone service-create --name nova --type compute --description &quot;OpenStack Compute&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |        OpenStack Compute         |
-|   enabled   |               True               |
-|      id     | 8733caba0b9742a39ee9ac53ad4d8e27 |
-|     name    |               nova               |
-|     type    |             compute              |
-+-------------+----------------------------------+
+<pre><code># fab prov_control_bgp &amp;&amp; fab prov_metadata_services &amp;&amp; fab prov_encap_type
 
 </code></pre>
 
-<p>在keystone注册nova end-point:</p>
+<p>验证:</p>
 
-<pre><code>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ compute / {print $2}') --publicurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --internalurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --adminurl http://10.17.17.211:8774/v2/%\(tenant_id\)s --region regionOne
-+-------------+-------------------------------------------+
-|   Property  |                   Value                   |
-+-------------+-------------------------------------------+
-|   adminurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
-|      id     |      d16c91bfacf2474ebee36314535a146f     |
-| internalurl | http://10.17.17.211:8774/v2/%(tenant_id)s |
-|  publicurl  | http://10.17.17.211:8774/v2/%(tenant_id)s |
-|    region   |                 regionOne                 |
-|  service_id |      8733caba0b9742a39ee9ac53ad4d8e27     |
-+-------------+-------------------------------------------+
+<pre><code># fab verify_cfgm
+# fab verify_control
+# fab verify_collector
+# fab verify_webui
+# fab -R control -w -- &quot;contrail-status&quot;
+# fab -P -R control -w -- 'update-rc.d supervisor-support-service disable'
 
 </code></pre>
 
-<h3 id="compute服务安装">Compute服务安装</h3>
+<p>现在访问:<br />
+<a href="https://10.77.77.100:8143">https://10.77.77.100:8143</a><br />
+Contrail的组件已经被配置完毕，接下来配置Compute节点，以引入Vrouter等。</p>
 
-<h4 id="controller节点配置">Controller节点配置</h4>
+<h4 id="openstack-controller节点">(OpenStack Controller节点)</h4>
 
-<p>在Controller节点上，安装以下包:</p>
-
-<pre><code>root@JunoController:~# apt-get -y install nova-api nova-cert nova-conductor nova-consoleauth nova-novncproxy nova-scheduler python-novaclient
-
-</code></pre>
-
-<p>配置nova所需的配置文件:</p>
+<p>删除ifcfg-eth4的配置后重启OpenStack Controller节点, 修改nova.conf文件:</p>
 
 <pre><code># vim /etc/nova/nova.conf
-[database]
-connection = mysql://nova:xxxxx@10.17.17.211/nova
-
 [DEFAULT]
-....
-rpc_backend = rabbit
-rabbit_host = 10.17.17.211
-rabbit_password = xxxxxx
-my_ip=10.17.17.211
-vncserver_listen = 0.0.0.0
-vncserver_proxyclient_address = 10.17.17.211
-auth_strategy = keystone 
-
-[keystone_authtoken]
-auth_uri = http://10.17.17.211:5000
-auth_host = 10.17.17.211
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = nova
-admin_password = xxxx
-[glance]
-host=10.17.17.211
-
-</code></pre>
-
-<p>删除sqlite3数据库:</p>
-
-<pre><code>root@JunoController:~# rm /var/lib/nova/nova.sqlite 
-
-</code></pre>
-
-<p>创建数据库：</p>
-
-<pre><code>root@JunoController:~# su -s /bin/sh -c &quot;nova-manage db sync&quot; nova
-
-</code></pre>
-
-<p>重启服务，使用nova检查本机可用镜像情况:</p>
-
-<pre><code>root@JunoController:~# service nova-api restart
-root@JunoController:~# service nova-cert restart
-root@JunoController:~#  service nova-consoleauth restart
-root@JunoController:~# service nova-scheduler restart
-root@JunoController:~# service nova-conductor restart
-root@JunoController:~# service nova-novncproxy restart
-root@JunoController:~# nova image-list
-+--------------------------------------+---------------------+--------+--------+
-| ID                                   | Name                | Status | Server |
-+--------------------------------------+---------------------+--------+--------+
-| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | ACTIVE |        |
-+--------------------------------------+---------------------+--------+--------+
-
-</code></pre>
-
-<h4 id="compute节点安装">Compute节点安装</h4>
-
-<p>安装下列包:</p>
-
-<pre><code>root@JunoCompute:~#  apt-get -y install nova-compute sysfsutils
-
-</code></pre>
-
-<p>配置:</p>
-
-<pre><code>root@JunoCompute:~# vim /etc/nova/nova.conf 
-[DEFAULT]
-......
-auth_strategy = keystone
-rpc_backend = rabbit
-rabbit_host = 10.17.17.211
-rabbit_password = xxxx
-my_ip = 10.17.17.213
-vnc_enabled = True
-vncserver_listen = 0.0.0.0
-vncserver_proxyclient_address = 10.17.17.213
-novncproxy_base_url = http://10.17.17.211:6080/vnc_auto.html
-glance_host = 10.17.17.211
-
-[keystone_authtoken]
-auth_uri = http://10.17.17.211:5000
-auth_host = 10.17.17.211
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = nova
-admin_password = xxxx
-
-[database]
-#The SQLAlchemy connection string used to connect to the database
-connection = mysql://nova:xxxx@10.17.17.211/nova
-[glance]
-host=10.17.17.211
-
-</code></pre>
-
-<p>看cpu硬件是否支持硬件加速:</p>
-
-<pre><code>root@JunoCompute:~# egrep -c '(vmx|svm)' /proc/cpuinfo
-2
-
-</code></pre>
-
-<p>如果支持加速，则配置nova-compute.conf为:</p>
-
-<pre><code>root@JunoCompute:~# cat /etc/nova/nova-compute.conf
-[libvirt]
-virt_type=kvm
-
-</code></pre>
-
-<p>删除不需要的nova.sqlite文件:</p>
-
-<pre><code>root@JunoCompute:~# rm -f /var/lib/nova/nova.sqlite 
-
-</code></pre>
-
-<p>重起nova服务:</p>
-
-<pre><code>root@JunoCompute:~# service nova-compute restart
-
-</code></pre>
-
-<h3 id="验证">验证</h3>
-
-<p>在控制节点上,列出所有的service:</p>
-
-<pre><code>root@JunoController:~# nova service-list
-+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-| Binary           | Host           | Zone     | Status  | State | Updated_at                 | Disabled Reason |
-+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-| nova-cert        | JunoController | internal | enabled | up    | 2015-04-13T10:16:10.000000 | -               |
-| nova-consoleauth | JunoController | internal | enabled | up    | 2015-04-13T10:16:12.000000 | -               |
-| nova-scheduler   | JunoController | internal | enabled | up    | 2015-04-13T10:16:05.000000 | -               |
-| nova-conductor   | JunoController | internal | enabled | up    | 2015-04-13T10:16:08.000000 | -               |
-| nova-compute     | JunoCompute    | nova     | enabled | up    | 2015-04-13T10:16:09.000000 | -               |
-+------------------+----------------+----------+---------+-------+----------------------------+-----------------+
-
-</code></pre>
-
-<p>现在compute节点已经配置完了，接下来可以配置网络节点。配置完网络节点后，就可以启动虚拟机了。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-5/">安装Icehouse@Ubuntu14.04(5)</a>
-      </h1>
-      <span class="post-date">Apr 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-5/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="neutron-database">Neutron Database</h3>
-
-<p>Follow following steps for create the database:</p>
-
-<pre><code>root@JunoController:~# mysql -u root -p
-Enter password: 
-Welcome to the MariaDB monitor.  Commands end with ; or \g.
-Your MariaDB connection id is 58
-Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
-
-Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-MariaDB [(none)]&gt; CREATE DATABASE neutron;
-Query OK, 1 row affected (0.00 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY 'xxxxx'
-    -&gt; ;
-Query OK, 0 rows affected (0.01 sec)
-
-MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY 'xxxxx';
-Query OK, 0 rows affected (0.00 sec)
-
-MariaDB [(none)]&gt; flush privileges;
-Query OK, 0 rows affected (0.01 sec)
-
-MariaDB [(none)]&gt; quit
-Bye
-
-</code></pre>
-
-<h3 id="keystone-items">Keystone items</h3>
-
-<p>创建用户:</p>
-
-<pre><code>root@JunoController:~# source ~/openstack/admin-openrc.sh
-root@JunoController:~# keystone user-create --name neutron --pass xxxxx
-+----------+----------------------------------+
-| Property |              Value               |
-+----------+----------------------------------+
-|  email   |                                  |
-| enabled  |               True               |
-|    id    | a4cbae42a2164c6e9a4c05c3f6835782 |
-|   name   |             neutron              |
-| username |             neutron              |
-+----------+----------------------------------+
-
-</code></pre>
-
-<p>更改权限，服务为tenant, 角色是admin:</p>
-
-<pre><code>root@JunoController:~# keystone user-role-add --user neutron --tenant service --role admin
-
-</code></pre>
-
-<p>创建服务：</p>
-
-<pre><code>root@JunoController:~# keystone service-create --name neutron --type network --description &quot;OpenStack Networking&quot;
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |       OpenStack Networking       |
-|   enabled   |               True               |
-|      id     | 1142b316e4e04061bb676b73d0cf6f68 |
-|     name    |             neutron              |
-|     type    |             network              |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<p>创建服务的end-point:</p>
-
-<pre><code>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ network / {print $2}') --publicurl http://10.17.17.211:9696 --adminurl http://10.17.17.211:9696 --internalurl http://10.17.17.211:9696 --region regionOne
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-|   adminurl  |     http://10.17.17.211:9696     |
-|      id     | 77bb946d42dc4d099875ecc377510937 |
-| internalurl |     http://10.17.17.211:9696     |
-|  publicurl  |     http://10.17.17.211:9696     |
-|    region   |            regionOne             |
-|  service_id | 1142b316e4e04061bb676b73d0cf6f68 |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<h3 id="安装组件">安装组件</h3>
-
-<p>在Controller端安装:</p>
-
-<pre><code>root@JunoController:~#  apt-get -y install neutron-server neutron-plugin-ml2 python-neutronclient
-
-</code></pre>
-
-<p>取得tenant service id:</p>
-
-<pre><code>root@JunoController:~# source ~/openstack/admin-openrc.sh
-root@JunoController:~# keystone tenant-get service
-+-------------+----------------------------------+
-|   Property  |              Value               |
-+-------------+----------------------------------+
-| description |          Service Tenant          |
-|   enabled   |               True               |
-|      id     | 4b22bf4e6a68419aa91da6e0ffaca2dc |
-|     name    |             service              |
-+-------------+----------------------------------+
-
-</code></pre>
-
-<p>编辑nova配置文件，修改如下：</p>
-
-<pre><code>root@JunoController:~# vim /etc/neutron/neutron.conf
-[DEFAULT]
-rpc_backend = neutron.openstack.common.rpc.impl_kombu
-rabbit_host = 10.17.17.211
-rabbit_password = xxxxx
-
-notify_nova_on_port_status_changes = True
-notify_nova_on_port_data_changes = True
-nova_url = http://10.17.17.211:8774/v2
-nova_admin_username = nova
-nova_admin_tenant_id = 4b22bf4e6a68419aa91da6e0ffaca2dc
-nova_admin_password = xxxxx
-nova_admin_auth_url = http://10.17.17.211:35357/v2.0
-
-core_plugin = ml2
-service_plugins = router
-allow_overlapping_ips = True
-
-auth_strategy = keystone
-
-[keystone_authtoken]
-auth_uri = http://10.17.17.211:5000
-auth_host = 10.17.17.211
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = neutron
-admin_password = xxxxx
-signing_dir = $state_path/keystone-signing
-[database]
-connection = mysql://neutron:xxxxx@10.17.17.211/neutron
-
-</code></pre>
-
-<p>编辑ML2(Modular Layer2)插件， 在控制节点上：</p>
-
-<pre><code>root@JunoController:~# vim /etc/neutron/plugins/ml2/ml2_conf.ini | more
-[ml2]
-type_drivers = gre
-tenant_network_types = gre
-mechanism_drivers = openvswitch
-
-[ml2_type_gre]
-tunnel_id_ranges = 1:1000
-
-
-[securitygroup]
-# Controls if neutron security group is enabled or not.
-# It should be false when you use nova security group.
-# enable_security_group = True
-firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-enable_security_group = True
-
-</code></pre>
-
-<p>调整Compute Service使用Neutron服务:</p>
-
-<pre><code># vim /etc/nova/nova.conf
 network_api_class = nova.network.neutronv2.api.API
-neutron_url = http://10.17.17.211:9696
-neutron_auth_strategy = keystone
-neutron_admin_tenant_name = service
+neutron_url = http://10.77.77.100:9696
+neutron_admin_tenant_name = services
 neutron_admin_username = neutron
-neutron_admin_password = xxxxx
-neutron_admin_auth_url = http://10.17.17.211:35357/v2.0
-linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
+neutron_admin_password = xqnCCCs2
+neutron_url_timeout = 300
+neutron_admin_auth_url = http://10.55.55.7:35357/v2.0/
 firewall_driver = nova.virt.firewall.NoopFirewallDriver
+enabled_apis = ec2,osapi_compute,metadata
 security_group_api = neutron
-
+service_neutron_metadata_proxy = True
 
 </code></pre>
 
@@ -1331,448 +384,719 @@ security_group_api = neutron
 
 </code></pre>
 
-<p>重启网络服务:</p>
+<p>删除已注册的nova-network组件:</p>
 
-<pre><code># service neutron-server restart
-
-</code></pre>
-
-<p>检查是否完成的命令:</p>
-
-<pre><code>root@JunoController:~# neutron ext-list
-+-----------------------+-----------------------------------------------+
-| alias                 | name                                          |
-+-----------------------+-----------------------------------------------+
-| security-group        | security-group                                |
-| l3_agent_scheduler    | L3 Agent Scheduler                            |
-| ext-gw-mode           | Neutron L3 Configurable external gateway mode |
-| binding               | Port Binding                                  |
-| provider              | Provider Network                              |
-| agent                 | agent                                         |
-| quotas                | Quota management support                      |
-| dhcp_agent_scheduler  | DHCP Agent Scheduler                          |
-| multi-provider        | Multi Provider Network                        |
-| external-net          | Neutron external network                      |
-| router                | Neutron L3 Router                             |
-| allowed-address-pairs | Allowed Address Pairs                         |
-| extra_dhcp_opt        | Neutron Extra DHCP opts                       |
-| extraroute            | Neutron Extra Route                           |
-+-----------------------+-----------------------------------------------+
+<pre><code># source ~/openrc
+# for i in $(nova service-list|grep nova-network|awk '{print $2}'); \
+do nova service-delete $i;done
 
 </code></pre>
 
-<p>###配置网络节点
-激活以下选项:</p>
+<p>接下来配置Compute节点.</p>
 
-<pre><code>root@JunoNetwork:~# vim /etc/sysctl.conf
-net.ipv4.ip_forward=1
-net.ipv4.conf.all.rp_filter=0
-net.ipv4.conf.default.rp_filter=0
-net.bridge.bridge-nf-call-arptables=1
-net.bridge.bridge-nf-call-iptables=1
-net.bridge.bridge-nf-call-ip6tables=1
+<h4 id="compute节点">(Compute节点)</h4>
 
-</code></pre>
+<p>引入本地安装仓库:</p>
 
-<p>提交更改(这里有错误):</p>
-
-<pre><code>root@JunoNetwork:~# sysctl -p
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.rp_filter = 0
-net.ipv4.conf.default.rp_filter = 0
-sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-arptables: No such file or directory
-sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-iptables: No such file or directory
-sysctl: cannot stat /proc/sys/net/bridge/bridge-nf-call-ip6tables: No such file or directory
+<pre><code>#  echo 'deb http://10.20.0.2:8080/contrail/ /' &gt;/etc/apt/sources.list.d/contrail.list
+# echo -e &quot;Package: *\nPin: release l=Ubuntu\nPin-Priority: 100&quot; &gt; /etc/apt/preferences
+# &gt;/etc/apt/sources.list
+# apt-get update
 
 </code></pre>
 
-<p>安装网络组件:</p>
+<p>删除已有的vswitch模块，并验证:</p>
 
-<pre><code>root@JunoNetwork:~# apt-get install neutron-plugin-ml2 neutron-plugin-openvswitch-agent neutron-l3-agent neutron-dhcp-agent
+<pre><code># apt-get purge -y openvswitch-switch nova-network nova-api
+# apt-get purge -y  nova-network nova-api
+# aptitude search -F '%p' '~i' | grep openvswitch
 
 </code></pre>
 
-<p>配置通用组件:</p>
+<p>删除OVS内核模块:</p>
 
-<pre><code># vim /etc/neutron/neutron.conf
+<pre><code># lsmod | grep openvswitch &amp;&amp; rmmod openvswitch
+
+</code></pre>
+
+<p>删除virtual网络,即virbr0端口:</p>
+
+<pre><code># virsh net-destroy default
+# virsh net-undefine default
+
+</code></pre>
+
+<p>删除除ifcfg-eth4和ifcfg-eth0的其他端口，并重启，重启后用下列命令检查是否有iptables NAT规则存在，理论上应该是空的:</p>
+
+<pre><code># iptables -L -t nat
+
+</code></pre>
+
+<p>安装vrouter:</p>
+
+<pre><code># apt-get install -y contrail-openstack-vrouter
+
+</code></pre>
+
+<p>配置vhosts,vrouter需要使用这个端口,指定IP地址为10.77.77.101:</p>
+
+<pre><code># vim /etc/network/interfaces.d/ifcfg-vhost0 
+auto vhost0
+iface vhost0 inet static
+    netmask 255.255.255.0
+    network_name application
+    address 10.77.77.101
+    gateway 10.77.77.1
+    mtu 1300
+# vim /etc/network/interfaces.d/ifcfg-eth4 
+auto eth4
+iface eth4 inet manual
+
+up ip l set eth4 up
+down ip l set eth4 down
+
+post-up  ethtool  -K  eth4  gso off  gro off || true
+
+</code></pre>
+
+<p>创建agent-param文件:</p>
+
+<pre><code># mv /etc/contrail/agent_param.tmpl /etc/contrail/agent_param
+# vim /etc/contrail/agent_param
+dev=eth4
+
+</code></pre>
+
+<p>设置vroute-agent配置:</p>
+
+<pre><code># vim /etc/contrail/contrail-vrouter-agent.conf
 [DEFAULT]
-rpc_backend = neutron.openstack.common.rpc.impl_kombu
-rabbit_host = 10.17.17.211
-rabbit_password = xxxxx
-core_plugin = ml2
-service_plugins = router
-allow_overlapping_ips = True
-verbose = True
-auth_strategy = keystone
-
-[keystone_authtoken]
-auth_uri = http://10.17.17.211:5000
-auth_host = 10.17.17.211
-auth_port = 35357
-auth_protocol = http
-admin_tenant_name = service
-admin_user = neutron
-admin_password = xxxxx
+headless_mode=true
+[DISCOVERY]
+server=10.77.77.100
+max_control_nodes=1
+[HYPERVISOR]
+type=kvm
+[NETWORKS]
+control_network_ip=10.77.77.101
+[VIRTUAL-HOST-INTERFACE]
+name=vhost0
+ip=10.77.77.101/24
+gateway=10.77.77.1
+physical_interface=eth4
 
 </code></pre>
 
-<p>编辑L3 agent:</p>
+<p>配置节点管理参数,地址指向Contrail控制器的IP:</p>
 
-<pre><code># vim /etc/neutron/l3_agent.ini
-[DEFAULT]
-interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
-use_namespaces = True
-verbose = True
+<pre><code># vim /etc/contrail/vrouter_nodemgr_param
+DISCOVERY=10.77.77.100
 
 </code></pre>
 
-<p>编辑DHCP插件:</p>
+<p>配置nova-compute:</p>
 
-<pre><code># vim /etc/neutron/dhcp_agent.ini
- [DEFAULT]
-interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
-dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
-use_namespaces = True
-
-</code></pre>
-
-<p>配置DHCP：</p>
-
-<pre><code>root@JunoNetwork:~# vim /etc/neutron/dhcp_agent.ini
-[DEFAULT]
-...
-dnsmasq_config_file = /etc/neutron/dnsmasq-neutron.conf
-root@JunoNetwork:~# vim /etc/neutron/dnsmasp-neutron.conf
-dhcp-option-force=26,1454
+<pre><code> # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url http://10.77.77.100:9696
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_auth_url http://10.55.55.7:35357/v2.0/
+ # openstack-config --set /etc/nova/nova.conf DEFAULT network_api_class nova_contrail_vif.contrailvif.ContrailNetworkAPI
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_tenant_name services
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_username neutron
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_password xqnCCCs2
+ # openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url_timeout 300
+ # openstack-config --set /etc/nova/nova.conf DEFAULT firewall_driver nova.virt.firewall.NoopFirewallDriver
+ # openstack-config --set /etc/nova/nova.conf DEFAULT security_group_api neutron
+ # service supervisor-vrouter restart
 
 </code></pre>
 
-<p>配置metadata agent:</p>
+<p>验证所有的vrouter服务都是active状态的:</p>
 
-<pre><code>root@JunoNetwork:~# vim /etc/neutron/metadata_agent.ini
-[DEFAULT]
-auth_url = http://10.17.17.211:5000/v2.0
-auth_region = regionOne
-admin_tenant_name = service
-admin_user = neutron
-admin_password = xxxxx
-nova_metadata_ip = 10.17.17.211
-metadata_proxy_shared_secret = xxxxx
+<pre><code># contrail-status 
+== Contrail vRouter ==
+supervisor-vrouter:           active
+contrail-vrouter-agent        active              
+contrail-vrouter-nodemgr      active              
 
 </code></pre>
 
-<p>回到controller节点，编辑:</p>
+<p>更改/etc/libvirt/qemu.confg中的cgroup_device_acl部分:</p>
 
-<pre><code># vim /etc/nova/nova.conf
-[DEFAULT]
-...
-service_neutron_metadata_proxy = true
-neutron_metadata_proxy_shared_secret = xxxxx
-
-</code></pre>
-
-<p>重启compute api服务:</p>
-
-<pre><code># service nva-api restart
+<pre><code>cgroup_device_acl = [
+&quot;/dev/null&quot;, &quot;/dev/full&quot;, &quot;/dev/zero&quot;,
+&quot;/dev/random&quot;, &quot;/dev/urandom&quot;,
+&quot;/dev/ptmx&quot;, &quot;/dev/kvm&quot;, &quot;/dev/kqemu&quot;,
+&quot;/dev/rtc&quot;, &quot;/dev/hpet&quot;,&quot;/dev/net/tun&quot;,
+]
 
 </code></pre>
 
-<p>配置 ml2:</p>
+<p>在每个OpenStack Compute节点上，添加iptables规则如下并保存:</p>
 
-<pre><code>root@JunoNetwork:~# vim /etc/neutron/plugins/ml2/ml2_conf.ini 
-[ml2]
-type_drivers = gre
-tenant_network_types = gre
-mechanism_drivers = openvswitch
-[ml2_type_gre]
-tunnel_id_ranges = 1:1000
-[ovs]
-local_ip = 10.19.19.212
-tunnel_type = gre
-enable_tunneling = True
-[securitygroup]
-firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-enable_security_group = True
+<pre><code># iptables -I INPUT 1 -s 169.254.0.0/16 -i vhost0 -j ACCEPT -m comment --comment &quot;metadata service&quot;
+# iptables -I INPUT 1 -p tcp -m multiport --destination-ports 2049,8085,9090,8102,33617,39704,44177,55970,60663 -j ACCEPT -m comment --comment &quot;juniper contrail rules&quot;
+# iptables-save &gt; /etc/iptables/rules.v4
 
 </code></pre>
 
-<p>重启openvswitch 服务:</p>
+<p>重启libvirt-bin和nova-compute服务:</p>
 
-<pre><code>root@JunoNetwork:~# service openvswitch-switch restart
-
-</code></pre>
-
-<p>增加bridge配置：</p>
-
-<pre><code>root@JunoNetwork:~# ovs-vsctl add-br br-ex
-root@JunoNetwork:~# cat /etc/network/interfaces
-auto eth2
-iface eth2 inet manual
-
-iface br-ex inet static
-address 10.22.22.212
-netmask 255.255.255.0
-gateway 10.22.22.1
-bridge_ports eth2
-bridge_stp off
-auto br-ex
+<pre><code># service libvirt-bin restart
+# service nova-compute restart
 
 </code></pre>
 
-<p>增加桥接端口，并且重启机器:</p>
+<p>(Contrail Controller节点)更改vrouter的配置, ！！！注意，这是在Contrail Deploy的那个节点运行的！！！！, host_name的结果可以在compute节点上通过hostname命令来获得 ：</p>
 
-<pre><code>root@JunoNetwork:~# ovs-vsctl add-port br-ex eth2
-root@JunoNetwork:~# reboot
-
-</code></pre>
-
-<p>###计算节点配置
-更改sysctl配置:</p>
-
-<pre><code>root@JunoCompute:~# vim /etc/sysctl.conf
-net.ipv4.conf.all.rp_filter=0
-net.ipv4.conf.default.rp_filter=0
-net.bridge.bridge-nf-call-arptables=1
-net.bridge.bridge-nf-call-iptables=1
-net.bridge.bridge-nf-call-ip6tables=1
-root@JunoCompute:~# sysctl -p 
-net.ipv4.conf.all.rp_filter = 0
-net.ipv4.conf.default.rp_filter = 0
-net.bridge.bridge-nf-call-arptables = 1
-net.bridge.bridge-nf-call-iptables = 1
-net.bridge.bridge-nf-call-ip6tables = 1
+<pre><code># python /opt/contrail/utils/provision_vrouter.py --host_name node-18 --host_ip 10.77.77.101 --api_server_ip 10.77.77.100 --admin_user neutron --admin_password xqnCCCs2 --admin_tenant_name services --oper add
 
 </code></pre>
 
-<p>安装下列包:</p>
+<h4 id="vgw配置">VGW配置</h4>
 
-<pre><code># apt-get install neutron-common neutron-plugin-ml2 neutron-plugin-openvswitch-agent openvswitch-datapath-dkms
+<p>OpenContrail支持多种配置，例如Juniper vSRX, Juniper MX, Cisco ASR等，但这些都需要专有硬件的支持（路由器），我们仅仅采用软件路由器Vrouter, 这里我们配置VGW:</p>
 
-</code></pre>
-
-<p>配置compute节点上的网络通用组件:</p>
-
-<pre><code>root@JunoCompute:~# vim /etc/neutron/neutron.conf
-    [DEFAULT]
-    auth_strategy = keystone
-    rpc_backend = neutron.openstack.common.rpc.impl_kombu
-    rabbit_host = controller
-    rabbit_password = xxxx
-    core_plugin = ml2
-    service_plugins = router
-    allow_overlapping_ips = True
-    verbose = True
-    [keystone_authtoken]
-    auth_uri = http://10.17.17.211:5000
-    auth_host = 10.17.17.211
-    auth_port = 35357
-    auth_protocol = http
-    admin_tenant_name = service
-    admin_user = neutron
-    admin_password = xxxx
-    signing_dir = $state_path/keystone-signing
-    [database]
-root@JunoCompute:~# vim /etc/neutron/plugins/ml2/ml2_conf.ini 
-    [DEFAULT]
-    ...
-    core_plugin = ml2
-    service_plugins = router
-    allow_overlapping_ips = True
-    [ml2]
-    ...
-    type_drivers = gre
-    tenant_network_types = gre
-    mechanism_drivers = openvswitch
-    [ml2_type_gre]
-    ...
-    tunnel_id_ranges = 1:1000
-    [ovs]
-    ...
-    local_ip = 10.19.19.213
-    tunnel_type = gre
-    enable_tunneling = True
-    [securitygroup]
-    ...
-    firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-    enable_security_group = True
-root@JunoCompute:~# service openvswitch-switch restart
-root@JunoCompute:~# service nova-compute restart
-root@JunoCompute:~# service neutron-plugin-openvswitch-agent restart
+<pre><code># export PYTHONPATH=/usr/lib/python2.7/dist-packages/contrail_vrouter_api/gen_py/instance_service
+# python /opt/contrail/utils/provision_vgw_interface.py --oper create --interface vgw --subnets 10.88.88.0/24 --routes 0.0.0.0/0 --vrf default-domain:admin:ext:ext
 
 </code></pre>
 
-<p>接下来我们配置Compute节点上的nova,让它使用neutron作为网络管理器.</p>
+<p>更新/etc/contrail/contrail-vrouter-agent.con中的[GATEWAY-0]部分:</p>
 
-<pre><code>root@JunoCompute:~# vim /etc/nova/nova.conf 
-[DEFAULT]
-network_api_class = nova.network.neutronv2.api.API
-neutron_url = http://10.17.17.211:9696
-neutron_auth_strategy = keystone
-neutron_admin_tenant_name = service
-neutron_admin_username = neutron
-neutron_admin_password = xxxx
-neutron_admin_auth_url = http://10.17.17.211:35357/v2.0
-linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-firewall_driver = nova.virt.firewall.NoopFirewallDriver
-security_group_api = neutron
+<pre><code>[GATEWAY-0]
+routing_instance=default-domain:admin:ext:ext
+interface=vgw
+ip_blocks=10.88.88.0/24
+routes=0.0.0.0/0
 
 </code></pre>
 
-<p>修改完毕后，重启Compute节点上的服务:</p>
+<p>重新启动supervisor-vrouter进程:</p>
 
-<pre><code>root@JunoCompute:~# service nova-compute restart
-nova-compute stop/waiting
-nova-compute start/running, process 2266
-root@JunoCompute:~# service neutron-plugin-openvswitch-agent restart
-stop: Unknown instance: 
-neutron-plugin-openvswitch-agent start/running, process 2303
+<pre><code># service supervisor-vrouter restart
 
 </code></pre>
 
-<p>配置Network节点的网络，因为我们需要br-ex作为对外网络的接口。<br />
-配置网络如下：</p>
+<p>重启其他所有的encapsulation方法，除了MPLS On UDP:<br />
+<img src="/images/2015_04_27_22_45_01_799x306.jpg" alt="/images/2015_04_27_22_45_01_799x306.jpg" /></p>
 
-<pre><code># ovs-vsctl add-br br-ex
-# ovs-vsctl add-port br-ex eth2
-# cat /etc/network/interfaces
-# 
-auto eth2
-iface eth2 inet manual
+<p>最后结果如下:<br />
+<img src="/images/2015_05_06_16_24_52_891x430.jpg" alt="/images/2015_05_06_16_24_52_891x430.jpg" /></p>
 
-iface br-ex inet static
-address 10.22.22.212
-netmask 255.255.255.0
-gateway 10.22.22.1
-bridge_ports eth2
-bridge_stp off
-auto br-ex
-# reboot
+<h3 id="总结">总结</h3>
 
-</code></pre>
+<p>非HA方式部署，需要花费内存为:<br />
+3+3+2+2=10G, 再加上Fuel Controller本身的3G,在16G的台式机上可以做到。</p>
 
-<p>增加ext-net:</p>
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/05/building-chromeos-steps/">Building ChromeOS Steps</a>
+      </h1>
+      <span class="post-date">May 5, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/05/05/building-chromeos-steps/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
 
-<pre><code>root@JunoController:~# neutron net-create ext-net --shared --router:external=True
-Created a new network:
-+---------------------------+--------------------------------------+
-| Field                     | Value                                |
-+---------------------------+--------------------------------------+
-| admin_state_up            | True                                 |
-| id                        | d879d5b1-f16e-4e28-beda-eb2b433e1f39 |
-| name                      | ext-net                              |
-| provider:network_type     | gre                                  |
-| provider:physical_network |                                      |
-| provider:segmentation_id  | 1                                    |
-| router:external           | True                                 |
-| shared                    | True                                 |
-| status                    | ACTIVE                               |
-| subnets                   |                                      |
-| tenant_id                 | ea1f0a6b15dc4796958f087c38756ed1     |
-+---------------------------+--------------------------------------+
+<p>My aim is for enable the bluetooth Networking in my Chromebook, AKA BNEP, so first I have to build out some experimentation platforms for investigation, following is the steps for building out the ChromeOS Images and let it run under kvm based virtual machine.</p>
+
+<h3 id="prerequistites">Prerequistites</h3>
+
+<p>I use a 6-Giga-Byte memory machine for building, first install following packages:</p>
+
+<pre><code>$ sudo apt-get install git-core gitk git-gui subversion curl
 
 </code></pre>
 
-<p>外部子网：</p>
+<p>Since I am in china mainland, the connection to googlesourcecode is blocked by Great Fire Wall(Fuck you!), I have to use proxychains for automatically convert my TCP/UDP flow to sock flow. That&rsquo;s why in some steps I use proxychains4 in front of the commands. If you are free to reach Internet, you should remove the proxychains4 in front of each command.<br />
+Then install <code>depot_tools</code>.</p>
 
-<pre><code>root@JunoController:~# neutron subnet-create ext-net --name ext-subnet --allocation-pool start=10.22.22.10,end=10.22.22.50 --disable-dhcp --gateway 10.22.22.1 --gateway 10.22.22.1 10.22.22.10/24
-Created a new subnet:
-+------------------+------------------------------------------------+
-| Field            | Value                                          |
-+------------------+------------------------------------------------+
-| allocation_pools | {&quot;start&quot;: &quot;10.22.22.10&quot;, &quot;end&quot;: &quot;10.22.22.50&quot;} |
-| cidr             | 10.22.22.0/24                                  |
-| dns_nameservers  |                                                |
-| enable_dhcp      | False                                          |
-| gateway_ip       | 10.22.22.1                                     |
-| host_routes      |                                                |
-| id               | 3c7e2224-0979-4eb6-b95f-16401ecbfef0           |
-| ip_version       | 4                                              |
-| name             | ext-subnet                                     |
-| network_id       | d879d5b1-f16e-4e28-beda-eb2b433e1f39           |
-| tenant_id        | ea1f0a6b15dc4796958f087c38756ed1               |
-+------------------+------------------------------------------------+
+<pre><code>dasdh@BuildMaasImage:~/Code$ pwd
+/home/dasdh/Code
+dasdh@BuildMaasImage:~/Code$ mkdir depot_tools
+dasdh@BuildMaasImage:~/Code$ proxychains4  git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+$ export PATH=`pwd`/depot_tools:&quot;$PATH&quot;
+$ echo $PATH
+/home/dasdh/Code/depot_tools:/home/dasdh/Code/depot_tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+
+</code></pre>
+
+<p>Config git:</p>
+
+<pre><code>dasdh@BuildMaasImage:~/Code$ git config --global user.email &quot;kkkttt@gmail.com&quot;
+dasdh@BuildMaasImage:~/Code$ git config --global user.name &quot;Dash&quot;
+
+</code></pre>
+
+<p>Maybe in the future you will use github repository, better you use <code>ssh-keygen</code> to generate the public ssh key and upload it to github.    Make sure your architecture is x86_64, and add following into your ~/.bashrc:</p>
+
+<pre><code>dasdh@BuildMaasImage:~/Code$ uname -m
+x86_64
+dasdh@BuildMaasImage:~/Code$ cat ~/.bashrc | grep umask
+umask 022
+
+</code></pre>
+
+<h3 id="get-source-code">Get Source Code</h3>
+
+<p>Get the code via following commands:</p>
+
+<pre><code>dasdh@BuildMaasImage:~$ mkdir chromiumos
+dasdh@BuildMaasImage:~$ pwd
+/home/dasdh
+
+</code></pre>
+
+<p>Then get the credential for chromiumOS( go to <a href="https://chromium-review.googlesource.com/new-password">https://chromium-review.googlesource.com/new-password</a> for getting the commands):</p>
+
+<pre><code>$  touch ~/.gitcookies
+$  chmod 0600 ~/.gitcookies
+$  git config --global http.cookiefile ~/.gitcookies
+$  tr , \\t &lt;&lt;\__END__ &gt;&gt;~/.gitcookies
+ .googlesource.com,TRUE,/,TRUE,2147483647,o,git-kkkttt.gmail.com=1/goeugoueogewoguoweugoawohouaohuowauhoaeuo
+ __END__
+$  git config --global &quot;url.https://chromium.googlesource.com/a/.insteadOf&quot; &quot;https://chromium.googlesource.com/&quot;
+$  git config --global --add &quot;url.https://chromium.googlesource.com/a/.insteadOf&quot; &quot;https://chromium.googlesource.com/a/&quot;
+$  proxychains4 git ls-remote https://chromium.googlesource.com/a/chromiumos/manifest.git
+
+</code></pre>
+
+<p>The final output result should be a list of file.<br />
+Because the google source code use https connection, so we need to define the .netrc like following:</p>
+
+<pre><code>$ touch ~/.netrc
+$ chmod 0600 ~/.netrc
+$ vim ~/.netrc
+machine chromium.googlesource.com
+login git-kkkttt.gmail.com
+password agowugoweugowugouwoguoweugoeugo
+
+machine chromium-review.googlesource.com
+login git-kkkttt.gmail.com
+password agowugoweugowugouwoguoweugoeugo
+
+</code></pre>
+
+<p>Now your configuration is ready, initialize the repository via:</p>
+
+<pre><code>$ proxychains4 repo init -u https://chromium.googlesource.com/chromiumos/manifest.git --repo-url https://chromium.googlesource.com/external/repo.git
+$ proxychains4 repo sync 
+
+</code></pre>
+
+<p>repo sync will take a very long time for getting all of the source code down, and it will takes arount 8G disk size.</p>
+
+<h3 id="build-source-code">Build Source Code</h3>
+
+<p>After source code is avaiable, start building it via:</p>
+
+<pre><code>$ proxychains cros_sdk
+
+</code></pre>
+
+<p>Since the proxychains failed, I&rsquo;ve enable the redsocks for crossing the GFW, in the last part of this article shows its installation and configuration.<br />
+Using redsocks we could continue the building:</p>
+
+<pre><code>$ cros_sdk
+dasdh@BuildMaasImage ~/trunk/src/scripts $ 
+
+</code></pre>
+
+<p>Now start building via:</p>
+
+<pre><code>#  export BOARD=amd64-generic
+# ./setup_board --board=${BOARD}
+# ./set_shared_user_password.sh
+# ./build_packages --board=${BOARD}
+# ./build_image --board=${BOARD} --noenable_rootfs_verification dev
+
+</code></pre>
+
+<p>If you met hostname error, make sure your hostname is added in <code>/etc/hosts</code>.</p>
+
+<p>The building result is listed as:</p>
+
+<pre><code>(cr) dasdh@BuildMaasImage ~/trunk/src/build/images/amd64-generic/R44-7040.0.2015_05_06_0543-a1 $ pwd
+/home/dasdh/trunk/src/build/images/amd64-generic/R44-7040.0.2015_05_06_0543-a1
+(cr) dasdh@BuildMaasImage ~/trunk/src/build/images/amd64-generic/R44-7040.0.2015_05_06_0543-a1 $ ls -l -h
+total 1.2G
+-rw-r--r-- 1 dasdh eng  399 May  6 05:52 boot.config
+-rw-r--r-- 1 dasdh eng  214 May  6 05:49 boot.desc
+-rw-r--r-- 1 dasdh eng 2.5G May  6 05:52 chromiumos_image.bin
+-rw-r--r-- 1 dasdh eng  586 May  6 05:52 config.txt
+drwxr-xr-x 2 dasdh eng 4.0K May  6 05:52 esp
+-rwxr-xr-x 1 dasdh eng 5.6K May  6 05:43 mount_image.sh
+-rwxr-xr-x 1 dasdh eng 4.8K May  6 05:43 pack_partitions.sh
+-rw-r--r-- 1 dasdh eng  12K May  6 05:43 partition_script.sh
+-rwxr-xr-x 1 dasdh eng 4.7K May  6 05:43 umount_image.sh
+-rwxr-xr-x 1 dasdh eng 5.0K May  6 05:43 unpack_partitions.sh
+
+</code></pre>
+
+<p>I think the chromiumos_image.bin is what we want.</p>
+
+<h3 id="redsocks">RedSocks</h3>
+
+<p>Download the redsocks source code and compile it:</p>
+
+<pre><code># cd /opt/src
+# git clone https://github.com/darkk/redsocks.git
+# cd redsocks
+# apt-get install libevent-dev 
+# make 
+
+</code></pre>
+
+<p>Write configuration files:</p>
+
+<pre><code># cat redsocks.sh
+#! /bin/sh
+
+case &quot;$1&quot; in
+  start|&quot;&quot;)
+    cd /opt/src/redsocks
+    if [ -e redsocks.log ] ; then
+      rm redsocks.log
+    fi
+    ./redsocks -p /opt/src/redsocks/redsocks.pid #set daemon = on in config file
+    # start redirection
+    iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDIRECT --to 12345
+    iptables -t nat -A OUTPUT -p tcp --dport 443 -j REDIRECT --to 12345
+    ;;
+
+  stop)
+    cd /opt/src/redsocks
+    if [ -e redsocks.pid ]; then
+      kill `cat redsocks.pid`
+      rm redsocks.pid
+    else
+      echo already killed, anyway, I will try killall
+      killall -9 redsocks
+    fi
+    # stop redirection
+    iptables -t nat -F OUTPUT
+    ;;
+
+  start_ssh)
+    #ssh -NfD 1234 user@example.cc #TODO: change it!!!
+    ssh -NfD 1234 544644af4382ec37bc0009da@weatherapp-kkkttt.rhcloud.com
+    ;;
+
+  stop_ssh)
+    ps aux|grep &quot;ssh -NfD 1234&quot;|awk '{print $2}'|xargs kill
+    ;;
+
+  clean_dns)
+    iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED -m gfw -j DROP -m comment --comment &quot;drop gfw dns hijacks&quot;
+    ;;
+
+  *)
+    echo &quot;Usage: redsocks start|stop|start_ssh|stop_ssh|clean_dns&quot; &gt;&amp;2
+    exit 3
+    ;;
+esac
+# cat redsocks.conf
+base {
+        // debug: connection progress &amp; client list on SIGUSR1
+        log_debug = on;
+
+        // info: start and end of client session
+        log_info = on;
+
+        /* possible `log' values are:
+         *   stderr
+         *   file:/path/to/file
+         *   syslog:FACILITY  facility is any of &quot;daemon&quot;, &quot;local0&quot;...&quot;local7&quot;
+         */
+        log = stderr;
+
+        // detach from console
+        daemon = on;
+
+        /* Change uid, gid and root directory, these options require root
+         * privilegies on startup.
+         * Note, your chroot may requre /etc/localtime if you write log to syslog.
+         * Log is opened before chroot &amp; uid changing.
+         */
+        // user = nobody;
+        // group = nobody;
+        // chroot = &quot;/var/chroot&quot;;
+
+        /* possible `redirector' values are:
+         *   iptables   - for Linux
+         *   ipf        - for FreeBSD
+         *   pf         - for OpenBSD
+         *   generic    - some generic redirector that MAY work
+         */
+        redirector = iptables;
+}
+
+redsocks {
+        /* `local_ip' defaults to 127.0.0.1 for security reasons,
+         * use 0.0.0.0 if you want to listen on every interface.
+         * `local_*' are used as port to redirect to.
+         */
+        local_ip = 127.0.0.1;
+        local_port = 12345;
+
+        // `ip' and `port' are IP and tcp-port of proxy-server
+        ip = 127.0.0.1;
+        port = 1234;
+
+        // known types: socks4, socks5, http-connect, http-relay
+        type = socks5;
+}
 
 
 </code></pre>
 
-<pre><code>root@JunoController:~# source openstack/demo-openrc.sh 
-root@JunoController:~# neutron net-create demo-net
-Created a new network:
-+----------------+--------------------------------------+
-| Field          | Value                                |
-+----------------+--------------------------------------+
-| admin_state_up | True                                 |
-| id             | 01c966ce-88cf-43a2-a7b7-2ebf6d6b6d60 |
-| name           | demo-net                             |
-| shared         | False                                |
-| status         | ACTIVE                               |
-| subnets        |                                      |
-| tenant_id      | 2ac9cae777014d3d94458f521b013e94     |
-+----------------+--------------------------------------+
-root@JunoController:~# neutron subnet-create demo-net --name demo-subnet --gateway 10.44.44.1 10.44.44.0/24
-Created a new subnet:
-+------------------+------------------------------------------------+
-| Field            | Value                                          |
-+------------------+------------------------------------------------+
-| allocation_pools | {&quot;start&quot;: &quot;10.44.44.2&quot;, &quot;end&quot;: &quot;10.44.44.254&quot;} |
-| cidr             | 10.44.44.0/24                                  |
-| dns_nameservers  |                                                |
-| enable_dhcp      | True                                           |
-| gateway_ip       | 10.44.44.1                                     |
-| host_routes      |                                                |
-| id               | c6181123-f729-4ad2-bddc-93cfc761d0e1           |
-| ip_version       | 4                                              |
-| name             | demo-subnet                                    |
-| network_id       | 01c966ce-88cf-43a2-a7b7-2ebf6d6b6d60           |
-| tenant_id        | 2ac9cae777014d3d94458f521b013e94               |
-+------------------+------------------------------------------------+
+<p>Everytime you use the redsocks, enable it via:</p>
 
-root@JunoController:~# neutron router-create demo-router
-Created a new router:
-+-----------------------+--------------------------------------+
-| Field                 | Value                                |
-+-----------------------+--------------------------------------+
-| admin_state_up        | True                                 |
-| external_gateway_info |                                      |
-| id                    | e5a010ba-371c-43d2-b3fb-a30e0dc5302b |
-| name                  | demo-router                          |
-| status                | ACTIVE                               |
-| tenant_id             | 2ac9cae777014d3d94458f521b013e94     |
-+-----------------------+--------------------------------------+
-
-root@JunoController:~# neutron router-interface-add demo-router demo-subnet
-Added interface c862f772-a1ef-4401-9a3b-2bdf5444e41b to router demo-router.
-
-root@JunoController:~# neutron router-gateway-set demo-router ext-net
-Set gateway for router demo-router
+<pre><code># ./redsocks.sh start_ssh
+# ./redsocks.sh start
 
 </code></pre>
 
-<p>检查，在外网上ping 10.22.22.10这个地址，因为路由器占用了一个地址，所以如果能ping通这个地址，说明我们创建的网络是好的。</p>
+<p>Disable it via:</p>
 
-<pre><code>[root:~]# ping 10.22.22.212                                                                                                                    
-PING 10.22.22.212 (10.22.22.212) 56(84) bytes of data.                                                                                         
-64 bytes from 10.22.22.212: icmp_seq=1 ttl=64 time=0.152 ms                                                                                    
-64 bytes from 10.22.22.212: icmp_seq=2 ttl=64 time=0.136 ms    
+<pre><code># ./redsocks.sh stop
+# ./redsocks.sh stop_ssh
 
 </code></pre>
 
-<p>检查agent状态:</p>
+<h3 id="run-chromeos-in-kvm">Run ChromeOS in kvm</h3>
 
-<pre><code>root@JunoController:~# neutron agent-list
-+--------------------------------------+--------------------+-------------+-------+----------------+
-| id                                   | agent_type         | host        | alive | admin_state_up |
-+--------------------------------------+--------------------+-------------+-------+----------------+
-| 0b7191e1-ecd2-4808-b87a-f616d0a3bc7b | Metadata agent     | JunoNetwork | :-)   | True           |
-| 34511134-8392-44a9-a889-0ff03d85a995 | Open vSwitch agent | JunoCompute | :-)   | True           |
-| 474065d1-a50a-4d11-89d3-37c7a88e449c | DHCP agent         | JunoNetwork | :-)   | True           |
-| 5569c590-df83-4ee1-a073-15c908ef8d20 | L3 agent           | JunoNetwork | :-)   | True           |
-| a22c6e2a-7af0-4404-9e5b-46996b370672 | Open vSwitch agent | JunoNetwork | :-)   | True           |
-+--------------------------------------+--------------------+-------------+-------+----------------+
+<p>Now Transfer the image to image for vm:</p>
+
+<pre><code>$ export BOARD=amd64-generic
+(cr) dasdh@BuildMaasImage ~/trunk/src/build/images/amd64-generic/latest $ cd ~/trunk/src/scripts/
+(cr) ((df83602...)) dasdh@BuildMaasImage ~/trunk/src/scripts $ ./image_to_vm.sh --board=${BOARD}
+Resizing stateful partition to 3072MB
 
 </code></pre>
 
-<p>在 Compute Node 上的 OVS agent出现后，才能代表我们的网络配置成功。</p>
+<p>Verify if kvm is supported on your system:</p>
+
+<pre><code>dasdh@BuildMaasImage:~/src/scripts$ kvm-ok
+INFO: /dev/kvm exists                                                                                                                          
+KVM acceleration can be used      
+
+</code></pre>
+
+<p>Now run via:</p>
+
+<pre><code>$ cd ~/chromiumos/src/scripts
+$ ./bin/cros_start_vm --image_path=../build/images/${BOARD}/latest/chromiumos_qemu_image.bin
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/04/30/modification-on-rpi-installation/">Modification SWAP on RPI Installation</a>
+      </h1>
+      <span class="post-date">Apr 30, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/30/modification-on-rpi-installation/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      <p>First disable the swap partition, for it will save your sd card:<br />
+Know where is your swap file:</p>
+
+<pre><code>$ cat /proc/swap*
+
+</code></pre>
+
+<p>Disable it via change the S to K under <code>/etc/rcx.d</code>, and reboot the services:</p>
+
+<pre><code>$ sudo mv S02dphys-swapfile K02dphys-swapfile
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/04/29/build-centos-image-for-maas/">Build CentOS Image For MAAS</a>
+      </h1>
+      <span class="post-date">Apr 29, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/29/build-centos-image-for-maas/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>MAAS could only deploy Ubuntu in its official support, this artcle will introduce how to Build CentOS based images.</p>
+
+<h3 id="preparation">Preparation</h3>
+
+<p>First you need a Ubuntu14.04 machine with kvm enabled.</p>
+
+<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade &amp;&amp; sudo apt-get -y dist-upgrade
+$ sudo apt-get install build-essential
+
+</code></pre>
+
+<h3 id="get-build-scripts">Get Build Scripts</h3>
+
+<p>Get the source code from the launchpad, and run following command for preparing the building environment.</p>
+
+<pre><code>$  bzr branch lp:maas-image-builder
+$ cd maas-images-builder
+$ make install-dependencies
+
+</code></pre>
+
+<p>For speed-up building, I use china mainland&rsquo;s repository,<br />
+Replace the <code>http://mirror.centos.org/centos/6/os/x86_64</code> like following:</p>
+
+<pre><code>$ vim ./src/mib/builders/centos.py
+      #&quot;http://mirror.centos.org/centos/6/os/i386&quot;)
+      &quot;http://mirrors.aliyun.com/centos/6/os/i386&quot;)
+      #&quot;http://mirror.centos.org/centos/6/os/x86_64&quot;)
+      &quot;http://mirrors.aliyun.com/centos/6/os/x86_64&quot;)
+  #&quot;http://mirror.centos.org/centos/7/os/x86_64&quot;)
+  &quot;http://mirrors.aliyun.com/centos/7/os/x86_64/&quot;)
+
+$ vim ./contrib/centos/centos6/centos6-amd64.ks
+repo --name=&quot;repo0&quot; --baseurl=http://mirrors.aliyun.com/centos/6/os/x86_64/
+repo --name=&quot;repo1&quot; --baseurl=http://mirrors.aliyun.com/centos/6/updates/x86_64/
+repo --name=&quot;repo2&quot; --baseurl=http://mirrors.aliyun.com/epel/6/x86_64/
+
+</code></pre>
+
+<h3 id="build-images">Build Images</h3>
+
+<p>Install python-dev and begin to make:</p>
+
+<pre><code># apt-get install python-dev
+# make
+
+</code></pre>
+
+<p>Now begin to generate the image:</p>
+
+<pre><code>#./bin/maas-image-builder -o centos6-amd64-root-tgz centos --edition 6
+
+</code></pre>
+
+<p>On-Building:<br />
+<img src="/images/2015_04_29_18_00_43_674x328.jpg" alt="/images/2015_04_29_18_00_43_674x328.jpg" /></p>
+
+<p>After building the image is listed as:</p>
+
+<pre><code># ls -l centos6-amd64-root-tgz 
+-rw-r--r-- 1 root root 353086181 Apr 29 13:16 centos6-amd64-root-tgz
+
+</code></pre>
+
+<h3 id="import-images">Import Images</h3>
+
+<p>First login into your own profile with following command:</p>
+
+<pre><code>$ maas login my-maas http://10.17.17.202/MAAS/api/1.0 ntQBr8QTPgeTyfYuMq:xxxxxxxxxxxxxxxxxxxxxxxxx7HNspYLch4kc6RLs
+$ maas my-maas boot-sources read
+
+</code></pre>
+
+<p>Above command will readout the boot-sources, now we need to import our newly-built images, import it via:</p>
+
+<pre><code>$ maas my-maas boot-resources create name=centos/centos6 architecture=amd64/generic content@=/home/Trusty/centos6-amd64-root-tgz
+
+</code></pre>
+
+<h3 id="login">Login</h3>
+
+<p>Use following commands:</p>
+
+<pre><code>maas@MassTestOnUbuntu1404:~$ ssh cloud-user@10.17.17.172
+The authenticity of host '10.17.17.172 (10.17.17.172)' can't be established.
+ECDSA key fingerprint is a5:57:5b:d1:ac:c0:8f:67:32:43:d8:6f:17:67:65:cb.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '10.17.17.172' (ECDSA) to the list of known hosts.
+[cloud-user@CentOS ~]$ ls
+[cloud-user@CentOS ~]$ cat /etc/issue
+\S
+Kernel \r on an \m
+
+[cloud-user@CentOS ~]$ uname -a
+Linux CentOS 3.10.0-229.1.2.el7.x86_64 #1 SMP Fri Mar 27 03:04:26 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
+
+</code></pre>
+
+<p>From Now on,you could use CentOS 6 for deploying!!!!!!!!!!!!!!1</p>
+
+<p>ENJOY IT!!!!!!!</p>
+
+<h3 id="trouble-shooting">Trouble Shooting</h3>
+
+<p>The version could not be speicified via &ndash;edition, everytime we got CentOS 7 based image , so we need to manually change the file:</p>
+
+<pre><code> root@BuildMaasImage:~/Code/once# vim src/mib/builders/centos.py
+    def populate_parser(self, parser):
+        &quot;&quot;&quot;Add parser options.&quot;&quot;&quot;
+        parser.add_argument(
+            #'--edition', default='7',
+            #help=&quot;CentOS edition to generate. (Default: 7)&quot;)
+            '--edition', default='6',
+            help=&quot;CentOS edition to generate. (Default: 6)&quot;)
+
+
+
+</code></pre>
+
+<p>Now re-generate the image again, we got CentOS 6.5 based images.<br />
+To-Be-Done:<br />
+How to generate the CentOS 6.<sup>5</sup>&frasl;<sub>6</sub>.<sup>4</sup>&frasl;<sub>6</sub>.3 version? we always get the newest CentOS 6 images.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/04/28/trouble-shooting-on-jujus-local-deployment/">Trouble Shooting On Juju&#39;s Local Deployment</a>
+      </h1>
+      <span class="post-date">Apr 28, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/04/28/trouble-shooting-on-jujus-local-deployment/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>When deploying juju, after <code>juju bootstrap</code>, use juju ssh for login, it will hint me:</p>
+
+<pre><code>$ juju ssh 1
+......
+Permission denied (publickey).
+
+</code></pre>
+
+<p>That could be solved by specify the id_rsa.pub key:</p>
+
+<pre><code>$ ssh-keygen -t rsa -b 2048
+$ juju bootstrap
+$ juju bootstrap
+$ juju deploy wordpress
+$ juju deploy mysql
+$ juju add-relation wordpress mysql
+$ juju status
+$ juju expose wordpress
+
+</code></pre>
+
+<p>By doing this you could make your juju deployment on local successfully.</p>
 
       
     </div>
@@ -2190,12 +1514,21 @@ PING 10.22.22.212 (10.22.22.212) 56(84) bytes of data.
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/47/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

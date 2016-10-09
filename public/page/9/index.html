@@ -93,9 +93,9 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/13/yong-vagrantguan-li-libvirt/">用Vagrant管理libvirt</a>
+        <a href="http://purplepalmdash.github.io/2016/04/20/devstack-enable-neutron/">DevStack Enable Neutron</a>
       </h1>
-      <span class="post-date">Mar 13, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/13/yong-vagrantguan-li-libvirt/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 20, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/04/20/devstack-enable-neutron/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
@@ -104,152 +104,43 @@
       
       
 
-<h3 id="先决条件">先决条件</h3>
+<h3 id="steps">Steps</h3>
 
-<p>Vagrant为0.8.1.</p>
+<p>Install steps are listed as following:</p>
 
-<p>参考:<br />
-<a href="http://linuxsimba.com/vagrant.html">http://linuxsimba.com/vagrant.html</a><br />
-<a href="http://linuxsimba.com/vagrant-libvirt-install/">http://linuxsimba.com/vagrant-libvirt-install/</a></p>
+<p>First as root user, create the initial stack user via:</p>
 
-<h3 id="ubuntu设置">Ubuntu设置</h3>
-
-<p>考虑到天朝防火墙的存在,需要经过以下命令才能安装vagrant-libvirt插件:</p>
-
-<pre><code>$ sudo apt-get install -y libvirt-dev ruby-dev
-$ gem source -r https://rubygems.org/
-$ gem source -a http://mirrors.aliyun.com/rubygems/
-$ gem install ruby-libvirt -v '0.6.0'
-$ gem install vagrant-libvirt -v '0.0.32'
-$ vagrant plugin install vagrant-libvirt
-$ vagrant plugin list
-vagrant-libvirt (0.0.32)
-$ axel http://linuxsimba.com/vagrantbox/ubuntu-trusty.box
-$ vagrant box add ./ubuntu-trusty.box --name &quot;trusty64&quot;
+<pre><code># git clone https://git.openstack.org/openstack-dev/devstack
+# tools/create-stack-user.sh 
+# passwd stack
 </code></pre>
 
-<h3 id="archlinux设置">ArchLinux设置</h3>
+<p>Now login with user <code>stack</code>, clone the repository and begin devstack installation:</p>
 
-<p>按照ArchLinux wiki的方法,安装vagrant-libvirt插件:</p>
-
-<pre><code> # in case it's already installled
- vagrant plugin uninstall vagrant-libvirt
- 
- # vagrant's copy of curl prevents the proper installation of ruby-libvirt
- sudo mv /opt/vagrant/embedded/lib/libcurl.so{,.backup}
- sudo mv /opt/vagrant/embedded/lib/libcurl.so.4{,.backup}
- sudo mv /opt/vagrant/embedded/lib/libcurl.so.4.4.0{,.backup}
- sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{,.backup}
- 
- CONFIGURE_ARGS=&quot;with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib&quot; vagrant plugin install vagrant-libvirt
- 
- # https://github.com/pradels/vagrant-libvirt/issues/541
- export PATH=/opt/vagrant/embedded/bin:$PATH
- export GEM_HOME=~/.vagrant.d/gems
- export GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems
- gem uninstall ruby-libvirt
- gem install ruby-libvirt
- 
- # put vagrant's copy of curl back
- sudo mv /opt/vagrant/embedded/lib/libcurl.so{.backup,}
- sudo mv /opt/vagrant/embedded/lib/libcurl.so.4{.backup,}
- sudo mv /opt/vagrant/embedded/lib/libcurl.so.4.4.0{.backup,}
- sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{.backup,}
+<pre><code>$ git clone https://git.openstack.org/openstack-dev/devstack
+$ cd devstack
+$ git checkout stable/liberty
+$ cp samples/local.conf ./
+$ vim local.conf
 </code></pre>
 
-<h3 id="导入box">导入box</h3>
+<p>The <code>local.conf</code> file should added following items:</p>
 
-<p>用packer编译出来的box文件默认工作在virtualbox下,我们需要用一个插件将其转换为
-libvirt可用的box:</p>
+<pre><code>
 
-<pre><code>#  vagrant plugin install vagrant-mutate
-# vagrant mutate ubuntu-14.04.virtualbox.box libvirt
-Extracting box file to a temporary directory.
-Converting ubuntu-14.04.virtualbox from virtualbox to libvirt.
-    (100.00/100%)
-Cleaning up temporary files.
-The box ubuntu-14.04.virtualbox (libvirt) is now ready to use.
-# cd /root/.vagrant.d/boxes/
-# mv ubuntu-14.04.virtualbox/ trusty64
-# vagrant box list
-trusty64 (libvirt, 0)
+# use TryStack git mirror
+GIT_BASE=http://git.trystack.cn
+NOVNC_REPO=http://git.trystack.cn/kanaka/noVNC.git
+SPICE_REPO=http://git.trystack.cn/git/spice/spice-html5.git
 </code></pre>
 
-<h3 id="检查安装的box">检查安装的box</h3>
+<p>Add following configurations:</p>
 
-<p>可以通过以下命令检查已经安装好的box:</p>
+<p><img src="/images/2016_04_21_10_46_16_505x495.jpg" alt="/images/2016_04_21_10_46_16_505x495.jpg" /></p>
 
-<pre><code>$ vagrant box list
-trusty64 	(libvirt, 0)
-ubuntu1404	(virtualbox, 0)
-</code></pre>
+<p>Now stacking the devstack:</p>
 
-<h3 id="配置vagrantfile">配置Vagrantfile</h3>
-
-<p>以下是一个例子:</p>
-
-<pre><code># -*- mode: ruby -*-
-# vi: set ft=ruby :
-Vagrant.configure(2) do |config|
-
-  config.vm.box = &quot;trusty64&quot;
-  # vagrant issues #1673..fixes hang with configure_networks
-  config.ssh.shell = &quot;bash -c 'BASH_ENV=/etc/profile exec bash'&quot;
-  config.vm.provider :libvirt do |domain|
-    domain.memory = 256
-    domain.nested = true
-  end
-
-# Private network using virtual network switching
-  config.vm.define :vm1 do |vm1|
-    vm1.vm.network :private_network, :ip =&gt; &quot;192.168.56.11&quot;
-  end
-
-  config.vm.define :vm2 do |vm2|
-    vm2.vm.network :private_network, :ip =&gt; &quot;192.168.56.12&quot;
-  end
-
-  # Private network. Point to Point between 2 Guest OS using a TCP tunnel
-  # Guest 1
-  #config.vm.define :test_vm1 do |test_vm1|
-  #  test_vm1.vm.network :private_network,
-  #    :libvirt__tunnel_type =&gt; 'server',
-  #    # default is 127.0.0.1 if omitted
-  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
-  #    :libvirt__tunnel_port =&gt; '11111'
-
-  # Guest 2
-  #config.vm.define :test_vm2 do |test_vm2|
-  #  test_vm2.vm.network :private_network,
-  #    :libvirt__tunnel_type =&gt; 'client',
-  #    # default is 127.0.0.1 if omitted
-  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
-  #    :libvirt__tunnel_port =&gt; '11111'
-
-
-  # Public Network
-  config.vm.define :vm1 do |vm1|
-    vm1.vm.network :public_network,
-      :dev =&gt; &quot;virbr0&quot;,
-      :mode =&gt; &quot;bridge&quot;,
-      :type =&gt; &quot;bridge&quot;
-  end
-end
-
-</code></pre>
-
-<h3 id="启动虚拟机">启动虚拟机</h3>
-
-<pre><code># vagrant up --provider=libvirt
-</code></pre>
-
-<p>启动时会出现以下问题, 解决方案为:</p>
-
-<pre><code>$ vagrant up --provider=libvirt
-....
-Missing required arguments: libvirt_uri
-.....
-$ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
+<pre><code>$ ./stack.sh
 </code></pre>
 
       
@@ -257,449 +148,186 @@ $ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/12/tips-on-5050rgb/">Tips On 5050RGB</a>
+        <a href="http://purplepalmdash.github.io/2016/04/18/change-ip-in-devstack/">Change IP In DevStack</a>
       </h1>
-      <span class="post-date">Mar 12, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/12/tips-on-5050rgb/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 18, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/04/18/change-ip-in-devstack/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="背景">背景</h3>
+<h3 id="tips">Tips</h3>
 
-<p>淘宝上买的5050RGB模块, 外观如下图:</p>
+<p>After changing the IP Address of the DevStack machine, do following for re-installing
+the envs:</p>
 
-<p><img src="/images/2016_03_12_19_36_05_351x233.jpg" alt="/images/2016_03_12_19_36_05_351x233.jpg" /></p>
-
-<p>连线:</p>
-
-<p>这个RGB模块比较奇怪,直接使用Arduino的5v输出一直有问题,我是用的外接5V电源供电,
-动用了面包板模块.(之后发现不是供电的问题, 是因为淘宝上卖的模块提供示例代码的问
-题)</p>
-
-<p>更具体的连线如下:</p>
-
-<pre><code>// V-VCC 5V   R-9   B-10  G-11
-#define LEDR 9
-#define LEDB 10
-#define LEDG 11
+<pre><code>$ ssh stack@Your_IP
+stack@packer-PerforceTest:~$ pwd
+/opt/stack
+stack@packer-PerforceTest:~$ cd devstack/
+stack@packer-PerforceTest:~/devstack$ ./unstack.sh &amp;&amp; ./stack.sh 
 </code></pre>
 
-<h3 id="测试">测试</h3>
-
-<p>按照厂方提供的程序,未能成功运行.</p>
-
-<p>厂方提供的电路图如下:</p>
-
-<p><img src="/images/2016_03_12_20_31_25_373x471.jpg" alt="/images/2016_03_12_20_31_25_373x471.jpg" /></p>
-
-<h3 id="debug">Debug</h3>
-
-<p>百思不得其解后,用万用表测试, 电阻发声的那档, 发现加电后,某两个LED可以亮, 另外
-一个不能亮.</p>
-
-<p>发现奇怪的一点是, VCC接高电压, RGB接低电压时, 无法点亮LED. RGB接高电压, VCC接
-低电压时, LED可以被点亮两个.</p>
-
-<p>猜测: 厂方给的参考资料有误, 接线错误. 而且LED坏了一个.</p>
-
-<p>验证, 正确.</p>
-
-<p>连线更改为:</p>
-
-<pre><code>// V-VCC 5V   R-9   B-10  G-11
-#define LEDR 9
-#define LEDG 10
-</code></pre>
-
-<p>蓝色的LED已坏, 所以示例代码中,不许配置LEDB.</p>
-
-<pre><code>// V-VCC GND   R-9   G-10  
-#define LEDR 9
-#define LEDG 10
-
-int i = 0;
-
-void setup()
-{
-  pinMode(LEDG,OUTPUT);
-  pinMode(LEDR,OUTPUT);
-
-}
-
-void loop()
-{
-  analogWrite(LEDR,0);
-  analogWrite(LEDG,0);  //off
-  delay(1000);
-  analogWrite(LEDR,255); 
-delay(1000); 
-  analogWrite(LEDR,0);
-  analogWrite(LEDG,0);
-  delay(1000); 
-  analogWrite(LEDR,30);
-  analogWrite(LEDG,200);
-delay(1000); 
-  analogWrite(LEDR,0);
-  analogWrite(LEDG,0);
-  delay(1000); 
-    analogWrite(LEDG,30);
-  analogWrite(LEDR,200);
-  delay(1000); 
-}
-</code></pre>
-
-<p>正确的电路连线应该是:</p>
-
-<p><img src="/images/2016_03_12_20_54_55_707x379.jpg" alt="/images/2016_03_12_20_54_55_707x379.jpg" /></p>
+<p>Now visiting your <code>http://Your_New_IP/dashboard</code> you will got the openstack dashborad.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/11/tips-on-w5100/">Tips on w5100</a>
+        <a href="http://purplepalmdash.github.io/2016/04/15/moving-docker-repository-position/">Moving Docker Repository Position</a>
       </h1>
-      <span class="post-date">Mar 11, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/11/tips-on-w5100/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 15, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/04/15/moving-docker-repository-position/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
         
       </span>
       
       
 
-<h3 id="参考">参考</h3>
+<p>Since the root partition is not so large, I have to change the default position of the
+docker repository, following are the steps:</p>
 
-<p>参考如下:</p>
+<h3 id="make-a-soft-link">Make a Soft Link</h3>
 
-<p><a href="http://www.bigiot.net/help/6.html">http://www.bigiot.net/help/6.html</a></p>
+<p>Make a soft link to the docker repository via:</p>
 
-<h3 id="问题">问题</h3>
-
-<p>上报的数据不准确.</p>
-
-<p>原因是因为W5100抄版的淘宝版本有短路, 换成别的模拟口:</p>
-
-<pre><code>const int LM35 = 3;//LM35 pin
-byte mac[] = {0x00, 0x1D, 0x72, 0x82, 0x35, 0x9D};
-EthernetClient client ;
-IPAddress ip(192, 168, 17, 177);//local IP
-//IPAddress server(121,42,180,30);
-char server[] = &quot;www.bigiot.net&quot;; 
+<pre><code>$ sudo mkdir DockerRepo
+$ sudo chown -R dash:dash DockerRepo
+$ sudo chmod  777 -R DockerRepo
+$ sudo tar -zcC /var/lib docker &gt; /home/juju/DockerRepo/var_lib_docker-backup-$(date +%s).tar.gz
+$ ls -l -h /home/juju/DockerRepo
+$ sudo mv /var/lib/docker /home/juju/DockerRepo/
+$ sudo ln -s /home/juju/DockerRepo/docker /var/lib/docker
+$ sudo service docker restart
+$ sudo service docker status
 </code></pre>
 
-<p>连线改为了3, 即A3口以后,上报数据成功.</p>
+<h3 id="change-docker-parameters">Change Docker Parameters</h3>
+
+<pre><code>Ubuntu/Debian: edit your /etc/default/docker file with the -g option: DOCKER_OPTS=&quot;-dns 8.8.8.8 -dns 8.8.4.4 -g /mnt&quot;
+</code></pre>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/10/pei-zhi-qemude-vdewang-luo/">配置Qemu的VDE网络</a>
+        <a href="http://purplepalmdash.github.io/2016/04/06/tips-on-setup-eclipse-che/">Tips On Setup Eclipse CHE</a>
       </h1>
-      <span class="post-date">Mar 10, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/10/pei-zhi-qemude-vdewang-luo/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 6, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/04/06/tips-on-setup-eclipse-che/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
         
       </span>
       
       
 
-<p>为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
-，DHCP获得IP地址，从而得到网络连接， 以下是步骤。</p>
+<h3 id="steps">Steps</h3>
 
-<h3 id="安装vde">安装VDE</h3>
+<p>Reconfigure the <code>LC_ALL</code>, etc:</p>
 
-<p>ArchLinux下安装命令为<code>sudo pacman -S vde2</code>.</p>
-
-<h3 id="配置">配置</h3>
-
-<p>贴出配置文件如下, 摘录自ArchLinux的Wiki. 值得注意的是，在Systemd的配置文件中，需要先把
-tun驱动装载上，才能使得VDE启动成功。</p>
-
-<p>配置qemu网络环境配置脚本:</p>
-
-<pre><code>$ vim /etc/systemd/scripts/qemu-network-env 
-#!/bin/sh
-# QEMU/VDE network environment preparation script
-
-# The IP configuration for the tap device that will be used for
-# the virtual machine network:
-
-TAP_DEV=tap0
-TAP_IP=10.33.34.254
-TAP_MASK=24
-TAP_NETWORK=10.33.34.0
-
-# Host interface
-NIC=enp2s0
-
-case &quot;$1&quot; in
-  start)
-        echo -n &quot;Starting VDE network for QEMU: &quot;
-
-        # If you want tun kernel module to be loaded by script uncomment here
-        modprobe tun 2&gt;/dev/null
-        # Wait for the module to be loaded
-        while ! lsmod | grep -q &quot;^tun&quot;; do echo &quot;Waiting for tun device&quot;; sleep 1; done
-
-        # Start tap switch
-        vde_switch -tap &quot;$TAP_DEV&quot; -daemon -mod 660 -group users
-
-        # Bring tap interface up
-        ip address add &quot;$TAP_IP&quot;/&quot;$TAP_MASK&quot; dev &quot;$TAP_DEV&quot;
-        ip link set &quot;$TAP_DEV&quot; up
-
-        # Start IP Forwarding
-        echo &quot;1&quot; &gt; /proc/sys/net/ipv4/ip_forward
-        iptables -t nat -A POSTROUTING -s &quot;$TAP_NETWORK&quot;/&quot;$TAP_MASK&quot; -o &quot;$NIC&quot; -j MASQUERADE
-        ;;
-  stop)
-        echo -n &quot;Stopping VDE network for QEMU: &quot;
-        # Delete the NAT rules
-        iptables -t nat -D POSTROUTING &quot;$TAP_NETWORK&quot;/&quot;$TAP_MASK&quot; -o &quot;$NIC&quot; -j MASQUERADE
-
-        # Bring tap interface down
-        ip link set &quot;$TAP_DEV&quot; down
-
-        # Kill VDE switch
-        pgrep -f vde_switch | xargs kill -TERM
-        ;;
-  restart|reload)
-        $0 stop
-        sleep 1
-        $0 start
-        ;;
-  *)
-        echo &quot;Usage: $0 {start|stop|restart|reload}&quot;
-        exit 1
-esac
-exit 0
+<pre><code>$ sudo vim /etc/environment 
+LC_ALL=en_US.UTF-8
+LANG=en_US.UTF-8
+$ sudo locale-gen &quot;en_US.UTF-8&quot;
+$ sudo dpkg-reconfigure locales
+$ sudo reboot
 </code></pre>
 
-<p>配置symtemd服务:</p>
+<p>Be Sure to use latest repository, like aliyun.com.</p>
 
-<pre><code>$ vim /etc/systemd/system/qemu-network-env.service
-[Unit]
-Description=Manage VDE Switch
-
-[Service]
-Type=oneshot
-ExecStart=/etc/systemd/scripts/qemu-network-env start
-ExecStop=/etc/systemd/scripts/qemu-network-env stop
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
+<pre><code>$ sudo apt-get update -y
+$ sudo bash
+# apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D 
+# 
 </code></pre>
 
-<p>使能服务，并重新启动机器:</p>
+<h3 id="trouble-shooting">Trouble-Shooting</h3>
 
-<pre><code>$ sudo systemctl enable qemu-network-env.service
-</code></pre>
-
-<h3 id="配置dhcpd">配置DHCPD</h3>
-
-<p>需要配置dhcpd以使得在<code>10.33.34.0/24</code>网段提供DHCP服务：</p>
-
-<pre><code>$ sudo vim /etc/dhcpd.conf
-
-subnet
-10.33.34.0 netmask 255.255.255.0 {
-# --- default gateway
-option routers
-10.33.34.254;
-# --- Netmask
-option subnet-mask
-255.255.255.0;
-# --- Broadcast Address
-option broadcast-address
-10.33.34.255;
-# --- Domain name servers, tells the clients which DNS servers to use.
-option domain-name-servers
-223.5.5.5,180.76.76.76;
-option time-offset 0;
-range 10.33.34.2 10.33.34.253;
-default-lease-time 1209600;
-max-lease-time 1814400;
-}
-</code></pre>
-
-<p>修改完dhcpd的配置后， 重新启动dhcpd服务:</p>
-
-<pre><code>$ sudo systemctl restart dhcpd4
-</code></pre>
-
-<h3 id="启动虚拟机">启动虚拟机</h3>
-
-<p>启动虚拟机，并使其使用我们刚才添加的vde网络:</p>
-
-<pre><code>$ sudo qemu-system-x86_64 -net nic -net vde -hda ./test1.qcow2 -m 2048 --enable-kvm
-</code></pre>
-
-<p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。<br />
-如果使用普通用户，会出错， To be solved.</p>
+<p>Docker download too slow, download it to local.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
+        <a href="http://purplepalmdash.github.io/2016/04/05/extend-vagrants-disk/">Extend Vagrant&#39;s Disk</a>
       </h1>
-      <span class="post-date">Mar 7, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-5/#disqus_thread">Comments</a>
+      <span class="post-date">Apr 5, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/04/05/extend-vagrants-disk/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
-      
+      <p>In Vagrantfile, edit the following definition:</p>
 
-<p>这一节将添加一个LED到已有的方案中. 这个LED将使用11口, 通过<code>./set-led new</code>来设
-置状态.</p>
-
-<h3 id="连线">连线</h3>
-
-<p>新加一个LED如图:</p>
-
-<p><img src="/images/2016_03_07_21_52_18_683x513.jpg" alt="/images/2016_03_07_21_52_18_683x513.jpg" /></p>
-
-<p>仅仅添加了一个LED + 220欧电阻.</p>
-
-<h3 id="代码修改">代码修改</h3>
-
-<h4 id="requests-h">requests.h</h4>
-
-<p>添加新的request定义:</p>
-
-<pre><code>diff --git a/requests.h b/requests.h
-index 90275f5..b354a73 100644
---- a/requests.h
-+++ b/requests.h
-@@ -32,4 +32,6 @@
- 
- #define CUSTOM_RQ_BLINK    3
- 
-+#define CUSTOM_RQ_NEWLED    4
-+
+<pre><code>  config.vm.provider &quot;virtualbox&quot; do |vb|
+  #   # Display the VirtualBox GUI when booting the machine
+  #   vb.gui = true
+  #
+  #   # Customize the amount of memory on the VM:
+    vb.memory = &quot;1024&quot;
+    file_to_disk = File.realpath( &quot;.&quot; ).to_s + &quot;/disk.vdi&quot;
+    if ARGV[0] == &quot;up&quot; &amp;&amp; ! File.exist?(file_to_disk) 
+      puts &quot;Creating 5GB disk #{file_to_disk}.&quot;
+      vb.customize [
+        'createhd', 
+        '--filename', file_to_disk, 
+        '--format', 'VDI', 
+        '--size', 5000 * 1024 # 5 GB
+        ] 
+      vb.customize [
+        'storageattach', :id, 
+        '--storagectl', 'SATA', 
+        '--port', 1, '--device', 0, 
+        '--type', 'hdd', '--medium', 
+        file_to_disk
+        ]
+    end
+    #config.vm.provision &quot;shell&quot;, path: &quot;scripts/add_new_disk.sh&quot;
+  end
+  config.vm.provision &quot;shell&quot;, path: &quot;scripts/add_new_disk.sh&quot;
 </code></pre>
 
-<h4 id="hid-custom-rq-h">hid_custom_rq.h</h4>
+<p>The <code>add_new_disk.sh</code> should be written like following:</p>
 
-<p>添加新的管脚, 和对<code>CUSTOM_RQ_NEWLED</code>的处理代码:</p>
+<pre><code>set -e
+set -x
 
-<pre><code>diff --git a/hid_custom_rq.h b/hid_custom_rq.h
-index f5509e4..b5411cf 100644
---- a/hid_custom_rq.h
-+++ b/hid_custom_rq.h
-@@ -13,6 +13,7 @@ class hid_custom_rqDevice {
-   hid_custom_rqDevice () {
-     usbInit();
-     ledPin = 13;        // pin 13 as default ledPin
-+    newledPin = 11;    // pin 11 as newledPin
-   }
-     
-   void poll() {
-@@ -20,6 +21,7 @@ class hid_custom_rqDevice {
-   }
-   
-   unsigned int ledPin;  
-+  unsigned int newledPin;  
- };
- 
- hid_custom_rqDevice hid_custom_rq = hid_custom_rqDevice();
-@@ -99,6 +101,14 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
-             usbMsgPtr = dataBuffer;         /* tell the driver which data to
-return */
-             return 1;                       /* tell the driver to send 1 byte
-*/
-         }
-+       /* Added for newly added LED */
-+       else if(rq-&gt;bRequest == CUSTOM_RQ_NEWLED){
-+            if(rq-&gt;wValue.bytes[0] &amp; 1){    /* set new LED */
-+                digitalWrite(hid_custom_rq.newledPin, HIGH);
-+            }else{                          /* clear new LED */
-+                digitalWrite(hid_custom_rq.newledPin, LOW);
-+            }
-+       }
-     }
+if [ -f /etc/disk_added_date ]
+then
+   echo &quot;disk already added so exiting.&quot;
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/sdb &lt;&lt;EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/sdb1
+vgextend VolGroup /dev/sdb1
+lvextend /dev/VolGroup/lv_root
+resize2fs /dev/VolGroup/lv_root
+
+date &gt; /etc/disk_added_date
 </code></pre>
 
-<h4 id="set-led-c">set-led.c</h4>
-
-<p>这个文件中,添加了两条新命令,分别为<code>./set-led newledon</code>和<code>./set-led newledoff</code>用于点亮/
-熄灭新加的LED.</p>
-
-<pre><code>diff --git a/examples/hid_custom_rq_demo/commandline/set-led.c b/examples/hid_custom_rq_demo/commandline/set-led.c
-index 44d39f9..a306eca 100644
---- a/examples/hid_custom_rq_demo/commandline/set-led.c
-+++ b/examples/hid_custom_rq_demo/commandline/set-led.c
-@@ -91,12 +91,19 @@ buffer[3] = 0;
-         }else{
-             printf(&quot;LED is %s\n&quot;, buffer[0] ? &quot;on&quot; : &quot;off&quot;);
-         }
--    }else if((isOn = (strcasecmp(argv[1], &quot;on&quot;) == 0)) || strcasecmp(argv[1], &quot;off&quot;) == 0){
-+    }
-+    else if((isOn = (strcasecmp(argv[1], &quot;on&quot;) == 0)) || strcasecmp(argv[1], &quot;off&quot;) == 0){
-         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_SET_STATUS, isOn, 0, buffer, 0, 5000);
-         if(cnt &lt; 0){
-             fprintf(stderr, &quot;USB error: %s\n&quot;, usb_strerror());
-         }
-     }
-+    else if((isOn = (strcasecmp(argv[1], &quot;newledon&quot;) == 0)) || strcasecmp(argv[1], &quot;newledoff&quot;) == 0){
-+        cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_NEWLED, isOn, 0, buffer, 0, 5000);
-+        if(cnt &lt; 0){
-+            fprintf(stderr, &quot;USB error: %s\n&quot;, usb_strerror());
-+        }
-+    }
- 
- else if(strcasecmp(argv[1], &quot;onoff&quot;) == 0){ /* Test custom on/off */
-</code></pre>
-
-<h4 id="hid-custom-rq-demo-ped">hid_custom_rq_demo.ped</h4>
-
-<p>因为新添加了硬件,ped文件同样需要更新.</p>
-
-<pre><code>diff --git a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-index 77e3912..6d98151 100644
---- a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-+++ b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-@@ -1,10 +1,13 @@
- #include &lt;hid_custom_rq.h&gt;
- 
- const int ledPin = 13;
-+const int newledPin = 11;
- 
- void setup() {
-   hid_custom_rq.ledPin = ledPin;
-   pinMode(hid_custom_rq.ledPin, OUTPUT);
-+  hid_custom_rq.newledPin = newledPin;
-+  pinMode(hid_custom_rq.newledPin, OUTPUT);
- }
- 
- void loop() {
-</code></pre>
-
-<h3 id="验证">验证</h3>
-
-<p>写入新编译的Arduino固件, 并新编译<code>set-led</code>程序, 即可看到新增的LED被点亮/熄灭.</p>
-
-<p>效果如图:</p>
-
-<p><img src="/images/70584386.jpg" alt="/images/70584386.jpg" /></p>
-
-<h3 id="延伸">延伸</h3>
-
-<p>既然点亮了LED, 其他各种设备就不在话下了. 引入一个舵机,或者步进电机, 就可以实现
-e-buddy人偶的提醒功能.</p>
-
-<p>当然我们可以想得更妙, 例如,用蓝牙或者WIFI来替代USB传输. 这样可以做到更远距离.</p>
+<p>Notice: this won&rsquo;t fit for Ubuntu Snappy Core.</p>
 
       
     </div>
@@ -1117,12 +745,21 @@ e-buddy人偶的提醒功能.</p>
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/10/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

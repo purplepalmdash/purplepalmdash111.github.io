@@ -93,203 +93,215 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/29/play-docker-4/">Play Docker(4)</a>
+        <a href="http://purplepalmdash.github.io/2015/03/01/rebuild-vrouter/">Rebuild Vrouter</a>
       </h1>
-      <span class="post-date">Jan 29, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/29/play-docker-4/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 1, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/03/01/rebuild-vrouter/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>In order to dive into Vrouter&rsquo;s researching, we build the ko by following comands.</p>
+
+<pre><code>$ cp /opt/contrail/contrail_install_repo/contrail-vrouter-source_1.21-74_all.deb ~/Code/
+$ cd ~/Code &amp;&amp; ar vx contrail-vrouter-source_1.21-74_all.deb 
+$ tar xzvf control.tar.gz 
+$ tar xzvf data.tar.gz 
+$ cd usr/src/modules/contrail-vrouter/
+$ tar xzvf contrail-vrouter-1.21.tar.gz 
+$ make
+
+</code></pre>
+
+<p>After building the ko will be available under the folder</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/27/single-node-openstack-startup/">Single Node OpenStack Startup</a>
+      </h1>
+      <span class="post-date">Feb 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/27/single-node-openstack-startup/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
         
       </span>
       
       
 
-<h3 id="fig-continue">Fig(Continue)</h3>
+<p>Following records the main steps for starting up the single node Openstack environment.</p>
 
-<p>Met some problems in last article, so this part will continue to work on Fig, the correct configuration files are listed as following:</p>
+<h3 id="ubuntu-setup-and-configuration">Ubuntu Setup and Configuration</h3>
 
-<pre><code>$ ls
-app.py  Dockerfile  fig.yml  requirements.txt
-$ cat Dockerfile 
-FROM python:2.7
-ADD . /code
-WORKDIR /code
-RUN pip install -r requirements.txt
-$ cat fig.yml 
-web:
-  build: .
-  command: python app.py
-  ports:
-   - &quot;5000:5000&quot;
-  volumes:
-   - .:/code
-  links:
-   - redis
-redis:
-  image: redis
-$ cat requirements.txt 
-flask
-redis
-$ cat app.py 
-from flask import Flask
-from redis import Redis
-import os
-app = Flask(__name__)
-redis = Redis(host='redis', port=6379)
+<h4 id="setup">Setup</h4>
 
-@app.route('/')
-def hello():
-    redis.incr('hits')
-    return 'Hello World! I have been seen %s times.' % redis.get('hits')
+<p>Use virt-manager, create a new virtual machine, install the system from ubuntu-12.04.3-server-amd64.iso, allocate 2 CPU and 4096 Memory, allocate the 80GB disk.<br />
+Create disk via:</p>
 
-if __name__ == &quot;__main__&quot;:
-    app.run(host=&quot;0.0.0.0&quot;, debug=True)
+<pre><code>Trusty@pc119:~/Code/Virt-Manager/SingleNode&gt; qemu-img create -f qcow2 SingleNode.qcow2 80G
+Formatting 'SingleNode.qcow2', fmt=qcow2 size=85899345920 encryption=off cluster_size=65536 lazy_refcounts=off
 
 </code></pre>
 
-<p>via <code>fig up</code> you could quickly build this app and let it run.<br />
-When it running, you could use <code>fig ps</code> for viewing the running instance:</p>
+<p>Configure the networking, bridge, then beging installing.<br />
+IP address set to 192.168.188.<sup>190</sup>&frasl;<sub>255</sub>.255.255.0, gateway first we set it to 192.168.188.1, later we will change it, because it&rsquo;s a pseudo-addresses.</p>
 
-<pre><code>$ sudo fig ps
-      Name             Command             State              Ports       
--------------------------------------------------------------------------
-figtest_redis_1    /entrypoint.sh     Up                 6379/tcp         
-                   redis-server                                           
-figtest_web_1      python app.py      Up                 0.0.0.0:5000-&gt;50 
-                                                         00/tcp    
+<h4 id="configuration">Configuration</h4>
 
-</code></pre>
+<p>First save a snapshot, shutdown the running virtual machine, then you could clone it for back up.<br />
+Configure the network in virtual machine via:</p>
 
-<p>Use <code>sudo fig run web env</code> you could view all of the variables of the running instance web, or change web into redis then displaying the variables of redis.<br />
-Use <code>sudo fig stop</code> to stop all of the running instance.</p>
-
-<pre><code>$ sudo fig stop
-Stopping figtest_web_1...
-Stopping figtest_redis_1...
+<pre><code>$ sudo ip route add default gw 192.168.0.xxx
+$ sudo ip route add 192.168.0.0/24 dev eth0
 
 </code></pre>
 
-<p>Use <code>sudo fig run web env</code> for displaying all of the variables of running <code>web</code>.</p>
+<p>SSH fast connect:</p>
 
-<h3 id="create-django">Create Django</h3>
-
-<p>Configuration files:</p>
-
-<pre><code>$ cat Dockerfile 
-FROM python:2.7
-ENV PYTHONUNBUFFERED 1
-RUN mkdir /code
-WORKDIR /code
-ADD requirements.txt /code/
-RUN pip install -r requirements.txt
-ADD . /code/
-
-$ cat fig.yml 
-db:
-  image: postgres
-web:
-  build: .
-  command: python manage.py runserver 0.0.0.0:8000
-  volumes:
-    - .:/code
-  ports:
-    - &quot;8000:8000&quot;
-  links:
-    - db
-
-$ cat requirements.txt 
-Django
-psycopg2
-
+<pre><code>$ sudo vi /etc/ssh/sshd_config
+UseDNS no
+$ sudo service ssh restart
 
 </code></pre>
 
-<p>Via <code>sudo  fig run web django-admin.py startproject figexample .</code><br />
-This means, first fig will create the image, then use this image for running <code>django-admin.py startproject figexample</code>,
-Examine via different methods:</p>
+<p>Now you could ssh to the virtual machine and update corresponding configurations.</p>
 
-<pre><code>$ sudo docker ps
-CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
-1abcafc5bd59        postgres:9          &quot;/docker-entrypoint.   4 minutes ago       Up 3 minutes        5432/tcp            django_db_1         
-741b0e375c73        postgres:9          &quot;/docker-entrypoint.   4 minutes ago       Up 4 minutes        5432/tcp            Django_db_1         
-[Trusty@DashCentOS django]$ sudo fig ps
-   Name                  Command               State    Ports   
----------------------------------------------------------------
-django_db_1   /docker-entrypoint.sh postgres   Up      5432/tcp 
+<p>In fact the snapshot could be made here.<br />
+Transfer the installtion media to virtual machine:</p>
+
+<pre><code>$ scp ./contrail-install-packages_1.21-74\~havana_all.deb Trusty@192.168.188.190:/home/Trusty/
 
 </code></pre>
 
-<p>Change the configuration file of the django project:</p>
+<h3 id="install-opencontrail">Install OpenContrail</h3>
 
-<pre><code>$ sudo vim figexample/settings.py
+<p>Set the root password:</p>
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'postgres',
-        'USER': 'postgres',
-        'HOST': 'db',
-        'PORT': 5432,
-    }
+<pre><code>$ sudo bash
+root@SingleNode:~# passwd
+Enter new UNIX password: 
+Retype new UNIX password: 
+passwd: password updated successfully
+
+</code></pre>
+
+<p>Install the deb file via:</p>
+
+<pre><code>root@SingleNode:~# ls
+contrail-install-packages_1.21-74~havana_all.deb
+root@SingleNode:~# dpkg -i contrail-install-packages_1.21-74~havana_all.deb 
+
+</code></pre>
+
+<p>Now setup the whole packages.</p>
+
+<pre><code>root@SingleNode:/etc/apt# cd /opt/contrail/contrail_packages/
+root@SingleNode:/opt/contrail/contrail_packages# ls
+contrail_debs.tgz  preferences  setup.sh  sources.list  VERSION
+root@SingleNode:/opt/contrail/contrail_packages# ./setup.sh
+
+</code></pre>
+
+<p>Copy the example testbed file to <code>testbed.py</code>:</p>
+
+<pre><code>root@SingleNode:/opt/contrail/utils# cp fabfile/testbeds/testbed_singlebox_example.py fabfile/testbeds/testbed.py
+
+</code></pre>
+
+<p>Edit this file to, notice the + means we did modifications    :</p>
+
+<pre><code>from fabric.api import env
+
+#Management ip addresses of hosts in the cluster
++++ host1 = 'root@127.0.0.1'
+
+#External routers if any
+#for eg. 
+#ext_routers = [('mx1', '10.204.216.253')]
+ext_routers = []
+
+#Autonomous system number
+router_asn = 64512
+
+#Host from which the fab commands are triggered to install and provision
++++ host_build = 'root@127.0.0.1'
+
+#Role definition of the hosts.
+env.roledefs = {
+    'all': [host1],
+    'cfgm': [host1],
+    'openstack': [host1],
+    'control': [host1],
+    'compute': [host1],
+    'collector': [host1],
+    'webui': [host1],
+    'database': [host1],
+    'build': [host_build],
+    'storage-master': [host1],
+    'storage-compute': [host1],
+}
+
+#Openstack admin password
+env.openstack_admin_password = 'secret123'
+
+#Hostnames
+env.hostnames = {
++    'all': ['SingleNode']
+}
+
++++ env.password = 'rootpass'
+#Passwords of each host
+env.passwords = {
++++     host1: 'rootpass',
+
++++     host_build: 'rootpass',
+}
+
+#For reimage purpose
+env.ostypes = {
++++    host1:'ubuntu',
 }
 
 </code></pre>
 
-<p>Save the file and run <code>sudo fig up</code>, this time your django project connects to the right postgresql server.<br />
-Examine the running containers:</p>
+<p>Now use fab to install :</p>
 
-<pre><code>$ sudo fig ps
-      Name             Command             State              Ports       
--------------------------------------------------------------------------
-django_db_1        /docker-           Up                 5432/tcp         
-                   entrypoint.sh                                          
-                   postgres                                               
-django_web_1       python manage.py   Up                 0.0.0.0:8000-&gt;80 
-                   runserver ...                         00/tcp           
-$ sudo docker ps
-CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                    NAMES
-d3c3c8bb6d0e        django_web:latest   &quot;python manage.py ru   4 minutes ago       Up 4 minutes        0.0.0.0:8000-&gt;8000/tcp   django_web_1        
-3f7b61fdd09e        postgres:9          &quot;/docker-entrypoint.   4 minutes ago       Up 4 minutes        5432/tcp                 django_db_1        
+<pre><code>root@SingleNode:/opt/contrail/utils# fab -c fabrc install_contrail
 
 </code></pre>
 
-<h3 id="run-asp">Run ASP</h3>
+<p>This will take some minutes.<br />
+Then setup all:</p>
 
-<p>Refers to:<br />
-<a href="http://dockerone.com/article/164">http://dockerone.com/article/164</a><br />
-The steps are listed as:</p>
-
-<pre><code>$ git clone https://github.com/aspnet/Home.git
-$ cd Home/
-$ cd samples/HelloWeb/
-$ vim Dockerfile
-FROM microsoft/aspnet
-
-COPY . /app
-WORKDIR /app
-RUN [&quot;kpm&quot;, &quot;restore&quot;]
-
-EXPOSE 5004
-ENTRYPOINT [&quot;k&quot;, &quot;kestrel&quot;]
-$ sudo docker build -t myapp .
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-myapp               latest              6c0d622049ea        2 hours ago         492 MB
-microsoft/aspnet    latest              1e67fe2f5a59        13 days ago         465.3 MB
-$ sudo docker run -t -d -p 80:5004 myapp
+<pre><code># cd /opt/congrail/utils
+# fab setup_all
 
 </code></pre>
 
-<p>Open your browser and visit <code>http://xxx.xx.xx.xxx:80</code> and you could found the asp based app runs.</p>
+<p>After installation the machine will be reboot.<br />
+A snapshot will be created when reboot done, this will be the cloned initial startpoint for OpenContrail.</p>
+
+<h3 id="start">Start</h3>
+
+<p>Create a simple web server via python:</p>
+
+<pre><code>python -m SimpleHTTPServer 8000
+
+</code></pre>
+
+<p>Then Create the image in OpenStack via:</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/28/play-docker-3/">Play Docker(3)</a>
+        <a href="http://purplepalmdash.github.io/2015/02/18/install-opencontrail-on-virt-manager/">Install OpenContrail On Virt-Manager</a>
       </h1>
-      <span class="post-date">Jan 28, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/28/play-docker-3/#disqus_thread">Comments</a>
+      <span class="post-date">Feb 18, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/18/install-opencontrail-on-virt-manager/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
@@ -298,115 +310,87 @@ $ sudo docker run -t -d -p 80:5004 myapp
       
       
 
-<h3 id="dockerfile">Dockerfile</h3>
+<p>Recently I am studying OpenContrail(based on OpenStack), so following includes the steps for me to setup a single-node emulation environment, the host machine is ArchLinux, which is one of my favorite Linux Distribution, and using nested virtualization for setting up a basic run-time environment.</p>
 
-<p>Dockerfile is like Vagrantfile, for define the configuration of the docker container.<br />
-The steps for creating the Dockerfile is listed as following:</p>
+<h3 id="libvirt">libvirt</h3>
 
-<pre><code>$ mkdir -p ~/Code
-$ cd ~/Code &amp;&amp; vim Dockerfile 
-FROM ubuntu:13.04
-MAINTAINER examples@docker.com
-RUN echo &quot;deb http://archive.ubuntu.com/ubuntu precise main universe&quot; &gt; /etc/apt/sources.list
-RUN apt-get update
-RUN apt-get upgrade -y
-RUN apt-get install -y openssh-server nginx  supervisor
-RUN mkdir -p /var/run/sshd
-RUN mkdir -p /var/log/supervisor
-RUN echo &quot;daemon off;&quot;&gt;&gt;/etc/nginx/nginx.conf
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-EXPOSE 22 80
-CMD [&quot;/usr/bin/supervisord&quot;]
-$ vim supervisord.conf 
-[supervisord]
-nodaemon=true
-[program:sshd]
-command=/usr/sbin/sshd -D
+<p>It seems the most convinient way for using nested virtualization is for using libvirt, so following is for setting up the virtualization environment.<br />
+First create libvirt user group and add current user into this group:</p>
 
-[program:nginx]
-command=/usr/sbin/nginx
-user=root
-autostart=true
+<pre><code># groupadd libvirt
+# gpasswd -a Trusty libvirt
 
 </code></pre>
 
-<p>Now build the target image with following command:</p>
+<p>Then uncomment following lines in <code>/etc/libvirt/libvirtd.conf</code>:</p>
 
-<pre><code>$ sudo docker build -t test/supervisord .
-
-</code></pre>
-
-<p>After build, we could use <code>sudo docker images</code> for examing the generated images. And use following command for start the sshd and nginx service:</p>
-
-<pre><code>$ sudo docker run -p 2222:22 -p 8080:80 -t -i test/supervisord
-
-</code></pre>
-
-<p>Now change the root password and you could directly <code>ssh root@127.0.0.1 -p 2222</code> or you could directly access <a href="http://1xx.xx.xx.xxx:8080">http://1xx.xx.xx.xxx:8080</a> for nginx webpages.</p>
-
-<h3 id="fig">Fig</h3>
-
-<p>Fig is used for swiftly build up a container. You only need to add a fig.yml and specify some simple content, then it could easily assit you building up a container.<br />
-Install fig via following command:</p>
-
-<pre><code>$ wget https://github.com/docker/fig/releases/download/1.0.1/fig-`uname -s`-`uname -m`
-$ sudo mv fig-xxx-xxx /usr/bin/fig
-$ sudo chmod 777 /usr/bin/fig
+<pre><code>$ vim /etc/libvirt/libvirtd.conf
+unix_sock_group = &quot;libvirt&quot;
+unix_sock_ro_perms = &quot;0777&quot;
+unix_sock_rw_perms = &quot;0770&quot;
+auth_unix_ro = &quot;none&quot;
+auth_unix_rw = &quot;none&quot;
 
 </code></pre>
 
-<p>Touch the definition files under a specified directory and then use fig for building the whole container:</p>
+<p>Then start and enable the libvirtd.service via following commands:</p>
 
-<pre><code>$ mkdir ~/fig
-$ ls
-app.py  Dockerfile  fig.yml  requirements.txt
-$ cat Dockerfile 
-FROM python:2.7
-ADD . /code
-WORKDIR /code
-RUN pip install -r requirements.txt
-$ cat fig.yml 
-web:
-  build: .
-  command: python app.py
-  links:
-   - db
-  ports:
-   - &quot;8000:8000&quot;
-db:
-  image: redis
-$ cat requirements.txt 
-flask
-redis
-$ cat app.py 
-from flask import Flask
-from redis import Redis
-import os
-app = Flask(__name__)
-redis = Redis(host='redis', port=6379)
-
-@app.route('/')
-def hello():
-    redis.incr('hits')
-    return 'Hello World! I have been seen %s times.' % redis.get('hits')
-
-if __name__ == &quot;__main__&quot;:
-    app.run(host=&quot;0.0.0.0&quot;, debug=True)
+<pre><code>$ sudo systemctl start libvirtd.service
+$ sudo systemctl enable libvirtd.service
 
 </code></pre>
 
-<p>Now use <code>sudo fig up</code> then you could let this web service run.</p>
+<p>From here you could run <code>virt-manager</code> for using virt manager.</p>
 
-<p>Met some problems, will be do this at home.</p>
+<h3 id="installtion-of-opencontrail">Installtion of OpenContrail</h3>
+
+<p>First you should download the deb file from juniper, then create a 4G Memory, at least 20G disk space virtual machine, notice your cpu selection should enable nested virtualization.<br />
+In Configuration, select &ldquo;Copy Host CPU Configuration&rdquo;, then your host machine&rsquo;s CPU configuration will be delivered to the virtualized machine.<br />
+The installation steps are:</p>
+
+<pre><code>$ sudo bash
+# passwd
+# dpkg -i contrail-install-packages_1.21-74~havana_all.deb
+# cd /opt/contrail/contrail_packages
+# ./setup.sh
+# cd /opt/contrail/
+# cp utils/fabfile/testbeds/testbed_singlebox_example.py utils/fabfile/testbeds/testbed.py
+# cd /opt/contrail/utils
+# fab -c fabrc install_contrail
+# fab setup_all
+
+</code></pre>
+
+<p>The installation will automatically restart.</p>
+
+<h3 id="openstack-and-opencontrail">OpenStack and OpenContrail</h3>
+
+<p>The access webpage are located at:<br />
+OpenStack:<br />
+<a href="http://YourIpAddress/horizon">http://YourIpAddress/horizon</a><br />
+OpenContrail:<br />
+<a href="https://YourIpAddress:8143">https://YourIpAddress:8143</a><br />
+Simply open a browser and view this.</p>
+
+<h3 id="nested">Nested</h3>
+
+<p>To check the nested virtualization, do following operations:</p>
+
+<pre><code>Trusty@Ubuntu1404:~$ cat /sys/module/kvm_intel/parameters/nested 
+Y
+Trusty@Ubuntu1404:~$ systool -m kvm_intel -v   | grep -i nested
+    nested              = &quot;Y&quot;
+
+</code></pre>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/28/using-teamviewer/">Using Teamviewer</a>
+        <a href="http://purplepalmdash.github.io/2015/02/16/switch-back-to-arch/">Switch Back To Arch</a>
       </h1>
-      <span class="post-date">Jan 28, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/28/using-teamviewer/#disqus_thread">Comments</a>
+      <span class="post-date">Feb 16, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/16/switch-back-to-arch/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
@@ -415,64 +399,78 @@ if __name__ == &quot;__main__&quot;:
       
       
 
-<h3 id="installation">Installation</h3>
+<p>Since I Moved the city and changed the job, my laptop had to be returned to company, so I bought another HP 8460P which is almost the same as my old one. But this one got i7 4 core CPU and more powerful.<br />
+First I installed Ubuntu and start playing virtualization on it, after successfully installed OpenStack and OpenContrail I started to think change back to my archLinux, so following is the steps.</p>
 
-<h4 id="centos">CentOS</h4>
+<h3 id="grub">grub</h3>
 
-<p>Download the corresponding rpm files, install it via <code>sudo yum install ******.rpm</code>, this will automatically install the dependencies and also install the teamviewer for your centos system.</p>
+<p>Use update-grub2 in Install Ubuntu, it will automatically scan all of the disks, cause I installed the archLinux in the second harddisk, it will add a new item in menu.lst, use this item we could reached ArchLinux.</p>
 
-<h4 id="ubuntu">Ubuntu</h4>
+<h3 id="libvirt">Libvirt</h3>
 
-<p>Only working for 14.04:<br />
-First you have to add i686(i386) supporting:</p>
+<p>Enable the libvirtd.service via:</p>
 
-<pre><code>$ dpkg --add-architecture i386
-$ apt-get update
-
-</code></pre>
-
-<p>Then you have to downloaded the following packages rather than the offcial packages(x64 or i386):<br />
-<a href="http://download.teamviewer.com/download/teamviewer_linux.deb">http://download.teamviewer.com/download/teamviewer_linux.deb</a><br />
-Install this <code>teamviewer_linux.deb</code>, and you got teamviewer running on your system.<br />
-For 12.04, directly download the package from:<br />
-<a href="http://download.teamviewer.com/download/teamviewer_linux_x64.deb">http://download.teamviewer.com/download/teamviewer_linux_x64.deb</a><br />
-Then install it via:</p>
-
-<pre><code># dpkg -i teamviewer_linux_x64.deb
-# apt-get install -f
+<pre><code>sudo systemctl enable libvirtd.service
 
 </code></pre>
 
-<p>Then teamviewer could be installed on your system.</p>
+<p>Then restart the system.</p>
 
-<h3 id="connect-back">Connect Back</h3>
+<h3 id="nested-virtualization">Nested Virtualization</h3>
 
-<p>First your server side will install the teamviewer and run is as the daemon mode.</p>
+<p>Manually we could do via:</p>
 
-<h3 id="tips">Tips</h3>
-
-<p>Stop the teamviewerd via(On CentOS):</p>
-
-<pre><code>$ sudo teamviewer --daemon stop
+<pre><code># modprobe -r kvm_intel
+# modprobe kvm_intel nested=1
 
 </code></pre>
 
-<p>While start it via:</p>
+<p>Then check it via:</p>
 
-<pre><code>$ sudo teamviewer --daemon start
+<pre><code>$ systool -m kvm_intel -v | grep nested
+    nested              = &quot;Y&quot;
 
 </code></pre>
 
-<p>Seems someone blocked the flow to this site&hellip;55555</p>
+<p>Add it to automatically loaded kernel module:</p>
+
+<pre><code>$ cat /etc/modprobe.d/modprobe.conf
+options kvm_intel nested=1
+
+</code></pre>
+
+<p>Then next time it boots up, will enter the nested mode.</p>
+
+<p>Didn&rsquo;t solved, fuck!!!!!!!</p>
+
+<h3 id="mount-lvm-partitions">Mount LVM Partitions</h3>
+
+<p>The steps is listed as following:</p>
+
+<pre><code>[Trusty@~]$ sudo vgscan
+  Reading all physical volumes.  This may take a while...
+  Found volume group &quot;DashUbuntu-vg&quot; using metadata type lvm2
+[Trusty@~]$ sudo vgchange -ay DashUbuntu-vg
+  2 logical volume(s) in volume group &quot;DashUbuntu-vg&quot; now active
+[Trusty@~]$ sudo lvscan
+  ACTIVE            '/dev/DashUbuntu-vg/root' [690.48 GiB] inherit
+  ACTIVE            '/dev/DashUbuntu-vg/swap_1' [7.91 GiB] inherit
+[Trusty@~]$ sudo mount /dev/DashUbuntu-vg/root /mnt
+[Trusty@~]$ ls /mnt
+bin   etc         initrd.img.old  lost+found  opt   run   sys  var
+boot  home        lib             media       proc  sbin  tmp  vmlinuz
+dev   initrd.img  lib64           mnt         root  srv   usr  vmlinuz.old
+
+</code></pre>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/27/play-docker-1/">Play Docker(1)</a>
+        <a href="http://purplepalmdash.github.io/2015/02/15/libvirt-network-configuration/">Libvirt Network Configuration</a>
       </h1>
-      <span class="post-date">Jan 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/27/play-docker-1/#disqus_thread">Comments</a>
+      <span class="post-date">Feb 15, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/15/libvirt-network-configuration/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
@@ -481,600 +479,126 @@ Then install it via:</p>
       
       
 
-<p>For playing docker and prepare for my presentation, I wrote this series and try to record my tips on playing docker.</p>
+<p>Since I want to use bridge network in libvirt, while the standard bridge networking is not available for me to use, so following tips is for creating and managing the networking.</p>
 
-<h3 id="background">Background</h3>
+<h3 id="enable-bridge">Enable Bridge</h3>
 
-<p>I created a droplet on DigitalOcean.com, which is running CentOS 7, the memory is only 512M, with one core and 20G size disk, which means its caculation resource is pretty limited, so heavy tasks should be avoid, like building.<br />
-Since the memory is only 512M, I allocated 1G swapfile to the machine.<br />
-The usable disk is 17G now.</p>
+<p>In host machine(OpenSuse), create bridge via:</p>
 
-<h3 id="docker-installation">Docker Installation</h3>
-
-<p>Docker is already part of CentOS7, so install it directly via:</p>
-
-<pre><code>$ sudo yum install -y docker
-$ which docker
-/usr/bin/docker
+<pre><code>$ sudo brctl addbr br0
+$ sudo brctl addif br0 eth0 
 
 </code></pre>
 
-<p>Start the service and make it default:</p>
+<p>This will add eth0 to bridge 0, while in startup file of OpenSuse we will do following:</p>
 
-<pre><code>$ sudo service docker start
-Redirecting to /bin/systemctl start  docker.service
-$ sudo chkconfig docker on
-Note: Forwarding request to 'systemctl enable docker.service'.
-ln -s '/usr/lib/systemd/system/docker.service' '/etc/systemd/system/multi-user.target.wants/docker.service'
-
-</code></pre>
-
-<p>Now even if you restart the machine, the service would be automatically started together with system boot.</p>
-
-<h3 id="first-instance">First Instance</h3>
-
-<p>Pull the debian back:</p>
-
-<pre><code>$ sudo docker pull debian
-Pulling repository debian
-c90d655b99b2: Download complete 
-511136ea3c5a: Download complete 
-30d39e59ffe2: Download complete 
-Status: Downloaded newer image for debian:latest
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-debian              wheezy              c90d655b99b2        8 hours ago         85.12 MB
-debian              7                   c90d655b99b2        8 hours ago         85.12 MB
-debian              7.8                 c90d655b99b2        8 hours ago         85.12 MB
-debian              latest              c90d655b99b2        8 hours ago         85.12 MB
+<pre><code># pwd
+/etc/sysconfig/network
+# cat ifcfg-eth0 
+BOOTPROTO='static'
+STARTMODE='ifplugd'
+IFPLUGD_PRIORITY='1'
+NAME='RTL8111/8168B PCI Express Gigabit Ethernet controller'
+USERCONTROL='no' 
+# cat ifcfg-br0 
+BOOTPROTO='static'
+STARTMODE='auto'
+IPADDR='192.168.0.xxx/24'
+NAME='Bridge For Virtualization'
+BRIDGE='yes'
+BRIDGE_PORTS='eth0'
+BRIDGE_FORWARDDELAY='0'
 
 </code></pre>
 
-<p>Install the <code>lsb_release</code>, then run different tags, all of them are the same:</p>
+<p>So next time reboot you will see br0 hold the address of <code>192.168.0.xxx</code>, this is the bridge port we have.</p>
 
-<pre><code>$ sudo docker run -i -t debian:7.8 /bin/bash
-xxxxxxx # lsb_release -a 
-No LSB modules are available.
-Distributor ID:	Debian
-Description:	Debian GNU/Linux 7.8 (wheezy)
-Release:	7.8
-Codename:	wheezy
+<h3 id="virtual-machine-configuration">Virtual Machine Configuration</h3>
 
-</code></pre>
+<p>First list all of the virtual machine we have</p>
 
-<h3 id="destroy-container">Destroy Container</h3>
-
-<p>List all of the container via <code>sudo docker ps -a</code>, then destroy the container via <code>sudo docker rm xxxxxx</code> while xxxxxx is the container ID.<br />
-Play magic, one line for remove all of the containers:</p>
-
-<pre><code>$ sudo docker rm `sudo docker ps -a -q`
-16d606046c24
-65ceffcf4a7b
-dfbc6d0fa051
-1dd18dbf8b9c
-66c931879c2c
-$ sudo docker ps -a
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+<pre><code>$ sudo virsh list --all
+ Id    Name                           State
+----------------------------------------------------
+ 2     Ubuntu12043                    running
+ -     OpenContrail                   shut off
 
 </code></pre>
 
-<h3 id="remove-the-images">Remove The Images</h3>
+<p>Edit the one we want to edit via:</p>
 
-<p>One line for remove all of the ununsed images:</p>
-
-<pre><code>$ sudo docker images -q
-c90d655b99b2
-c90d655b99b2
-c90d655b99b2
-c90d655b99b2
-$ sudo docker rmi `sudo docker images -q`
-Untagged: debian:7
-Untagged: debian:7.8
-Untagged: debian:latest
-Untagged: debian:wheezy
-Deleted: c90d655b99b2ec5b7e94d38c87f92dce015c17a313caeaae0e980d9b9bed8444
-Deleted: 30d39e59ffe287f29a41a3f8bd70734afc8728329e3289945cbdc5bbf07cd980
-Deleted: 511136ea3c5a64f264b78b5433614aec563103b4d4702f3ba7d4d2698e22c158
-Error response from daemon: No such image: c90d655b99b2
-Error response from daemon: No such image: c90d655b99b2
-Error response from daemon: No such image: c90d655b99b2
-2015/01/27 21:14:01 Error: failed to remove one or more images
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+<pre><code>$ sudo virsh edit Ubuntu12043
+    &lt;interface type='bridge'&gt;
+      &lt;mac address='24:42:53:21:52:49'/&gt;
+      &lt;source bridge='br0'/&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
+    &lt;/interface&gt;
 
 </code></pre>
 
-<p>But it would be add a pipe like <code>sudo docker images -q | uniq</code></p>
+<p>So next time when you boot-up the machine, it will have the physical network which connecting to br0.</p>
 
-<h3 id="connect-to-existing-running-container">Connect To Existing Running Container</h3>
+<h3 id="configure-route">Configure route</h3>
 
-<h4 id="docker-1-3-ways">Docker 1.3 Ways</h4>
+<p>In virtual machine, give the fixed ip address via:</p>
 
-<p>From Docker 1.3, we could use <code>docker exec -it</code> for attaching to running container:</p>
-
-<pre><code>$ sudo docker run -i -t centos /bin/bash
-[root@1f9005d495c6 /]# 
-$ sudo docker ps
-[sudo] password for Trusty: 
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-1f9005d495c6        centos:7            &quot;/bin/bash&quot;         8 minutes ago       Up 8 minutes                            sick_jones          
-$ sudo docker exec -it 1f9005d495c6 /bin/bash
-[root@1f9005d495c6 /]# 
+<pre><code>$ sudo ifconfig eth0 192.168.188.188
+$ sudo ip route add 192.168.0.0/24 dev eth0
+$ sudo route add default gw 192.168.0.xxx
+$ sudo route -n
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface                                                                 
+0.0.0.0         192.168.0.119   0.0.0.0         UG    0      0        0 eth0                                                                  
+192.168.0.0     0.0.0.0         255.255.255.0   U     0      0        0 eth0                                                                  
+192.168.188.0   0.0.0.0         255.255.255.0   U     0      0        0 eth0   
 
 </code></pre>
 
-<p>But the Container&rsquo;s lifecycle is controlled by the first instance, <code>docker exec</code> only attached to, this means if you exit the container, all of the <code>docker exec</code> tty will be shutdown.</p>
+<p>We want make it permanent via:<br />
+First make the permanent ip address:</p>
 
-<h4 id="nsenter-ways">Nsenter Ways</h4>
+<pre><code># cat /etc/network/interfaces 
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
 
-<p>First use <code>docker inspect</code> for get the PID.</p>
+# The loopback network interface
+auto lo
+iface lo inet loopback
 
-<pre><code>$ sudo docker ps 
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-8337ea52cfd1        centos:7            &quot;/bin/bash&quot;         4 seconds ago       Up 4 seconds                            pensive_blackwell   
-$ PID=$(sudo docker inspect --format {{.State.Pid}} 8337ea52cfd1)
-$ echo $PID
-3951
-
-</code></pre>
-
-<p>Use nsenter for enter the PID&rsquo;s namespace:</p>
-
-<pre><code>$ sudo nsenter --target $PID --mount --uts --ipc --net --pid
-[root@8337ea52cfd1 /]#
+# The primary network interface
+auto eth0
+iface eth0 inet static
+        address 192.168.188.188
+        netmask 255.255.255.0
 
 </code></pre>
 
-<h4 id="lazy-wrap-of-nsenter-ways">Lazy Wrap of Nsenter Ways</h4>
+<p>Second we want to configure the route:</p>
 
-<p>Just visit:<br />
-<a href="https://github.com/jpetazzo/nsenter">https://github.com/jpetazzo/nsenter</a>, download the docker-enter, and place it in the right place:</p>
-
-<pre><code>$ sudo docker ps 
-[sudo] password for Trusty: 
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-8337ea52cfd1        centos:7            &quot;/bin/bash&quot;         11 minutes ago      Up 11 minutes                           pensive_blackwell   
-$ sudo docker-enter pensive_blackwell ls -la
-...
-$ sudo docker-enter 8337ea52cfd1 /bin/bash
-[root@8337ea52cfd1 /]# 
+<pre><code>$ tail  /etc/rc.local
+ip route add 192.168.0.0/24 dev eth0
+route add default gw 192.168.0.xxx
+echo &quot;nameserver 114.114.114.114&quot;&gt;&gt;/etc/resolv.conf
 
 </code></pre>
 
-<h4 id="docker-attach">Docker Attach</h4>
+<p>This will set the route and the default gateway of your device, also the nameserver will be set.<br />
+But while in the host machine, you will add following iptables rules:</p>
 
-<p>If you attach to the container, you must remember, better you use tmux holding the whole instance.</p>
-
-<pre><code>$ sudo docker ps
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-057435c2f1cb        centos:7            &quot;/bin/bash&quot;         5 seconds ago       Up 4 seconds                            evil_kirch          
-$ sudo docker attach 057435c2f1cb
-[root@057435c2f1cb /]# ls
-bin  dev  etc  home  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  selinux  srv  sys  tmp  usr  var
+<pre><code># ip route add 192.168.188.0/24 dev br0
+# iptables -t nat -A POSTROUTING -s 192.168.188.0/24 -j SNAT --to 192.168.0.xxx
+# iptables -A FORWARD -s 192.168.188.188 -j ACCEPT
 
 </code></pre>
 
-<p>Once you quit from the &ldquo;attached&rdquo; tty, the origin tty will also quit.</p>
+<p>The iptables rules should be saved via <code>iptables-save</code>, while the route rules should be added into following file:</p>
 
-<h3 id="more-system-info">More System Info</h3>
-
-<p>Use <code>docker info</code> to get more detailed system infos:</p>
-
-<pre><code>$ sudo docker info
-Containers: 3
-Images: 3
-Storage Driver: devicemapper
- Pool Name: docker-253:1-397799-pool
- Pool Blocksize: 65.54 kB
- Data file: /var/lib/docker/devicemapper/devicemapper/data
- Metadata file: /var/lib/docker/devicemapper/devicemapper/metadata
- Data Space Used: 563.1 MB
- Data Space Total: 107.4 GB
- Metadata Space Used: 1.069 MB
- Metadata Space Total: 2.147 GB
- Library Version: 1.02.84-RHEL7 (2014-03-26)
-Execution Driver: native-0.2
-Kernel Version: 3.10.0-123.8.1.el7.x86_64
-Operating System: CentOS Linux 7 (Core)
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-centos              7                   8efe422e6104        3 weeks ago         224 MB
-centos              centos7             8efe422e6104        3 weeks ago         224 MB
-centos              latest              8efe422e6104        3 weeks ago         224 MB
-$ sudo docker ps -a
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS                       PORTS               NAMES
-057435c2f1cb        centos:7            &quot;/bin/bash&quot;         3 minutes ago       Exited (0) 54 seconds ago                        evil_kirch          
-8337ea52cfd1        centos:7            &quot;/bin/bash&quot;         21 minutes ago      Exited (127) 4 minutes ago                       pensive_blackwell   
-1f9005d495c6        centos:7            &quot;/bin/bash&quot;         34 minutes ago      Exited (0) 24 minutes ago                        sick_jones          
+<pre><code>$  cat /etc/rc.d/after.local 
+ip route add 192.168.188.0/24 dev br0                
 
 </code></pre>
 
-<h3 id="commit-changes">Commit Changes</h3>
-
-<p>Install the vim in the running container:</p>
-
-<pre><code>$ sudo docker run -i -t centos /bin/bash
-[sudo] password for Trusty: 
-[root@ea29113ba0e1 /]# which vim
-/usr/bin/which: no vim in (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
-[root@ea29113ba0e1 /]# yum install -y vim
-
-</code></pre>
-
-<p>In another container, commit the changes:</p>
-
-<pre><code>$ sudo docker commit ea29113ba0e1 vim_installed
-54cebb627e37600e81a832616eb3253af5dd26d0d248b9a9251e23bc8c93567d
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-vim_installed       latest              54cebb627e37        12 seconds ago      362.6 MB
-centos              latest              8efe422e6104        3 weeks ago         224 MB
-centos              7                   8efe422e6104        3 weeks ago         224 MB
-centos              centos7             8efe422e6104        3 weeks ago         224 MB
-
-</code></pre>
-
-<p>Next time if you want to use the vim installed images, simply run:</p>
-
-<pre><code>$ sudo docker run -it vim_installed /bin/bash
-[root@4b76f0c7bc46 /]# which vim
-/usr/bin/vim
-
-</code></pre>
-
-<h3 id="job-controlling">Job Controlling</h3>
-
-<p>Use environment variables for recording the running job:</p>
-
-<pre><code>$ JOB=$(sudo docker run -d vim_installed /bin/sh -c &quot;while true; do echo Hello World; sleep 1; done&quot;)
-$ echo $JOB
-5dcb0884d27077e84ef4fea7fc0b3e8151657e92e0c2d4d1e33f84483715dfb9
-
-</code></pre>
-
-<p>Examine the log from the app&rsquo;s output:</p>
-
-<pre><code>$ sudo docker logs $JOB
-$ sudo docker logs --follow $JOB
-
-</code></pre>
-
-<p>Add &ndash;follow will continue to view the log output.<br />
-Stop the running container:</p>
-
-<pre><code>$ sudo docker stop $JOB
-5dcb0884d27077e84ef4fea7fc0b3e8151657e92e0c2d4d1e33f84483715dfb9
-
-</code></pre>
-
-<p>Start the stopped container:</p>
-
-<pre><code>$ sudo docker start $JOB
-5dcb0884d27077e84ef4fea7fc0b3e8151657e92e0c2d4d1e33f84483715dfb9
-
-</code></pre>
-
-<p>Or Restart:</p>
-
-<pre><code>$ sudo docker restart $JOB
-
-</code></pre>
-
-<p>Or kill:</p>
-
-<pre><code>$ sudo docker kill $JOB
-
-</code></pre>
-
-<p>Notice the kill exit code is -1:</p>
-
-<pre><code>$ sudo docker ps
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-$ sudo docker ps -a
-CONTAINER ID        IMAGE                  COMMAND                CREATED             STATUS                        PORTS               NAMES
-5dcb0884d270        vim_installed:latest   &quot;/bin/sh -c 'while t   9 minutes ago       Exited (-1) 8 seconds ago                         focused_pike 
-
-</code></pre>
-
-<p><code>sudo docker rm $JOB</code> will remove the job.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/27/play-docker-2/">Play Docker(2)</a>
-      </h1>
-      <span class="post-date">Jan 27, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/27/play-docker-2/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Continue, but this time for further topics:</p>
-
-<h3 id="export-import">Export/Import</h3>
-
-<p>From <a href="https://registry.hub.docker.com/">https://registry.hub.docker.com/</a> to find more interesting images:<br />
-Use opensuse:</p>
-
-<pre><code>$ sudo docker pull opensuse
-$ sudo docker images
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-opensuse            latest              758c78b4040c        3 weeks ago         622.7 MB
-opensuse            13.2                758c78b4040c        3 weeks ago         622.7 MB
-opensuse            harlequin           758c78b4040c        3 weeks ago         622.7 MB
-$ sudo docker run -i -t opensuse /bin/bash
-:/ # yzpper in vim
-
-</code></pre>
-
-<p>After installed commit the changes and verify:</p>
-
-<pre><code>$ sudo docker run -i -t install_vim_suse /bin/bash
-:/ # which vim
-/usr/bin/vim
-
-</code></pre>
-
-<p>Now we export it to tar file:</p>
-
-<pre><code>$ sudo docker ps
-$ sudo docker export 7b594d048b0b&gt;~/opensuse_vim.tar
-$ ls -l -h ~/opensuse_vim.tar
--rw-r--r--  1 Trusty root 704M Jan 27 22:39 opensuse_vim.tar
-
-</code></pre>
-
-<p>Made changes after we exported the tar file.</p>
-
-<pre><code>$ sudo tar xvf opensuse_vim.tar
-$ sudo touch ./root/I_Want_You_See_This_File
-$ sudo rm -f opensuse_vim.tar
-$ sudo tar cvf opensuse_vim_modified.tar ./*
-$ ls -l -h *.tar
--rw-r--r-- 1 root root 704M Jan 27 22:45 opensuse_vim_modified.tar
-
-</code></pre>
-
-<p>Import the tar file into the images:</p>
-
-<pre><code>$ sudo cat ./opensuse_vim_modified.tar | sudo docker import - Trusty/opensuse_vim_modified:v1.0
-c18f7e43c4197a2a1a614a1ee91c6d8f0e06a6d7593ca94354303e3760e389a7
-$ sudo docker images
-$ sudo docker images
-REPOSITORY                   TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-Trusty/opensuse_vim_modified   v1.0                c18f7e43c419        47 seconds ago      724 MB
-$ sudo docker run -i -t Trusty/opensuse_vim_modified:v1.0 /bin/bash
-:/ # ls /root/
-I_Want_You_See_This_File  bin
-
-</code></pre>
-
-<p>Now we could see the modified files has been ported to our running containers.<br />
-Even you could docker import from remote url:</p>
-
-<pre><code>$sudo docker import http://example.com/exampleimage.tgz example/imagerepo
-
-</code></pre>
-
-<h3 id="networking">Networking</h3>
-
-<h4 id="run-app-inside-the-container">Run app inside the container</h4>
-
-<p>First pull the images <code>training/webapp</code> back:</p>
-
-<pre><code>$ sudo docker pull training/webapp
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-training/webapp     latest              31fa814ba25a        8 months ago        278.6 MB
-
-</code></pre>
-
-<p>Quickly enter the container and examine what&rsquo;s inside the pandora box:</p>
-
-<pre><code>$ sudo docker run -i -t training/webapp /bin/bash
-root@f19ca7c18763:/opt/webapp# cat /etc/issue
-Ubuntu 12.04.4 LTS \n \l
-
-root@f19ca7c18763:/opt/webapp# ls
-Procfile  app.py  requirements.txt  tests.py
-root@f19ca7c18763:/opt/webapp# cat app.py | more
-import os
-
-from flask import Flask
-
-</code></pre>
-
-<p>It&rsquo;s a flask based webapp.<br />
-Manually run the app.py and use another terminal for testing it:</p>
-
-<pre><code>root@f19ca7c18763:/opt/webapp# python app.py
- * Running on http://0.0.0.0:5000/
-$ sudo docker exec -it f19ca7c18763 /bin/bash
-root@f19ca7c18763:/opt/webapp# which curl
-/usr/bin/curl
-root@f19ca7c18763:/opt/webapp# curl http://127.0.0.1:5000
-Hello world!root@f19ca7c18763:/opt/webapp# 
-
-</code></pre>
-
-<p>When you use curl, you will see in the first terminal it will indicates the request has been solved.<br />
-Or you could directly request the page in host machine, via: <code>curl http://172.17.0.21:5000</code>, the result will be the same.</p>
-
-<h4 id="expose-to-world">Expose to World</h4>
-
-<p>Randomly let our container map to host&rsquo;s port via:</p>
-
-<pre><code>$ sudo docker run -d -P --name web training/webapp python app.py
-8781cf98cc685ae37a9aa421a9d30f71c64f12fa8fc07b2e1d888f761089e528
-$ sudo docker ps -l
-CONTAINER ID        IMAGE                    COMMAND             CREATED             STATUS              PORTS                     NAMES
-8781cf98cc68        training/webapp:latest   &quot;python app.py&quot;     6 seconds ago       Up 5 seconds        0.0.0.0:49153-&gt;5000/tcp   web                 
-
-</code></pre>
-
-<p>Then on Internet, we could directly fetch the HelloWorld now.</p>
-
-<pre><code>~% curl http://1xx.xxx.xx.xxx:49153
-Hello world!%          
-
-</code></pre>
-
-<p>Inspect the name of the running container:</p>
-
-<pre><code>$ sudo docker inspect -f &quot;{{ .State.StartedAt }}&quot; 8781cf98cc68
-2015-01-28T04:25:38.768661692Z
-$ sudo docker inspect -f &quot;{{ .State.Pid }}&quot; 8781cf98cc68
-7307
-$ sudo docker inspect -f &quot;{{ .Name }}&quot; 8781cf98cc68
-/web
-
-</code></pre>
-
-<p>We got the name, then we could directly read the logs using this name:</p>
-
-<pre><code>$ sudo docker logs -f web
- * Running on http://0.0.0.0:5000/
-183.62.15.118 - - [28/Jan/2015 04:27:30] &quot;GET / HTTP/1.1&quot; 200 -
-183.62.15.118 - - [28/Jan/2015 06:00:18] &quot;GET / HTTP/1.1&quot; 200 -
-183.62.15.118 - - [28/Jan/2015 06:00:24] &quot;GET / HTTP/1.1&quot; 200 -
-
-</code></pre>
-
-<p>Using <code>-p</code> for specify the host port and container port mapping:</p>
-
-<pre><code>$ sudo docker run -d -p 5000:5000 --name web1 training/webapp python app.py
-2a0692015ba776f7daa957906470178df1fd8d26439422cd4528d2e253bf3331
-$ sudo docker ps
-CONTAINER ID        IMAGE                    COMMAND             CREATED             STATUS              PORTS                    NAMES
-2a0692015ba7        training/webapp:latest   &quot;python app.py&quot;     3 seconds ago       Up 3 seconds        0.0.0.0:5000-&gt;5000/tcp   web1 
-
-</code></pre>
-
-<p>The test could be curl the 5000 port of the remote machine, while the logs could be found using <code>-f web1</code>.<br />
-Examine the port mapping using following command:</p>
-
-<pre><code>$ sudo docker run -d -P --name web3 training/webapp python app.py
-$ sudo docker port web3 5000
-0.0.0.0:49154
-
-</code></pre>
-
-<p><code>-p</code> could be added as multiple ports, like:</p>
-
-<pre><code>$ sudo docker run -d -p 5000:5000 -p 3000:80 training/webapp python app.py
-
-</code></pre>
-
-<h3 id="docker-container-linking">Docker Container Linking</h3>
-
-<p>Pull back a new images and run it as daemon:</p>
-
-<pre><code>$ sudo docker run -d --name db training/postgres
-$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-training/postgres   latest              258105bea10d        7 months ago        364.5 MB
-training/webapp     latest              31fa814ba25a        8 months ago        278.6 MB
-$ sudo docker ps 
-CONTAINER ID        IMAGE                      COMMAND                CREATED             STATUS              PORTS                     NAMES
-ff6603d47552        training/postgres:latest   &quot;su postgres -c '/us   14 seconds ago      Up 14 seconds       5432/tcp                  db                  
-f94368f3d091        training/webapp:latest     &quot;python app.py&quot;        9 minutes ago       Up 9 minutes        0.0.0.0:49154-&gt;5000/tcp   web3                
-
-</code></pre>
-
-<p>Remove the existing web3 container, and create a new one which links to container <code>db</code>:</p>
-
-<pre><code>$ sudo docker rm -f f94368f3d091
-f94368f3d091
-$ sudo docker run -d -P --name web4 --link db:db training/webapp python app.py
-0cf8f0adcb3d1728c61e33c0c9184213478a2a231ba525339a3049534f4ce4ef
-$ sudo docker ps
-CONTAINER ID        IMAGE                      COMMAND                CREATED             STATUS              PORTS                     NAMES
-0cf8f0adcb3d        training/webapp:latest     &quot;python app.py&quot;        4 seconds ago       Up 3 seconds        0.0.0.0:49155-&gt;5000/tcp   web4                
-ff6603d47552        training/postgres:latest   &quot;su postgres -c '/us   2 minutes ago       Up 2 minutes        5432/tcp                  db  
-
-</code></pre>
-
-<p>Examine the link infos when entering the container itself:</p>
-
-<pre><code>$ sudo docker exec -i -t 0cf8f0adcb3d  /bin/bash
-root@0cf8f0adcb3d:/opt/webapp# env
-HOSTNAME=0cf8f0adcb3d
-DB_NAME=/web4/db
-DB_PORT_5432_TCP_ADDR=172.17.0.26
-DB_PORT=tcp://172.17.0.26:5432
-DB_PORT_5432_TCP=tcp://172.17.0.26:5432
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-PWD=/opt/webapp
-DB_PORT_5432_TCP_PORT=5432
-SHLVL=1
-HOME=/
-DB_PORT_5432_TCP_PROTO=tcp
-DB_ENV_PG_VERSION=9.3
-_=/usr/bin/env
-
-
-</code></pre>
-
-<p>Use <code>ip address show</code> to examine the ip address.<br />
-Why they could be linked?<br />
-Also when you enter the web machine, cat its /etc/hosts, will see the db named:</p>
-
-<pre><code>root@0cf8f0adcb3d:/opt/webapp# cat /etc/hosts
-172.17.0.27	0cf8f0adcb3d
-127.0.0.1	localhost
-::1	localhost ip6-localhost ip6-loopback
-fe00::0	ip6-localnet
-ff00::0	ip6-mcastprefix
-ff02::1	ip6-allnodes
-ff02::2	ip6-allrouters
-172.17.0.26	db
-
-</code></pre>
-
-<h3 id="advance-networking">Advance Networking</h3>
-
-<p>Secret of DNS/hostname/hosts:</p>
-
-<pre><code>root@0cf8f0adcb3d:/opt/webapp# mount
-/dev/vda1 on /etc/resolv.conf type ext4 (rw,relatime,data=ordered)
-/dev/vda1 on /etc/hostname type ext4 (rw,relatime,data=ordered)
-/dev/vda1 on /etc/hosts type ext4 (rw,relatime,data=ordered)
-
-</code></pre>
-
-<p>Once the variables changes the container&rsquo;s corresponding name will also be changed.</p>
-
-<h4 id="iptables">Iptables</h4>
-
-<p>Container Visit WAN:<br />
-Use sysctl&rsquo;s <code>ip_forward</code>, check it via:</p>
-
-<pre><code>$ cat /proc//sys/net/ipv4/ip_forward
-1
-
-</code></pre>
-
-<p>1 means that we could forward our traffic flow from WAN to</p>
-
-<p>WAN visit Container:</p>
-
-<pre><code>$ sudo docker run -d -p 5000:5000 --name web5 training/webapp python app.py
-$ sudo iptables -t nat -nL
-......
-Chain DOCKER (2 references)
-target     prot opt source               destination         
-DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:49155 to:172.17.0.27:5000
-DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:5000 to:172.17.0.28:5000
-
-</code></pre>
-
-<p>The last one is added via our run command.</p>
+<p>Now reboot the host machine, you route configuration will be saved.</p>
 
       
     </div>
@@ -1492,12 +1016,21 @@ DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:5000 to:17
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/56/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

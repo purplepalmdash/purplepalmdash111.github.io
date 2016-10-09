@@ -93,113 +93,147 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/11/ba-wan-panamax/">把玩Panamax</a>
+        <a href="http://purplepalmdash.github.io/2015/01/26/using-new-do-system/">Using New DO System</a>
       </h1>
-      <span class="post-date">Dec 11, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/11/ba-wan-panamax/#disqus_thread">Comments</a>
+      <span class="post-date">Jan 26, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/26/using-new-do-system/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
         
       </span>
       
       
 
-<h3 id="前提条件">前提条件</h3>
+<p>Since the coreOS met some critical errors, I have to re-construct the DO System using CentOS. So I destroyed the old CoreOS machine, runs CentOS.</p>
 
-<p>在MAC上把玩Panamax前，需要安装Virtualbox, Vagrant, 而后, 用下列命令安装Panamax:</p>
+<h3 id="configure">Configure</h3>
 
-<pre><code>$ brew install http://download.panamax.io/installer/brew/panamax.rb
-$ panamax init
+<h3 id="install-packages">Install packages</h3>
 
-</code></pre>
+<p>Update and install vim</p>
 
-<p>这将开始下载CoreOS镜像，需要等一段时间。</p>
-
-<p>In fact the panamax could also be installed on ArchLinux rather than only in Ubuntu, simply run:</p>
-
-<pre><code>$ curl http://download.panamax.io/installer/ubuntu.sh | bash
+<pre><code>$ yum update
+$ yum install vim
 
 </code></pre>
 
-<h3 id="trouble-shooting">Trouble Shooting</h3>
+<h4 id="add-swap">Add Swap</h4>
 
-<h4 id="init-failed">Init failed</h4>
+<p>512M is not enough for playing, enlarge the swapfile.</p>
 
-<pre><code>$ panamix init
-A different VM with name panamax-vm has been created already. Please re-install or delete panamax-vm VM and try again.
-
-</code></pre>
-
-<p>Use following command for listing all of the virtualmachines:</p>
-
-<pre><code>VBoxManage list vms
-
-</code></pre>
-
-<p>Didn&rsquo;t found the panamax related infos.<br />
-Finally solve the problem via:</p>
-
-<pre><code>[Trusty@~/.vagrant.d]$ pwd
-/home/Trusty/.vagrant.d
-[Trusty@~/.vagrant.d]$ mv plugins.json plugins.json.back
-[Trusty@~/.vagrant.d]$ mv gems gems.back
-
-</code></pre>
-
-<h4 id="frozen-string">Frozen String</h4>
-
-<p>The error code:</p>
-
-<pre><code>/opt/vagrant/embedded/gems/gems/vagrant-1.7.0/lib/vagrant/util/subprocess.rb:28:in `encode!': can't modify frozen String (RuntimeError)
+<pre><code># dd if=/dev/zero of=/swapfile bs=1M count=1024
+# chmod 600 /swapfile
+# mkswap /swapfile
+$ sudo vim /etc/systemd/system/swap.service
+ [Unit]  
+ Description=Turn on swap  
+ [Service]  
+ Type=oneshot  
+ Environment=&quot;SWAPFILE=/swapfile&quot;
+ RemainAfterExit=true  
+ ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
+ ExecStart=/usr/bin/sh -c &quot;/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ ExecStop=/usr/bin/sh -c &quot;/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ ExecStopPost=/usr/bin/sh -c &quot;/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ [Install]  
+ WantedBy=multi-user.target 
+$ sudo  systemctl enable /etc/systemd/system/swap.service  
+$ sudo systemctl start swap  
 
 </code></pre>
 
-<p>Is it because I upgraded to the latest vagrant?</p>
+<p>Now the swapfile is 1000MB, enough for doing various operations.</p>
 
-<p>I couldnot roll back to vagrant1.6, so I upgraded to the vagrant-git, its version is 1.7.1, from the yaourt repository, thus I could get the installation continue.</p>
+<h4 id="add-new-user">Add new user</h4>
 
-<h3 id="opensuse-way">OpenSuse Way</h3>
+<p>Add new user and changes its password:</p>
 
-<p>First remove the installed virtualbox:</p>
-
-<pre><code>$ zypper remove virtualbox
-$ zypper in libvncserver0 LibVNCServer-devel
+<pre><code># useradd -m -g root -G root -s /bin/bash Trusty
+# passwd Trusty
 
 </code></pre>
 
-<p>Install the 4.3 version of virtualbox:</p>
+<p>Change the sshd configuration, disable root login, and change the listening port.</p>
 
-<pre><code>$ wget http://download.opensuse.org/repositories/home:/Warhammer40k:/stuff/openSUSE_13.1/x86_64/VirtualBox-custom-4.3-4.3.20-1.1.x86_64.rpm
-$ rpm -ivh VirtualBox-custom-4.3-4.3.20-1.1.x86_64.rpm
+<pre><code>vim /etc/ssh/sshd_config
+port changes, 
+PermitRootLogin no
+
+</code></pre>
+
+<p>Now reboot the system, you will got a safe DigitalOcean machine.</p>
+
+<h3 id="build-opencontrail">Build OpenContrail</h3>
+
+<p>The repo is the same as the above article, then we install other packages which needed for CengOS.</p>
+
+<pre><code>$ sudo yum install -y libtool kernel-devel 
+$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
 
 </code></pre>
 
-<p>Now doing the same as we noticed above.<br />
-But the <code>panamax init</code> got following error messages:</p>
+<p>Install epel via:</p>
 
-<pre><code>==&gt; panamax-vm: Clearing any previously set network interfaces...
-There was an error while executing `VBoxManage`, a CLI used by Vagrant
-for controlling VirtualBox. The command and stderr is shown below.
-
-Command: [&quot;hostonlyif&quot;, &quot;create&quot;]
-
-Stderr: 0%...
-Progress state: NS_ERROR_FAILURE
-VBoxManage: error: Failed to create the host-only adapter
-VBoxManage: error: VBoxNetAdpCtl: Error while adding new interface: failed to open /dev/vboxnetctl: No such file or directory
-VBoxManage: error: Details: code NS_ERROR_FAILURE (0x80004005), component HostNetworkInterface, interface IHostNetworkInterface
-VBoxManage: error: Context: &quot;int handleCreate(HandlerArg*, int, int*)&quot; at line 66 of file VBoxManageHostonly.cpp
+<pre><code>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo 
 
 </code></pre>
+
+<p>Install following packages from epel:</p>
+
+<pre><code>$ sudo yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler 
+$  sudo yum install -y python-lxml patch unzip flex bison gcc-c++ openssl-devel make wget python-setuptools
+
+</code></pre>
+
+<p>So now you could run the whole compilation via <code>scons</code> under the ~/Code folder.<br />
+tips: tmux&rsquo;s q will quit ctrl+b mode.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/10/re-write-weatherapp/">Re-Write WeatherAPP</a>
+        <a href="http://purplepalmdash.github.io/2015/01/23/install-openfire-for-lan-chat/">Install OpenFire For LAN Chat</a>
       </h1>
-      <span class="post-date">Dec 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/10/re-write-weatherapp/#disqus_thread">Comments</a>
+      <span class="post-date">Jan 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/23/install-openfire-for-lan-chat/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>In order to support chat in LAN, install Openfire, following are the steps for installing and configurating.</p>
+
+<h3 id="local-machine">Local Machine</h3>
+
+<pre><code>$ wget 
+$ apt-get update &amp;&amp;  apt-get install default-jre
+
+</code></pre>
+
+<p>Since another people is also installing this. Change it to DigitalOcean.</p>
+
+<h3 id="dockerize-openfire">Dockerize Openfire</h3>
+
+<p>Get the image via:</p>
+
+<pre><code>docker pull sameersbn/openfire
+
+</code></pre>
+
+<p>Since the installation is already done, docker ignored&hellip;</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/01/22/enable-apache2-redirect/">Enable Apache2 Redirect</a>
+      </h1>
+      <span class="post-date">Jan 22, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/22/enable-apache2-redirect/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
@@ -208,390 +242,206 @@ VBoxManage: error: Context: &quot;int handleCreate(HandlerArg*, int, int*)&quot;
       
       
 
-<h3 id="background">Background</h3>
+<h3 id="problem">Problem</h3>
 
-<h3 id="building-the-environment">Building the Environment</h3>
+<p>Want to redirect from <code>http://xxx/</code> to <code>http://xxx/a/b</code></p>
 
-<p>First clone the Vagrant Repo from:</p>
+<h3 id="solution">Solution</h3>
 
-<pre><code>$ pwd
-/media/y/Vagrant/CoreOS
-$ git clone https://github.com/coreos/coreos-vagrant.git
-$ cd coreos-vagrant
-$ cp config.rb.sample config.rb
-$ cp user-data.sample user-data
+<p>Change the configuration file of the <code>/etc/apache2/sites-enabled/000-default</code>, enable the  <code>RedirectMatch</code>:</p>
+
+<pre><code>	# For forwarding all of the request to '/' TO '/bin/view'
+ 	RedirectMatch ^/$ /a/b
 
 </code></pre>
 
-<h4 id="cluster-setting">Cluster Setting</h4>
-
-<p>Edit the config.rb, for configurating the instance and the official CoreOS channel:</p>
-
-<pre><code># Size of the CoreOS cluster created by Vagrant
-$num_instances=3
-# Official CoreOS channel from which updates should be downloaded
-$update_channel='stable'
-
-</code></pre>
-
-<p>Now start the vagrant and view its status:</p>
-
-<pre><code>$ vagrant up
-$ vagrant status
-Current machine states:
-
-core-01                   running (virtualbox)
-core-02                   running (virtualbox)
-core-03                   running (virtualbox)
-$ vagrant ssh core-1
-
-</code></pre>
-
-<p>After you login to the coreOS, you could view the status of this virtual machine. Each of the machine have 1 Core, 1G ram, 20G harddisk.</p>
-
-<h3 id="single-machine">Single Machine</h3>
-
-<p>Just comment the following lines of the config.rb:</p>
-
-<pre><code># $num_instances=3
-
-</code></pre>
-
-<p>This will bring one instance of vagrant based CoreOS machine.</p>
-
-<h3 id="nodejs">NodeJS</h3>
-
-<p>I want to write my APPs using NodeJS, thus I want to setup the NodeJS dev environment on CoreOS based Docker. Following are the steps:<br />
-First configure the proxy of docker:</p>
-
-<pre><code>$ sudo mkdir /etc/systemd/system/docker.service.d
-$ sudo vim http-proxy.conf
-[Service]
-Environment=&quot;HTTP_PROXY=http://proxy.example.com:8080&quot;
-To apply the change, reload the unit and restart docker:
-$ systemctl daemon-reload
-$ systemctl restart docker
-
-</code></pre>
-
-<p>Now you could use docker for pulling back some container and run.</p>
-
-<pre><code>$ docker search base
-$ docker pull base
-$ docker images
-$ docker run base /bin/bash -c &quot;ls /&quot;
-$ docker run base /bin/bash -c &quot;cat /etc/issue&quot;
-
-</code></pre>
-
-<p>Since the network is not good, I created the droplet on DigitalOcean, and installed CoreOS.</p>
-
-<h3 id="dockerized">Dockerized</h3>
-
-<p><a href="http://blogs.aws.amazon.com/application-management/post/Tx1ZLAHMVBEDCOC/Dockerizing-a-Python-Web-App">http://blogs.aws.amazon.com/application-management/post/Tx1ZLAHMVBEDCOC/Dockerizing-a-Python-Web-App</a><br />
-Steps is listed as following:</p>
-
-<pre><code>$ git clone git@github.com:awslabs/eb-py-flask-signup.git
-$ cd eb-py-flask-signup
-$ git checkout master
-$ vim Dockerfile
-FROM ubuntu:14.04
-
-# Install Python Setuptools
-RUN apt-get install -y python-setuptools
-
-# Install pip
-RUN easy_install pip
-
-# Add and install Python modules
-ADD requirements.txt /src/requirements.txt
-RUN cd /src; pip install -r requirements.txt
-
-# Bundle app source
-ADD . /src
-
-# Expose
-EXPOSE  5000
-
-# Run
-CMD [&quot;python&quot;, &quot;/src/application.py&quot;]
-$ docker build -t eb-py-sample .
-$ docker run -d \
-     -e APP_CONFIG=application.config.example \
-     -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-     -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-     -p 8080:5000 \
-     eb-py-sample
-
-</code></pre>
-
-<p>Then open <a href="http://localhost:8000">http://localhost:8000</a> to see your own app.</p>
+<p>Restart the service of apache2 then everything goes OK.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/06/tips-on-30days30skills-5/">Tips on 30Days30Skills(5)</a>
+        <a href="http://purplepalmdash.github.io/2015/01/21/building-vrouter/">Building vrouter</a>
       </h1>
-      <span class="post-date">Dec 6, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/06/tips-on-30days30skills-5/#disqus_thread">Comments</a>
+      <span class="post-date">Jan 21, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/21/building-vrouter/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/sdn">SDN</a>
         
       </span>
       
       
 
-<p>Since the RESTful API is a little bit hard for setup, I ignore the Day10 and Day11, jump to Day 12, OpenCV.</p>
+<h3 id="preparation">Preparation</h3>
 
-<h3 id="day-12-opencv">Day 12 - OpenCV</h3>
+<p>First we should get repo, while this little kit has been banned via GFW, thus we should use DO machine for getting it down and ssh to local machine.</p>
 
-<h4 id="get-the-jar-file">Get the jar file</h4>
-
-<p>First download the opencv from:
-<a href="http://sourceforge.net/projects/opencvlibrary/files/latest/download">http://sourceforge.net/projects/opencvlibrary/files/latest/download</a></p>
-
-<pre><code>$ unzip *.zip
-$ cd opencv-2.4.10
-$ cmake -G &quot;Unix Makefiles&quot; -D CMAKE_CXX_COMPILER=/usr/bin/g++ -D CMAKE_C_COMPILER=/usr/bin/gcc -D WITH_CUDA=ON .. 
-$ make -j4 &amp;&amp; make install
+<pre><code>$ mkdir ~/bin
+$ PATH=~/bin:$PATH
+$ curl https://storage.googleapis.com/git-repo-downloads/repo &gt; ~/bin/repo
+$ chmod a+x ~/bin/repo
+$ tail ~/.zshrc
+# Add our own bin/ folder for using different tools:    
+export PATH=&quot;$PATH:$HOME/bin&quot;
 
 </code></pre>
 
-<p>Trouble shooting when generating openCV jar file:<br />
-Correct output should be:</p>
+<p>Now we could use repo.</p>
 
-<pre><code>--   Java:
---     ant:                         /bin/ant (ver 1.9.4)
---     JNI:                         /usr/lib/jvm/java-7-openjdk/include /usr/lib/jvm/java-7-openjdk/include/linux /usr/lib/jvm/java-7-openjdk/include
---     Java tests:                  YES
+<h3 id="oops-git-is-old">Oops, git is old!</h3>
 
-</code></pre>
+<p>The default version of git is too old in CentOS, thus we have to upgrade it. , repo needs git version newer than 1.7.2, or you won&rsquo;t get any results from github.</p>
 
-<p>Add JNi</p>
-
-<pre><code>export JAVA_HOME=/usr/lib/jvm/java-7-openjdk/
+<pre><code>~% git --version
+git version 1.7.1
 
 </code></pre>
 
-<p>Then build with following command:</p>
+<p>Install necessary packages:</p>
 
-<pre><code>$ cmake -G &quot;Unix Makefiles&quot; -D CMAKE_CXX_COMPILER=/usr/bin/g++ -D CMAKE_C_COMPILER=/usr/bin/gcc -D WITH_CUDA=ON -D BUILD_SHARED_LIBS=OFF -D BUILD_NEW_PYTHON_SUPPORT=NO .. &amp;&amp; make
-
-</code></pre>
-
-<p>For MACOS, you should install:</p>
-
-<pre><code>$ brew install ant
-$ export JAVA_HOME=`/usr/libexec/java_home -v 1.6`
+<pre><code>$ sudo yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
 
 </code></pre>
 
-<p>Then re-compile and now you could get the jar file under build/bin/.</p>
+<p>Now build and install git via:</p>
 
-<h4 id="development-on-opencv">Development on OpenCV</h4>
-
-<p>Using eclipse LUNA.</p>
-
-<pre><code>(venv)[Trusty@~/code/30days/Day12OpenCV/opencv-2.4.10/build/bin]$ pwd
-/home/Trusty/code/30days/Day12OpenCV/opencv-2.4.10/build/bin
-(venv)[Trusty@~/code/30days/Day12OpenCV/opencv-2.4.10/build/bin]$ ls *.jar
-opencv-2410.jar
-
-</code></pre>
-
-<p>Add the new User Libraries:</p>
-
-<p><img src="/images/addjavalib.jpg" alt="/images/addjavalib.jpg" /></p>
-
-<p>The detailed configuration steps could be refered to the <a href="http://segmentfault.com/a/1190000000358809">http://segmentfault.com/a/1190000000358809</a>,  After configuration your User Libraries should be looked like this:<br />
-<img src="/images/javalib2.jpg" alt="/images/javalib2.jpg" /></p>
-
-<p>Add User Libraries thus you could see the configuration of the lib is looked like:<br />
-<img src="/images/libconfiguration.jpg" alt="/images/libconfiguration.jpg" /></p>
-
-<p>Code is like following:</p>
-
-<pre><code>package facedetection;
-import org.opencv.core.Core;
-import org.opencv.core.Mat;
-import org.opencv.core.MatOfRect;
-import org.opencv.core.Point;
-import org.opencv.core.Rect;
-import org.opencv.core.Scalar;
-import org.opencv.highgui.Highgui;
-import org.opencv.objdetect.CascadeClassifier;
-
-public class MyFaceDetectionClass {
-    public static void main(String[] args) {
-
-        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-        System.out.println(&quot;\nRunning FaceDetector&quot;);
-
-        CascadeClassifier faceDetector = new CascadeClassifier(MyFaceDetectionClass.class.getResource(&quot;haarcascade_frontalface_alt.xml&quot;).getPath());
-        Mat image = Highgui
-                .imread(MyFaceDetectionClass.class.getResource(&quot;shekhar.JPG&quot;).getPath());
-
-        MatOfRect faceDetections = new MatOfRect();
-        faceDetector.detectMultiScale(image, faceDetections);
-
-        System.out.println(String.format(&quot;Detected %s faces&quot;, faceDetections.toArray().length));
-
-        for (Rect rect : faceDetections.toArray()) {
-            Core.rectangle(image, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height),
-                    new Scalar(0, 255, 0));
-        }
-
-        String filename = &quot;ouput.png&quot;;
-        System.out.println(String.format(&quot;Writing %s&quot;, filename));
-        Highgui.imwrite(filename, image);
-    }
-}
+<pre><code>$ sudo mkdir -p /usr/local/git
+$ wget https://www.kernel.org/pub/software/scm/git/git-1.9.4.tar.gz
+$ tar xzvf git-1.9.4.tar.gz
+$ cd git-1.9.4
+$ make prefix=/usr/local/git all
+$ sudo make prefix=/usr/local/git install
+$ echo &quot;export PATH=/usr/local/git/bin:$PATH&quot;&gt;&gt;~/.zshrc
+$ source ~/.zshrc
+$ git --version
+git version 1.9.4
 
 </code></pre>
 
-<p>Then you should place the xml file and the JPG file under the java class, after doing this, run the application, then you will got the png file generate with face detected.</p>
+<p>Now the git is already the newer version, we could use it together with repo.</p>
 
-<h3 id="day-13-dropwizard">Day 13 - Dropwizard</h3>
+<h3 id="sync-repository">Sync Repository</h3>
 
-<p>First you should install mondb in ArchLinux:</p>
+<p>Unfortunately we have been blocked by GFW, so we have to enable little tool proxychains:</p>
 
-<pre><code>$ sudo pacman -S mongodb
-
-</code></pre>
-
-<p>Then in eclipse, create a new Maven project with the template of &ldquo;maven-archetype-quickstart&rdquo;, with the following configuration of Artifact Id and Group id.<br />
-<img src="/images/blogjava.jpg" alt="/images/blogjava.jpg" /></p>
-
-<p>The default pom.xml should be modified,</p>
-
-<p>Since the network environment is not stable, I created a vncserver at the VPS, and use VPS for developing.<br />
-In vps:</p>
-
-<pre><code>sudo apt-get install eclipse
-sudo apt-get install mongodb
+<pre><code>$ git clone https://github.com/rofl0r/proxychains-ng.git 
+$ cd proxychains-ng
+$ ./configure --prefix=/usr
+$ make
+$ sudo make install
+$ sudo make install-config
+$ sudo vim /etc/proxychains.conf
+# defaults set to &quot;tor&quot;
+#socks4 	127.0.0.1 9050
+socks5 	127.0.0.1 1395
 
 </code></pre>
 
-<p>then install the maven from: <a href="http://download.eclipse.org/technology/m2e/releases/1.3">http://download.eclipse.org/technology/m2e/releases/1.3</a></p>
+<p>Now we could use proxychains for syncing the repositories, simply init the repo via:</p>
+
+<pre><code>$ cd /home/xxx.xxxxx/Code/Vrouter_repo
+$ proxychains4 repo init -u git@github.com:Juniper/contrail-vnc -m vrouter-manifest.xml
+
+</code></pre>
+
+<p>Now sync the repository via:</p>
+
+<pre><code>$ proxychains4 repo sync
+
+</code></pre>
+
+<h3 id="build">Build</h3>
+
+<p>After syncing the code, we could finally build this repository, build it via;</p>
+
+<pre><code>$ scons vrouter
+
+</code></pre>
+
+<p>Seems boost is pretty old on CentOS 6.6, thus we have to manually compile boost on our system.<br />
+Since some packages are pretty old on CentOS, I switched to the ubuntu for developing.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/06/use-vccw-for-deploying-wp/">Use VCCW For Deploying WP</a>
+        <a href="http://purplepalmdash.github.io/2015/01/21/install-chrome-on-centos/">Install Chrome On CentOS</a>
       </h1>
-      <span class="post-date">Dec 6, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/06/use-vccw-for-deploying-wp/#disqus_thread">Comments</a>
+      <span class="post-date">Jan 21, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/21/install-chrome-on-centos/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
         
       </span>
       
       
 
-<p>For deploying differenet versions of Wordpress, I searched various kinds of solutions, includeing docker and vagrant, finally I found VCCW(A Wordpress development environment) is what I want, because I could freely changes the WP versions, so following is the guideline for installing and configurating the whole virtualmachine.</p>
+<p>Until now I failed in installing chrome on CentOS, for the libstdc++ version is too old in the machine, but record the steps here, later I will continue to work on this issue.</p>
 
-<h3 id="install">Install</h3>
+<h3 id="repository-preparation">Repository Preparation</h3>
 
-<p>The installation steps are listed as:</p>
+<p>Add following file in to your <code>/etc/yum.repos.d</code>:</p>
 
-<pre><code>$ vagrant plugin install vagrant-hostsupdater
-$ wget https://github.com/miya0001/vccw/archive/1.9.1.tar.gz
-$ tar xzvf 1.9.1.tar.gz
-$ cd vccw-1.9.1
-$ vagrant up
-
-</code></pre>
-
-<p>This will start downloading and configrating the VM, it will cost sometimes. So just drink a coffee and get back.</p>
-
-<pre><code>$ vagrant plugin install vagrant-omnibus &amp;&amp; vagrant plugin install vagrant-hostsupdater &amp;&amp;  vagrant plugin install vagrant-proxyconf
+<pre><code>~% cat /etc/yum.repos.d/google-chrome.repo 
+[google-chrome]
+name=google-chrome
+baseurl=http://dl.google.com/linux/chrome/rpm/stable/$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://dl-ssl.google.com/linux/linux_signing_key.pub
 
 </code></pre>
 
-<p>Configure proxy and chef?</p>
+<p>Now install the chrome via:</p>
 
-<pre><code>$ vim Vagrantfile
-Vagrant.configure(2) do |config|
-  config.proxy.http     = &quot;http://1xx.xx.xx:xxx:2xxx&quot;
-  config.proxy.https    = &quot;http://1xx.xx.xx:xxx:2xxx&quot;
-  config.proxy.no_proxy = &quot;localhost,127.0.0.1,.example.com&quot;
-
-config.omnibus.chef_version = :latest
-$ VAGRANT_APT_HTTP_PROXY=&quot;http://1xx.xx.xx.xxx:2xxxx vagrant up
-$ VAGRANT_APT_HTTP_PROXY=&quot;http://1xx.xx.xx.xxx:2xxxx vagrant provision
+<pre><code>$ sudo yum install google-chrome-stable
+	 Processing Dependency: libstdc++.so.6(GLIBCXX_3.4.15)(64bit) for package: google-chrome-stable-40.0.2214.91-1.x86_64
+--&gt; Finished Dependency Resolution
+Error: Package: google-chrome-stable-40.0.2214.91-1.x86_64 (google-chrome)
+           Requires: libstdc++.so.6(GLIBCXX_3.4.15)(64bit)
 
 </code></pre>
 
-<pre><code>vagrant halt
+<p>The failure reason is because our libstdc++ version is too old.</p>
+
+<h3 id="check-lib-version">Check Lib Version</h3>
+
+<p>View where is libstdc++:</p>
+
+<pre><code>$ ldconfig -p | grep stdc++
+	libstdc++.so.6 (libc6,x86-64) =&gt; /usr/lib64/libstdc++.so.6
 
 </code></pre>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/04/flask-and-angularjs-blog-tips/">Flask&amp;amp;AngularJS Blog Tips</a>
-      </h1>
-      <span class="post-date">Dec 4, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/12/04/flask-and-angularjs-blog-tips/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
-        
-      </span>
-      
-      
+<p>Get the strings which contains LIBCXX in the libstdc++.so.6:</p>
 
-<h3 id="background">Background</h3>
-
-<p>For setup the local blog which used for recording some articles, and provide the RESTful APIs for remote usage.<br />
-The tutorial is located at:<br />
-<a href="http://blog.john.mayonvolcanosoftware.com/building-a-blog-using-flask-and-angularjs-part-1/">http://blog.john.mayonvolcanosoftware.com/building-a-blog-using-flask-and-angularjs-part-1/</a></p>
-
-<h3 id="installation-of-packages">Installation of Packages</h3>
-
-<p>First preapare the environment using virtualenv2:</p>
-
-<pre><code>$ virtualenv2 flask_blog
-$ source flask_blog/bin/activate
+<pre><code>$ strings /usr/lib64/libstdc++.so.6  | grep LIBCXX
+GLIBCXX_3.4
+GLIBCXX_3.4.1
+GLIBCXX_3.4.2
+GLIBCXX_3.4.3
+GLIBCXX_3.4.4
+GLIBCXX_3.4.5
+GLIBCXX_3.4.6
+GLIBCXX_3.4.7
+GLIBCXX_3.4.8
+GLIBCXX_3.4.9
+GLIBCXX_3.4.10
+GLIBCXX_3.4.11
+GLIBCXX_3.4.12
+GLIBCXX_3.4.13
+GLIBCXX_FORCE_NEW
+GLIBCXX_DEBUG_MESSAGE_LENGTH
 
 </code></pre>
 
-<p>Now write a requirements.txt file, under the current folder, the content is:</p>
+<p>We could see the newest version of GLIBCXX is only 3.4.13, while chrome requuires 3.4.15. So the solution should be we install the newer version.</p>
 
-<pre><code>Flask==0.10.1
-Flask-Bcrypt==0.6.0
-Flask-HTTPAuth==2.2.1
-Flask-RESTful==0.2.12
-Flask-SQLAlchemy==1.0
-Flask-WTF==0.10.0
-Jinja2==2.7.3
-MarkupSafe==0.23
-SQLAlchemy==0.9.7
-SQLAlchemy-Utils==0.26.9
-WTForms==2.0.1
-WTForms-Alchemy==0.12.8
-WTForms-Components==0.9.5
-Werkzeug==0.9.6
-aniso8601==0.83
-decorator==3.4.0
-infinity==1.3
-intervals==0.3.1
-itsdangerous==0.24
-marshmallow==0.7.0
-py-bcrypt==0.4
-pytz==2014.4
-six==1.7.3
-validators==0.6.0
-wsgiref==0.1.2
+<h3 id="upgrade-glibcxx">Upgrade GLIBCXX</h3>
 
-</code></pre>
-
-<p>Use <code>pip install -r requirements.txt</code> for installing all of the packages.</p>
+<p>TBD.</p>
 
       
     </div>
@@ -1009,12 +859,21 @@ wsgiref==0.1.2
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/61/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

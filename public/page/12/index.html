@@ -93,98 +93,469 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/02/23/using-python-for-checking-imap-mailbox-unread-message/">Using python for checking imap mailbox unread message</a>
+        <a href="http://purplepalmdash.github.io/2016/03/16/vagrant-libvirt-playing/">Vagrant-libvirt Playing</a>
       </h1>
-      <span class="post-date">Feb 23, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/02/23/using-python-for-checking-imap-mailbox-unread-message/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 16, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/16/vagrant-libvirt-playing/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>最终目的是用vagrant实现CloudStack+Xenserver的自动化部署。</p>
+
+<h3 id="centos6-7-box-creating">CentOS6.7 box Creating</h3>
+
+<p>用packer生成CentOS6.7 amd64的镜像，这个镜像默认是virtualbox兼容的，用vagrant-mutate插件
+将其转换为libvirt可用的box镜像:</p>
+
+<pre><code># vagrant mutate centos-6.7.virtualbox.box libvirt
+# cd /root/.vagrant.d/boxes
+# ls
+centos-6.7.virtualbox  trusty64
+# mv centos-6.7.virtualbox/ centos6764
+# vagrant box list
+centos6764 (libvirt, 0)
+trusty64   (libvirt, 0)
+</code></pre>
+
+<p>创建Vagrantfile文件启动一个实验性质的虚拟机：</p>
+
+<pre><code># pwd
+/media/opensusue/dash/Code/Vagrant/CentOS2New
+# ls
+Vagrantfile  Vagrantfile~
+# cat Vagrantfile
+    # -*- mode: ruby -*-
+    # vi: set ft=ruby :
+    Vagrant.configure(2) do |config|
+      # The most common configuration options are documented and commented below.
+      # For a complete reference, please see the online documentation at
+      # https://docs.vagrantup.com.
+    
+      config.vm.box = &quot;centos6764&quot;
+      # vagrant issues #1673..fixes hang with configure_networks
+      config.ssh.shell = &quot;bash -c 'BASH_ENV=/etc/profile exec bash'&quot;
+      config.vm.provider :libvirt do |domain|
+        domain.memory = 512
+        domain.nested = true
+      end
+    
+      config.vm.define :centosnew do |centosnew|
+        centosnew.vm.network :private_network, :ip =&gt; &quot;192.168.88.2&quot;
+      end
+    
+    end
+# vagrant up
+</code></pre>
+
+<p><code>vagrant up</code>以后，一个名为<code>CentOS2New_centosnew</code>的虚拟机将被创建， 命名规则为当前文件夹
+名+定义的vm名称。</p>
+
+<p>虚拟机启动完毕后，检查状态并登录到该机器:</p>
+
+<pre><code># vagrant status
+Current machine states:
+
+centosnew                 running (libvirt)
+
+The Libvirt domain is running. To stop this machine, you can run
+`vagrant halt`. To destroy the machine, you can run `vagrant destroy`.
+# vagrant ssh centosnew
+Last login: Wed Mar 16 02:31:18 2016 from 192.168.121.1
+[vagrant@localhost ~]$
+</code></pre>
+
+<p>我们可以检查网卡状态，是否设置为我们需要设置的地址<code>192.168.88.2</code>.</p>
+
+<h3 id="更多定制化参数">更多定制化参数</h3>
+
+<h4 id="嵌套虚拟化">嵌套虚拟化</h4>
+
+<p>未知原因，我在CentOS6上检查嵌套虚拟化总是提示有问题，所以以下的验证是在Ubuntu系统上验证
+的。</p>
+
+<p>我们在上面的配置文件里制定了nested选项为true, 现在登录进去检查一下嵌套虚拟化是否加载成
+功:</p>
+
+<pre><code>vagrant@vagrant:~$ lsmod | grep kvm
+kvm_intel             143590  0 
+kvm                   452043  1 kvm_intel
+vagrant@vagrant:~$ modinfo kvm_intel | grep nested
+parm:           nested:bool
+vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
+N
+vagrant@vagrant:~$ sudo modprobe -r kvm_intel
+vagrant@vagrant:~$ sudo modprobe kvm_intel nested=1
+vagrant@vagrant:~$ cat /sys/module/kvm_intel/parameters/nested
+Y
+</code></pre>
+
+<p>改变nested选项为false后，验证步骤如下:</p>
+
+<pre><code>$ cat /sys/module/kvm_intel/parameters/nested
+N
+</code></pre>
+
+<p>值得注意的是，在虚拟机中，仍然可以通过<code>modprobe kvm_intel nested=1</code>来打开nested选项。</p>
+
+<h4 id="cpu-passthrough">CPU Passthrough</h4>
+
+<p>指定参数为<code>domain.cpu_mode = 'host-passthrough'</code>:</p>
+
+<pre><code>  config.vm.provider :libvirt do |domain|
+    domain.memory = 512
+    domain.nested = false
+    #domain.cpu_mode = 'host-passthrough'
+  end
+</code></pre>
+
+<p>未指定时:</p>
+
+<pre><code>vagrant@vagrant:~$ cat /proc/cpuinfo  | grep -i &quot;model name&quot;
+model name	: Intel Core i7 9xx (Nehalem Class Core i7)
+</code></pre>
+
+<p>指定后:</p>
+
+<pre><code>[vagrant@localhost ~]$ cat /proc/cpuinfo | grep -i &quot;model name&quot;
+model name	: Intel(R) Core(TM) i3 CPU         540  @ 3.07GHz
+</code></pre>
+
+<h4 id="指定hostname">指定hostname</h4>
+
+<p>安装cloudstack时hostname是必要条件之一， Vagrantfile中可以指定vm的hostname:</p>
+
+<pre><code>  config.vm.define &quot;centosnew&quot; do |centosnew|
+    centosnew.vm.hostname = &quot;centosnew.example.com&quot;
+  end
+</code></pre>
+
+<p>启动虚拟机后可以通过<code>hostname</code>和<code>hostname --fqdn</code>来检查结果。</p>
+
+<h3 id="快照">快照</h3>
+
+<p>通过sahara来实现libvirt机器的快照:</p>
+
+<pre><code>$ vagrant plugin install sahara
+</code></pre>
+
+<p>在验证系统时，可以进入vagrant的sandbox模式，验证成功后才正式提交。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/15/ba-wan-ebuddy-4/">把玩ebuddy(4)</a>
+      </h1>
+      <span class="post-date">Mar 15, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/15/ba-wan-ebuddy-4/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
         
       </span>
       
-      <p>Just paste some python scripts:</p>
+      
 
-<pre><code>&gt;&gt;&gt; import imaplib
-&gt;&gt;&gt; obj=imaplib.IMAP4_SSL('imap.163.com','993')
-&gt;&gt;&gt; obj.login('XXXXX','XXXXXXXX')
-('OK', [b'LOGIN completed'])
-&gt;&gt;&gt; obj.select()
-('OK', [b'49'])
-&gt;&gt;&gt; obj.search(None,'Unseen')
-('OK', [b''])
-&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-0
-&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-1
-&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-2
-&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-2
-&gt;&gt;&gt; len(obj.search(None, 'UnSeen')[1][0].split()) 
-1
-&gt;&gt;&gt; 
+<p>总结了一下ebuddy的玩法，最近加了点玩法，就是用ebuddy作为Bash运行脚本后的提示部件。譬如
+，当完成了某个编译任务后，用ebuddy来告知任务的运行成功。</p>
+
+<pre><code>$ Task A ; NOTIFY EBUDDY
 </code></pre>
 
-<p>Using the unread counts, you could easily interact with some other programs,
-for example shining LEDs.</p>
+<h3 id="bin-ebuddy">/bin/ebuddy</h3>
+
+<p>创建一个<code>/bin/ebuddy</code>的文件，内容如下:</p>
+
+<pre><code>#!/bin/bash
+FILE=/tmp/ebuddy
+while true
+do
+	# if exists the file, then blinking the ebuddy.
+  if [ -f $FILE ];
+  then
+	  # Exists the file, shining the ebuddy
+     echo 07 &gt; /dev/udp/127.0.0.1/8888
+  else
+	  # Now clear the status of the ebuddy
+     echo 17 &gt; /dev/udp/127.0.0.1/8888
+  fi
+#echo 07 &gt; /dev/udp/127.0.0.1/8888
+sleep 3
+done
+</code></pre>
+
+<p>这个文件的意思是，如果存在<code>/tmp/ebuddy</code>文件，ebuddy的头会亮起，否则，清除ebuddy的状态。</p>
+
+<h3 id="notifyebuddy-clearebuddy">notifyebuddy &amp;&amp; clearebuddy</h3>
+
+<p>这两个命令是做在.zshrc里的两个alias:</p>
+
+<pre><code>$ vim ~/.zshrc
+# For Using ebuddy
+alias notifyebuddy='touch /tmp/ebuddy'
+alias clearebuddy='rm -f /tmp/ebuddy'
+</code></pre>
+
+<p>这样我们可以在运行完某个命令后，告知ebuddy完成事件。</p>
+
+<h3 id="局限">局限</h3>
+
+<p>不能同时标识两个以上的命令完成情况。</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/02/23/playing-e-buddy/">Playing e-Buddy</a>
+        <a href="http://purplepalmdash.github.io/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/">使用squid缓存所有rpm/deb安装包</a>
       </h1>
-      <span class="post-date">Feb 23, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/02/23/playing-e-buddy/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 15, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
         
       </span>
       
       
 
-<h3 id="python-library">Python Library</h3>
+<p>在进行自动化部署的时候，需要频繁安装系统，鉴于工作环境的带宽有限，我需要设置一个代理服
+务器，用于缓存所有的RPM/DEB安装包，以便自动化部署可以在瞬间完成。</p>
 
-<p>Clone the repository from google Code to github, then clone it to local:<br />
-This library could makes the ebuddy dance and sing.</p>
+<p>以下示例运行在ArchLinux上。</p>
 
-<pre><code>$ git clone git@github.com:purplepalmdash/pybuddy-dx.git
+<h3 id="squid搭建">Squid搭建</h3>
+
+<p>Squid介绍:</p>
+
+<p>Squid 是一个 Web 缓存代理，支持 HTTP, HTTPS, FTP, 以及更多。它通过缓存与重用经常请求的
+web页面，减少带宽使用同时提升了响应时间。Squid 具有可扩展的访问控制功能，同时可以使服务
+器加速。它运行在 Unix 和 Windows 中，采用 GNU GPL 协议发布。</p>
+
+<p>安装squid:</p>
+
+<pre><code>$ sudo pacman -S squid
 </code></pre>
 
-<h3 id="environment">Environment</h3>
+<p>我们需要配置squid以便它能适配我们的环境，我的环境里主要需要做以下几个事情：<br />
+1. 更改squid缓存目录到/home分区。<br />
+2. 更改squid缓存目录大小为30G以上。<br />
+3. 更改缓存文件大小，以便它支持大的RPM/DEB包。</p>
 
-<p>Since ArchLinux runs python3, we need to create a virtualenv for running python2.7</p>
+<p>更改缓存目录， 找到以下的行，在其下添加我们自定义的缓存目录:</p>
 
-<pre><code>$ virtualenv2 venv2 --python=python2.7
- ✗ . ~/venv2/bin/activate
-(venv2) ➜  _posts git:(master) ✗ python
-Python 2.7.11 (default, Dec  6 2015, 15:43:46) 
-[GCC 5.2.0] on linux2
-$ pip install pyusb
+<pre><code>$ sudo vim /etc/squid/squid.conf
+# Uncomment and adjust the following to add a disk cache directory.
+#cache_dir ufs /var/cache/squid 100 16 256
+cache_dir ufs /home/dash/squid 30000 16 256
 </code></pre>
 
-<h3 id="modification">Modification</h3>
+<p>我们将在指定目录下创建目录， 第一层数为16, 每个文件夹下最多包含256个子文件夹。</p>
 
-<p>Modify the source code, mainly change the following lines:</p>
+<p>在配置文件的最后加入以下行，以支持更大的缓存文件:</p>
 
-<pre><code>    #except NoBuddyException, e:
-    except NoBuddyException:
+<pre><code>$ sudo vim /etc/squid/squid.conf
+maximum_object_size 200 MB
 </code></pre>
 
-<p>Start the ebuddy via:</p>
+<p>现在开始创建缓存目录:</p>
 
-<pre><code>$ python pybuddyDX1.py
-2016-02-23 15:51:39,242 INFO     Searching e-buddy...
-2016-02-23 15:51:39,399 INFO     DX e-buddy found!
-2016-02-23 15:51:39,962 INFO     Starting daemon...
+<pre><code>$ squid -z
 </code></pre>
 
-<p>Let buddy runs via:</p>
+<p>启动服务后，运行检查</p>
 
-<pre><code># echo 03 | nc -q0 -u 127.0.0.1 8888
-# echo 04 | nc -q0 -u 127.0.0.1 8888
+<pre><code>$ sudo systemctl restart squid
+$ sudo systemctl enable squidz
+$ sudo systemctl -k check
+</code></pre>
+
+<p>验证可以通过<code>netstat -anp | grep 3128</code>来检查squid进程是否运行。</p>
+
+<h3 id="使用squid代理">使用squid代理</h3>
+
+<h3 id="apt-cacher">apt-cacher</h3>
+
+<p>以上设置的代理仅能支持RPM包的工作，对于DEB包我们需要使用apt-cacher, 在ArchLinux上安装和配置apt-cacher:</p>
+
+<pre><code>$ yaourt apt-cacher
+$ sudo vim /etc/apt-cacher-ng/acng.conf
+CacheDir: /home/nomodify/apt-cacher
+Port: 3142
+
+</code></pre>
+
+<p>Config on Agent:</p>
+
+<pre><code>$ sudo vim /etc/apt/apt.conf.d/01proxy 
+Acquire::http::Proxy &quot;http://192.168.0.121:3142&quot;;
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/13/yong-vagrantguan-li-libvirt/">用Vagrant管理libvirt</a>
+      </h1>
+      <span class="post-date">Mar 13, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/13/yong-vagrantguan-li-libvirt/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="先决条件">先决条件</h3>
+
+<p>Vagrant为0.8.1.</p>
+
+<p>参考:<br />
+<a href="http://linuxsimba.com/vagrant.html">http://linuxsimba.com/vagrant.html</a><br />
+<a href="http://linuxsimba.com/vagrant-libvirt-install/">http://linuxsimba.com/vagrant-libvirt-install/</a></p>
+
+<h3 id="ubuntu设置">Ubuntu设置</h3>
+
+<p>考虑到天朝防火墙的存在,需要经过以下命令才能安装vagrant-libvirt插件:</p>
+
+<pre><code>$ sudo apt-get install -y libvirt-dev ruby-dev
+$ gem source -r https://rubygems.org/
+$ gem source -a http://mirrors.aliyun.com/rubygems/
+$ gem install ruby-libvirt -v '0.6.0'
+$ gem install vagrant-libvirt -v '0.0.32'
+$ vagrant plugin install vagrant-libvirt
+$ vagrant plugin list
+vagrant-libvirt (0.0.32)
+$ axel http://linuxsimba.com/vagrantbox/ubuntu-trusty.box
+$ vagrant box add ./ubuntu-trusty.box --name &quot;trusty64&quot;
+</code></pre>
+
+<h3 id="archlinux设置">ArchLinux设置</h3>
+
+<p>按照ArchLinux wiki的方法,安装vagrant-libvirt插件:</p>
+
+<pre><code> # in case it's already installled
+ vagrant plugin uninstall vagrant-libvirt
+ 
+ # vagrant's copy of curl prevents the proper installation of ruby-libvirt
+ sudo mv /opt/vagrant/embedded/lib/libcurl.so{,.backup}
+ sudo mv /opt/vagrant/embedded/lib/libcurl.so.4{,.backup}
+ sudo mv /opt/vagrant/embedded/lib/libcurl.so.4.4.0{,.backup}
+ sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{,.backup}
+ 
+ CONFIGURE_ARGS=&quot;with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib&quot; vagrant plugin install vagrant-libvirt
+ 
+ # https://github.com/pradels/vagrant-libvirt/issues/541
+ export PATH=/opt/vagrant/embedded/bin:$PATH
+ export GEM_HOME=~/.vagrant.d/gems
+ export GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems
+ gem uninstall ruby-libvirt
+ gem install ruby-libvirt
+ 
+ # put vagrant's copy of curl back
+ sudo mv /opt/vagrant/embedded/lib/libcurl.so{.backup,}
+ sudo mv /opt/vagrant/embedded/lib/libcurl.so.4{.backup,}
+ sudo mv /opt/vagrant/embedded/lib/libcurl.so.4.4.0{.backup,}
+ sudo mv /opt/vagrant/embedded/lib/pkgconfig/libcurl.pc{.backup,}
+</code></pre>
+
+<h3 id="导入box">导入box</h3>
+
+<p>用packer编译出来的box文件默认工作在virtualbox下,我们需要用一个插件将其转换为
+libvirt可用的box:</p>
+
+<pre><code>#  vagrant plugin install vagrant-mutate
+# vagrant mutate ubuntu-14.04.virtualbox.box libvirt
+Extracting box file to a temporary directory.
+Converting ubuntu-14.04.virtualbox from virtualbox to libvirt.
+    (100.00/100%)
+Cleaning up temporary files.
+The box ubuntu-14.04.virtualbox (libvirt) is now ready to use.
+# cd /root/.vagrant.d/boxes/
+# mv ubuntu-14.04.virtualbox/ trusty64
+# vagrant box list
+trusty64 (libvirt, 0)
+</code></pre>
+
+<h3 id="检查安装的box">检查安装的box</h3>
+
+<p>可以通过以下命令检查已经安装好的box:</p>
+
+<pre><code>$ vagrant box list
+trusty64 	(libvirt, 0)
+ubuntu1404	(virtualbox, 0)
+</code></pre>
+
+<h3 id="配置vagrantfile">配置Vagrantfile</h3>
+
+<p>以下是一个例子:</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure(2) do |config|
+
+  config.vm.box = &quot;trusty64&quot;
+  # vagrant issues #1673..fixes hang with configure_networks
+  config.ssh.shell = &quot;bash -c 'BASH_ENV=/etc/profile exec bash'&quot;
+  config.vm.provider :libvirt do |domain|
+    domain.memory = 256
+    domain.nested = true
+  end
+
+# Private network using virtual network switching
+  config.vm.define :vm1 do |vm1|
+    vm1.vm.network :private_network, :ip =&gt; &quot;192.168.56.11&quot;
+  end
+
+  config.vm.define :vm2 do |vm2|
+    vm2.vm.network :private_network, :ip =&gt; &quot;192.168.56.12&quot;
+  end
+
+  # Private network. Point to Point between 2 Guest OS using a TCP tunnel
+  # Guest 1
+  #config.vm.define :test_vm1 do |test_vm1|
+  #  test_vm1.vm.network :private_network,
+  #    :libvirt__tunnel_type =&gt; 'server',
+  #    # default is 127.0.0.1 if omitted
+  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
+  #    :libvirt__tunnel_port =&gt; '11111'
+
+  # Guest 2
+  #config.vm.define :test_vm2 do |test_vm2|
+  #  test_vm2.vm.network :private_network,
+  #    :libvirt__tunnel_type =&gt; 'client',
+  #    # default is 127.0.0.1 if omitted
+  #    # :libvirt__tunnel_ip =&gt; '127.0.0.1',
+  #    :libvirt__tunnel_port =&gt; '11111'
+
+
+  # Public Network
+  config.vm.define :vm1 do |vm1|
+    vm1.vm.network :public_network,
+      :dev =&gt; &quot;virbr0&quot;,
+      :mode =&gt; &quot;bridge&quot;,
+      :type =&gt; &quot;bridge&quot;
+  end
+end
+
+</code></pre>
+
+<h3 id="启动虚拟机">启动虚拟机</h3>
+
+<pre><code># vagrant up --provider=libvirt
+</code></pre>
+
+<p>启动时会出现以下问题, 解决方案为:</p>
+
+<pre><code>$ vagrant up --provider=libvirt
+....
+Missing required arguments: libvirt_uri
 .....
+$ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
 </code></pre>
 
       
@@ -192,244 +563,104 @@ $ pip install pyusb
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/02/19/mutt-configuration-on-do/">Mutt Configuration On DO</a>
+        <a href="http://purplepalmdash.github.io/2016/03/12/tips-on-5050rgb/">Tips On 5050RGB</a>
       </h1>
-      <span class="post-date">Feb 19, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/02/19/mutt-configuration-on-do/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      <p>For sending back the daily fetched items into China Great LAN, I have to setup
-the smtp configuration for mutt on DO&rsquo;s ubuntu machine. Following are the
-steps.</p>
-
-<p>Install the mutt and msmtp:</p>
-
-<pre><code>$ sudo apt-get install -y mutt msmtp 
-</code></pre>
-
-<p>Edit following files:</p>
-
-<pre><code>$ cat ~/.muttrc
-set mbox_type=Maildir
-set folder=$HOME/.mail
-set spoolfile=~/.mail
-set header_cache=~/.mail/.hcache
-set sendmail=&quot;/usr/bin/msmtp&quot;
-set use_from=yes
-set realname=&quot;YourRealName&quot;
-set from=YourUserNameHere@163.com
-set envelope_from=yes 
-</code></pre>
-
-<p>msmtp rc config file:</p>
-
-<pre><code>$ cat ~/.msmtprc
-account default
-host smtp.163.com
-port 25
-protocol smtp
-auth plain
-from YourUserNameHere@163.com
-user YourUserNameHere
-password YourPasswordHere
-$ chmod 600 ~/.msmtprc
-</code></pre>
-
-<p>And muttrc under .muttrc and edit it with:</p>
-
-<pre><code>$ mkdir -p  ~/.mutt
-$ touch ~/.mutt/muttrc
-$ cat ~/.mutt/muttrc
-set realname='YourRealName'
-set sendmail=&quot;/usr/bin/msmtp&quot;
-set edit_headers=yes
-set folder=~/mail
-set mbox=+mbox
-set spoolfile=+inbox
-set record=+sent
-set postponed=+drafts
-set mbox_type=Maildir
-
-mailboxes +inbox +lovey-dovey +happy-kangaroos
-</code></pre>
-
-<p>Now send mail via:</p>
-
-<pre><code>$ echo &quot;cba&quot; | mutt -s &quot;Today download&quot; YourFriendMail@qq.com
-$ echo &quot;cba&quot; | mutt -s &quot;Today download&quot; YourFriendMail@qq.com  -a /var/www/cl.tar.xz
-</code></pre>
-
-<p>I tried to configure the qq.com mailbox, but failed, the above solution only
-suitable for 163.com.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/02/18/usb-cute-things/">USB Cute Things</a>
-      </h1>
-      <span class="post-date">Feb 18, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/02/18/usb-cute-things/#disqus_thread">Comments</a>
+      <span class="post-date">Mar 12, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/03/12/tips-on-5050rgb/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
         
       </span>
       
-      <p>Funny Things on Taobao:</p>
-
-<pre><code>USB新奇特 带HUB HUB USB邮件通知提醒器 USB Webmail Notifier 
-https://item.taobao.com/item.htm?spm=a230r.1.14.7.1r483a&amp;id=19165960441&amp;ns=1&amp;abbucket=5#detail
-
- Dream Cheeky USB Friends Alert 邮件消息提醒器
-还用老旧的邮箱？来，一起怀个旧吧。这个小东西能帮你提醒邮件状态，支持Facebook、Twitter、
-MSN的消息呢，哦，差点忘记了，只有MSN你偶尔可以玩一下。
-https://item.taobao.com/item.htm?spm=a230r.1.14.13.1r483a&amp;id=523240173722&amp;ns=1&amp;abbucket=5#detail
-
-
-i-buddy:
-https://item.taobao.com/item.htm?spm=a230r.1.14.1.aWRsP6&amp;id=5177828698&amp;ns=1&amp;abbucket=5#detail
-https://2.taobao.com/item.htm?id=521593051559&amp;spm=a230r.1.14.12.CcgnsG&amp;ns=1&amp;abbucket=5#detail
-
- USB Webmail Notifer USB邮件通知器 
-USB Webmail Notifer USB邮件通知器
-https://item.taobao.com/item.htm?spm=a230r.1.14.36.BVZqTi&amp;id=2719139321&amp;ns=1&amp;abbucket=5#detail
-
-
-
-
-HX USB温度计TEMPer 机房/库房 温度计 环境监测 防水 邮件提醒 
-https://detail.tmall.com/item.htm?spm=a230r.1.14.4.BVZqTi&amp;id=40327431222&amp;cm_id=140105335569ed55e27b&amp;abbucket=5
-
-taobao ebuddy
-http://www.computersolutions.cn/blog/category/tao-bao/
-
-
-AIDA64 On Digital Frame
-http://bbs.yleee.com.cn/thread-30787-1-1.html
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/02/15/hacking-steelseries-engine-3-usb-mouse-under-linux-2/">Hacking SteelSeries Engine 3 USB Mouse Under Linux(2)</a>
-      </h1>
-      <span class="post-date">Feb 15, 2016  &middot; <a href="http://purplepalmdash.github.io/2016/02/15/hacking-steelseries-engine-3-usb-mouse-under-linux-2/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/devicedriver">DeviceDriver</a>
-        
-      </span>
-      
       
 
-<h3 id="interact-with-mouse">Interact with Mouse</h3>
+<h3 id="背景">背景</h3>
 
-<p>Just some tips on newly-discovered items.</p>
+<p>淘宝上买的5050RGB模块, 外观如下图:</p>
 
-<p>The needed python modules should be get and compiled as following:<br />
-<a href="https://github.com/andrepl/rivalctl">https://github.com/andrepl/rivalctl</a></p>
+<p><img src="/images/2016_03_12_19_36_05_351x233.jpg" alt="/images/2016_03_12_19_36_05_351x233.jpg" /></p>
 
-<pre><code># git clone https://github.com/andrepl/rivalctl.git
-# sudo python setup.py install
+<p>连线:</p>
+
+<p>这个RGB模块比较奇怪,直接使用Arduino的5v输出一直有问题,我是用的外接5V电源供电,
+动用了面包板模块.(之后发现不是供电的问题, 是因为淘宝上卖的模块提供示例代码的问
+题)</p>
+
+<p>更具体的连线如下:</p>
+
+<pre><code>// V-VCC 5V   R-9   B-10  G-11
+#define LEDR 9
+#define LEDB 10
+#define LEDG 11
 </code></pre>
 
-<p>Be sure to make changes to the correct HID ID.</p>
+<h3 id="测试">测试</h3>
 
-<p>Ipython scripts:</p>
+<p>按照厂方提供的程序,未能成功运行.</p>
 
-<pre><code># sudo ipython
-Python 2.7.6 (default, Jun 22 2015, 17:58:13) 
-Type &quot;copyright&quot;, &quot;credits&quot; or &quot;license&quot; for more information.
+<p>厂方提供的电路图如下:</p>
 
-IPython 1.2.1 -- An enhanced Interactive Python.
-?         -&gt; Introduction and overview of IPython's features.
-%quickref -&gt; Quick reference.
-help      -&gt; Python's own help system.
-object?   -&gt; Details about 'object', use 'object??' for extra details.
+<p><img src="/images/2016_03_12_20_31_25_373x471.jpg" alt="/images/2016_03_12_20_31_25_373x471.jpg" /></p>
 
-In [1]: RIVAL_HID_ID = '0003:00001038:00001386'
+<h3 id="debug">Debug</h3>
 
-In [2]: cd /usr/local/lib/python2.7/dist-packages/rivalctl-0.1-py2.7.egg/rival/
-/usr/local/lib/python2.7/dist-packages/rivalctl-0.1-py2.7.egg/rival
+<p>百思不得其解后,用万用表测试, 电阻发声的那档, 发现加电后,某两个LED可以亮, 另外
+一个不能亮.</p>
 
-In [3]: import hidrawpure as hidraw
+<p>发现奇怪的一点是, VCC接高电压, RGB接低电压时, 无法点亮LED. RGB接高电压, VCC接
+低电压时, LED可以被点亮两个.</p>
 
-In [4]: import os
+<p>猜测: 厂方给的参考资料有误, 接线错误. 而且LED坏了一个.</p>
 
-In [5]: 
+<p>验证, 正确.</p>
 
-In [5]: import yaml
+<p>连线更改为:</p>
 
-In [6]: import pyudev
-
-In [7]: import webcolors
-
-In [8]: def find_device_path():
-   ...:         &quot;&quot;&quot;find the appropriate /dev/hidrawX device to control the mouse&quot;&quot;&quot;
-   ...:         ctx = pyudev.Context()
-   ...:         for dev in ctx.list_devices(HID_ID=RIVAL_HID_ID):
-   ...:                 if dev.sequence_number == 0:
-   ...:                         children = list(dev.children)
-   ...:                         if children:
-   ...:                                 child = children[0]
-   ...:                                 if child.subsystem == 'hidraw':
-   ...:                                         return child['DEVNAME']
-   ...:                 
-
-In [9]: dev_path = find_device_path()
-
-In [10]: opened_device=hidraw.HIDRaw(open(dev_path, 'w+'))
-
-In [11]: opened_device.getName()
-*************In ioctl functionality!
-&lt;open file u'/dev/hidraw5', mode 'w+' at 0x7f0a00088150&gt;
-2181056516
-&lt;type 'int'&gt;
-&lt;ctypes.c_char_Array_512 object at 0x7f0a00088560&gt;
-True
-After ioctl functionality!
-@@@@@@@@@@@@@@@@@@@@@@
-2181056516
-@@@@@@@@@@@@@@@@@@@@@@
-Out[11]: u'SteelSeries The Sims 4 Gaming Mouse'
+<pre><code>// V-VCC 5V   R-9   B-10  G-11
+#define LEDR 9
+#define LEDG 10
 </code></pre>
 
-<p>Whole source file:</p>
+<p>蓝色的LED已坏, 所以示例代码中,不许配置LEDB.</p>
 
-<pre><code>RIVAL_HID_ID = '0003:00001038:00001386'
-cd /usr/local/lib/python2.7/dist-packages/rivalctl-0.1-py2.7.egg/rival/
-import hidrawpure as hidraw
-import os
-import yaml
-import pyudev
-import webcolors
+<pre><code>// V-VCC GND   R-9   G-10  
+#define LEDR 9
+#define LEDG 10
 
-def find_device_path():
-    &quot;&quot;&quot;find the appropriate /dev/hidrawX device to control the mouse&quot;&quot;&quot;
-    ctx = pyudev.Context()
-    for dev in ctx.list_devices(HID_ID=RIVAL_HID_ID):
-        if dev.sequence_number == 0:
-            children = list(dev.children)
-            if children:
-                child = children[0]
-                if child.subsystem == 'hidraw':
-                    return child['DEVNAME']
+int i = 0;
 
-dev_path = find_device_path()
-opened_device=hidraw.HIDRaw(open(dev_path, 'w+'))
-opened_device.getName()
+void setup()
+{
+  pinMode(LEDG,OUTPUT);
+  pinMode(LEDR,OUTPUT);
+
+}
+
+void loop()
+{
+  analogWrite(LEDR,0);
+  analogWrite(LEDG,0);  //off
+  delay(1000);
+  analogWrite(LEDR,255); 
+delay(1000); 
+  analogWrite(LEDR,0);
+  analogWrite(LEDG,0);
+  delay(1000); 
+  analogWrite(LEDR,30);
+  analogWrite(LEDG,200);
+delay(1000); 
+  analogWrite(LEDR,0);
+  analogWrite(LEDG,0);
+  delay(1000); 
+    analogWrite(LEDG,30);
+  analogWrite(LEDR,200);
+  delay(1000); 
+}
 </code></pre>
 
-<h3 id="to-be-continue">To Be Continue</h3>
+<p>正确的电路连线应该是:</p>
 
-<p>To be investigated soon, the issue is I could not change the settings.</p>
+<p><img src="/images/2016_03_12_20_54_55_707x379.jpg" alt="/images/2016_03_12_20_54_55_707x379.jpg" /></p>
 
       
     </div>
@@ -847,12 +1078,21 @@ opened_device.getName()
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/13/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

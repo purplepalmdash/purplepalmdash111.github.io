@@ -93,82 +93,209 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/26/trying-docker-in-company/">Trying Docker In Company</a>
+        <a href="http://purplepalmdash.github.io/2015/02/13/libvirt-on-opensuse/">Libvirt On OpenSuse</a>
       </h1>
-      <span class="post-date">Jan 26, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/26/trying-docker-in-company/#disqus_thread">Comments</a>
+      <span class="post-date">Feb 13, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/13/libvirt-on-opensuse/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
         
       </span>
       
       
 
+<p>In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested virtualization is not OK. So that&rsquo;s why I have to try libvirt.</p>
+
 <h3 id="installation">Installation</h3>
 
-<p>Install docker via:</p>
+<p>Install the virt-manager related software via:</p>
 
-<pre><code>$ sh -c &quot;wget -qO- https://get.docker.io/gpg | apt-key add -&quot;
-$ sh -c &quot;echo deb http://get.docker.io/ubuntu docker main\
-&gt; /etc/apt/sources.list.d/docker.list&quot;
-$ apt-get update
-$ apt-get install lxc-docker
-$ which docker
-/usr/bin/docker
+<pre><code>$ sudo zypper install kvm libvirt libvirt-python qemu virt-manager
+$ sudo zypper in patterns-openSUSE-kvm_server
 
 </code></pre>
 
-<h3 id="very-beginning">Very Beginning</h3>
+<p>Now if you directly call virt-manager you will got the following hint:</p>
 
-<p>Docker pull the docker.cn packages back, the speed is around 500K/</p>
-
-<pre><code>$ docker pull docker.cn/docker/ubuntu
-
-</code></pre>
-
-<p>Run into an instance:</p>
-
-<pre><code># docker run -i -t docker.cn/docker/ubuntu /bin/bash
-root@3ad7689e600a:/# ps -ef
-UID        PID  PPID  C STIME TTY          TIME CMD
-root         1     0  0 06:27 ?        00:00:00 /bin/bash
-root        16     1  0 06:27 ?        00:00:00 ps -ef
+<pre><code> error: authentication failed: Authorization requires authentication but no agent is available.
+    error: failed to connect to the hypervisor
 
 </code></pre>
 
-<p>In another terminal, show the running container:</p>
+<p>Or if you run <code>virsh -c qemu:///system</code> you will got the same hint message.<br />
+Solution is we have to enable the polkit service, add following script:</p>
 
-<pre><code># docker ps
-CONTAINER ID        IMAGE                           COMMAND             CREATED             STATUS              PORTS               NAMES
-3ad7689e600a        docker.cn/docker/ubuntu:14.04   &quot;/bin/bash&quot;         11 seconds ago      Up 10 seconds                           sick_hodgkin 
+<pre><code>$ sudo vim /usr/bin/polkitexec
+#! /bin/bash
+
+prg=$1
+
+[ &quot;$prg&quot; ] || exec echo &quot;missing argument&quot;
+[ -x &quot;$prg&quot; ] || which $prg &amp;&gt;/dev/null || exec echo &quot;program not found: $1&quot;
+
+shift
+args=$*
+
+[ `id -u` -eq 0 ] &amp;&amp; exec $prg $args
+
+uname -m | grep -q 64 &amp;&amp; lib=/usr/lib64 || lib=/usr/lib
+
+if [ &quot;$DESKTOP_SESSION&quot; = &quot;kde&quot; ]; then 
+        pga=polkit-kde-authentication-agent-1
+        lpga=/usr/$lib/kde4/libexec/$pka
+else
+        pga=polkit-gnome-authentication-agent-1
+        lpga=/usr/lib/$pga
+fi
+
+case $DESKTOP_SESSION in
+        gnome|gnome-shell|cinnamon*) exec $prg $args ;;
+        *) ps nc -C $pga &amp;&gt;/dev/null &amp;&amp; exec $prg $args || { [ ! -x $lpga ] &amp;&amp; exec echo &quot;program not found: $lpga&quot; || $lpga &amp; $prg $args ;} ;;
+esac
+$ sudo chmod 777 /sur/bin/polkitexec
+$ vim ~/.zshrc
+# Wrap virt-manager with polkitexec. 
+alias virt-manager='polkitexec virt-manager'
 
 </code></pre>
 
-<h3 id="make-changes-and-submit">Make Changes And Submit</h3>
+<p>Now the virt-manager could be run correctly.</p>
 
-<p>First made some modification to our container:</p>
+<h3 id="trouble-shooting">Trouble-Shooting</h3>
 
-<pre><code>sudo apt-get install vim
+<p>If you met following error, add root to your kvm.conf is OK.</p>
 
-</code></pre>
-
-<p>The above command will install vim.<br />
-Now commit the changes:</p>
-
-<pre><code># docker commit c7ddc390f0c8 installed_vim_container
-ed347fc03634e6c66ee45d213cf4d2839e55376f3e34d18c6e58bada1f701425
+<pre><code>Could not access KVM kernel module: Permission denied
+failed to initialize KVM: Permission denied
+No accelerator found!
 
 </code></pre>
 
-<p>List all of the images:</p>
+<p>First change the priviledge:</p>
 
-<pre><code># docker images
-REPOSITORY                TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-installed_vim_container   latest              ed347fc03634        47 seconds ago      235.8 MB
-docker.cn/docker/ubuntu   14.04               b39b81afc8ca        9 days ago          192.7 MB
-docker.cn/docker/ubuntu   14.04.1             b39b81afc8ca        9 days ago          192.7 MB
-docker.cn/docker/ubuntu   latest              b39b81afc8ca        9 days ago          192.7 MB
-docker.cn/docker/ubuntu   trusty              b39b81afc8ca        9 days ago          192.7 MB
+<pre><code>#chown root:kvm /dev/kvm
+
+</code></pre>
+
+<p>Then modify the /etc/libvirt/qemu.conf:</p>
+
+<pre><code>#user=&quot;root&quot;
+user=&quot;root&quot;
+#group=&quot;root&quot;
+group=&quot;root&quot;
+
+</code></pre>
+
+<p>Restart the libvirtd and restart the virt-manager:</p>
+
+<pre><code>#service libvirtd restart
+
+</code></pre>
+
+<p>Now continue to install OpenContrail.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/10/build-opencontrail-on-centos7-local/">Build OpenContrail On CentOS7(Local)</a>
+      </h1>
+      <span class="post-date">Feb 10, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/10/build-opencontrail-on-centos7-local/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
+        
+      </span>
+      
+      <p>Fresh steps.</p>
+
+<pre><code>$ sudo yum update
+$ sudo yum install vim
+$ sudo yum install net-tools
+$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
+$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
+$ sudo yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler 
+$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
+
+</code></pre>
+
+<p>As root, Add repositories:</p>
+
+<pre><code># wget -q -O - http://www.atomicorp.com/installers/atomic | sh
+# yum update
+# yum install dpkg dpkg-devel
+
+</code></pre>
+
+<p>Missing fakeroot, so can&rsquo;t be continue.</p>
+
+<p>Change back to CentOS 6.6.</p>
+
+<pre><code>$ sudo yum install vim net-tools
+$ wget https://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+$ sudo rpm -ivh epel-release-6-8.noarch.rpm 
+$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
+$ sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
+$ yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler  bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel xz
+
+</code></pre>
+
+<p>Install git:</p>
+
+<pre><code>$ yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
+$ wget https://www.kernel.org/pub/software/scm/git/git-1.9.4.tar.gz
+$ sudo yum install expat-devel tar
+$ make prefix=/usr install
+$ which git
+git version 1.9.4
+
+</code></pre>
+
+<p>Using repo sync:</p>
+
+<pre><code>$ repo init -u git@github.com:Juniper/contrail-vnc
+$ repo sync
+
+</code></pre>
+
+<p>Install argparse:</p>
+
+<pre><code>$ yum install python-argparse
+$ declare -x USER=&quot;root&quot;
+
+</code></pre>
+
+<p>We should upgrade some packages to let python could fetch back the packages:</p>
+
+<pre><code>$ wget http://ftp.gnu.org/gnu/autoconf/autoconf-latest.tar.gz
+$ tar xzvf autoconf-latest.tar.gz
+$ cd autoconf-2.69/
+$ ./configure --prefix=/usr &amp;&amp; make &amp;&amp; sudo make install
+$ sudo yum install libtool
+
+</code></pre>
+
+<p>Fetch the 3rd_party packages:</p>
+
+<pre><code>$ python third_party/fetch_package.py
+
+</code></pre>
+
+<p>Then tar and export it to the host machine.</p>
+
+<p>When Building, we have to install libipfix:</p>
+
+<pre><code>$ wget http://sourceforge.net/projects/libipfix/files/libipfix/libipfix_110209.tgz/download
+$ # build it.   
+
+</code></pre>
+
+<p>Enable the epel repository and install dpkg and dpkg-devel:</p>
+
+<pre><code>$ sudo sed -i -e 's/enabled=0/enabled=1/' /etc/yum.repos.d/epel.repo
+$ sudo yum update &amp;&amp; sudo yum install -y dpkg dpkg-devel
 
 </code></pre>
 
@@ -177,9 +304,122 @@ docker.cn/docker/ubuntu   trusty              b39b81afc8ca        9 days ago    
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/26/using-do-for-building-opencontrail/">Using DO For Building OpenContrail</a>
+        <a href="http://purplepalmdash.github.io/2015/02/09/play-docker-6-using-docker-for-building/">Play Docker(6) -- Using docker for building</a>
       </h1>
-      <span class="post-date">Jan 26, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/26/using-do-for-building-opencontrail/#disqus_thread">Comments</a>
+      <span class="post-date">Feb 9, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/09/play-docker-6-using-docker-for-building/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>The steps is for Ubuntu12.04, the purpose of this documentation is for swiftly get the source code and fetch it to local repository.</p>
+
+<h3 id="preparation">Preparation</h3>
+
+<p>Pull back the Ubuntu12.04:</p>
+
+<pre><code>$ sudo docker pull ubuntu12.04
+
+</code></pre>
+
+<p>Then run into the ubuntu12.04 via:</p>
+
+<pre><code>$ sudo docker run -it ubuntu12.04 /bin/bash
+root@7b30cc924bb0:~ #
+
+</code></pre>
+
+<p>Install following packages in Ubuntu 12.04 container:</p>
+
+<pre><code># apt-get install python-software-properties
+# apt-get install curl
+# curl https://storage.googleapis.com/git-repo-downloads/repo &gt; /bin/repo
+# chmod 777 /bin/repo
+# apt-get update
+# apt-get install python-pip
+# apt-get install git
+# git config --global user.email kkkttt@gmail.com
+# git config --global user.name kkkttt
+# ssh -T git@github.com
+# repo init -u git@github.com:Juniper/contrail-vnc
+# repo sync
+# declare -x USER=&quot;root&quot;
+# apt-get install python-lxml autoconf bzip2 libtool unzip wget 
+# python third_party/fetch_packages.py
+
+</code></pre>
+
+<p>Install nginx:</p>
+
+<pre><code>$ sudo rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+$ sudo rpm -ivh nginx
+
+</code></pre>
+
+<p>Change nginx&rsquo;s listenning directory to <code>/var/www/</code>, tar the directory and put it under this folder, then use firefox for downloading it.</p>
+
+<h3 id="compile-local">Compile Local</h3>
+
+<p>Referes to :<br />
+<a href="http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/">http://kkkttt.github.io/blog/2015/01/29/build-contrial-source-code/</a><br />
+Plus:</p>
+
+<pre><code>$ sudo apt-get install libglib2.0-dev libglib2.0
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/09/tips-for-building-opencontrail-on-ubuntu14-dot-04/">Tips for building opencontrail on Ubuntu14.04</a>
+      </h1>
+      <span class="post-date">Feb 9, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/09/tips-for-building-opencontrail-on-ubuntu14-dot-04/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="dependencies">Dependencies</h3>
+
+<p>Install the following packages to make <code>scons</code> getting through:</p>
+
+<pre><code>$ sudo apt-get install -y scons git python-lxml wget gcc patch make unzip flex bison g++ libssl-dev autoconf automake libtool pkg-config vim python-dev python-setuptools libprotobuf-dev protobuf-compiler libsnmp-python libboost-dev libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev libboost-program-options-dev libboost-python-dev libboost-regex-dev libboost-system-dev libcurl4-openssl-dev google-mock libgoogle-perftools-dev liblog4cplus-dev libtbb-dev libhttp-parser-dev libxml2-dev libicu-dev
+$  sudo apt-get install libxml2-dev
+$  sudo apt-get install libboost-dev
+$  sudo apt-get install libboost-filesystem-dev
+$  sudo apt-get install libboost-program-options-dev
+$  sudo apt-get install libboost-system-dev libboost-regex-dev libboost-python-dev libboost-chrono-dev libtbb-dev
+
+</code></pre>
+
+<p>Then the linking should be OK.</p>
+
+<h3 id="making-packages">Making Packages</h3>
+
+<p>Install following packages for meeting the requirements of deb packages:</p>
+
+<pre><code>$ sudo apt-get install libcurl4-openssl-dev libboost-date-time-dev libboost-thread-dev google-mock libgoogle-perftools-dev libhttp-parser-dev
+
+</code></pre>
+
+<p>Then <code>make -f packages.make</code> you could get the generated deb files.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/07/play-docker-5/">Play Docker(5)</a>
+      </h1>
+      <span class="post-date">Feb 7, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/02/07/play-docker-5/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
@@ -188,276 +428,75 @@ docker.cn/docker/ubuntu   trusty              b39b81afc8ca        9 days ago    
       
       
 
-<p>Since the network environment is not good(In fact, very bad), because of the GFW, so I have to build the opencontrail packages in digitalOcean. Following is the tips and how-to.</p>
+<p>Since I enabled OpenSuse, later all of the docker related operation could be operated on OpenSuse13.2.</p>
 
-<h3 id="preparation">Preparation</h3>
+<h3 id="installation">Installation</h3>
 
-<p>First we have to get the Latest Ubuntu images, and let it OK for building the OpenContrail:</p>
+<p>Install docker via:</p>
 
-<pre><code>$ docker search ubuntu
-.....
-$ docker pull ubuntu
-$ docker run -i -t ubuntu /bin/bash
-root@4c74f2890dbe:/# apt-get update
+<pre><code>$ sudo zypper in docker
+$ which docker
+/usr/bin/docker
 
 </code></pre>
 
-<p>Now we run into the ubuntu build environment. This is where we want to build the whole opencontrail deb file.<br />
-Install curl and then install repo:</p>
+<h3 id="specify-storage-location">Specify Storage Location</h3>
 
-<pre><code># apt-get install curl
-# mkdir -p ~/bin
-# curl https://storage.googleapis.com/git-repo-downloads/repo &gt; ~/bin/repo
-# chmod 777 /root/bin/repo
-# apt-get install vim
-# vim ~/.bashrc
-export PATH=/root/bin:$PATH
-# source ~/.bashrc
-# which repo
-/root/bin/repo
+<p>The /var directory has the limitation, thus we have to specify the storage locateion in /etc/sysconfig/docker:</p>
 
-</code></pre>
+<pre><code>$ pwd
+/etc/sysconfig
+$  cat docker 
 
-<p>Now repo became usable in our system.<br />
-Install following packages(So many packages!!!) for preparing the building of the opencontrail:</p>
+## Path           : System/Management
+## Description    : Extra cli switches for docker daemon
+## Type           : string
+## Default        : &quot;&quot;
+## ServiceRestart : docker
+#
+DOCKER_OPTS=&quot;-g /home/xxxxxx/Code/Virtualization/Docker/docker/&quot;
 
-<pre><code># apt-get install -y scons git python-lxml wget gcc patch make unzip flex bison g++ libssl-dev autoconf automake libtool pkg-config vim python-dev python-setuptools libprotobuf-dev protobuf-compiler libsnmp-python libboost-dev libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev libboost-program-options-dev libboost-python-dev libboost-regex-dev libboost-system-dev libcurl4-openssl-dev google-mock libgoogle-perftools-dev liblog4cplus-dev libtbb-dev libhttp-parser-dev libxml2-dev libicu-dev
 
 </code></pre>
 
-<p>Use tmux for holding the building context:</p>
+<p>Now we could use the nearly 2T Size /home partition for storing docker images..</p>
 
-<pre><code># apt-get install tmux
-# tmux new -s &quot;BuildContrail&quot;
+<h3 id="use-china-resources">Use China Resources</h3>
 
-</code></pre>
+<p>The default dockhub is banned by GFW, so we have to use replacement repository in China.<br />
+Add the options to /ec/sysconfig/docker:</p>
 
-<h3 id="clone-the-code">Clone The Code</h3>
-
-<p>Create the directories and then configure the git&rsquo;s username and Email.</p>
-
-<pre><code># mkdir Code
-# cd Code/
-#  git config --global user.email kkkttt@gmail.com
-# git config --global user.name kkkttt
-# ssh-keygen
+<pre><code>DOCKER_OPTS=&quot;-g /home/clouder/Code/Virtualization/Docker/docker/ --insecure-registry dl.dockerpool.com:5000&quot;
 
 </code></pre>
 
-<p>Upload the generate <code>id_rsa.pub</code> to the github.com, then let your machine verified by github.</p>
+<p>Then restart the docker via <code>systemctl restart docker</code>, after them we could use following command for pull back images:</p>
 
-<pre><code># ssh -T git@github.com
-Hi kkkttt! You've successfully authenticated, but GitHub does not provide shell access.
-
-</code></pre>
-
-<p>Now you could use repo for syncing back the code:</p>
-
-<pre><code># mkdir -p ~/Code
-# cd ~/Code
-# repo init -u git@github.com:Juniper/contrail-vnc
-# repo sync 
+<pre><code>$ sudo docker pull dl.dockerpool.com:5000/ubuntu:14.04
 
 </code></pre>
 
-<h3 id="third-party">Third-Party</h3>
+<p>After pull back ,check the name of our fetched back ubuntu:14.04 is:</p>
 
-<p>There is little trick in syncing the 3rd party source code back, you have to manually create the folder and let it writable, then modify the source code of the python file:</p>
-
-<pre><code># mkdir -p /tmp/cache/root/
-# chmod -R /tmp/cache/root/
-# vim third_party/*.py
-_PACKAGE_CACHE='/tmp/cache/' + os.environ['USER'] + '/third_party'
-_PACKAGE_CACHE='/tmp/cache/root/' + '/third_party'
+<pre><code>$ sudo docker images
+dl.dockerpool.com:5000/ubuntu            14.04               5506de2b643b        3 months ago        197.8 MB
+dl.dockerpool.com:5000/ubuntu            latest              5506de2b643b        3 months ago        197.8 MB
 
 </code></pre>
 
-<p>Now use following command for syncing the 3rd party packages back:</p>
+<p>Change to a differenet tag name:</p>
 
-<pre><code># python third_party/fetch_packages.py
-
-</code></pre>
-
-<h3 id="build">Build</h3>
-
-<p>Building is pretty easy, simply type <code>scons</code> then everything is automatically on-going.<br />
-Troubles, if you don&rsquo;t specify USER, then the error will be raised, complains the os.environ[&lsquo;USER&rsquo;] got nothing, then scons will be halt.<br />
-Solution:</p>
-
-<pre><code># declare -x USER=&quot;root&quot;
+<pre><code>$ sudo docker tag dl.dockerpool.com:5000/ubuntu:14.04 ubuntu:14.04
 
 </code></pre>
 
-<p>Then the build begin, and it will last for a long time.</p>
+<p>Now check again and you will find the long and hard-to-remember name has been changed to <code>ubuntu:14.04</code>.<br />
+Our version of docker runs on OpenSuse is:</p>
 
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/26/using-new-do-system/">Using New DO System</a>
-      </h1>
-      <span class="post-date">Jan 26, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/26/using-new-do-system/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>Since the coreOS met some critical errors, I have to re-construct the DO System using CentOS. So I destroyed the old CoreOS machine, runs CentOS.</p>
-
-<h3 id="configure">Configure</h3>
-
-<h3 id="install-packages">Install packages</h3>
-
-<p>Update and install vim</p>
-
-<pre><code>$ yum update
-$ yum install vim
+<pre><code>$ docker --version
+Docker version 1.4.1, build 5bc2ff8
 
 </code></pre>
-
-<h4 id="add-swap">Add Swap</h4>
-
-<p>512M is not enough for playing, enlarge the swapfile.</p>
-
-<pre><code># dd if=/dev/zero of=/swapfile bs=1M count=1024
-# chmod 600 /swapfile
-# mkswap /swapfile
-$ sudo vim /etc/systemd/system/swap.service
- [Unit]  
- Description=Turn on swap  
- [Service]  
- Type=oneshot  
- Environment=&quot;SWAPFILE=/swapfile&quot;
- RemainAfterExit=true  
- ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
- ExecStart=/usr/bin/sh -c &quot;/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
- ExecStop=/usr/bin/sh -c &quot;/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
- ExecStopPost=/usr/bin/sh -c &quot;/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
- [Install]  
- WantedBy=multi-user.target 
-$ sudo  systemctl enable /etc/systemd/system/swap.service  
-$ sudo systemctl start swap  
-
-</code></pre>
-
-<p>Now the swapfile is 1000MB, enough for doing various operations.</p>
-
-<h4 id="add-new-user">Add new user</h4>
-
-<p>Add new user and changes its password:</p>
-
-<pre><code># useradd -m -g root -G root -s /bin/bash Trusty
-# passwd Trusty
-
-</code></pre>
-
-<p>Change the sshd configuration, disable root login, and change the listening port.</p>
-
-<pre><code>vim /etc/ssh/sshd_config
-port changes, 
-PermitRootLogin no
-
-</code></pre>
-
-<p>Now reboot the system, you will got a safe DigitalOcean machine.</p>
-
-<h3 id="build-opencontrail">Build OpenContrail</h3>
-
-<p>The repo is the same as the above article, then we install other packages which needed for CengOS.</p>
-
-<pre><code>$ sudo yum install -y libtool kernel-devel 
-$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
-
-</code></pre>
-
-<p>Install epel via:</p>
-
-<pre><code>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
-$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo 
-
-</code></pre>
-
-<p>Install following packages from epel:</p>
-
-<pre><code>$ sudo yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler 
-$  sudo yum install -y python-lxml patch unzip flex bison gcc-c++ openssl-devel make wget python-setuptools
-
-</code></pre>
-
-<p>So now you could run the whole compilation via <code>scons</code> under the ~/Code folder.<br />
-tips: tmux&rsquo;s q will quit ctrl+b mode.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/23/install-openfire-for-lan-chat/">Install OpenFire For LAN Chat</a>
-      </h1>
-      <span class="post-date">Jan 23, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/23/install-openfire-for-lan-chat/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>In order to support chat in LAN, install Openfire, following are the steps for installing and configurating.</p>
-
-<h3 id="local-machine">Local Machine</h3>
-
-<pre><code>$ wget 
-$ apt-get update &amp;&amp;  apt-get install default-jre
-
-</code></pre>
-
-<p>Since another people is also installing this. Change it to DigitalOcean.</p>
-
-<h3 id="dockerize-openfire">Dockerize Openfire</h3>
-
-<p>Get the image via:</p>
-
-<pre><code>docker pull sameersbn/openfire
-
-</code></pre>
-
-<p>Since the installation is already done, docker ignored&hellip;</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/22/enable-apache2-redirect/">Enable Apache2 Redirect</a>
-      </h1>
-      <span class="post-date">Jan 22, 2015  &middot; <a href="http://purplepalmdash.github.io/2015/01/22/enable-apache2-redirect/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
-        
-      </span>
-      
-      
-
-<h3 id="problem">Problem</h3>
-
-<p>Want to redirect from <code>http://xxx/</code> to <code>http://xxx/a/b</code></p>
-
-<h3 id="solution">Solution</h3>
-
-<p>Change the configuration file of the <code>/etc/apache2/sites-enabled/000-default</code>, enable the  <code>RedirectMatch</code>:</p>
-
-<pre><code>	# For forwarding all of the request to '/' TO '/bin/view'
- 	RedirectMatch ^/$ /a/b
-
-</code></pre>
-
-<p>Restart the service of apache2 then everything goes OK.</p>
 
       
     </div>
@@ -875,12 +914,21 @@ $ apt-get update &amp;&amp;  apt-get install default-jre
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/57/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>

@@ -93,839 +93,127 @@
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/28/linux2-dot-6-32-for-utu2440-7/">Linux2.6.32 for Utu2440(7)</a>
+        <a href="http://purplepalmdash.github.io/2014/11/12/server-performance/">Server Performance</a>
       </h1>
-      <span class="post-date">Oct 28, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/28/linux2-dot-6-32-for-utu2440-7/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="watchdog">Watchdog</h3>
-
-<p>Change the configuraiton of Watchdog in kernel:<br />
-<img src="/images/2440watchdog.jpg" alt="/images/2440watchdog.jpg" /></p>
-
-<p>Watchdog configuraiton in kernel:</p>
-
-<pre><code>$ grep &quot;CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME&quot; ./ -r
-./drivers/watchdog/s3c2410_wdt.c:#define CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME   (15)
-
-</code></pre>
-
-<p>Test Watchdog:</p>
-
-<pre><code>~ # dmesg | grep watchdog
-s3c2410-wdt s3c2410-wdt: watchdog inactive, reset disabled, irq enabled
-~ # 
-~ # echo 0&gt;/dev/watchdog
-
-s3c2410-wdt s3c2410-wdt: Unexpected close, not stopping watchdog
-
-</code></pre>
-
-<p>Then after 15 seconds your board will reset, disable watchdog via:</p>
-
-<pre><code>~ # echo -n V&gt;/dev/watchdog
-
-</code></pre>
-
-<h3 id="led">LED</h3>
-
-<p>The connection for LED is:<br />
-<img src="/images/2440leds.jpg" alt="/images/2440leds.jpg" /></p>
-
-<p>Saw s3c2440 chip connection:<br />
-<img src="/images/2440leds1.jpg" alt="/images/2440leds1.jpg" /></p>
-
-<p>Connection in text:</p>
-
-<pre><code>EINT4 GPF4 DL1
-EINT5 GPF5 DL2
-EINT6 GPF6 DL3
-EINT7 GPF7 DL4 
-
-</code></pre>
-
-<p>Code changes:</p>
-
-<pre><code>#include &lt;linux/miscdevice.h&gt;
-#include &lt;linux/delay.h&gt;
-#include &lt;asm/irq.h&gt;
-#include &lt;mach/regs-gpio.h&gt;
-#include &lt;mach/hardware.h&gt;
-#include &lt;linux/kernel.h&gt;
-#include &lt;linux/module.h&gt;
-#include &lt;linux/init.h&gt;
-#include &lt;linux/mm.h&gt;
-#include &lt;linux/fs.h&gt;
-#include &lt;linux/types.h&gt;
-#include &lt;linux/delay.h&gt;
-#include &lt;linux/moduleparam.h&gt;
-#include &lt;linux/slab.h&gt;
-#include &lt;linux/errno.h&gt;
-#include &lt;linux/ioctl.h&gt;
-#include &lt;linux/cdev.h&gt;
-#include &lt;linux/string.h&gt;
-#include &lt;linux/list.h&gt;
-#include &lt;linux/pci.h&gt;
-#include &lt;linux/gpio.h&gt;
-#include &lt;asm/uaccess.h&gt;
-#include &lt;asm/atomic.h&gt;
-#include &lt;asm/unistd.h&gt;
-#define DEVICE_NAME &quot;leds&quot; //设备名(/dev/leds)
-//LED 对应的GPIO 端口列表
-static unsigned long led_table [] = {
- S3C2410_GPF(4),
- S3C2410_GPF(5),
- S3C2410_GPF(6),
- S3C2410_GPF(7),
-};
-//LED 对应端口将要输出的状态列表
-static unsigned int led_cfg_table [] = {
- S3C2410_GPIO_OUTPUT,
- S3C2410_GPIO_OUTPUT,
- S3C2410_GPIO_OUTPUT,
- S3C2410_GPIO_OUTPUT,
-};
-/*ioctl 函数的实现
-* 在应用/用户层将通过ioctl 函数向内核传递参数，以控制LED 的输出状态
-*/
-static int leds_ioctl(struct inode *inode,
-          struct file *file,
-          unsigned int cmd,
-          unsigned long arg)
-{
- switch(cmd) {
-  case 0:
-  case 1:
-    if (arg &gt; 4) {
-     return -EINVAL;
-    }
-  //根据应用/用户层传递来的参数(取反)，通过s3c2410_gpio_setpin 函数设置LED 对应的端口寄存器
-  s3c2410_gpio_setpin(led_table[arg], !cmd);
-   return 0;
-  default:
-    return -EINVAL;
- }
-}
-/*
-* 设备函数操作集，在此只有ioctl 函数，通常还有read, write, open, close 等，因为本LED 驱动在下面已经
-* 注册为misc 设备，因此也可以不用open/close
-*/
-static struct file_operations dev_fops = {
- .owner = THIS_MODULE,
- .ioctl = leds_ioctl,
-};
-/*
-* 把LED 驱动注册为MISC 设备
-*/
-static struct miscdevice misc = {
- .minor = MISC_DYNAMIC_MINOR, //动态设备号
- .name = DEVICE_NAME,
- .fops = &amp;dev_fops,
-};
-/*
-* 设备初始化
-*/
-static int __init dev_init(void)
-{
- int ret;
- int i;
- for (i = 0; i &lt; 4; i++) {
-  //设置LED 对应的端口寄存器为输出(OUTPUT)
-  s3c2410_gpio_cfgpin(led_table[i], led_cfg_table[i]);
-  //设置LED 对应的端口寄存器为低电平输出，在模块加载结束后，四个LED 应该是全部都是发光状态
-  s3c2410_gpio_setpin(led_table[i], 0);
- }
- ret = misc_register(&amp;misc); //注册设备
-
- if(ret &lt; 0)
- {
-        printk(DEVICE_NAME &quot;register falid!\n&quot;);
-        return ret;
-  }
-
- printk (DEVICE_NAME &quot;\tinitialized\n&quot;); //打印初始化信息
- return 0;
-}
-static void __exit dev_exit(void)
-{
- misc_deregister(&amp;misc);
-}
-//模块初始化，仅当使用insmod/podprobe 命令加载时有用，如果设备不是通过模块方式加载，此处将不会被调用
-module_init(dev_init); 
-//卸载模块，当该设备通过模块方式加载后，可以通过rmmod 命令卸载，将调用此函数
-module_exit(dev_exit); 
-MODULE_LICENSE(&quot;GPL&quot;); //版权信息
-MODULE_AUTHOR(&quot;singleboy.&quot;); //开发者信息
-</code></pre>
-
-<p>Change Kconfig file:</p>
-
-<pre><code>config LEDS_SMDK2440
- tristate &quot;LED Support for SMDK2440 GPIO LEDs&quot;
- depends on SMDK2440_CPU2440
- default y if SMDK2440_CPU2440
- help
-  This option enables support for LEDs connected to GPIO lines
-  on SMDK2440 boards.
-
-</code></pre>
-
-<p>And the Makefile</p>
-
-<pre><code>obj-$(CONFIG_LEDS_SMDK2440)     += smdk2440_leds.o
-
-</code></pre>
-
-<p>Rebuild the kernel and verify.</p>
-
-<p>Test file:</p>
-
-<pre><code>#include &lt;stdio.h&gt;
-#include &lt;stdlib.h&gt;
-#include &lt;unistd.h&gt;
-#include &lt;sys/ioctl.h&gt;
-
-int main(int argc, char **argv)
-{
- int on;
- int led_no;
- int fd;
- if (argc != 3 || sscanf(argv[1], &quot;%d&quot;, &amp;led_no) != 1 || sscanf(argv[2],&quot;%d&quot;, &amp;on) != 1 ||
-     on &lt; 0 || on &gt; 1 || led_no &lt; 0 || led_no &gt; 3) {
-  fprintf(stderr, &quot;Usage: leds led_no 0|1\n&quot;);
-  exit(1);
- }
- fd = open(&quot;/dev/leds0&quot;, 0);
- if (fd &lt; 0) {
-  fd = open(&quot;/dev/leds&quot;, 0);
- }
- if (fd &lt; 0) {
-  perror(&quot;open device leds&quot;);
-  exit(1);
- }
- ioctl(fd, on, led_no);
- close(fd);
- return 0;
-}
-
-</code></pre>
-
-<p>Then run test like:</p>
-
-<pre><code>/root # ./led 0 0
-/root # ./led 1 0
-/root # ./led 2 0
-/root # ./led 2 1
-/root # ./led 2 0
-/root # ./led 3 0
-
-</code></pre>
-
-<p>Write a simple script</p>
-
-<pre><code>while true
- do
-./led 0 0
-sleep 1
-./led 0 1
-sleep 1
-./led 1 0
-sleep 1
-./led 1 1
-sleep 1
-./led 2 0
-sleep 1
-./led 2 1
-sleep 1
-./led 3 0
-sleep 1
-./led 3 1
-done
-
-</code></pre>
-
-<p>Now you could see led blinks.</p>
-
-<h3 id="keys">Keys</h3>
-
-<p>First view the schematic to find the circle connection:<br />
-<img src="/images/2440buttons.jpg" alt="/images/2440buttons.jpg" /></p>
-
-<p>Keys connection:</p>
-
-<pre><code>K1	EINT0		GPF0
-K2	EINT1		GPF1 
-K3	EINT2		GPF2
-K4	EINT3		GPF3	
-K5	EINT11		GPG3
-K6	EINT19		GPG11
-
-</code></pre>
-
-<p>The definition should be adjusted to the keys connection definition.</p>
-
-<p>Edit the drivers/misc/smdk2440_buttons.c:</p>
-
-<pre><code>#include &lt;linux/module.h&gt;
-#include &lt;linux/kernel.h&gt;
-#include &lt;linux/fs.h&gt;
-#include &lt;linux/init.h&gt;
-#include &lt;linux/delay.h&gt;
-#include &lt;linux/poll.h&gt;
-#include &lt;linux/irq.h&gt;
-#include &lt;asm/irq.h&gt;
-#include &lt;linux/interrupt.h&gt;
-#include &lt;asm/uaccess.h&gt;
-#include &lt;mach/regs-gpio.h&gt;
-#include &lt;mach/hardware.h&gt;
-#include &lt;linux/platform_device.h&gt;
-#include &lt;linux/cdev.h&gt;
-#include &lt;linux/miscdevice.h&gt;
-#include &lt;linux/sched.h&gt;
-#include &lt;linux/gpio.h&gt;
-#define DEVICE_NAME &quot;buttons&quot; //设备名称
-/*定义中断所用的结构体*/
-struct button_irq_desc {
- int irq; //按键对应的中断号
- int pin; //按键所对应的GPIO 端口
- int pin_setting; //按键对应的引脚描述，实际并未用到，保留
- int number; //定义键值，以传递给应用层/用户态
- char *name; //每个按键的名称
-};
-/*结构体实体定义*/
-static struct button_irq_desc button_irqs [] = {
- {IRQ_EINT0, S3C2410_GPF(0), S3C2410_GPF0_EINT0, 0, &quot;KEY0&quot;},
- {IRQ_EINT1, S3C2410_GPF(1), S3C2410_GPF1_EINT1, 1, &quot;KEY1&quot;},
- {IRQ_EINT2, S3C2410_GPF(2), S3C2410_GPF2_EINT2, 2, &quot;KEY2&quot;},
- {IRQ_EINT3, S3C2410_GPF(3), S3C2410_GPF3_EINT3, 3, &quot;KEY3&quot;},
- {IRQ_EINT11, S3C2410_GPG(3), S3C2410_GPG3_EINT11, 4, &quot;KEY4&quot;},
- {IRQ_EINT19, S3C2410_GPG(11), S3C2410_GPG11_EINT19, 5, &quot;KEY5&quot;},
-};
-/*开发板上按键的状态变量，注意这里是’0’，对应的ASCII 码为30*/
-static volatile char key_values [] = {'0', '0', '0', '0', '0', '0'};
-/*因为本驱动是基于中断方式的，在此创建一个等待队列，以配合中断函数使用；当有按键按下并读取到键
-值时，将会唤醒此队列，并设置中断标志，以便能通过 read 函数判断和读取键值传递到用户态；当没有按
-键按下时，系统并不会轮询按键状态，以节省时钟资源*/
-static DECLARE_WAIT_QUEUE_HEAD(button_waitq);
-/*中断标识变量，配合上面的队列使用，中断服务程序会把它设置为1，read 函数会把它清零*/
-static volatile int ev_press = 0;
-/*本按键驱动的中断服务程序*/
-static irqreturn_t buttons_interrupt(int irq, void *dev_id)
-{
- struct button_irq_desc *button_irqs = (struct button_irq_desc *)dev_id;
- int down;
- // udelay(0);
- /*获取被按下的按键状态*/
- down = !s3c2410_gpio_getpin(button_irqs-&gt;pin);
- /*状态改变，按键被按下，从这句可以看出，当按键没有被按下的时候，寄存器的值为1(上拉)，但按
-  键被按下的时候，寄存器对应的值为0*/
- if (down != (key_values[button_irqs-&gt;number] &amp; 1)) { // Changed
-  /*如果key1 被按下，则key_value[0]就变为’1’，对应的ASCII 码为31*/
-  key_values[button_irqs-&gt;number] = '0' + down;
-  ev_press = 1; /*设置中断标志为1*/
-  wake_up_interruptible(&amp;button_waitq); /*唤醒等待队列*/
- }
- return IRQ_RETVAL(IRQ_HANDLED);
-}
-/*
-*在应用程序执行open(“/dev/buttons”,…)时会调用到此函数，在这里，它的作用主要是注册6 个按键的中断。
-*所用的中断类型是IRQ_TYPE_EDGE_BOTH，也就是双沿触发，在上升沿和下降沿均会产生中断，这样做
-是为了更加有效地判断按键状态
-*/
-static int s3c24xx_buttons_open(struct inode *inode, struct file *file)
-{
- int i;
- int err = 0;
- for (i = 0; i &lt; sizeof(button_irqs)/sizeof(button_irqs[0]); i++) {
-  if (button_irqs[i].irq &lt; 0) {
-   continue;
-  }
-  /*注册中断函数*/
-  err = request_irq(button_irqs[i].irq, buttons_interrupt, IRQ_TYPE_EDGE_BOTH,
-        button_irqs[i].name, (void *)&amp;button_irqs[i]);
-  if (err)
-   break;
- }
- if (err) { /*如果出错，释放已经注册的中断，并返回*/
-  i--;
-  for (; i &gt;= 0; i--) {
-   if (button_irqs[i].irq &lt; 0) {
-    continue;
-   }
-   disable_irq(button_irqs[i].irq);
-   free_irq(button_irqs[i].irq, (void *)&amp;button_irqs[i]);
-  }
-  return -EBUSY;
- }
- /*注册成功，则中断队列标记为1，表示可以通过read 读取*/
- ev_press = 1;
- /*正常返回*/
- return 0;
-}
-/*
-*此函数对应应用程序的系统调用close(fd)函数，在此，它的主要作用是当关闭设备时释放6 个按键的中断*
-处理函数
-*/
-static int s3c24xx_buttons_close(struct inode *inode, struct file *file)
-{
- int i;
- for (i = 0; i &lt; sizeof(button_irqs)/sizeof(button_irqs[0]); i++) {
-  if (button_irqs[i].irq &lt; 0) {
-   continue;
-  }
-  /*释放中断号，并注销中断处理函数*/
-  free_irq(button_irqs[i].irq, (void *)&amp;button_irqs[i]);
- }
- return 0;
-}
-/*
-*对应应用程序的read(fd,…)函数，主要用来向用户空间传递键值
-*/
-static int s3c24xx_buttons_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
-{
- unsigned long err;
- if (!ev_press) {
-  if (filp-&gt;f_flags &amp; O_NONBLOCK)
-   /*当中断标识为0 时，并且该设备是以非阻塞方式打开时，返回*/
-   return -EAGAIN;
-  else
-   /*当中断标识为0 时，并且该设备是以阻塞方式打开时，进入休眠状态，等待被唤醒*/
-   wait_event_interruptible(button_waitq, ev_press);
- }
- /*把中断标识清零*/
- ev_press = 0;
- /*一组键值被传递到用户空间*/
- err = copy_to_user(buff, (const void *)key_values, min(sizeof(key_values), count));
- return err ? -EFAULT : min(sizeof(key_values), count);
-}
-static unsigned int s3c24xx_buttons_poll( struct file *file, struct poll_table_struct *wait)
-{
- unsigned int mask = 0;
- /*把调用poll 或者select 的进程挂入队列，以便被驱动程序唤醒*/
- poll_wait(file, &amp;button_waitq, wait);
- if (ev_press)
-  mask |= POLLIN | POLLRDNORM;
- return mask;
-}
-/*设备操作集*/
-static struct file_operations dev_fops = {
- .owner = THIS_MODULE,
- .open = s3c24xx_buttons_open,
- .release = s3c24xx_buttons_close,
- .read = s3c24xx_buttons_read,
- .poll = s3c24xx_buttons_poll,
-};
-static struct miscdevice misc = {
- .minor = MISC_DYNAMIC_MINOR,
- .name = DEVICE_NAME,
- .fops = &amp;dev_fops,
-};
-/*设备初始化，主要是注册设备*/
-static int __init dev_init(void)
-{
- int ret;
- /*把按键设备注册为misc 设备，其设备号是自动分配的*/
- ret = misc_register(&amp;misc);
-
- if(ret &lt; 0)
-  {
-        printk(DEVICE_NAME &quot;register falid!\n&quot;);
-        return ret;
-   }
- printk (DEVICE_NAME&quot;\tinitialized\n&quot;);
- return 0;
-}
-/*注销设备*/
-static void __exit dev_exit(void)
-{
- misc_deregister(&amp;misc);
-}
-module_init(dev_init); //模块初始化，仅当使用insmod/podprobe 命令加载时有用，如果设备不是通过模块方式加载，此处将不会被调用
-module_exit(dev_exit); //卸载模块，当该设备通过模块方式加载后，可以通过rmmod 命令卸载，将调用此函数
-MODULE_LICENSE(&quot;GPL&quot;); //版权信息
-MODULE_AUTHOR(&quot;singleboy.&quot;); //作者名字
-
-</code></pre>
-
-<p>Edit the Kconfig file:</p>
-
-<pre><code> config SMDK2440_BUTTONS
-  tristate &quot;Buttons driver for SMDK2440 development boards&quot;
-  depends on SMDK2440_CPU2440
-  default y if SMDK2440_CPU2440
-  help
-   this is buttons driver for SMDK2440 development boards
-
-</code></pre>
-
-<p>Also change the Makefile:</p>
-
-<pre><code>obj-$(CONFIG_SMDK2440_BUTTONS)  += smdk2440_buttons.o
-
-</code></pre>
-
-<p>Make the kernel out and verify it on board.</p>
-
-<p>Test code:</p>
-
-<pre><code>#include &lt;stdio.h&gt;
-#include &lt;stdlib.h&gt;
-#include &lt;unistd.h&gt;
-#include &lt;sys/ioctl.h&gt;
-#include &lt;sys/types.h&gt;
-#include &lt;sys/stat.h&gt;
-#include &lt;fcntl.h&gt;
-#include &lt;sys/select.h&gt;
-#include &lt;sys/time.h&gt;
-#include &lt;errno.h&gt;
-
-int main(void)
-{
- int buttons_fd;
- char buttons[6] = {'0', '0', '0', '0', '0', '0'}; //定义按键值变量，对于驱动函数中的key_values 数组
-
- buttons_fd = open(&quot;/dev/buttons&quot;, 0); /*打开按键设备/dev/buttons*/
- if (buttons_fd &lt; 0) {
-  perror(&quot;open device buttons&quot;); /*打开失败则退出*/
-  exit(1);
- }
-
- for (;;) { /*永读按键并打印键值和状态*/
-  char current_buttons[6];
-  int count_of_changed_key;
-  int i;
-
-/*使用read 函数读取一组按键值（6 个）*/
-  if (read(buttons_fd, current_buttons, sizeof current_buttons) != sizeof current_buttons) {
-   perror(&quot;read buttons:&quot;);
-   exit(1);
-  }
-
-/*逐个分析读取到的按键值*/
-
-  for (i = 0, count_of_changed_key = 0; i &lt; sizeof buttons / sizeof buttons[0]; i++) {
-   if (buttons[i] != current_buttons[i]) {
-    buttons[i] = current_buttons[i];
-
-/*打印按键值，并标明按键按下/抬起的状态*/
-    printf(&quot;%skey %d is %s&quot;, count_of_changed_key? &quot;, &quot;: &quot;&quot;, i+1, buttons[i] == '0' ? &quot;up&quot; : &quot;down&quot;);
-    count_of_changed_key++;
-   }
-  }
-  if (count_of_changed_key) {
-   printf(&quot;\n&quot;);
-  }
- }
-
- close(buttons_fd); /*关闭按键设备文件*/
- return 0;
-}
-
-</code></pre>
-
-<p>Test Result:</p>
-
-<pre><code>/root # ./buttons
-key 1 is down
-key 1 is up
-key 2 is down
-key 2 is up
-key 3 is down
-key 3 is up
-key 4 is down
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/27/linux2-dot-6-32-for-utu2440-6/">Linux2.6.32 for Utu2440(6)</a>
-      </h1>
-      <span class="post-date">Oct 27, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/27/linux2-dot-6-32-for-utu2440-6/#disqus_thread">Comments</a>
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="flash-disk">Flash Disk</h3>
-
-<p>Enable the scsi device support in kernel configuration:<br />
-<img src="/images/scsidriver.jpg" alt="/images/scsidriver.jpg" /><br />
-Then enable the usb support:</p>
-
-<pre><code>* Support for Host-side USB
-* USB device filesystem(DEPRECATED)
-* OHCI HCD support
-* USB Mass Storage support
-
-</code></pre>
-
-<p>Also enable the filesystem support for FAT/FAT16/FAT32/EXT4:</p>
-
-<p>change the default u-boot parameters:</p>
-
-<pre><code>utu-bootloader=&gt;&gt;&gt;printenv bootcmd
-bootcmd=nand read.i 0x32000000 0x60000 0x200000; bootm
-utu-bootloader=&gt;&gt;&gt;setenv bootcmd 'tftp 30000000 uImage; bootm'
-utu-bootloader=&gt;&gt;&gt;printenv bootcmd
-bootcmd=tftp 30000000 uImage; bootm
-utu-bootloader=&gt;&gt;&gt;saveenv
-Saving Environment to NAND...
-Erasing Nand...Writing to Nand... done
-
-</code></pre>
-
-<p>Next time the reboot will directly download the kernel file from tftp server and bootm it from memory.</p>
-
-<p>Also please enable the filesystem support on FAT/FAT32/ext4, etc, then next time you insert the USB Disk, it will automatically scanned and recognize your partitions.</p>
-
-<h3 id="mmc-sd">MMC/SD</h3>
-
-<p>From the schematic image we could see:<br />
-<img src="/images/sdio.jpg" alt="/images/sdio.jpg" /></p>
-
-<p>Add the following definition in <code>arch/arm/mach-s3c2440/mach-smdk2440.c</code>:</p>
-
-<pre><code>// Added for mmc
-#include &lt;linux/mmc/host.h&gt;
-#include &lt;plat/mci.h&gt;
-
-/* MMC/SD */
-static struct s3c24xx_mci_pdata smdk2440_mmc_cfg = {
-    .gpio_detect = S3C2410_GPG(8),
-    .gpio_wprotect = S3C2410_GPH(8),
-    .set_power = NULL,
-    .ocr_avail = MMC_VDD_32_33|MMC_VDD_33_34,
-};
-
-static struct platform_device *smdk2440_devices[] __initdata = {
-	//........
-	&amp;s3c_device_sdi,  // Added SD card into the platform equipments 
-};
-
-static void __init smdk2440_machine_init(void)
-{
-
-+    	/* Add support for mmc in smdk2440 */
-+	s3c_device_sdi.dev.platform_data = &amp;smdk2440_mmc_cfg;
-
-
-</code></pre>
-
-<p>Kernel configuration:</p>
-
-<pre><code>Device Drivers ---&gt;
-&lt;*&gt; MMC/SD/SDIO card support ---&gt;
-&lt;*&gt; MMC block device driver
-&lt;*&gt; Secure Digital Host Controller Interface support
-&lt;*&gt; Samsung S3C SD/MMC Card Interface support
-
-</code></pre>
-
-<p>Then re-compile the kernel and verify.<br />
-Only 1G&rsquo;s mmc card could be supported currently. I didn&rsquo;t test other volumns.</p>
-
-<h3 id="sound-card">Sound Card</h3>
-
-<p>The sound card&rsquo;s schematic is listed as:<br />
-<img src="/images/soundcard.jpg" alt="/images/soundcard.jpg" /><br />
-Then made code changes in:</p>
-
-<pre><code>// Sound Card
-#include &lt;sound/s3c24xx_uda134x.h&gt;
-
-
-/*Sound card*/
-static struct s3c24xx_uda134x_platform_data s3c24xx_uda134x_data = {
-    .l3_clk = S3C2410_GPB(4),
-    .l3_data = S3C2410_GPB(3),
-    .l3_mode = S3C2410_GPB(2),
-    .model = UDA134X_UDA1341,
-};
-
-
-static struct platform_device s3c24xx_uda134x = {
-    .name = &quot;s3c24xx_uda134x&quot;,
-         .dev = {
-         .platform_data = &amp;s3c24xx_uda134x_data,
-    }
-};
-
-static struct platform_device *smdk2440_devices[] __initdata = {
-	//.........
-        &amp;s3c24xx_uda134x, // Register the UDA1341 platform device to kernel
-};
-
-
-</code></pre>
-
-<p>Kernel Configuration:<br />
-<img src="/images/soundcard2.jpg" alt="/images/soundcard2.jpg" /></p>
-
-<p><img src="/images/soundcard1.jpg" alt="/images/soundcard1.jpg" /><br />
-Then re-compile the kernel and verify it on utu2440.</p>
-
-<p>Test steps:</p>
-
-<pre><code>$ cat /root/test.wav&gt;/dev/dsp
-$ cat /proc/devices
-10 misc
- 13 input
- 14 sound
- 21 sg
- 29 fb
-
-</code></pre>
-
-<p>Now cross-compile mad-player for playing mp3.</p>
-
-<p>Download the madplayer and cross-compiler.</p>
-
-<pre><code>$ ./configure CC=arm-linux-gcc --host=arm --prefix=/srv/nfs4/rootfs/usr/
-$ make clean &amp;&amp; make
-$ sudo make install
-
-</code></pre>
-
-<p>Trouble shooting:</p>
-
-<pre><code>/bin # /bin/sh madplay 
-madplay: line 1: syntax error: unexpected word (expecting &quot;)&quot;)
-
-[Trusty@/media/y/embedded/utu2440/App/madplay-0.15.2b]$ arm-linux-readelf -a madplay | grep interpreter
-      [Requesting program interpreter: /lib/ld-linux.so.3]
-
-</code></pre>
-
-<p>Solution: copy all of the dynamic library from the cross-compiler to the root file system:</p>
-
-<pre><code>$ sudo cp -f /opt/cross/arm-linux-gcc_4.3.2/arm-none-linux-gnueabi/libc/armv4t/lib/*so* /srv/nfs4/rootfs/lib -a
-
-</code></pre>
-
-<p>Download the libmad from:<br />
-<a href="http://sourceforge.net/projects/mad/files/libmad/0.15.1b/libmad-0.15.1b.tar.gz/download">http://sourceforge.net/projects/mad/files/libmad/0.15.1b/libmad-0.15.1b.tar.gz/download</a></p>
-
-<pre><code>$ ./configure --prefix=/srv/nfs4/rootfs/usr/ --host=arm-linux CC=arm-linux-gcc
-$ make &amp;&amp; make install
-
-</code></pre>
-
-<p>When run madplay, it will complains the Bus Error, need further debugging.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/27/shadowsocks-on-digitalocean/">ShadowSocks on DigitalOcean</a>
-      </h1>
-      <span class="post-date">Oct 27, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/27/shadowsocks-on-digitalocean/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 12, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/12/server-performance/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
         
       </span>
       
-      <p>Mainly recorded the steps for installation:</p>
+      <p>Get the UnixBench and run</p>
 
-<pre><code># apt-get install python-pip
-# pip install shadowsocks
-# vim /etc/shadowsocks.json
-{
-    &quot;server&quot;:&quot;1xx.xxx.xxx.xxx&quot;,
-    &quot;server_port&quot;:xxxx,
-    &quot;local_address&quot;: &quot;127.0.0.1&quot;,
-    &quot;local_port&quot;:1080,
-    &quot;password&quot;:&quot;Pass!Pass!Pass&quot;,
-    &quot;timeout&quot;:300,
-    &quot;method&quot;:&quot;aes-256-cfb&quot;,
-    &quot;fast_open&quot;: false,
-    &quot;workers&quot;: 1
-}
-# apt-get install supervisor
-# vim /etc/supervisor/conf.d/shadowsocks.conf
-[program:shadowsocks]
-command=ssserver -c /etc/shadowsocks.json
-autorestart=true
-user=nobody
-# vim /etc/default/supervisor
-ulimit -n 51200
-# service supervisor start
+<pre><code>wget http://byte-unixbench.googlecode.com/files/UnixBench5.1.3.tgz
+tar xvf UnixBench5.1.3.tgz 
+cd UnixBench
+./Run
+
 
 </code></pre>
 
-<p>Then in client you could use a shadownsocks client for connecting to remote servers and enjoy the free internet.</p>
+<p>Result:</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/27/system-trouble-shooting/">System Trouble Shooting</a>
+        <a href="http://purplepalmdash.github.io/2014/11/10/enable-bluetooth-headset-on-archlinux/">Enable Bluetooth Headset On ArchLinux</a>
       </h1>
-      <span class="post-date">Oct 27, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/27/system-trouble-shooting/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/10/enable-bluetooth-headset-on-archlinux/#disqus_thread">Comments</a>
       
       <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/troubleshooting">TroubleShooting</a>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
         
       </span>
       
       
 
-<h3 id="sshd-timeout">SSHD Timeout</h3>
+<p>Since my operating system upgraded, I have to re-set my bluetooth headset. I use A2DP via Bluez5/Pulseaudio.</p>
 
-<h4 id="trouble">Trouble</h4>
+<h3 id="installation">Installation</h3>
 
-<p>When you login to some remote ssh machine, after 1 or 2 minutes, the server will hint you:<br />
-Connection closed by foreign host.</p>
+<p>First install following packages:</p>
 
-<h4 id="solution">Solution</h4>
-
-<p>This trouble happens on Ubuntu14.04, because we don&rsquo;t set the timeout intervals. So we could add following 2 lines into the <code>/etc/ssh/sshd_config</code></p>
-
-<pre><code>ClientAliveInterval 60
-ClientAliveCountMax 3
+<pre><code># pacman -S pulseaudio-alsa bluez bluez-libs bluez-utils
 
 </code></pre>
 
-<p>AliveInterval means we could keep the client alive for 60 minutes. AliveCountMax means when server send 3 times request to ssh client, if client didn&rsquo;t send back reply message, then the ssh connection will be lost.<br />
-Restart the ssh via <code>service ssh restart</code> and now you won&rsquo;t got this annoying trouble.</p>
+<p>Then start the service via systemd:</p>
 
-<h3 id="dns">DNS</h3>
-
-<p>Since I use dnsencrypt at home, so once it enabled, all of the query goes to the 127.0.0.1, I have to turn it back at company.</p>
-
-<pre><code>[Trusty@~]$ cat /etc/resolv.conf
-# Generated by resolvconf
-nameserver 10.0.0.1
-search lan
-alias disdns='sudo systemctl stop dnscrypt-proxy.service'
-$ disdns
+<pre><code># systemctl start bluetooth
 
 </code></pre>
 
-<p>By doing this you could reach the internet.</p>
+<h3 id="configuration">Configuration</h3>
+
+<p>I use an expect script for automatically connect to my MW600 and play:</p>
+
+<pre><code>#!/usr/bin/expect
+
+# This script is for automatically scan my bluetooth headset, which is Sony-Errison mw-600
+
+# Timeout should be very short in local
+# set timeout 3
+
+spawn ssh Trusty@localhost -Y
+expect {
+        &quot;yes/no&quot; {
+                    send &quot;yes\n&quot;
+                                exp_continue
+                                    }
+            &quot;assword&quot; {
+                        send &quot;xxxxxxx!\n&quot;
+                                }
+}
+expect $
+
+# Now we are in the controlled session, run bluetooth related commands.
+send &quot;bluetoothctl\r&quot;
+expect #
+send &quot;power on\r&quot;
+expect &quot;yes&quot;
+send &quot;agent on\r&quot;
+expect #
+send &quot;default-agent\r&quot;
+expect #
+send &quot;connect 8C:64:22:5F:FF:BD\r&quot;
+expect &quot;connection successful&quot; 
+# Now exit the bluetoothctl
+send &quot;exit\r&quot;
+expect $
+
+# After execute the command in this ssh session, simply exit. 
+send &quot;exit\r&quot;
+expect $
+
+</code></pre>
+
+<p>Everytime I want to use bluetooth headset, just run:</p>
+
+<pre><code> $ /home/Trusty/auto/autobluetooth.sh &amp;&amp; pavucontrol &amp;
+
+</code></pre>
+
+<h3 id="flash-content">Flash Content</h3>
+
+<p>Install following package for let alsa use pulseaudio:</p>
+
+<pre><code>$ sudo pacman -S pulseaudio-alsa
+
+</code></pre>
+
+<p>Restart opera(or other browser which calls flash), now your sound will be played via bluetooth.</p>
 
       
     </div>
     
     <div class="post">
       <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/25/linux2-dot-6-32-for-utu2440-5/">Linux2.6.32 for Utu2440(5)</a>
+        <a href="http://purplepalmdash.github.io/2014/11/10/openwrt-on-bbb-3/">OpenWRT on BBB(3)</a>
       </h1>
-      <span class="post-date">Oct 25, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/10/25/linux2-dot-6-32-for-utu2440-5/#disqus_thread">Comments</a>
+      <span class="post-date">Nov 10, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/10/openwrt-on-bbb-3/#disqus_thread">Comments</a>
       
       <br/>
       <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
@@ -934,252 +222,402 @@ $ disdns
       
       
 
-<p>In this chapter we will continue to migrate driver on LCD, first we want to get the LCD information.</p>
+<h3 id="building-guideline">Building Guideline</h3>
 
-<h3 id="lcd-info">LCD Info</h3>
+<p>I found a openwrt-bbb  repository on github, so just download it and build:<br />
+<a href="https://github.com/nc543/openwrt-bbb/wiki">https://github.com/nc543/openwrt-bbb/wiki</a></p>
 
-<p>From the LCD we could see &ldquo;LTV350QV-F0E&rdquo;, Search it on google and we know it&rsquo;s  <code>SAMSUNG TFT 3.5-inch 320*240 LTV350QV-F0E lcd panel</code>.<br />
-Its datasheet could be downloaded from:<br />
-<a href="http://www.datasheet-pdf.com/datasheet-html/L/T/V/LTV350QV-F0E_Samsung.pdf.html">http://www.datasheet-pdf.com/datasheet-html/L/T/V/LTV350QV-F0E_Samsung.pdf.html</a></p>
-
-<p>TFT means （Thin Film Transistor）.<br />
-Beware, the kernel we should choose is <code>uImage_T1_F0E_320x240_ts</code>, because we bought the Package 1 of the development board, they shipped us with Samsung screen .</p>
-
-<h3 id="code-modification">Code Modification</h3>
-
-<p>Kernel configuration modification:</p>
-
-<pre><code>Device Drivers ---&gt;
-	Graphics support ---&gt;
-		&lt;*&gt; Support for frame buffer devices
-			Support for buffer devices ---&gt;
-				&lt;*&gt; S3C2410 LCD framebuffer support
-		Backlight &amp; LCD device sipport ---&gt;
-			&lt;*&gt;Lowlevel LCD controls
-		Display device support ---&gt;
-			&lt;*&gt; Display panel/monitor support
-		Console display driver support ---&gt;
-			&lt;*&gt; Framebuffer Console support
-			[*] Framebuffer Console Rotation
-			[*] Select compiled-in fonts
-			[*] VGA 8x8 font
-			[*] VGA 8x16 font
-			[*] Mini 4x6 font
-			[*] Sparc console 8x16 font
-		[*] Bootup logo ---&gt;
-			--- Bootup logo
-			[*] Standard 224-color Linux logo
+<pre><code>$ git clone https://github.com/nc543/openwrt-bbb.git
+$ cd openwrt-bbb
+$ make
 
 </code></pre>
 
-<p>arch/arm/mach-s3c2440/mach-smdk2440.c:</p>
+<p>When building you will meet the openssl download error, simply change the version from 1.0.1i to 1.0.1h or other version is OK.<br />
+I change this because in recent days the download page of openssl.org is not stable, so the download procedure will directly download the tar files from openwrt.org, while on openwrt.org it holds the 1.0.1h version rather than 1.0.1i version. If you could get 1.0.1i version from openssl.org, then you needn&rsquo;t do these changes.</p>
 
-<pre><code>static struct s3c2410fb_display smdk2440_lcd_cfg __initdata = {
- 
-        .lcdcon5        = S3C2410_LCDCON5_FRM565 |
-                          S3C2410_LCDCON5_INVVCLK |
-                          S3C2410_LCDCON5_INVVLINE |
-                          S3C2410_LCDCON5_INVVFRAME |
-                        // S3C2410_LCDCON5_PWREN |
-                          S3C2410_LCDCON5_HWSWP,
- 
-        .type           = S3C2410_LCDCON1_TFT,
- 
-        .width          = 320,    // 240,
-        .height         = 240,    //320,
- 
-        .pixclock       = 100000,   //HCLK/10   166667,
-        .xres           = 320,    //240,
-        .yres           = 240,    //320,
-        .bpp            = 16,
-        .left_margin    = 17,     //HFPD+1     20,
-        .right_margin   = 17,     //HBPD+1     8,
-        .hsync_len      = 13,     //HSPW+1     4,
-        .upper_margin   = 5,      //VBPD+1     8,
-        .lower_margin   = 5,      //VFPD+1     7,
-        .vsync_len      = 9,      //VSPW+1     4,
-};
+<h3 id="verification">Verification</h3>
 
-static struct s3c2410fb_mach_info smdk2440_fb_info __initdata = {
-        .displays       = &amp;smdk2440_lcd_cfg,
-        .num_displays   =  1, 
-        .default_display = 0,
- //#if 0
-       
-        .gpccon         = 0xaaaa56a9,    //0xaa940659,
-        .gpccon_mask    = 0xffffffff,
-        .gpcup          = 0xffffffff,    //0x0000ffff,
-        .gpcup_mask     = 0xffffffff,
-        .gpdcon         = 0xaaaaaaaa,    //0xaa84aaa0,
-        .gpdcon_mask    = 0xffffffff,
-        .gpdup          = 0xffffffff,    //0x0000faff,
-        .gpdup_mask     = 0xffffffff,
-//#endif 
-        .lpcsel         = 0,     //((0xCE6) &amp; ~7) | 1&lt;&lt;4,
-};
+<p>As the author said, directly use dd for copying the files into the SD card, but I failed.</p>
+
+<h4 id="sd-card">SD Card</h4>
+
+<p>Use following command for write the image to the SD card:</p>
+
+<pre><code>$ sudo dd if=bin/omap/openwrt-omap-combined-vfat-ext4.img of=/dev/sdb
+$ sync
 
 </code></pre>
 
-<p>Enable the lcd:</p>
+<p>Then we have to do following operation in order to change the bootup sequence and parameters:</p>
 
-<pre><code>static struct platform_device *smdk2410_devices[] __initdata = {
-&amp;s3c_device_usb,
-&amp;s3c_device_lcd, 
+<pre><code>$ mount /dev/mmcblk0p1 /mnt
+$ cp openwrt-omap-zImage /mnt/
+$ cp dtbs/am335x-boneblack.dtb /mnt/dtbs/
+$ vim uEnv.txt
+kernel_file=zImage
+fdtfile=am335x-boneblack.dtb
 
-</code></pre>
+loadzimage=load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${kernel_file}
+loadfdt=load mmc ${mmcdev}:${mmcpart} ${fdtaddr} /dtbs/${fdtfile}
 
-<p>arch/arm/mach-s3c2410/include/mach/regs-lcd.h:</p>
+console=ttyO0,115200n8
+mmcroot=/dev/mmcblk0p2 ro
+mmcrootfstype=ext4 rootwait
 
-<pre><code>#define S3C2410_LCDCON1_MMODE (0&lt;&lt;7)
+mmcargs=setenv bootargs console=${console} root=${mmcroot} rootfstype=${mmcrootfstype} ${optargs}
 
-</code></pre>
+uenvcmd=run loadzimage; run loadfdt; run mmcargs; bootz ${loadaddr} - ${fdtaddr}
 
-<p>drivers/video/s3c2410fb.c, after around line 52:</p>
-
-<pre><code>//LTV350QV_FOE_V0.0
- static void LTV350QV_Short_Delay(u_char time)
- {
-  ndelay(150);
- }
-
-
-#define LTV350QV_FOE 0x1d //device ID
-typedef struct _LTV350qv_spi_data_{
-unsigned char Device_ID; //ID of the device
-unsigned int Index; //index of register
-unsigned long Structure; //structure to be writed
-}LTV350QV_SPI_Data;
-//micro for LTV350QV_FOE
-#define CS_H __raw_writel(__raw_readl(S3C2410_GPCDAT) |(1&lt;&lt; 8),S3C2410_GPCDAT)//MAKE_HIGH(LTV350QV_CS)
-#define CS_L __raw_writel(__raw_readl(S3C2410_GPCDAT)&amp;~(1&lt;&lt; 8),S3C2410_GPCDAT)//MAKE_LOW(LTV350QV_CS)
-#define SCLK_H __raw_writel(__raw_readl(S3C2410_GPCDAT) |(1&lt;&lt; 9),S3C2410_GPCDAT)//MAKE_HIGH(LTV350QV_SCL)
-#define SCLK_L __raw_writel(__raw_readl(S3C2410_GPCDAT)&amp;~(1&lt;&lt; 9),S3C2410_GPCDAT)//MAKE_LOW(LTV350QV_SCL)
-#define SDI_H __raw_writel(__raw_readl(S3C2410_GPCDAT) |(1&lt;&lt;10),S3C2410_GPCDAT)//MAKE_HIGH(LTV350QV_SDI)
-#define SDI_L __raw_writel(__raw_readl(S3C2410_GPCDAT)&amp;~(1&lt;&lt;10),S3C2410_GPCDAT)//MAKE_LOW(LTV350QV_SDI)
-#define RST_H __raw_writel(__raw_readl(S3C2410_GPDDAT) |(1&lt;&lt; 0),S3C2410_GPDDAT)//MAKE_HIGH(LTV350QV_RST)
-#define RST_L __raw_writel(__raw_readl(S3C2410_GPDDAT)&amp;~(1&lt;&lt; 0),S3C2410_GPDDAT)//MAKE_LOW(LTV350QV_RST)
-//
-static void LTV350QV_Register_Write(LTV350QV_SPI_Data regdata)
-{
-u_char i,temp1;
-u_int temp2;
-u_long temp3;
-unsigned long flags;
-//write index
-temp1=regdata.Device_ID&lt;&lt;2 | 0&lt;&lt;1 | 0&lt;&lt;0; //register index
-temp2=regdata.Index;
-temp3=(temp1&lt;&lt;24) | (temp2&lt;&lt;8);
-local_irq_save(flags);
-CS_L;
-LTV350QV_Short_Delay(1);
-for(i=0;i&lt;24;i++)
-{
-SCLK_L;
-if(temp3 &amp; (1&lt;&lt;(31-i)) ) //if is H
-SDI_H;
-else
-SDI_L;
-LTV350QV_Short_Delay(1); //setup time
-SCLK_H;
-LTV350QV_Short_Delay(1); //hold time
-}
-CS_H;
-LTV350QV_Short_Delay(5);
-//write instruction
-temp1=regdata.Device_ID&lt;&lt;2 | 1&lt;&lt;1 | 0&lt;&lt;0; //instruction
-temp2=regdata.Structure;
-temp3=(temp1&lt;&lt;24) | (temp2&lt;&lt;8);
-CS_L;
-LTV350QV_Short_Delay(1);
-for(i=0;i&lt;24;i++)
-{
-SCLK_L;
-if(temp3 &amp; (1&lt;&lt;(31-i)) ) //if is H
-SDI_H;
-else
-SDI_L;
-LTV350QV_Short_Delay(1);
-SCLK_H;
-LTV350QV_Short_Delay(1);
-}
-CS_H;
-local_irq_restore(flags);
-}
- 
-static void LTV350QV_Write(u_int index, u_int regdata)
-{
-LTV350QV_SPI_Data WriteData;
-WriteData.Device_ID = LTV350QV_FOE;
-WriteData.Index = index;
-WriteData.Structure = regdata;
-LTV350QV_Register_Write(WriteData);
-}
- 
-static void LTV350QV_Power_ON(void)
-{
-LTV350QV_Write( 9, 0x0000);
-mdelay(150);
-LTV350QV_Write( 9, 0x4000);
-LTV350QV_Write(10, 0x2000);
-LTV350QV_Write( 9, 0x4055);
-mdelay(550);
-LTV350QV_Write( 1, 0x409d);
-LTV350QV_Write( 2, 0x0204);
-LTV350QV_Write( 3, 0x0100);
-LTV350QV_Write( 4, 0x3000);
-LTV350QV_Write( 5, 0x4003);
-LTV350QV_Write( 6, 0x000a);
-LTV350QV_Write( 7, 0x0021);
-LTV350QV_Write( 8, 0x0c00);
-LTV350QV_Write(10, 0x0103);
-LTV350QV_Write(11, 0x0301);
-LTV350QV_Write(12, 0x1f0f);
-LTV350QV_Write(13, 0x1f0f);
-LTV350QV_Write(14, 0x0707);
-LTV350QV_Write(15, 0x0307);
-LTV350QV_Write(16, 0x0707);
-LTV350QV_Write(17, 0x0000);
-LTV350QV_Write(18, 0x0004);
-LTV350QV_Write(19, 0x0000);
-mdelay(200);
-LTV350QV_Write( 9, 0x4a55);
-LTV350QV_Write( 5, 0x5003);
-}
- 
- 
-static void s3c2440fb_init_ltv350qv(void)
-{
-__raw_writel(0xaa9556a9, S3C2410_GPCCON); //Initialize VD[7:0],LCDVF[2:0],VM,VFRAME,VLINE,VCLK,LEND
-//LCDVF[0],[1],[2]---output;VD[0],[1],[2]----output.
-__raw_writel(0xffffffff, S3C2410_GPCUP); // Disable Pull-up register
-LTV350QV_Power_ON() ; //init LCD model
-__raw_writel(0xaaaaaaaa, S3C2410_GPDCON);
-__raw_writel(0xffffffff, S3C2410_GPDUP);
-// __raw_writel(3, S3C2410_LCDINTMSK); // MASK LCD Sub Interrupt
-// __raw_writel(0, S3C2410_TPAL); // Disable Temp Palette
-// __raw_writel(0, S3C2410_LPCSEL); // Disable LPC3600
-}
+optargs=&quot;debug init=/etc/preinit&quot;
 
 </code></pre>
 
-<p>Then add following sentense before the &ldquo;return 0&rdquo; of <code>static int s3c2410fb_init_registers(struct fb_info *info)</code>:</p>
+<p>With above modification you could directly use the SD card for booting the BBB and use OpenWRT!</p>
 
-<pre><code>s3c2440fb_init_ltv350qv();
+<h4 id="nfs">NFS</h4>
+
+<p>Create NFS via following command:</p>
+
+<pre><code>[root@TrustyArch omap]# pwd
+/media/y/embedded/BBB/OpenWRT/openwrt-bbb/bin/omap
+[root@TrustyArch omap]# cp openwrt-omap-zImage /srv/tftp/
+[root@TrustyArch omap]# cp dtbs/am335x-boneblack.dtb /srv/tftp/
+[root@TrustyArch omap]# mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d /srv/tftp/openwrt-omap-zImage /srv/tftp/uImage
+[root@TrustyArch omap]# rm -rf /srv/nfs4/BBBrootfs/
+[root@TrustyArch omap]# mkdir -p /srv/nfs4/BBBrootfs
+[root@TrustyArch omap]# tar xzvf openwrt-omap-Default-rootfs.tar.gz -C /srv/nfs4/BBBrootfs/
 
 </code></pre>
 
-<p>Now recompile the kernel, you will see framebuffer OK.</p>
+<p>Wow, start from NFS got failed for:</p>
 
-<p>Comment all of the function content of drivers/char/vt.c blank_screen_t(unsigned long dummy), this will disable the LCD&rsquo;s display from closing.</p>
+<pre><code>[    1.262675] VFS: Cannot open root device &quot;nfs&quot; or unknown-block(0,255): error -6
+[    1.270603] Please append a correct &quot;root=&quot; boot option; here are the available partitions:
+[    1.279456] b300         1875968 mmcblk0  driver: mmcblk
+[    1.285084]   b301           72261 mmcblk0p1 00000000-01
+[    1.290680]   b302         1799280 mmcblk0p2 00000000-02
+[    1.296300] b310            1024 mmcblk0boot1  (driver?)
+[    1.301895] b308            1024 mmcblk0boot0  (driver?)
+[    1.307513] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,255)
 
-<h3 id="directly-boot-from-tftp">Directly boot from tftp</h3>
+</code></pre>
 
-<p>Avoiding flash into the nand.</p>
+<p>Later I will investigate this problem.</p>
 
-<pre><code>
-&gt;tftp 30000000 uImage
-dm9000 i/o: 0x18000300, id: 0x90000a46 
-&gt; bootm
+<h3 id="re-compile-kernel">Re-Compile Kernel</h3>
+
+<p>First we enable the kernel .config support, so later we could directly output its .config for newer version:</p>
+
+<pre><code>$ make menuconfig
+General setup
+[*] Kernel .config support
+[*] Enable access to .config through /proc/config.gz
+
+</code></pre>
+
+<p>Enable the nfs support:</p>
+
+<pre><code>Device Driver
+[*] Block devices
+[*] Network block device support
+Networking options
+[*] IP: kernel level autoconfiguration
+[*]	IP: DHCP support
+[*]	IP: BOOTP support
+[*]
+File Systems
+[*] Netwrok File Systems
+
+</code></pre>
+
+<p>The detailed NFS client configuration is listed as following image:<br />
+<img src="/images/nfsconfiguration.jpg" alt="/images/nfsconfiguration.jpg" /></p>
+
+<p>Save the configuration and re-compile the kernel:</p>
+
+<pre><code>$ make V=99 -j4
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/09/wei-bbbbian-yi-nei-he-he-linux/">为BBB编译内核和Linux</a>
+      </h1>
+      <span class="post-date">Nov 9, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/09/wei-bbbbian-yi-nei-he-he-linux/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<p>因为原文是英文的缘故，所以这里就直接用中文翻译，并把编译时的步骤和注意事项记载下来。<br />
+主要参考了:<br />
+<a href="https://eewiki.net/display/linuxonarm/BeagleBone+Black">https://eewiki.net/display/linuxonarm/BeagleBone+Black</a><br />
+All of the files and folder are located under <code>$BBB/201411</code> folder.</p>
+
+<h3 id="交叉编译链准备">交叉编译链准备</h3>
+
+<p>下载、设置交叉编译链:</p>
+
+<pre><code>wget -c https://releases.linaro.org/14.09/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux.tar.xz
+tar xf gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux.tar.xz
+export CC=`pwd`/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/bin/arm-linux-gnueabihf-
+
+</code></pre>
+
+<p>测试交叉编译链:</p>
+
+<pre><code># ${CC}gcc --version
+arm-linux-gnueabihf-gcc (crosstool-NG linaro-1.13.1-4.9-2014.09 - Linaro GCC 4.9-2014.09) 4.9.2 20140904 (prerelease)
+Copyright (C) 2014 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+</code></pre>
+
+<h3 id="编译u-boot">编译U-Boot</h3>
+
+<p>下载U-Boot:</p>
+
+<pre><code>git clone git://git.denx.de/u-boot.git
+cd u-boot/
+git checkout v2014.10 -b tmp
+
+</code></pre>
+
+<p>下载、加载补丁:</p>
+
+<pre><code>wget -c https://raw.githubusercontent.com/eewiki/u-boot-patches/master/v2014.10/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+
+</code></pre>
+
+<p>编译U-Boot:</p>
+
+<pre><code># make ARCH=arm CROSS_COMPILE=${CC} distclean &amp;&amp; make ARCH=arm CROSS_COMPILE=${CC} am335x_evm_defconfig &amp;&amp; make ARCH=arm CROSS_COMPILE=${CC}
+
+</code></pre>
+
+<h3 id="编译内核">编译内核</h3>
+
+<p>下面的步骤将编译出内核和内核模块，编译完成后全部被拷贝到deploy文件夹中。</p>
+
+<h4 id="主线内核">主线内核</h4>
+
+<p>编译前准备， 在Ubuntu 12.04，安装下列包:</p>
+
+<pre><code>$ sudo apt-get install bc build-essential device-tree-compiler fakeroot lzma lzop man-db u-boot-tools libncurses5-dev ia32-libs wget
+
+</code></pre>
+
+<p>下载:</p>
+
+<pre><code>$ git clone https://github.com/RobertCNelson/bb-kernel.git
+$ cd bb-kernel/
+
+</code></pre>
+
+<p>切换到v3.8.x分支(支持全面):</p>
+
+<pre><code>$ git checkout origin/am33x-v3.8 -b tmp
+
+</code></pre>
+
+<p>切换到v3.17.x分支(SGX， 更好的usb和Ethernet支持), SGX，硬件加速。</p>
+
+<pre><code>$ git checkout origin/am33x-v3.17 -b tmp
+
+</code></pre>
+
+<p>编译：</p>
+
+<pre><code>$ ./build_kernel.sh
+
+</code></pre>
+
+<h4 id="ti内核">TI内核</h4>
+
+<p>完整编译步骤如下：</p>
+
+<pre><code>git clone https://github.com/RobertCNelson/ti-linux-kernel-dev/
+cd ti-linux-kernel-dev/
+git checkout origin/ti-linux-3.14.y -b tmp
+./build_kernel.sh
+
+</code></pre>
+
+<h3 id="准备文件系统">准备文件系统</h3>
+
+<h4 id="ubuntu">Ubuntu</h4>
+
+<p>下载并解压Ubuntu文件系统:</p>
+
+<pre><code>wget -c https://rcn-ee.net/deb/minfs/trusty/ubuntu-14.04-minimal-armhf-2014-07-07.tar.xz
+tar xf ubuntu-14.04-minimal-armhf-2014-07-07.tar.xz
+
+</code></pre>
+
+<h3 id="写入存储卡">写入存储卡</h3>
+
+<h4 id="分区准备">分区准备</h4>
+
+<p>准备的TF卡容量为8G， 使用lsblk可以用于查看device id。</p>
+
+<pre><code>$ lsblk
+NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+mmcblk0     179:0    0   7.4G  0 disk 
+├─mmcblk0p1 179:1    0    48M  0 part 
+└─mmcblk0p2 179:2    0   7.4G  0 part 
+
+</code></pre>
+
+<p>备份好TF卡上文件内容后，对其重新进行分区，这里使用fdisk移除掉所有分区后重新分成一个区，而后格式化为ext4分区。</p>
+
+<pre><code># export DISK=/dev/mmcblk0
+# sudo dd if=/dev/zero of=${DISK} bs=1M count=10
+# sudo dd if=./u-boot/MLO of=${DISK} count=1 seek=1 conv=notrunc bs=128k
+# sudo dd if=./u-boot/u-boot.img of=${DISK} count=2 seek=1 conv=notrunc bs=384k
+# sudo sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
+1,,0x83,*
+__EOF__
+# sudo mkfs.ext4 /dev/mmcblk0p1 -L rootfs
+
+</code></pre>
+
+<p>现在查看lsblk的结果应该是这样:</p>
+
+<pre><code>mmcblk0     179:0    0   7.4G  0 disk 
+└─mmcblk0p1 179:1    0   7.4G  0 part 
+
+</code></pre>
+
+<h4 id="写入">写入</h4>
+
+<p>我们将使用eMMC自有的BootLoader, 所以在/media/rootfs中使用下列内容到uEnv.txtt：</p>
+
+<pre><code>##This will work with: Angstrom's 2013.06.20 u-boot.
+ 
+loadaddr=0x82000000
+fdtaddr=0x88000000
+rdaddr=0x88080000
+ 
+initrd_high=0xffffffff
+fdt_high=0xffffffff
+ 
+loadximage=load mmc 0:1 ${loadaddr} /boot/vmlinuz-${uname_r}
+loadxfdt=load mmc 0:1 ${fdtaddr} /boot/dtbs/${uname_r}/${fdtfile}
+loadxrd=load mmc 0:1 ${rdaddr} /boot/initrd.img-${uname_r}; setenv rdsize ${filesize}
+loaduEnvtxt=load mmc 0:1 ${loadaddr} /boot/uEnv.txt ; env import -t ${loadaddr} ${filesize};
+loadall=run loaduEnvtxt; run loadximage; run loadxfdt;
+ 
+mmcargs=setenv bootargs console=tty0 console=${console} ${optargs} ${cape_disable} ${cape_enable} root=${mmcroot} rootfstype=${mmcrootfstype} ${cmdline}
+ 
+uenvcmd=run loadall; run mmcargs; bootz ${loadaddr} - ${fdtaddr};
+
+</code></pre>
+
+<p>解压缩下载好的rootfs文件到SD卡分区：</p>
+
+<pre><code>$ tar xvf armhf-rootfs-ubuntu-trusty.tar -C /media/rootfs/
+$ sync
+
+</code></pre>
+
+<p>拷贝kernel到SD卡分区:</p>
+
+<pre><code># cp /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32.zImage ./vmlinuz-3.14.23-ti-r32
+
+</code></pre>
+
+<p>拷贝Kernel Device Tree二进制文件:</p>
+
+<pre><code>tar xvf /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32-dtbs.tar.gz -C /media/rootfs/boot/dtbs/${kernel_version}/
+
+</code></pre>
+
+<p>拷贝内核模块:</p>
+
+<pre><code># tar xfv /media/y/embedded/BBB/201411/deploy/3.14.23-ti-r32-modules.tar.gz -C /media/rootfs/
+
+</code></pre>
+
+<p>配置fstab文件:</p>
+
+<pre><code>sudo sh -c &quot;echo '/dev/mmcblk0p1  /  auto  errors=remount-ro  0  1' &gt;&gt; /media/rootfs/etc/fstab&quot;
+
+</code></pre>
+
+<p>配置网络：</p>
+
+<pre><code># vim /media/rootfs/etc/network/interfaces
+auto lo
+iface lo inet loopback
+ 
+auto eth0
+iface eth0 inet dhcp
+
+</code></pre>
+
+<p>配置串口登录：</p>
+
+<pre><code>$ sudo vim /media/rootfs/etc/init/serial.conf
+start on stopped rc RUNLEVEL=[2345]
+stop on runlevel [!2345]
+ 
+respawn
+exec /sbin/getty 115200 ttyO0
+
+</code></pre>
+
+<p>进入U-boot后更改一下配置：</p>
+
+<pre><code>U-Boot# setenv mmcroot /dev/mmcblk0p1 ro
+U-Boot# boot
+
+</code></pre>
+
+<p>默认用户名，密码分别是: root/temppwd<br />
+进入系统以后查看系统信息：</p>
+
+<pre><code>ubuntu@arm:~$ uname -a 
+Linux arm 3.14.23-ti-r32 #1 SMP PREEMPT Sun Nov 9 04:19:25 UTC 2014 armv7l armv7l armv7l GNU/Linux
+ubuntu@arm:~$ cat /etc/issue
+Ubuntu 14.04 LTS \n \l
+
+default username:password is [ubuntu:temppwd]
+ubuntu@arm:~$ ifconfig
+eth0      Link encap:Ethernet  HWaddr 90:59:af:65:d9:8c  
+          inet addr:10.0.0.122  Bcast:10.0.0.255  Mask:255.255.255.0
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/08/install-new-image-to-sd-card-for-bbb/">Install new image to sd card for BBB</a>
+      </h1>
+      <span class="post-date">Nov 8, 2014  &middot; <a href="http://purplepalmdash.github.io/2014/11/08/install-new-image-to-sd-card-for-bbb/#disqus_thread">Comments</a>
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      <p>Mainly for installing the OpenWRT system on the BBB, following is the steps:</p>
+
+<pre><code># zImage
+cp /media/y/embedded/BBB/svnco/trunk/bin/omap/openwrt-omap-zImage ./zImage
+# dtb file
+cp /media/y/embedded/BBB/svnco/trunk/bin/omap/dtbs/am335x-boneblack.dtb ./dtbs/
+
 
 </code></pre>
 
@@ -1599,12 +1037,21 @@ dm9000 i/o: 0x18000300, id: 0x90000a46
         ><a href="/page/133/">133</a></li>
         
         <li
+        ><a href="/page/134/">134</a></li>
+        
+        <li
+        ><a href="/page/135/">135</a></li>
+        
+        <li
+        ><a href="/page/136/">136</a></li>
+        
+        <li
         >
         <a href="/page/72/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
         </li>
         
         <li>
-            <a href="/page/133/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+            <a href="/page/136/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
         </li>
         
     </ul>
