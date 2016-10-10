@@ -103,4 +103,59 @@ $ valgrind -v --leak-check=full ./TwoSum
 
 看起来也不会有什么严重的后果。   
 
+#### Python版
+自己写的Python版本实现如下:    
+
+```python
+class Solution(object):
+    def twoSum(self, nums, target):
+        """
+        :type nums: List[int]
+        :type target: int
+        :rtype: List[int]
+        """
+        returnvalue = []
+        for num in nums:
+            for left in nums[nums.index(num)+1:]:
+                if (num + left == target):
+                    returnvalue.append(nums.index(num))
+                    returnvalue.append(nums.index(left))
+        return returnvalue
+
+print (Solution().twoSum([5, 4, 11, 17], 9))
+```
+心得1: 类(class)的用法.    
+心得2: 数组的一点点小小的使用。    
+
+基本逻辑和C语言实现的差不多，算法复杂度也一样。    
+
+#### 引入的bug
+设置的test case中，我们的代码在遇到[0,4,3,0]这样的输入时，会报错。原因在于nums.index(0)
+总是返回第一个0所在的下标(0)，而不是第二个0所在的下标(3)，修改后的代码如下:     
+
+```
+class Solution(object):
+    def twoSum(self, nums, target):
+        """
+        :type nums: List[int]
+        :type target: int
+        :rtype: List[int]
+        """
+        returnvalue = []
+        index = 0
+        for num in nums:
+            index += 1
+            for left in nums[index:]:
+                if (num + left == target):
+                    returnvalue.append(nums.index(num))
+                    returnvalue.append(nums[index:].index(left)+index)
+        return returnvalue
+
+print (Solution().twoSum([0,4,3,0], 0))
+```
+运行后的结果，不是那么理想，只击败了34%左右的提交结果:    
+
+![/images/2016_10_10_16_34_33_1195x858.jpg](/images/2016_10_10_16_34_33_1195x858.jpg)    
+
+#### Python Hash
 
