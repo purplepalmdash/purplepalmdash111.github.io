@@ -391,3 +391,104 @@ int main(void)
 ```
 
 一塌糊涂啊！！！明天继续写。    
+
+最后独立写出的答案如下，非常难看。    
+
+```c
+int shiftnumber = 0;
+
+struct ListNode* addTwoNumbers(struct ListNode* l1, struct ListNode* l2) {
+	struct ListNode* currentl1 = l1;
+	struct ListNode* currentl2 = l2;
+	// Holding the return value
+	struct ListNode* ptr = (struct ListNode*)malloc(sizeof(struct ListNode));
+	struct ListNode* head = ptr;
+	ptr->next = NULL;
+	shiftnumber = 0;
+
+
+	// First calculate the longest Linked List
+	int lenl1 = 0;
+	int lenl2 = 0;
+
+	while(currentl1 != NULL)
+	{
+		lenl1++;
+		currentl1 = currentl1->next;
+	}
+	while(currentl2 != NULL)
+	{
+		lenl2++;
+		currentl2 = currentl2->next;
+	}
+
+	currentl1 = l1;
+	currentl2 = l2;
+
+	// Get the largest length, thus we could use this number for controlling the
+	// return value. 
+	int LinkedListLen = lenl1>lenl2?lenl1:lenl2;
+	while(LinkedListLen > 0)
+	{
+		LinkedListLen--;
+		int ValOfL1, ValOfL2 = 0;
+		ValOfL1 = (currentl1 == NULL)?0:currentl1->val;
+		ValOfL2 = (currentl2 == NULL)?0:currentl2->val;
+		ptr->val = ((ValOfL1 + ValOfL2)%10 + shiftnumber)%10;
+		if(((ValOfL1 + ValOfL2)%10 + shiftnumber) == 10)
+		{
+		    shiftnumber = 1;
+		}
+		else{
+		shiftnumber = 0;
+		    if((ValOfL1 + ValOfL2)>=10)
+		    {
+		        shiftnumber = (ValOfL1 + ValOfL2)/10;
+		    }
+		}
+		// Allocate memory for new node. Only allocate (LinkedListLen - 1) times
+		if(LinkedListLen > 0)
+		{
+		    ptr->next = (struct ListNode*)malloc(sizeof(struct ListNode));
+		    ptr->next->next = NULL;
+		    ptr = ptr->next;
+		}
+		// Switch to next node.
+		if(currentl1 != NULL)
+		{
+		    currentl1 = currentl1->next;
+		}
+		if(currentl2 != NULL)
+		{
+		    currentl2 = currentl2->next;
+		}
+	}
+	// If shiftnumber > 0, allocate a new node for holding it
+	if(shiftnumber != 0)
+	{
+		ptr->next = (struct ListNode*)malloc(sizeof(struct ListNode));
+		ptr->next->next = NULL;
+		ptr->next->val = shiftnumber;
+	}
+	
+	return head;
+}
+```
+我的思路:    
+
+1，考虑到两个输入的链表长度可能不一样，因而先得到最长的链表长度，用这个最长的长度来做递归。    
+2, 是否有进位通过一个全局表两shiftnumber来hold. 如果相加到最后依然有进位，则在循环外开辟一块空间来存放这个进位。    
+3, 两个链表中的任何一个一旦走到了NULL指针，则其值用0来代替。    
+4, 三目运算符的使用。    
+5, `ptr->val = ((ValOfL1 + ValOfL2)%10 + shiftnumber)%10;`，这个是考虑到test case:    
+```
+[9]
+[1, 9]
+```
+如果不做的话，则得出结果会是[0,10], 进位和该位数字的和为10的时候需要单独考虑。    
+
+反思:    
+1, 对指针的使用要非常小心。    
+2, 就是凭直觉写出来的，算法很差, 代码可读性也很差。    
+
+
