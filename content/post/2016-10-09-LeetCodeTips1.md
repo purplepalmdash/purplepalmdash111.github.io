@@ -491,4 +491,92 @@ struct ListNode* addTwoNumbers(struct ListNode* l1, struct ListNode* l2) {
 1, 对指针的使用要非常小心。    
 2, 就是凭直觉写出来的，算法很差, 代码可读性也很差。    
 
+### Longest substr
 
+The sample code is listed, while to be optimized:    
+
+```
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAXN 50000
+
+// q should be longer than p
+int comlen(char* p, char* q)
+{
+    int i = 0;
+    while (*q && (*p++ == *q++))
+    {
+        i++;
+    }
+    return i;
+}
+
+int cstring_cmp(const void *a, const void *b)
+{
+    const char **ia = (const char **)a;
+    const char **ib = (const char **)b;
+    return strcmp(*ia, *ib);
+}
+
+
+int lengthOfLongestSubstring(char* s) {
+      char c[MAXN];
+      char* a[MAXN];
+     
+
+      // Create a new array which hold char *s
+      // Remove all of the duplicated items in array
+      // no_duplicated[]
+ 
+      char ch;
+      int n = 0;
+      for(n = 0; n < strlen(s); n++)
+      {
+          printf("%c ",s[n]);
+          a[n] = &c[n];
+          c[n] = s[n];
+      }
+      a[n] = 0;
+
+      qsort(a, n, sizeof(char*), cstring_cmp);
+
+      int maxlen = 0;
+      int len = 0;
+      int maxi = 0;
+      for (int i = 0; i < n - 1; i++)
+      {
+          len = comlen(a[i], a[i + 1]);
+	  printf("len is %d\n", len);
+          if (len > maxlen)
+          {
+              maxlen = len;
+              maxi = i;
+          }
+      }
+
+      printf("maxlen:%d\tmax string:\t", maxlen);
+      char ch_tmp;
+      for (int i = 0; i < maxlen; i++)
+      {
+          ch_tmp = *(a[maxi] + i);
+          printf("%c", ch_tmp);
+      }
+      printf("\n");
+
+      return maxlen;
+}
+
+int main(void)
+{
+	char s[100] = "abcabcccc";
+	char t[100] = "bbbbbbbbbbbb";
+	char k[100] = "pwwkew";
+	lengthOfLongestSubstring(s);
+	lengthOfLongestSubstring(t);
+	lengthOfLongestSubstring(k);
+	return 0;
+}
+
+```
