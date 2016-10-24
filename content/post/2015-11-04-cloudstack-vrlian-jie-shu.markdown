@@ -55,6 +55,15 @@ Test Client上运行一个快速发起并保持连接的客户端程序，服务
 Server端代码下载地址:    
 [https://gist.github.com/yongboy/5318930/raw/ccf8dc236da30fcf4f89567d567eaf295b363d47/server.c](https://gist.github.com/yongboy/5318930/raw/ccf8dc236da30fcf4f89567d567eaf295b363d47/server.c)   
 
+编译方法，ubuntu下:    
+
+```
+$ sudo apt-get install -y libev-dev
+$ vim server.c
+注释掉ev.h那行，直接换成#include <ev.h>
+$ gcc -o server server.c -lev -lm
+```
+
 Client端代码下载地址:    
 
 [https://gist.github.com/yongboy/5324779/raw/f29c964fcd67fefc3ce66e487a44298ced611cdc/client2.c](https://gist.github.com/yongboy/5324779/raw/f29c964fcd67fefc3ce66e487a44298ced611cdc/client2.c)   
