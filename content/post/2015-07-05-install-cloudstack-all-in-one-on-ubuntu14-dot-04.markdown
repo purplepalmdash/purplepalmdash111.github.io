@@ -355,3 +355,18 @@ This should go through a sequence of setup.
 ```
 
 Now you could enjoy the cloudstack all-in-one
+
+### Trouble-Shooting
+No 8080/client webpage:   
+
+```
+$ vim /etc/cloudstack/management/db.properties
+Change the db IP.  
+```
+Remove tomcat6 startup
+
+```
+$ sudo /etc/init.d/tomcat6 stop
+$ sudo update-rc.d -f tomcat6 remove
+```
+Be sure the /etc/hosts don't contain the `127.0.1.1` items.   
