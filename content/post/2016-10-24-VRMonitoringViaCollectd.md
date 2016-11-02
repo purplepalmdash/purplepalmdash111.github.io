@@ -45,6 +45,9 @@ Then `apt-get update && apt-get install -y collectd`, for installing collectd.
 Configuration of collectd:    
 
 ```
+$ touch /var/log/collectd.log
+$ vim /etc/collectd/collectd.conf
+Hostname "WeiLan"
 LoadPlugin logfile
 #LoadPlugin syslog
 
@@ -62,6 +65,7 @@ LoadPlugin logfile
 ..... 
 
 LoadPlugin conntrack
+LoadPlugin uptime 
 #LoadPlugin df
 LoadPlugin write_graphite
 

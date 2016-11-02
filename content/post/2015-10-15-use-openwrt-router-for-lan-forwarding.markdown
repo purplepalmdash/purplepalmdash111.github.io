@@ -90,3 +90,24 @@ autorunApps =
 
 Now everytime we reboot the system, it will automatically start the dhcpd server and
 let OpenWRT as the access Point.    
+
+### Kernel IPV4 Forwarding
+Check the configuration:    
+
+```
+# sysctl -a | grep forward
+```
+Enable the forwarding manually:    
+
+```
+# sysctl net.ipv4.ip_forward=1
+```
+
+added it into system startup:    
+
+```
+# vim /etc/sysctl.d/30-ipforward.conf
+net.ipv4.ip_forward=1
+net.ipv6.conf.default.forwarding=1
+net.ipv6.conf.all.forwarding=1
+```
