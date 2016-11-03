@@ -83,3 +83,34 @@ Acquire::http::Proxy "http://192.168.0.121:3142";
 In ArchLinux, add it into startup file:    
 
 `sudo apt-cacher-ng`.    
+
+### Docker way
+Run instance via:    
+
+```
+# docker run --name apt-cacher-ng -d --restart=always  --publish 3142:3142
+--volume /var1/aptcacher:/var/cache/apt-cacher-ng
+sameersbn/apt-cacher-ng:latest
+```
+Then Added a systemd service:  
+
+```
+# vim /usr/lib/systemd/system/aptcache.service
+[Unit]
+Description=aptcache container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker start -a apt-cacher-ng
+ExecStop=/usr/bin/docker stop -t 2 apt-cacher-ng
+
+[Install]
+WantedBy=multi-user.target
+``` 
+enable the service via:    
+
+```
+$ sudo systemctl enable aptcache
+```

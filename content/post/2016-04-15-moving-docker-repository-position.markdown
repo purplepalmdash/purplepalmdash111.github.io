@@ -23,6 +23,9 @@ $ sudo ln -s /home/juju/DockerRepo/docker /var/lib/docker
 $ sudo service docker restart
 $ sudo service docker status
 ```
+Notice: the `tar -zcC` will take a long time, be patient.    
+In systemd like system, you should firstly stop docker.service, after moving,
+restarting the docker.service.    
 ### Change Docker Parameters
 
 ```
