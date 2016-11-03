@@ -80,3 +80,6 @@ Config on Agent:
 $ sudo vim /etc/apt/apt.conf.d/01proxy 
 Acquire::http::Proxy "http://192.168.0.121:3142";
 ```
+In ArchLinux, add it into startup file:    
+
+`sudo apt-cacher-ng`.    
