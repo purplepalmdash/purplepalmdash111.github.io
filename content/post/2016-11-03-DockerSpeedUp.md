@@ -19,7 +19,7 @@ ArchLinux下，编辑以下文件，或者你可以通过`sudo systemctl edit do
 ExecStart=
 ExecStart=/usr/bin/dockerd --registry-mirror=http://1a653205.m.daocloud.io -H fd://
 ```
-现在重新家在服务并重新启动`docker.service`：    
+现在重新加载服务并重新启动`docker.service`：    
 
 ```
 # systemctl daemon-reload
