@@ -85,3 +85,42 @@ Created symlink /etc/systemd/system/multi-user.target.wants/DockerRegistry.servi
 # docker push localhost:5000/ubuntu:16.04
 ```
 
+### 在agent机器上启用本地registry仓库
+在systemd类型的机器上，例如Ubuntu16.04上，使用以下命令，添加`192.168.177.11:5000`这个私有仓库：
+
+```
+# sed -i 's#fd://#fd:// --registry-mirror http://192.168.177.11:5000
+--insecure-registry 192.168.177.11:5000#' /lib/systemd/system/docker.service
+# systemctl daemon-reload
+# systemctl restart docker
+```
+
+添加完毕后，检查docker运行参数:    
+
+```
+# ps -ef | grep docker
+root      4253     1  2 21:48 ?        00:00:00 /usr/bin/dockerd -H fd://
+--registry-mirror http://192.168.177.11:5000 --insecure-registry
+192.168.177.11:5000
+root      4260  4253  0 21:48 ?        00:00:00 docker-containerd -l
+unix:///var/run/docker/libcontainerd/docker-containerd.sock --shim
+docker-containerd-shim --metrics-interval=0 --start-timeout 2m --state-dir
+/var/run/docker/libcontainerd/containerd --runtime docker-runc
+```
+pull一个已经被放入仓库里的镜像，速度非常快:    
+
+```
+# docker pull 192.168.177.11:5000/fedora:latest
+latest: Pulling from fedora
+41b563eedcb0: Pull complete 
+Digest:
+sha256:cc4323bf2ee99b414600605e42d1888c4c1b0a08f5793a379c1238af4a44315d
+Status: Downloaded newer image for 192.168.177.11:5000/fedora:latest
+```
+检查安装的镜像:     
+
+```
+$ sudo docker run -it 192.168.177.11:5000/fedora /bin/bash
+[root@810f44567c87 /]# cat /etc/redhat-release 
+Fedora release 24 (Twenty Four)
+```
