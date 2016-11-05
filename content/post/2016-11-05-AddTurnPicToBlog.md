@@ -138,3 +138,31 @@ https://github.com/niklasvh/html2canvas/releases/download/0.4.1/html2canvas.js
 ![/images/2016_11_05_18_58_11_250x375.jpg](/images/2016_11_05_18_58_11_250x375.jpg)    
 
 打完，收工，以后在盆友圈想怎么咆哮就可以怎么咆哮了。
+
+### Trouble-Shooting
+之所以加这么个条目是因为，在未定义背景的网页里，有时候截出来的图是黑色背景的，修正：    
+
+修改`./static/js/html2canvas.js`文件:    
+
+```
+sTransparent = function(backgroundColor) {
+  return (backgroundColor === "transparent" || backgroundColor === "rgba(0, 0,
+0, 0)");
+};
+```
+改为:    
+
+```
+_html2canvas.Util.isTransparent = function(backgroundColor) {
+  return (backgroundColor === "transparent" || backgroundColor === "rgba(0, 0,
+0, 0)" || backgroundColor === undefined);
+};
+```
+之后我们在`./layouts/partials/head.html`中，添加这一行:    
+
+```
+          html2canvas(document.getElementsByClassName('post'), {
++              background :'#FFFFFF',
+              onrendered: function(canvas) {
+```
+现在生成的图片背景就是白色的了。    
