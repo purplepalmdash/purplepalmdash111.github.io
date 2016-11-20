@@ -6,7 +6,7 @@ keywords = ["Life"]
 title = "Nov20BaiyunMountain"
 
 +++
-今天下午的路径：    
+今天下午的路径, GPS上来看是18公里，路途上大概24公里：    
 
 ![/images/2016_11_20_20_58_50_613x834.jpg](/images/2016_11_20_20_58_50_613x834.jpg)    
 
