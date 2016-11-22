@@ -16,4 +16,37 @@ to[https://github.com/crashdump/collectd-xenserver](https://github.com/crashdump
 * sudo pip install collectd
 
 ### Configuration
-The plugin could not working. to be investigated.
+Make a directory under `/etc/collectd` folder, and copy the
+`collectd-xenserver.py` into this folder:    
+
+```
+$ sudo mkdir -p  /var/collectd/plugins
+$ sudo cp YourDictory/collectd-xenserver.py /var/collectd/plugins/collectd_xenserver.py
+```
+Now edit the configuration file of `/etc/collectd/collectd.conf`:    
+
+```
+<LoadPlugin python>
+	Globals true
+</LoadPlugin>
+
+<Plugin python>
+	ModulePath "/etc/collectd/plugins/"
+	#LogTraces true
+	#Interactive true
+	Import "collectd_xenserver"
+        <Module "collectd_xenserver">
+              <Host "192.168.10.187">
+                    User "root"
+                    Password "xxxxx"
+              </Host>
+        </Module>
+
+</Plugin>
+```
+Now restart the collectd, you will find the data-set has been collectd and
+send into the graphite server.    
+
+```
+$ sudo service collectd restart
+```
