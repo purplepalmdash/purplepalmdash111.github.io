@@ -172,6 +172,84 @@ Database Host: mysql
 ```
 After installation, now refresh the webpage you will see the installed wordpress.    
 
+### Echo Server
+First download the image and load it into the minikube VM:    
+
+```
+$ docker pull gcr.io/google_containers/echoserver:1.4
+$ kubectl run hello-minikube --image=gcr.io/google_containers/echoserver:1.4 \
+--hostport=8000 --port=8080 
+$ kubectl get pod
+NAME                              READY     STATUS    RESTARTS   AGE
+hello-minikube-3383150820-x72om   1/1       Running   0          1m
+```
+You could use `kubectl describe pod hellxxxx` for displaying the detailed
+info.     
+
+Test echo server:    
+
+```
+# curl $(minikube service hello-minikube --url) --data "param1=value1"
+CLIENT VALUES:
+client_address=172.17.0.1
+command=POST
+real path=/
+query=nil
+request_version=1.1
+request_uri=http://192.168.99.101:8080/
+
+SERVER VALUES:
+server_version=nginx: 1.10.0 - lua: 10001
+
+HEADERS RECEIVED:
+accept=*/*
+content-length=13
+content-type=application/x-www-form-urlencoded
+host=192.168.99.101:32520
+user-agent=curl/7.51.0
+BODY:
+param1=value1%                                        
+```
+Or use nmap for scan all of the ports:    
+
+```
+$ nmap 192.168.99.101
+
+Starting Nmap 7.31 ( https://nmap.org ) at 2016-11-28 22:09 CST
+Nmap scan report for 192.168.99.101
+Host is up (0.0043s latency).
+Not shown: 996 closed ports
+PORT      STATE SERVICE
+22/tcp    open  ssh
+8000/tcp  open  http-alt
+8443/tcp  open  https-alt
+30000/tcp open  ndmps
+```
+8000 port is the port listening for, testing this port:    
+
+```
+$  curl http://192.168.99.101:8000 --data "param1=value1"
+CLIENT VALUES:
+client_address=192.168.99.1
+command=POST
+real path=/
+query=nil
+request_version=1.1
+request_uri=http://192.168.99.101:8080/
+
+SERVER VALUES:
+server_version=nginx: 1.10.0 - lua: 10001
+
+HEADERS RECEIVED:
+accept=*/*
+content-length=13
+content-type=application/x-www-form-urlencoded
+host=192.168.99.101:8000
+user-agent=curl/7.51.0
+BODY:
+param1=value1% 
+```
+
 ### Tips
 Login to minikube VM:     
 
