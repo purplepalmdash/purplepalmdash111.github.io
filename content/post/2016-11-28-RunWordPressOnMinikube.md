@@ -339,3 +339,11 @@ Delete pod in terminating status in force:
 ```
 # kubectl delete pod mypod --grace-period=0
 ```
+
+Using kubectl proxy:    
+
+```
+$ kubectl proxy --port=8001
+Starting to serve on localhost:8001
+```
+Now visit: `http://localhost:8001/ui` for accessing the dashboard.    
