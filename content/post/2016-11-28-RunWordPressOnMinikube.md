@@ -249,6 +249,69 @@ user-agent=curl/7.51.0
 BODY:
 param1=value1% 
 ```
+### Deployment Using dashboard
+Specify the namespace:    
+![/images/2016_11_29_10_35_29_283x454.jpg](/images/2016_11_29_10_35_29_283x454.jpg)    
+
+![/images/2016_11_29_10_35_37_205x403.jpg](/images/2016_11_29_10_35_37_205x403.jpg) 
+
+Create app name:    
+
+```
+App name: hello-yang
+Container Image: gcr.io/google_containers/echoserver:1.4
+Number of pods: 5
+Service: External
+Port: 8080  Target port: 8080  Protocol: TCP
+``` 
+After deployment, examine the result via:    
+
+```
+➜  ~ kubectl get namespace
+NAME            STATUS    AGE
+default         Active    14h
+devops-meetup   Active    13h
+kube-system     Active    14h
+➜  ~ kubectl get deployment --namespace="devops-meetup"
+NAME         DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+hello-yang   5         5         5            5           24m
+```
+Delete the deployment via:    
+
+```
+# kubectl delete deployment hello-yang --namespace="devops-meetup"
+deployment "hello-yang" deleted
+```
+### Deployment Using yaml
+Download the yaml file:    
+
+```
+$  wget
+https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/guestbook/all-in-one/guestbook-all-in-one.yaml
+$ vim guestbook-all-in-one.yaml
+  # type: LoadBalancer
+  type: LoadBalancer
+```
+Create the service via:    
+
+```
+$ kubectl create -f guestbook-all-in-one.yaml
+```
+Get the service and view the result:    
+
+```
+➜  ~ kubectl get services
+NAME           CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
+frontend       10.0.0.164   <pending>     80/TCP     15m
+kubernetes     10.0.0.1     <none>        443/TCP    15h
+redis-master   10.0.0.100   <none>        6379/TCP   15m
+redis-slave    10.0.0.14    <none>        6379/TCP   15m
+➜  ~ minikube service frontend --url
+http://192.168.99.101:30640
+```
+Then open the browser and view the result.    
+
+![/images/2016_11_29_11_31_56_375x301.jpg](/images/2016_11_29_11_31_56_375x301.jpg)    
 
 ### Tips
 Login to minikube VM:     
@@ -269,4 +332,10 @@ View minikube service URL:
 ```
 $ minikube-linux-amd64 service nginx --url
 http://192.168.99.100:32400
+```
+
+Delete pod in terminating status in force:    
+
+```
+# kubectl delete pod mypod --grace-period=0
 ```
