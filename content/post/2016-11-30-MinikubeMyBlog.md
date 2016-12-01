@@ -149,4 +149,13 @@ $ minikube service frontendservice --url
 http://192.168.99.101:31521
 ```
 Open your browser and navigate to the corresponding url then you could get the
-website running.     
+website running.    
+
+### port-forward
+Use following command, forward the local flows to pod:     
+
+```
+$ kubectl port-forward hugoblog 8078:80
+``` 
+Now open your browser visit `http://localhost:8078`, then you could visit the
+blog. 

@@ -347,3 +347,14 @@ $ kubectl proxy --port=8001
 Starting to serve on localhost:8001
 ```
 Now visit: `http://localhost:8001/ui` for accessing the dashboard.    
+
+wide output:    
+
+```
+$ kubectl get pods -o wide
+NAME       READY     STATUS    RESTARTS   AGE       IP           NODE
+hugoblog   1/1       Running   2          22h       172.17.0.4   minikube
+$ kubectl get pods        
+NAME       READY     STATUS    RESTARTS   AGE
+hugoblog   1/1       Running   2          22h
+```
