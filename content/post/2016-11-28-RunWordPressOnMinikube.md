@@ -358,3 +358,14 @@ $ kubectl get pods
 NAME       READY     STATUS    RESTARTS   AGE
 hugoblog   1/1       Running   2          22h
 ```
+
+Create deployment command:    
+
+```
+# kubectl run my-nginx --image=nginx --replicas=2 --port=808 --expose
+```
+so if you want to delete all of the pods, simply delete:    
+
+```
+# kubectl delete deployments my-nginx
+```
