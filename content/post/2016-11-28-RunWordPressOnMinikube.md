@@ -369,3 +369,24 @@ so if you want to delete all of the pods, simply delete:
 ```
 # kubectl delete deployments my-nginx
 ```
+
+Prevent image pull in json definition files(take zookeeper.json for example):    
+
+```
+$ cat zookeeper.json
+{
+  "kind": "Pod",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "zookeeper",
+    "labels": {
+      "name": "zookeeper"
+    }
+  },
+  "spec": {
+    "containers": [
+      {
+        "name": "zookeeper",
+        "image": "mattf/zookeeper:latest",
+	"imagePullPolicy": "IfNotPresent",
+```
