@@ -59,3 +59,39 @@ To make sure the file is touched, before we use `touch somefile`, now we use:
     - name: touch something in the /tmp
       file: path=/tmp/abc.txt state=touch
 ```
+
+### Specify the username/password
+Edit the inventory file:    
+
+```
+[all:vars]
+ansible_connection=ssh
+ansible_ssh_user=vagrant
+ansible_ssh_pass=vagrant
+```
+### Ping all of the nodes
+via:    
+
+```
+$ ansible all -m ping -i inventory
+```
+
+### Change the default gw
+Add following scripts into the Vagrantfile:     
+
+```
+  # default router
+  config.vm.provision "shell",
+    run: "always",
+    inline: "route add default gw 192.168.0.176"
+
+  # default router ipv6
+  #config.vm.provision "shell",
+  #  run: "always",
+  #  inline: "route -A inet6 add default gw fc00::1 eth1"
+
+  # delete default gw on eth0
+  config.vm.provision "shell",
+    run: "always",
+    inline: "eval `route -n | awk '{ if ($8 ==\"eth0\" && $2 != \"0.0.0.0\") print \"route del default gw \" $2; }'`"
+```
