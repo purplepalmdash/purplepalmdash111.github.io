@@ -95,3 +95,12 @@ Add following scripts into the Vagrantfile:
     run: "always",
     inline: "eval `route -n | awk '{ if ($8 ==\"eth0\" && $2 != \"0.0.0.0\") print \"route del default gw \" $2; }'`"
 ```
+
+### Ignore first time ssh key checking
+Edit the following options:    
+
+```
+$ vim ansible.cfg
+[defaults]
+host_key_checking = False
+```
