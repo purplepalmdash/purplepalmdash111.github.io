@@ -261,3 +261,8 @@ Hello World , build me now!
 指定好其编译目录。     
 
 可以将jenkins与git结合。   
+
+如果需要用mesos来自动deploy app，可以参考:    
+
+[http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/](http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/)    
+
