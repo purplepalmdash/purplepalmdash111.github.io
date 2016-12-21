@@ -68,36 +68,65 @@ https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 #cloud-config
 hostname: coreos1 
-coreos:  
-  etcd:
-    name: coreos1
-    peers: 172.17.8.102:7001 ## IP=172.17.8.102 won't add this line
-    addr: 172.17.8.101:4001
-    peer-addr: 172.17.8.101:7001
+coreos:
+  etcd2:
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
+    # specify the initial size of your cluster with ?size=X
+    discovery: https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxx
+    advertise-client-urls: http://172.17.8.201:2379,http://172.17.8.201:4001
+    initial-advertise-peer-urls: http://172.17.8.201:2380
+    # listen on both the official ports and the legacy ports
+    # legacy ports can be omitted if your application doesn't depend on them
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    listen-peer-urls: http://172.17.8.201:2380,http://172.17.8.201:7001
+  fleet:
+    public-ip: "172.17.8.201"
+  flannel:
+    interface: "172.17.8.201"
   units:
     - name: etcd2.service
       command: start
     - name: fleet.service
+      command: start
+    - name: flanneld.service
+      drop-ins:
+      - name: 50-network-config.conf
+        content: |
+          [Service]
+          ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{ "Network": "10.1.0.0/16" }'
       command: start
     - name: static.network
       content: |
         [Match]
         Name=enp0s8
         [Network]
-        Address=172.17.8.101/24
+        Address=172.17.8.201/24
         Gateway=172.17.8.1
         DNS=172.17.8.1
+    - name: docker-tcp.socket
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+  
+        [Socket]
+        ListenStream=2375
+        Service=docker.service
+        BindIPv6Only=both
+  
+        [Install]
+        WantedBy=sockets.target
 users:  
   - name: core
     ssh-authorized-keys: 
-      - ssh-rsa
-        "ADD ME"
-dash@DashSSD
+      - ssh-rsa "ADD ME"
   - groups:
       - sudo
       - docker
-
 ```
+For coreos2 node, simply replace the ip address from `172.17.8.201` to `172.17.8.202`, etc.    
+
 ### Installation
 Install it via:    
 
@@ -110,4 +139,13 @@ After a while, the installation will finish.
 Repeat this step in 3 nodes.   
 
 ### Verification
- 
+Login into any of the core machine in cluster:    
+
+```
+core@coreos1 ~ $ etcdctl cluster-health
+member f934a5ba1eca1ea is healthy: got healthy result from http://172.17.8.201:2379
+member 23798f79754d53b7 is healthy: got healthy result from http://172.17.8.203:2379
+member 5acdd34e67ade1d7 is healthy: got healthy result from http://172.17.8.202:2379
+cluster is healthy
+``` 
+
