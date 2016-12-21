@@ -16,7 +16,7 @@ $ qemu-img create -f qcow2 coreos1.qcow2 30G
 $ qemu-img create -f qcow2 coreos2.qcow2 30G
 $ qemu-img create -f qcow2 coreos3.qcow2 30G
 ```
-Create a network named `172.17.8.1/24', dhcp disabled.     
+Create a network named `172.17.8.1/24`, dhcp disabled.     
 
 Since the vnet interface is occupied via virtualbox, switches to virtualbox
 installation.  
