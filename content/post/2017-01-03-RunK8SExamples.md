@@ -1,7 +1,7 @@
 +++
 date = "2017-01-03T19:10:32+08:00"
 categories = ["Virtualization"]
-keywords = ["Virtualization]
+keywords = ["Virtualization"]
 description = "Run k8s"
 title = "运行K8S例程"
 
