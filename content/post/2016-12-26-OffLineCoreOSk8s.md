@@ -952,6 +952,13 @@ $ kubectl port-forward kubernetes-dashboard-v1.4.1-SOME-ID 9090
 ```
 现在访问`http://127.0.0.1:9090`则可以直接访问到kubernetes dashboard.    
 
+或者，转发到特定端口：    
+
+```
+$ kubectl port-forward kubernetes-dashboard-xxxxx 9081:9090
+```
+则访问`http://127.0.0.1:9081`即可访问到kube-ui.
+
 ### heapster监控
 heapster controller的定义文件如下:    
 
