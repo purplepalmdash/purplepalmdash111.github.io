@@ -3,7 +3,7 @@ date = "2017-01-06T15:42:25+08:00"
 categories = ["Virtualization"]
 keywords = ["Virtualization"]
 description = "Reading Digests on Docker Cloud"
-title = "Docker容器与容器云笔记"
+title = "DockerCloudReadingDigests"
 
 +++
 ### 第一章
