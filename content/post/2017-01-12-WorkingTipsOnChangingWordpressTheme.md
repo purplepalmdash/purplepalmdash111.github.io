@@ -1,5 +1,5 @@
 +++
-title = "更改Wordpress模板"
+title = "Wordpress长图片功能实现"
 date = "2017-01-12T12:06:15+08:00"
 categories = ["Linux"]
 keywords = ["Linux"]
@@ -121,7 +121,7 @@ $ cat test.html | grep -i themes
 +	$output .= '</div><!-- .save-to-jpg -->'; 
 +	$output .= '<hr>';
 ```
-这将在标题栏下面添加一个图标和链接，点击该图标将触发javascript程序，将当前页面
+这将在标题栏下面添加一个图标和链接，点击该图标将触发javascript函数，将当前页面
 转变为jpg图片.    
 
 `/var/www/html/wp-includes/formatting.php`:    
