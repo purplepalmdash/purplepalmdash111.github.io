@@ -176,7 +176,7 @@ Enter any passphrase!
 文件，并将它的链接文件指向`/dev/usbdevice`:    
 
 ```
-# vim /etc/udev/rules.d/99-custom-usb.rules 
+# vi /etc/udev/rules.d/99-custom-usb.rules 
 SUBSYSTEMS=="usb",DRIVERS=="usb",SYMLINK+="usbdevice%n"
 ```
 重新加载udev规则:    
@@ -228,7 +228,7 @@ sleep 2
 我们添加针对`sda3_crypt`加密卷的配置信息:    
 
 ```
-# vim /etc/crypttab 
+# vi /etc/crypttab 
 sda2_crypt UUID=4270c1eb-5a06-4a1f-8a19-d5af9db4f779 none luks,swap
 sda3_crypt UUID=8ca94b2f-89d3-4114-9e33-290dc57ed723 none luks,keyscript=/usr/local/sbin/openluksdevices.sh
 ```
@@ -236,13 +236,13 @@ sda3_crypt UUID=8ca94b2f-89d3-4114-9e33-290dc57ed723 none luks,keyscript=/usr/lo
 我们也需要田间针对`sda3_crypt`卷的解密操作:    
 
 ```
-# vim /etc/initramfs-tools/conf.d/cryptroot 
+# vi /etc/initramfs-tools/conf.d/cryptroot 
 CRYPTROOT=target=sda3_crypt,source=/dev/disk/by-uuid/8ca94b2f-89d3-4114-9e33-290dc57ed723
 ```
 并在`/etc/initramfs-tools`中添加`usb_storage`选项:    
 
 ```
-# vim /etc/initramfs-tools/modules 
+# vi /etc/initramfs-tools/modules 
 usb_storage
 ```
 添加`udevusbkey.sh`文件，以在临时文件系统`initrd`中添加自定义的udev规则:    
@@ -283,7 +283,7 @@ exit 0
 GRUB2配置文件也需要进行相应的修改，以添加`rootdelay`和`cryptopts`选项:    
 
 ```
-$ vim /etc/default/grub
+$ vi /etc/default/grub
 GRUB_CMDLINE_LINUX_DEFAULT="rootdelay=20 cryptopts=target=sda3_crypt,source=/dev/disk/by-uuid/8ca94b2f-89d3-4114-9e33-290dc57ed723,keyscript=/lib/cryptsetup/scripts/openluksdevices.sh"
 GRUB_CMDLINE_LINUX=""
 ```
@@ -309,4 +309,6 @@ GRUB_CMDLINE_LINUX=""
 被用来在启动时为机密卷提供一个用于解密的secret key.    
 
 ### Bug
-按照原教程里的配置，导致swap分区无法被激活，我觉得可能需要添加关于swap分区的选项。
+按照原教程里的配置，导致swap分区无法被激活，我觉得可能需要添加关于swap分区的选项。    
+
+更新，在分区指定swap分区加密的时候，选定密码类型为random password.     
