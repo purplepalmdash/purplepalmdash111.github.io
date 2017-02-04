@@ -110,3 +110,24 @@ $ sudo vim /etc/yum.conf
 exclude=kernel*
 ```
 Now via `yum update` you won't get your kernel related packages update.    
+
+### LVM Based Encryption
+If you use lvm based, then do following things:    
+
+```
+# cat /etc/crypttab 
+luks-189e8c45-2c62-4c08-acb6-b3264c435fd1 UUID=189e8c45-2c62-4c08-acb6-b3264c435fd1 none 
+# blkid
+/dev/sda1: LABEL="XENSERVER-6" UUID="5CD6-02A1" TYPE="vfat" 
+/dev/sdb1: UUID="d13618c7-b166-4135-8cae-1c5b8c5110fc" TYPE="xfs" 
+/dev/sdb2: UUID="tZyuzH-wIpt-MtQv-gWsJ-Ld69-zjtQ-TfbL6z" TYPE="LVM2_member" 
+/dev/mapper/cl-00: UUID="189e8c45-2c62-4c08-acb6-b3264c435fd1" TYPE="crypto_LUKS" 
+/dev/mapper/luks-189e8c45-2c62-4c08-acb6-b3264c435fd1: UUID="f7a6d197-5afd-46e1-8a69-408de5278405" TYPE="xfs" 
+
+```
+Then your command should be like:    
+
+```
+# cryptsetup luksAddKey /dev/mapper/cl-00 luks-secret.key --key-slot 1
+```
+Make sure the partition is the same as the one you looked as `crypto_LUKS`.    
