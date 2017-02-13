@@ -233,7 +233,7 @@ sda2_crypt UUID=4270c1eb-5a06-4a1f-8a19-d5af9db4f779 none luks,swap
 sda3_crypt UUID=8ca94b2f-89d3-4114-9e33-290dc57ed723 none luks,keyscript=/usr/local/sbin/openluksdevices.sh
 ```
 同样，我们需要重新生成initramfs，因而在initramfs的制作工具的定义文件里
-我们也需要田间针对`sda3_crypt`卷的解密操作:    
+我们也需要添加针对`sda3_crypt`卷的解密操作:    
 
 ```
 # vi /etc/initramfs-tools/conf.d/cryptroot 
