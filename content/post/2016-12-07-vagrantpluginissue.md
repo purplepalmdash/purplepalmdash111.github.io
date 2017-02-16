@@ -75,3 +75,25 @@ CentOS72ForKubernetes                 (virtualbox, 0)
 CentOS72KVM                           (libvirt, 0)
 CentOS72Kubernetes                    (virtualbox, 0)
 ```
+
+### fog-libvirt issue
+When build fog-libvirt, we met:    
+
+```
+domain.c:5696:29: error: ‘VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK’ undeclared (first use in this function)
+                     INT2NUM(VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK));
+                             ^
+/opt/vagrant/embedded/include/ruby-2.2.0/ruby/ruby.h:241:30: note: in definition of macro ‘INT2FIX’
+ #define INT2FIX(i) (((VALUE)(i))<<1 | FIXNUM_FLAG)
+```
+Then the solution would be change the ld from :    
+
+```
+# ln -fs /usr/bin/ld.gold /usr/bin/ld
+# vagrant plugin install --plugin-version 0.0.3 fog-libvirt
+# rm -f /usr/bin/ld
+# ln -fs /usr/bin/ld.bfd /usr/bin/ld
+```
+Now you got the vagrant-libvirt working again.   
+
+**Notice**: This would be happend in vagrant-1.9.1
