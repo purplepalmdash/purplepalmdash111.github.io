@@ -186,3 +186,15 @@ Ubuntu16.04上没有tomcat6的包，导致cloudstack-management安装有问题�
 方案：   
 A, 在Ubuntu16.04上安装tomcat6.    
 B, 采用Ubuntu14.04作为management服务器.    
+
+### cloudmonkey issue
+The cloudmonkey could be installed via following commands:    
+
+```
+$ sudo apt-get install cloudstack-cli
+$ sudo apt-get install python-pip
+$ pip install cloudmonkey
+$ sudo easy_install --upgrade requests
+$ sudo easy_install --upgrade pygments
+```
+then you could use cloudmonkey.    
