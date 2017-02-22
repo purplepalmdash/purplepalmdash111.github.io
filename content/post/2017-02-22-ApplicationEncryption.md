@@ -143,4 +143,38 @@ root      1983  1876  0 21:52 pts/0    00:00:00 grep --color=auto nweb
 ```
 打开浏览器，可以看到该框架已经被正确运行, 而这一次框架的可执行文件位于加密磁盘里。   
 
+### 试图解锁框架
+前面说过，如果用户能登入系统，则框架对用户来说完全可见，不存在加密的问题。所以第一步应该是阻止用户登录入系统.    
 
+如果用户得到虚拟机磁盘，挂载到另一台机器上：    
+
+![/images/2017_02_22_11_10_13_606x347.jpg](/images/2017_02_22_11_10_13_606x347.jpg)    
+
+启动后检查磁盘的挂载情况, 可以看到40G 大小的OpenSuse12.3系统盘已经被挂载上:     
+
+```
+$ sudo fdisk -l /dev/vdb
+Disk /dev/vdb: 40 GiB, 42949672960 bytes, 83886080 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0x0000bea3
+
+Device     Boot    Start      End  Sectors  Size Id Type
+/dev/vdb1           2048  4208639  4206592    2G 82 Linux swap / Solaris
+/dev/vdb2  *     4208640 36403199 32194560 15.4G 83 Linux
+/dev/vdb3       36403200 83886079 47482880 22.7G 83 Linux
+```
+`/dev/vdb2`为OpenSuse 12.3的系统盘，我们挂载一下，并检查`/media/vol`里的内容:    
+
+```
+# mount /dev/vdb2 /mnt1
+# ls /mnt1
+bin  boot  dev  encryption  etc  home  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  selinux  srv  sys  tmp  usr  var
+# ls /mnt1/media/vol/
+```
+可以看到此挂载目录下框架内容完全不可见，而此时如果硬行查看`/root/luks.vol`文件，只能看到乱码.    
+
+解密加密后的raw文件的关键在于拿到keyfile,
+而我们的keyfile位于`/root/keyfile`，理论上还是存在被解密的可能。为了保密起见，可以考虑将此keyfile置于可移动介质中，或者云端。
