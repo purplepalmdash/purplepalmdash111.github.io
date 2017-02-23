@@ -116,3 +116,38 @@ host 1xx.xx.xx.xxx
 port 8894
 ```
 此时每次提交的代码都会触发DO上主机的自动化构建过程，且自动侦听8068端口。
+
+### 自动推送到服务器
+只需要更改`post-receive`文件即可实现自动推送流程:    
+
+```
+#!/bin/bash
+
+APP_NAME=exampleapp
+APP_DIR=$HOME/$APP_NAME
+REVISION=$(expr substr $(git rev-parse --verify HEAD) 1 7)
+
++++ REGISTRY=192.168.0.40:5000
++++ APP_SERVERS=(
++++   "pyrasis@192.168.0.101"
++++   "pyrasis@192.168.0.102"
++++ )
+
+GIT_WORK_TREE=$APP_DIR git checkout -f
+
+cd $APP_DIR
+docker build --tag $APP_NAME:$REVISION .
+docker tag $APP_NAME:$REVISION $REGISTRY/$APP_NAME:$REVISION
+docker push $REGISTRY/$APP_NAME:$REVISION
+
++++ SSH="ssh -o StrictHostKeyChecking=no"
++++ for SERVER in ${APP_SERVERS[@]}
++++ do
++++   $SSH $SERVER docker pull $REGISTRY/$APP_NAME:$REVISION
++++   $SSH $SERVER docker stop $APP_NAME
++++   $SSH $SERVER docker rm $APP_NAME
++++   $SSH $SERVER docker run -d --name $APP_NAME \
++++     -p 80:80 $REGISTRY/$APP_NAME:$REVISION
++++ done
+```
+上面的代码需要事先实现中转机(即运行git的机器)与目标服务器的ssh免登录设置。
