@@ -52,6 +52,33 @@ minikubeVM: Running
 localkube: Running
 ```
 
+View add-on lists:    
+
+```
+$ minikube addons list
+- heapster: disabled
+- ingress: disabled
+- registry-creds: disabled
+- addon-manager: enabled
+- dashboard: enabled
+- kube-dns: enabled
+```
+
+Trouble-Shooting:    
+When getting following error msgs, delete `~/.minikube` and run `minikube
+start` again solves the problem.    
+
+```
+~$ minikube start
+Starting local Kubernetes cluster...
+E0224 15:08:58.755236    7977 start.go:107] Error starting host: Error getting state for host: machine does not exist.
+```
+### minikube upgrade
+Upgrade minikube in ubuntu by installing the newest deb package.    
+
+Upgrade minikube in ArchLinux by `yaourt -S minikube`, then `minikube start`
+will use the newest version.    
+
 ### Trouble-Shooting In Dashboard
 When startup the dashboard, the minikube will complains could not find the endpoint:    
 
