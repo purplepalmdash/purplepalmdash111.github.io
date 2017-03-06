@@ -117,40 +117,10 @@ $ sudo systemctl enable cloudpass.service
 ```
 $ sudo apt-get install -y network-manager
 ```
-为了避免可能的失败，需要注释掉`/etc/network/interfaces`里的相关配置:    
-
-```
-# The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-#auto eth0
-#iface eth0 inet dhcp
-#pre-up sleep 2
-```
 现在启用服务，并激活`NetWorkManager-wait-online.service`服务:    
 
 ```
 $ sudo systemctl enable NetworkManager
-$ sudo systemctl enable NetworkManager-wait-online.service
 ```
-更改我们上面定义的服务依赖关系为:    
 
-```
-[Unit]
-Description=cloudpass container
-Wants=NetworkManager-wait-online.service
-After=NetworkManager-wait-online.service
-
-[Service]
-Type=idle
-Restart=always
-RemainAfterExit=true
-ExecStart=/usr/bin/test.sh
-ExecStop=/usr/bin/echo helloabcabc
-
-[Install]
-WantedBy=multi-user.target
-```
-此方案需要进一步验证。对于以前的编译框架，建议单独列一个出来为`BuildXenialForCloudStack`
+`192.168.1.69,/home/juju/BuildOneClick__Box_OrQcow2`
