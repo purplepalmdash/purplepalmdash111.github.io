@@ -31,6 +31,7 @@ $ sudo npm install -g cnpm --registry=https://registry.npm.taobao.org
 $ sudo cnpm install -g vue-cli
 $ vue init webpack my-project
 $ cd my-project
+$ cnpm install
 ```
 前端项目的依赖很多，所以需要用cnpm install所有依赖
 
