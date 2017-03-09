@@ -88,3 +88,38 @@ Sizeof A is 6
 Sizeof B is 8
 ```
 由此可见，其答案局限于32位平台，不能单纯的盲从于参考答案。    
+
+### sizeof(string)变化
+例子：    
+
+```
+#include <iostream>
+#include <string>
+using namespace std;
+
+int main()
+{
+	string strArr1[] = {"Trend", "Micro", "Soft"};
+	string *pStrArr1 = new string[2];
+	pStrArr1[0] = "US";
+	pStrArr1[1] = "CN";
+
+	for(int i = 0; i<sizeof(strArr1)/sizeof(string); i++)
+		cout<<strArr1[i];
+	for(int j = 0; j<sizeof(pStrArr1)/sizeof(string); j++)
+		cout<<pStrArr1[j];
+
+	cout<<endl;
+	cout<<sizeof(pStrArr1)<<endl;
+	cout<<sizeof(string)<<endl;
+	return 0;
+}
+```
+实际的输出应该为:    
+
+```
+TrendMicroSoft
+8
+32
+```
+这是因为库函数发生了变化，sizeof(string)的大小已经调整为32, 因而书里说的TrendMicroSoftUS是永远不会打印出来的。     
