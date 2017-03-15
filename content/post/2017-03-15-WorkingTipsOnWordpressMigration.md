@@ -152,3 +152,13 @@ Now reopen the browser,this time you will see the page has been adjusted to
 old website:    
 
 ![/images/2017_03_15_17_11_40_610x511.jpg](/images/2017_03_15_17_11_40_610x511.jpg)
+
+### Ubuntu Env Preparation
+scp the whole directory to remote machine(Ubuntu16.04).    
+
+Install docker-compose via:    
+
+```
+$ sudo pip install docker-compose
+$ sudo docker-compose up -d
+```
