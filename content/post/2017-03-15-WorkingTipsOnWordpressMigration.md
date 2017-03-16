@@ -156,6 +156,22 @@ old website:
 ### Ubuntu Env Preparation
 scp the whole directory to remote machine(Ubuntu16.04).    
 
+Install docker via:    
+
+```
+$ sudo apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    software-properties-common
+$ curl -fsSL <DOCKER-EE-URL>/gpg | sudo apt-key add -
+$ sudo add-apt-repository \
+   "deb [arch=amd64] <-DOCKER-EE-URL> \
+   $(lsb_release -cs) \
+   stable-17.03"
+$ sudo apt-get install docker-ce
+```
+
 Install docker-compose via:    
 
 ```
