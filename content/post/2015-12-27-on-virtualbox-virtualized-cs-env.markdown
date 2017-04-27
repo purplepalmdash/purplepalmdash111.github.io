@@ -135,6 +135,7 @@ Selinux:
 
 ```
 # sed -i "/SELINUX=enforcing/ c\SELINUX=permissive" /etc/selinux/config
+# sed -i "/SELINUX=permissive/ c\SELINUX=disabled" /etc/selinux/config
 ```
 Hostname, change `/etc/hosts` file:    
 
