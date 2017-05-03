@@ -9,7 +9,7 @@ categories = ["Linux"]
 The steps in Ubuntu includes:    
 
 ```
-$ sudo pacman -S pcmanfm mtpfs gvfs-mtp gvfs-photos2 libmtp
+$ sudo pacman -S pcmanfm mtpfs gvfs-mtp gvfs-gphoto2 libmtp
 ```
 
 Edit the fuse configuration via:    
