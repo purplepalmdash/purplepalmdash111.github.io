@@ -15,6 +15,12 @@ Virt-manager, CentOS 7 ISO安装盘
 ### 安装注意事项
 分区时选择xfs(CentOS默认)， 选择LVM分区。    
 
+![/images/2017_05_24_15_16_47_460x471.jpg](/images/2017_05_24_15_16_47_460x471.jpg)
+
+The disk partition should be `Automatically create them`.    
+
+![/images/2017_05_24_15_17_58_595x456.jpg](/images/2017_05_24_15_17_58_595x456.jpg)
+
 安装时选择minimum installation. 安装完毕后，关闭虚拟机
 ### 安装后调整
 复制安装好的硬盘:    
