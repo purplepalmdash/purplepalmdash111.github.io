@@ -35,3 +35,26 @@ SELINUX=disabled
 # systemctl disable firewalld
 ```
 Now restart the machine, your dev environment is ready now.    
+
+### USB启动问题
+CentOS 7的initramfs需要重新编译，以获得usb支持。步骤如下:    
+
+获取Linux Kernel版本:    
+
+```
+# ls /lib/modules
+3.10.0-514.el7.x86_64
+```
+在`/boot/`目录下重新生成initramfs:    
+
+```
+# mkinitrd --with-usb --preload=ehci-hcd --preload=usb-storage --preload=scsi_mod --preload=sd_mod ./usbinitrd-3.10.0-514.el7.x86_64 3.10.0-514.el7.x86_64
+```
+更改grub配置项:    
+
+```
+# vim /boot/grub2/grub.cfg
+	- initrd16 /boot/initramfs-3.10.0-514.el7.x86_64.img
+	+ initrd16 /boot/usbinitrd-3.10.0-514.el7.x86_64.img
+```
+现在重新启动，则可以通过USB启动系统。    
