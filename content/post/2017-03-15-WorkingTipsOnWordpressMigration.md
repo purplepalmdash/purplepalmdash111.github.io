@@ -131,6 +131,9 @@ for the new domain name, suppose our old domain name is `www.oldname.com`, the
 new domain name is localhost:8093`, do following command for adjust to the
 new domain name:    
 
+Run:    
+
+`mysql -h172.19.0.2 -P3306 -uroot -pMyexample250`
 
 ```
 use wordpress;
