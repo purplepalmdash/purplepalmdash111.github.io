@@ -107,5 +107,13 @@ I thinks this could solve the problems.
 
 Or we could use the rescue kernel for booting the system, which acts the same
 as the general kernels
+
+No, install `kmod-redhat-megaraid_sas.x86_64` won't solve the problem, so I
+googled and finf following way could solves this problem.    
+
+```
+# dracut --add-driver megaraid_sas.ko -f
+/boot/initramfs-3.10.0-514.21.1.el7.x86_64.img 3.10.0-514.21.1.el7.x86_64
+```
 ### TBD
 ScreeShot Software
