@@ -105,7 +105,7 @@ export PATH=/sbin/:$PATH
 ```
 Next time you could directly run `ifconfig`, or if you don't want to change your .bashrc file, do `/sbin/ifconfig`.     
 
-### 8. Show history timestap
+### 8. Show history timestamp
 
 ```
 [Trusty@Linux01 ~]$  export HISTTIMEFORMAT="%F %T `whoami` "
