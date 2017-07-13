@@ -18,7 +18,11 @@ Docker常用的两种网络模式包括Bridge和Host模式，为测试这两种�
 
 测试将基于以下几个场景:
 * 原始网络吞吐量
-* 跨主机的
+* 跨主机物理机到Docker(host模式)
+* 跨主机物理机到Docker(Bridge模式)
+* 同主机物理机到Docker(Bridge模式)
+* 同主机Docker到Docker(Bridge模式-external)
+* 同主机Docker到Docker(Bridge模式-internal)
 
 ### 原始网络吞吐量
 首先，我们需要得到在没有任何Docker容器运行时的原始网络吞吐，在Server端运行:   
