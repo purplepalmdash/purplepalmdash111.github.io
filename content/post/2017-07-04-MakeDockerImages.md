@@ -1,5 +1,4 @@
 +++
-date = "2017-07-04T14:47:50+08:00"
 categories = ["Linux"]
 keywords = ["Linux"]
 description = "Make docker images offline"
