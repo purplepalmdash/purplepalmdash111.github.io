@@ -1,9 +1,11 @@
 +++
 title = "CreateRHEL6CustomizedISO"
+date = "2017-07-27T12:28:35+08:00"
 description = "CreateRHEL6CustomizedISO"
 keywords = ["Linux"]
 categories = ["Linux"]
 +++
+
 ### 目的
 根据用户自定义配置，自动从ISO安装出整个系统。     
 

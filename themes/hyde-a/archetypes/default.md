@@ -1,6 +1,7 @@
 +++
 title = ""
+date = "{{ .Date }}"
 description = ""
-keywords = []
-categories = []
+keywords = ["Linux"]
+categories = ["Linux"]
 +++

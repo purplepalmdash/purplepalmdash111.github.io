@@ -1,6 +1,7 @@
 +++
 title = "WorkingTipsOnOracleDatabaseDeployment"
 description = "WorkingTipsOnOracleDatabaseDeployment"
+date = "2017-07-21T12:28:35+08:00"
 keywords = ["Linux"]
 categories = ["Linux"]
 +++
