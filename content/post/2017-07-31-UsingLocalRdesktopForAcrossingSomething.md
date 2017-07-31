@@ -77,6 +77,11 @@ Enable the service :
 # sudo systemctl enable iptables.service
 ```
 
+This method won't work properly, because libvirtd also add some rules. 
+
+Finally I have to add the scripts in my awesome startup scripts.    
+
+
 ### Iptables Recovery
 Recover the default iptables rules via:   
 
@@ -94,3 +99,4 @@ sudo iptables -D INPUT -i enp0s25 -m state --state ESTABLISHED,RELATED -j ACCEPT
 sudo iptables -D INPUT -i enp0s25 -p tcp --dport 3389 -j ACCEPT
 sudo iptables -D INPUT -i enp0s25 -j DROP
 ```
+
