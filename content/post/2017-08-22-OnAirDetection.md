@@ -81,3 +81,47 @@ Should be
 
 ![/images/2017_08_22_15_24_13_265x289.jpg](/images/2017_08_22_15_24_13_265x289.jpg)
 
+
+### Fixed-Bug
+Every time it will print starting with `FF FF`:    
+
+```
+int incomingByte=0;
+int vanishByte=0;
+
+void setup() {
+  // initialize both serial ports:
+  Serial.begin(9600);
+  Serial2.begin(9600,SERIAL_8N1);
+
+    while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+
+
+    while (!Serial2) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+
+  // prints title with ending line break
+  Serial.println("ASCII Table ~ Character Map");
+}
+
+void loop() {
+
+    //Serial.println();
+   //for (int i=0; i<9; i++) {
+    while(!Serial2.available()); // wait for a character
+    vanishByte = incomingByte;
+    incomingByte = Serial2.read();
+    if((incomingByte == 0xFF) && (vanishByte != 0xFF))
+    {
+      Serial.println();
+    }
+    Serial.print(incomingByte,HEX);
+    Serial.print(' ');
+   //}
+   //Serial.println();
+}
+```
+![/images/2017_08_22_15_24_13_265x289.jpg](/images/2017_08_22_15_24_13_265x289.jpg)
