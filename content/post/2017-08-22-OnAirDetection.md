@@ -76,3 +76,8 @@ Result:
 
 ### Problem
 How to detect the result? Start from FF FF?    
+
+Should be 
+
+![/images/2017_08_22_15_24_13_265x289.jpg](/images/2017_08_22_15_24_13_265x289.jpg)
+
