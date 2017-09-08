@@ -6,7 +6,7 @@ keywords = ["Linux"]
 categories = ["Linux"]
 +++
 ### AIM
-Recently I am working in a network desperited environment, this means, I am
+Recently I am working in a network isolated environment, this means, I am
 unable to connect to internet freely. But I have to finish my working using
 some specific docker images, how? So I have to build them locally using iso.    
 

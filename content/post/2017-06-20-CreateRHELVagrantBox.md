@@ -34,7 +34,7 @@ name=local
 baseurl=file:///mnt
 enabled=1
 gpgcheck=0
-# yum makecache&&yum install -y vim kernel-devel gcc
+# yum makecache&&yum install -y vim kernel-devel gcc bzip2
 ```
 添加vagrant用户:    
 
@@ -49,6 +49,9 @@ gpgcheck=0
 vagrant ALL=(ALL)	NOPASSWD:ALL
 Defaults:vagrant	!requiretty
 ```
+
+if you have make vagrant to be the member of `%wheel`, be sure to add
+nopassword for this group.    
 
 预置ssh-key:    
 
@@ -98,3 +101,23 @@ AuthorizedKeysFile .ssh/authorized_keys
 # vagrant up
 ```
 
+### CentOS7
+First you have to copy `/etc/sysconfig/network-scripts/ifcfg-enp0sxxx` to
+`/etc/sysconfig/network-scripts/ifcfg-eth0`, and edit its configuration by
+replacing `enp0sx` to `eth0`, then you have to edit the grub configuration for
+naming from `enp0sx` to `eth0`:    
+
+```
+Edit your /etc/default/grub. Change the line from
+GRUB_CMDLINE_LINUX=""
+to
+GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"
+```
+Finally you make the new configuration for grub2:    
+
+```
+# grub2-mkconfig -o /boot/grub2/grub.cfg
+```
+
+if you have make vagrant to be the member of `%wheel`, be sure to add
+nopassword for this group.    
