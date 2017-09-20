@@ -1,5 +1,5 @@
 +++
-title = "一键更改IP"
+title = "云终端虚拟机搬迁操作指南"
 date = "2017-09-20T11:22:30+08:00"
 description = "ChangeIP"
 keywords = ["Linux"]
