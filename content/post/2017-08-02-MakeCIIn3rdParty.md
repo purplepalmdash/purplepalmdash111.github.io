@@ -58,3 +58,11 @@ $ sudo docker push  192.168.124.102:5000/xxxxx/wgetbuildcs6:latest
 ``` 
 
 证明友商方案对git协议支持不佳，切换回gitlab，用http继续测试。     
+
+
+### Enable push in git
+Enable push to git server in git daemon:   
+
+```
+# git daemon --enable=receive-pack --verbose --export-all --base-path=.
+```
