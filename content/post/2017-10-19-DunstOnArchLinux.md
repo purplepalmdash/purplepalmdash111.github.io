@@ -91,3 +91,48 @@ Now restart your awesome, you will get the dunst working, test it via
 
 ![/images/2017_10_19_11_21_16_370x108.jpg](/images/2017_10_19_11_21_16_370x108.jpg)
 
+
+### Crontab
+Using crontab for sending notifications, first we create the scripts for
+sending the notifications:    
+
+
+```
+➜  ~ cat /bin/notify.sh 
+############# crontab ###################
+#### every 1 hour between 9:00 am - 18:00 pm
+#0 9-18/1 * * * /path/command
+#### at certain time #####
+#10 9-18/1 * * * /path/command
+############# Standup boy ################
+current_time=`date`
+
+############# To-Do List #################
+filename="/home/dash/tasks.txt"
+filecontent=`cat $filename`
+
+#### Until you click it, you won't get this window vanish #####
+notify-send -u critical -t 0 "$current_time, Stand UP, Boy" "$filecontent"
+
+#### example for read every lines #### 
+#while read -r line
+#do
+#    #notify-send "$line"
+#done < "$filename"
+```
+
+Then we install and configure crontab for hourly run this script:    
+
+```
+$ sudo pacman -S cronie
+$ sudo systmctl enable cronie.service
+$ crontab -e
+$ sudo systemctl start cronie.service
+```
+
+The crontab items:    
+
+```
+$ crontab -l 
+10 9-18/1 * * * /bin/notify.sh
+```
