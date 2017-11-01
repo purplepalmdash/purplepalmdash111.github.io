@@ -105,6 +105,134 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/04/openwrt-on-bbb-2/">OpenWRT on BBB(2)</a>
+      </h1>
+      <span class="post-date">Nov 4, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="cheetsheet-for-using-nfs">Cheetsheet For Using NFS</h3>
+
+<p>Following configuration use the 192.168.1.221&rsquo;s tftp server and 192.168.1.11&rsquo;s nfs server, why I use different nfs server because 192.168.1.11 runs ubuntu and could reached by nfs client easily.</p>
+
+<pre><code>setenv ipaddr 192.168.1.16
+setenv serverip 192.168.1.221
+tftpboot ${fdtaddr} am335x-boneblack.dtb
+tftpboot ${kloadaddr} uImage
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=192.168.1.11:/srv/nfs4/BBBrootfs ip=192.168.1.1 rootwait
+bootm ${kloadaddr} - ${fdtaddr}
+
+</code></pre>
+
+<h3 id="how-to-start-more-services">How to start more services</h3>
+
+<p>Current we only got following output:</p>
+
+<pre><code>procd: - init -
+//.......
+procd: - init complete -
+
+</code></pre>
+
+<p>From the Kernel Source code we know the init startup sequence:</p>
+
+<pre><code>$ cd /media/y/embedded/BBB/svnco/trunk/build_dir/target-arm_cortex-a9+vfpv3_uClibc-0.9.33.2_eabi/linux-omap/linux-3.14.4
+$ cd init
+$ vim main.c
+if (!try_to_run_init_process(&quot;/etc/preinit&quot;) ||
+	    !try_to_run_init_process(&quot;/sbin/init&quot;) ||
+	    !try_to_run_init_process(&quot;/etc/init&quot;) ||
+	    !try_to_run_init_process(&quot;/bin/init&quot;) ||
+	    !try_to_run_init_process(&quot;/bin/sh&quot;))
+		return 0;
+
+</code></pre>
+
+<p>The preinit is called by <code>/etc/preinit</code>, while in this file, we found:</p>
+
+<pre><code>for pi_source_file in /lib/preinit/*; do
+        . $pi_source_file
+done
+
+</code></pre>
+
+<p>This means all of the preinit script is listed under NFS Server&rsquo;s /lib/preinit/ folder.</p>
+
+<p>Add our own preinit startup file:</p>
+
+<pre><code>[root@TrustyArch preinit]# ls
+02_default_set_state  30_failsafe_wait             70_initramfs_test  90_init_console~
+10_indicate_failsafe  40_run_failsafe_hook         80_mount_root      99_10_failsafe_login
+10_indicate_preinit   50_indicate_regular_preinit  90_init_console    99_10_run_init
+[root@TrustyArch preinit]# vim 90_init_console
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+init_console() {
+    preinit_echo &quot;Called 90_init_console here!&quot;
+    if [ &quot;$pi_suppress_stderr&quot; = &quot;y&quot; ]; then
+        exec &lt;$M0 &gt;$M1 2&gt;&amp;0
+    else 
+        exec &lt;$M0 &gt;$M1 2&gt;$M2
+    fi
+}
+
+boot_hook_add preinit_essential init_console
+[root@TrustyArch preinit]# chmod 777 90_init_console
+[root@TrustyArch preinit]# rm -f 90_init_console~ 
+
+</code></pre>
+
+<p>Now restart the BBB, to see if really take effects.<br />
+Also add a new file named 50_choose_console, with the setted M0 and M1, you could get your console.</p>
+
+<pre><code>$ cat 50_choose_console
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+choose_console() {
+    # the shell really doesn't like having stdin/out closed
+    # that's why we use /dev/pty/m0 and m1 (or equivalent) as replacement
+    # for /dev/console if there's no serial console available
+
+    if grep -q devfs /proc/filesystems; then
+        M0=/dev/pty/m0
+        M1=/dev/pty/m1
+        M2=/dev/pty/m1
+    elif [ -x /sbin/hotplug2 ]; then
+        M0=/dev/ptmx
+        M1=/dev/ptmx
+        M2=/dev/ptmx
+    elif [ -x /sbin/udevd ]; then
+        M0=/dev/pty/ptmx
+        M1=/dev/pty/ptmx
+        M2=/dev/pty/ptmx
+    fi
+    dd if=/dev/console of=/dev/null bs=1 count=0 &gt;/dev/null 2&gt;/dev/null &amp;&amp; {
+        M0=/dev/console
+        M1=/dev/console
+        M2=/dev/console    
+    }
+}
+
+boot_hook_add preinit_essential choose_console
+
+</code></pre>
+
+<p>But I still cannot get the terminal.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/11/02/use-tftp-slash-nfs-testing-bbb-kernel/">Use TFTP/NFS Testing  BBB Kernel </a>
       </h1>
       <span class="post-date">Nov 2, 2014 
@@ -1099,126 +1227,6 @@ void loop()
   bitSet(PINB, 5);    // toggle LED
   Serial.println(&quot;I am waked!&quot;);
 }
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/28/expand-storage-in-59/">Expand storage in 59</a>
-      </h1>
-      <span class="post-date">Oct 28, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      <p>I have 2 Servers in LAB, one had only 120G Harddisk, but with powerful CPU/Memory, the other have larger disk, but CPU/mem are not power enough, thus I use samba for sharing its storage.<br />
-The samba server runs:</p>
-
-<pre><code># cat /etc/issue
-Red Hat Enterprise Linux Server release 6.3 (Santiago)
-Kernel \r on an \m
-
-</code></pre>
-
-<p>Query if samba installed:</p>
-
-<pre><code># rpm -qa samba
-samba-3.5.10-125.el6.i686
-
-</code></pre>
-
-<p>Then configure it.</p>
-
-<pre><code># df -h 
-.....
-/dev/mapper/vg_linux01-lv_home
-                      405G   37G  349G  10% /home
-
-</code></pre>
-
-<p>Make the directory for sharing:</p>
-
-<pre><code>mkdir -p /home/Trusty/share
-
-</code></pre>
-
-<p>Add following share directory in /etc/samba/smb.conf:</p>
-
-<pre><code>[myshare]
-   comment = Mary's and Fred's stuff
-   path = /home/Trusty/share
-   valid users = Trusty
-   public = no
-   writable = yes
-   printable = no
-   create mask = 0765
-
-</code></pre>
-
-<p>Then add samba user:</p>
-
-<pre><code>smbpasswd -a Trusty
-
-</code></pre>
-
-<p>Now <code>Trusty</code> become usable for samba.<br />
-Restart samba service:</p>
-
-<pre><code>service smb restart
-
-</code></pre>
-
-<p>And add samba as the start-up service:</p>
-
-<pre><code>[root@Linux01 Trusty]# chkconfig smb on
-[root@Linux01 Trusty]# chkconfig nmb on
-[root@Linux01 Trusty]# chkconfig winbind on
-
-</code></pre>
-
-<p>In powerful server, listed the samba server&rsquo;s sharing directories:</p>
-
-<pre><code>Trusty@Linux59:~&gt; smbclient -L 1xx.xxx.xxx.53 -U Trusty
-Enter Trusty's password: 
-Domain=[MYGROUP] OS=[Unix] Server=[Samba 3.5.10-125.el6]
-
-        Sharename       Type      Comment
-        ---------       ----      -------
-        myshare         Disk      Mary's and Fred's stuff
-        IPC$            IPC       IPC Service (Samba Server Version 3.5.10-125.el6)
-        Trusty            Disk      Home Directories
-Domain=[MYGROUP] OS=[Unix] Server=[Samba 3.5.10-125.el6]
-
-        Server               Comment
-        ---------            -------
-
-        Workgroup            Master
-        ---------            -------
-
-</code></pre>
-
-<p>Now add it in /etc/fstab:</p>
-
-<pre><code>//1xx.xxx.xxx.xx/myshare         /media/samba/  cifs defaults,username=Trusty,password=xxxx,ip=1xx.xxx.xxx.xx,_netdev 0 0
-
-</code></pre>
-
-<p>But this won&rsquo;t OK, because cifs depends on the network, we should add following line in root&rsquo;s crontab:</p>
-
-<pre><code>@reboot sleep 10;mount -a
-
-</code></pre>
-
-<p>Next time you will see the remote samba sharing directory available at  /media/samba. Use mount to see the result.</p>
-
-<p>Change the uid/gid in mount:</p>
-
-<pre><code>ip=1xx.xxx.xxx.53,uid=1001,gid=100,_netdev
 
 </code></pre>
 

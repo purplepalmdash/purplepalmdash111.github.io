@@ -105,6 +105,164 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/10/08/dockerize-markdown-written-cv/">Dockerize Markdown Written CV</a>
+      </h1>
+      <span class="post-date">Oct 8, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="tips">Tips</h3>
+
+<p>Manually run the commands for generating the CVs.</p>
+
+<pre><code>$ sudo apt-get install -y build-essential
+$ sudo apt-get install -y pandoc
+$ sudo apt-get install -y wkhtmltopdf 
+$ sudo apt-get install xvfb
+$  echo 'xvfb-run --server-args=&quot;-screen 0, 1024x768x24&quot; /usr/bin/wkhtmltopdf $*' &gt; \
+/usr/bin/wkhtmltopdf.sh
+$ chmod a+x /usr/bin/wkhtmltopdf
+$ chmod a+x /usr/bin/wkhtmltopdf.sh 
+$ ln -s /usr/bin/wkhtmltopdf.sh /usr/local/bin/wkhtmltopdf
+$ apt-get install -y ttf-wqy-zenhei
+$ apt-get install -y git
+$ apt-get install -y rubygems-integration ruby-dev
+$ apt-get install -y libimage-exiftool-perl
+$ gem install compass
+$ gem install susy
+$ git clone https://github.com/barraq/pandoc-moderncv.git
+$ cd pandoc-moderncv/
+$ mkdir -p cv/images/
+$ vim cv/cv.md
+$ gem install gempass
+$ gem install 
+$ make
+#####$ apt-get install python-software-properties
+#####$ apt-get install software-properties-common
+$ vim Makefile 
+   -&gt; Change the wkpdf to wkhtmltopdf
+$ make pdf
+</code></pre>
+
+<h3 id="dockerfile">Dockerfile</h3>
+
+<p>Write the Dockerfile like following:</p>
+
+<pre><code># Based on Ubuntu 14.04
+FROM ubuntu:trusty
+
+# Install Packages, via apt-get. 
+RUN apt-get update &amp;&amp; apt-get install -y \
+	build-essential \
+	pandoc \
+	wkhtmltopdf \
+	xvfb \
+	ttf-wqy-zenhei \
+	git \
+	rubygems-integration \
+	ruby-dev \
+	libimage-exiftool-perl \
+	python-twisted
+
+# Now Change wkhtmltopdf
+RUN echo 'xvfb-run --server-args=&quot;-screen 0, 1024x768x24&quot; /usr/bin/wkhtmltopdf $*' &gt; /usr/bin/wkhtmltopdf.sh
+RUN chmod a+x /usr/bin/wkhtmltopdf
+RUN chmod a+x /usr/bin/wkhtmltopdf.sh 
+RUN ln -s /usr/bin/wkhtmltopdf.sh /usr/local/bin/wkhtmltopdf
+
+# Now Run gems 
+RUN gem install compass
+RUN gem install susy
+
+# Git Clone the CV FrameWork from github.
+RUN mkdir -p /opt/Code/
+RUN git clone https://github.com/barraq/pandoc-moderncv.git  /opt/Code/pandoc-moderncv
+
+# Now begin to build the cv, using the demo 'scaffold'
+RUN cd /opt/Code/pandoc-moderncv/ &amp;&amp; make scaffold &amp;&amp; make pdf HTMLTOPDF=wkhtmltopdf
+
+# Run http server on server 5177, since in dist/ folder we will have the html and pdf
+EXPOSE 5177
+CMD [&quot;twistd&quot;, &quot;-n&quot;, &quot;web&quot;, &quot;-p&quot;, &quot;5177&quot;, &quot;--path&quot;, &quot;/opt/Code/pandoc-moderncv/dist/&quot;]
+
+</code></pre>
+
+<p>Put it on github, and trigger an auto-build on dockerhub, pulling it and you could get
+the well built docker image.</p>
+
+<h3 id="use-this-container">Use this Container</h3>
+
+<p>Use it via:</p>
+
+<pre><code>$ sudo docker build -t mycv/mycvapp /home/dash/Code/DockerBuild
+$ sudo docker run -d -p 5000:5177 mycv/mycvapp
+</code></pre>
+
+<p>Since our Docker Container listens 5177 port, we use <code>-p</code> for mapping local machine&rsquo;s
+5000 port to 5177, visit localmachine:5000 then you could found the CV based directory.</p>
+
+<h3 id="change-to-debian-based">Change to Debian Based</h3>
+
+<p>Maybe Debian based will be much more slim? But this involves the pandoc issue.</p>
+
+<pre><code># Based on Debian Wheezy
+FROM debian:wheezy
+
+# Install Packages, via apt-get. 
+RUN apt-get update &amp;&amp; apt-get install -y \
+        build-essential \
+        cabal-install \
+        wkhtmltopdf \
+        xvfb \
+        ttf-wqy-zenhei \
+        git \
+        rubygems-integration \
+        ruby-dev \
+        libimage-exiftool-perl \
+	zlib1g-dev \
+	libdigest-perl \
+        python-twisted &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+# Via cabal for installing pandoc, latest one will have the markdown plugins
+RUN cabal update &amp;&amp; cabal install pandoc
+
+# After install pandoc via cabal, update the $PATH
+ENV PATH /root/.cabal/bin:$PATH
+
+# Now Change wkhtmltopdf
+RUN echo 'xvfb-run --server-args=&quot;-screen 0, 1024x768x24&quot; /usr/bin/wkhtmltopdf $*' &gt;
+/usr/bin/wkhtmltopdf.sh
+RUN chmod a+x /usr/bin/wkhtmltopdf
+RUN chmod a+x /usr/bin/wkhtmltopdf.sh 
+RUN ln -s /usr/bin/wkhtmltopdf.sh /usr/local/bin/wkhtmltopdf
+
+# Now Run gems 
+RUN gem install compass
+RUN gem install susy
+
+# Git Clone the CV FrameWork from github.
+RUN mkdir -p /opt/Code/
+RUN git clone https://github.com/barraq/pandoc-moderncv.git  /opt/Code/pandoc-moderncv
+
+# Now begin to build the cv, using the demo 'scaffold'
+RUN cd /opt/Code/pandoc-moderncv/ &amp;&amp; make scaffold &amp;&amp; make pdf HTMLTOPDF=wkhtmltopdf
+
+# Run http server on server 5177, since in dist/ folder we will have the html and pdf
+EXPOSE 5177
+CMD [&quot;twistd&quot;, &quot;-n&quot;, &quot;web&quot;, &quot;-p&quot;, &quot;5177&quot;, &quot;--path&quot;, &quot;/opt/Code/pandoc-moderncv/dist/&quot;]
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/09/22/sharing-mouse-slash-keyboard-among-3-nodes/">Sharing Mouse/Keyboard among 3 Nodes</a>
       </h1>
       <span class="post-date">Sep 22, 2015 
@@ -485,74 +643,6 @@ audio,video,floppy,network,rfkill,scanner,storage,optical,power,wheel,uucp -s  \
 /usr/bin/zsh xxxxx
 # passwd xxxxx
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/30/gpt-slash-ssd-on-archlinux-installation/">GPT/SSD on ArchLinux Installation</a>
-      </h1>
-      <span class="post-date">Aug 30, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>Since I met so many problems in archlinux installation on SSD, plus UEFI issues, I use
-following virt machine for re-produce the problem and try to find out the solution.</p>
-
-<h3 id="prepare">Prepare</h3>
-
-<p>Prepare two disk, one for SSD, the second is the oridinary one.</p>
-
-<pre><code>$ qemu-img create -f qcow2 -o cluster_size=4k ArchSSD.qcow2 100G
-$ qemu-img create -f qcow2 ArchHDD.qcow2 80G
-$ virt-manage
-</code></pre>
-
-<h3 id="uefi-support-in-virt-manager">UEFI Support In Virt-Manager</h3>
-
-<p>Follow the tips in
-<a href="https://fedoraproject.org/wiki/Using_UEFI_with_QEMU">https://fedoraproject.org/wiki/Using_UEFI_with_QEMU</a></p>
-
-<pre><code># wget http://www.kraxel.org/repos/firmware.repo -O /etc/yum.repos.d/firmware.repo
-# yum install edk2.git-ovmf-x64
-# vim /etc/libvirt/qemu.conf
- nvram = [
-    &quot;/usr/share/edk2.git/ovmf-x64/OVMF_CODE-pure-efi.fd:/usr/share/edk2.git/ovmf-x64/OVMF_VARS-pure-efi.fd&quot;,
- ]
-</code></pre>
-
-<p>In customization of the vm, select like following:</p>
-
-<p><img src="/images/2015_08_30_10_09_31_306x202.jpg" alt="/images/2015_08_30_10_09_31_306x202.jpg" /></p>
-
-<h3 id="virtual-machine-definition">Virtual Machine Definition</h3>
-
-<p>The configuration of the vm machine is listed as in following picture:</p>
-
-<p><img src="/images/2015_08_30_09_28_46_445x204.jpg" alt="/images/2015_08_30_09_28_46_445x204.jpg" /></p>
-
-<p>So now begin to install virt-machine. Use iso for booting up the machine and you will
-see following partition configuration in the terminal:</p>
-
-<pre><code>root@archiso ~ # fdisk -l /dev/vda
-Disk /dev/vda: 100 GiB, 107374182400 bytes, 209715200 sectors
-Units: sectors of 1 * 512 = 512 bytes
-Sector size (logical/physical): 512 bytes / 512 bytes
-I/O size (minimum/optimal): 512 bytes / 512 bytes
-root@archiso ~ # fdisk -l /dev/vdb
-Disk /dev/vdb: 80 GiB, 85899345920 bytes, 167772160 sectors
-Units: sectors of 1 * 512 = 512 bytes
-Sector size (logical/physical): 512 bytes / 512 bytes
-I/O size (minimum/optimal): 512 bytes / 512 bytes
-</code></pre>
-
-<h3 id="partition-preparation">Partition Preparation</h3>
 
       
     </div>

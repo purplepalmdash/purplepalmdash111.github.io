@@ -105,6 +105,203 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/13/write-python-weather-app-on-heroku-11/">Write Python Weather APP on Heroku(11)</a>
+      </h1>
+      <span class="post-date">May 13, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
+        
+      </span>
+      
+      
+
+<h3 id="draw-flot-picture">Draw Flot Picture</h3>
+
+<p>Since the article is mainly on writing apps, I don&rsquo;t want to spend much time on how to use javascript or flot for drawing picture.<br />
+Simply checkout the code on github, you will see the code which is used for retrieving the data and start drawing plot pictures.</p>
+
+<h3 id="fetching-24-hours-data">Fetching 24-hours Data</h3>
+
+<p>Fetching 24 latest records from the postgres database, and then add them into the chart, chart then has been sent to simplejson which used for updating the flot picture locally .</p>
+
+<pre><code>@app.route('/ajax/24hours/')
+# ajax updateing for 24-hour data
+def TwentyFourHours():
+    # Here we will visit postgres for retrieving back the last 24 hours' data
+    # Local version
+    # engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb', echo=True)
+    # Heroku Version
+    db_conn = os.environ['DATABASE_URL']
+    engine = create_engine(db_conn)
+    # Engine selection
+    metadata=MetaData(bind=engine)
+    weather_table=Table('weather',metadata,
+        Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+        Column('Temperature', Integer),
+        Column('Humidity', Integer),
+        Column('PmTen', Integer),
+        Column('PmTwoFive', Integer),
+    )
+    s = select([weather_table]).order_by(weather_table.c.Insert_Time.desc()).limit(24)
+    conn = engine.connect()
+    result = conn.execute(s)
+    chart = []
+    for row in result:
+        # row[0], datetime; 
+        # row[1], Temperature;
+        # row[2], Humidity;
+        # row[3], PM10;
+        # row[4], PM2.5; 
+
+        ###  append row[x] into the char ###
+        # chart.append({
+        chart.insert(0, {
+            &quot;label&quot;: (row[0] + timedelta(hours = 8)).strftime(&quot;%H:%M&quot;),
+            &quot;value&quot;: row[1],
+            &quot;humi_value&quot;: row[2],
+            &quot;pm25_value&quot;: row[4],
+            &quot;pm10_value&quot;: row[3]
+            })
+
+    jsonStr = simplejson.dumps({
+        # This is char, will be used in script.js
+        &quot;chart&quot; :{
+            # tooltip is used by the jQuery chart:
+            &quot;tooltip&quot;   : &quot;Temperature at %1: %2 degree&quot;,
+            # humi_tooltip is used for jQuery chart for humidity:
+            &quot;humi_tooltip&quot; : &quot;Humidity at %1: %2 \%&quot;,
+            &quot;pm25_tooltip&quot; : &quot;PM2.5 at %1: %2 ug/m(3)&quot;,
+            &quot;pm10_tooltip&quot; : &quot;PM10 at %1: %2 ug/m(3)&quot;,
+            &quot;data&quot;      : chart
+            },
+        # This is &quot;downtime&quot; will be used in script.js
+             &quot;downtime&quot;  : getDowntime(1)
+        })
+
+    return jsonStr;
+
+</code></pre>
+
+<p>The periodic task which runs in <code>tasks.py</code> will fetching the data from the python api and the webpage, then insert them into the postgres database, so here in 24-hours&rsquo; function we just get them out and fill in the flot picture.</p>
+
+<h3 id="daily-data">Daily Data</h3>
+
+<p>Daily data shall be generated via calculating them at the mid-night, that is, at the beginning of a brand new day, we will calculate out the last day&rsquo;s average data.<br />
+The code is implemented in <code>tasks.py</code> as a crontab task, the code is listed as following:</p>
+
+<pre><code># Every Day we will run a periodly work which will calculate 
+# the average temperature/humidity/pm2.5/pm10 task, and store
+# it into the daily database, thus we have to define new Database
+# here and insert data into.
+# Beijing is locate at east 8 zone, thus 16:12 + 8 hour = 24:12
+# At every mid-night(24:12) it will caculate the average value for
+# the past 24 hours. 
+@periodic_task(run_every=crontab(hour=16, minute=12))
+def OneDayHandler():
+    # First Get the last 24 hours' data set
+    # Local Engine
+    # engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb',echo=True)
+    # Heroku Engine
+    db_conn = environ['DATABASE_URL']
+    engine = create_engine(db_conn)
+    metadata=MetaData(bind=engine)
+    # Definition of the weather table
+    weather_table=Table('weather',metadata,
+    	Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+    	Column('Temperature', Integer),
+    	Column('Humidity', Integer),
+    	Column('PmTen', Integer),
+    	Column('PmTwoFive', Integer),
+    )
+    # Get last 24 records, If we suppose there are truely 24 records in last 24 hours, we can enable this sentense. But sometimes, this will be wrong. 
+    s = select([weather_table]).order_by(weather_table.c.Insert_Time.asc()).limit(24)
+    conn = engine.connect()
+    results = conn.execute(s)
+
+    # Temperature
+    totTemperature = 0
+    avgTemperature = 0
+    # Humidity
+    totHumidity = 0
+    avgHumidity = 0
+    # PM2.5
+    totPm25 = 0
+    avgPm25 = 0
+    # PM10
+    totPm10 = 0
+    avgPm10 = 0
+
+    records_number = 0 
+    for item in results:
+        totTemperature += item[1]
+        totHumidity += item[2]
+        totPm25 += item[4]
+        totPm10 += item[3]
+        records_number += 1
+
+    if records_number&gt;0:
+        avgTemperature = totTemperature/records_number
+        avgHumidity = totHumidity/records_number
+        avgPm25 = totPm25/records_number
+        avgPm10 = totPm10/records_number
+
+    # Definition of the avg_eather table
+    avg_metadata = MetaData(bind=engine)
+    avg_weather_table=Table('avg_weather',avg_metadata,
+    	Column('avg_Insert_Time', DateTime(timezone=True),primary_key=True),
+    	Column('avg_Temperature', Integer),
+    	Column('avg_Humidity', Integer),
+    	Column('avg_PmTen', Integer),
+    	Column('avg_PmTwoFive', Integer),
+    )
+    # Create table in db
+    avg_metadata.create_all(checkfirst=True)
+    # Create insert sentense
+    avg_ins = avg_weather_table.insert()
+    # Really insert
+    avg_ins = avg_weather_table.insert().values(avg_Insert_Time=datetime.utcnow(), avg_Temperature = avgTemperature, avg_Humidity = avgHumidity, avg_PmTen = avgPm10, avg_PmTwoFive = av
+gPm25)
+    # Connect to engine and execute
+    avg_conn = engine.connect()
+    avg_conn.execute(avg_ins)
+
+    return 1
+
+</code></pre>
+
+<p>We defined a new table named avg_weather, and at the mid-night we will retrieve the latest 24 records, calculating their average value, then insert them into the aver_weather table.</p>
+
+<h3 id="displaying-daily-data">Displaying Daily Data</h3>
+
+<p>The main procedure is mainly like in 24-hours datas, but notice we are select from avg_weather, and we only select 7 items.<br />
+30-days data is very simple, change the day from 7 to 30, then you can see the monthly data.</p>
+
+<h3 id="write-testing-interface">Write Testing Interface</h3>
+
+<p>We hope we can manually test the functions via web. So we added following testing APIs in genhtml.py:</p>
+
+<pre><code>@app.route('/test/fetch/')
+def fetch():
+    fetch_and_store_data()
+    return &quot;Fetching Test Done!!!&quot;;
+
+@app.route('/test/gen/')
+def generateOneDay():
+    OneDayHandler()
+    return &quot;Generate Test Done!!!&quot;;
+
+</code></pre>
+
+<p>If we visit <a href="http://Your_app_address/test/fetch">http://Your_app_address/test/fetch</a>, the program will fetch back the data.  And for <a href="http://Your_app_address/test/gen">http://Your_app_address/test/gen</a>, the daily average data will be generated.</p>
+
+<p>Next Chapter is the last one. We simply paste the screenshots of the APP.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/05/13/write-python-weather-app-on-heroku-12/">Write Python Weather APP on Heroku(12)</a>
       </h1>
       <span class="post-date">May 13, 2014 
@@ -604,121 +801,6 @@ def fetch_and_store_data():
 
 <p>Until now, almost all of the back-end has been set up. We can fetch the data and periodly insert into the database, and our web app will continue to run(Never sleep).<br />
 Tomorrow we will try to write a beautiful front-end for our webapp.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/05/10/celery-and-rabbitmq-on-archlinux/">Celery and RabbitMQ on ArchLinux</a>
-      </h1>
-      <span class="post-date">May 10, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Install and run rabbitmq server via:</p>
-
-<pre><code>$ yaourt rabbitmq
-$ rabbitmq-server
-
-</code></pre>
-
-<p>Install celery in python virtual enviroment:</p>
-
-<pre><code>$ workon venv2
-(venv2) $ pip install celery
-
-</code></pre>
-
-<h3 id="run-simple-tasks">Run Simple Tasks</h3>
-
-<p>Following python file, named &ldquo;tasks.py&rdquo; defines two tasks:</p>
-
-<pre><code>from celery import Celery
-
-app = Celery('tasks', backend='amqp', broker='amqp://')
-
-@app.task(ignore_result=True)
-def print_hello():
-    print 'hello there'
-
-@app.task
-def gen_prime(x):
-    multiples = []
-    results = []
-    for i in xrange(2, x+1):
-        if i not in multiples:
-            results.append(i)
-            for j in xrange(i*i, x+1, i):
-                multiples.append(j)
-    return results
-
-</code></pre>
-
-<p>Run it via:</p>
-
-<pre><code>celery worker -A tasks &amp;
-
-</code></pre>
-
-<p>Now in another terminal you can use python interractive window for:</p>
-
-<pre><code>from tasks import print_hello
-from tasks import gen_prime
-print_hello()
-primes = gen_prime(1000)
-primes = gen_prime(50000)
-# CTRL+C will stop it. 
-# Access the background worker
-primes = gen_prime.delay(50000)
-# by the worker executing now, because we configured the backend for application
-primes.ready()
-False
-...
-True
-print primes.get()
-
-</code></pre>
-
-<h3 id="periodic-tasks">Periodic Tasks</h3>
-
-<p>Add following lines into the tasks.py:</p>
-
-<pre><code>from celery.task import periodic_task
-from datetime import timedelta
-
-
-@periodic_task(run_every=timedelta(minutes=1))
-def print_minutes():
-    print 'Hello, 1 minute reached'
-
-@periodic_task(run_every=timedelta(seconds=3))
-def every_3_seconds():
-    print(&quot;Running periodic task!&quot;)
-
-</code></pre>
-
-<p>Now start the tasks.py via following commands:</p>
-
-<pre><code>$ celery -A tasks worker --loglevel=info --beat
-
-</code></pre>
-
-<p>You will see Celery output &ldquo;Running periodic tasks!&rdquo; every 3 seconds, while every 1 minutes the &ldquo;Hello, 1 minute reached&rdquo; will be printed out.</p>
-
-<h3 id="to-be-thought">To Be Thought</h3>
-
-<p>How to mirgrate it with our heroku web app ?<br />
-The periodic_task is good for fetching pages/datas and generate the result, then store the results into the database.</p>
-
-<p>But the webapp should response to user&rsquo;s http request, this will be the main task.</p>
 
       
     </div>

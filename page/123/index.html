@@ -105,6 +105,169 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/29/i2c-between-raspberrypi-and-arduino/">I2C between raspberryPI and Arduino</a>
+      </h1>
+      <span class="post-date">Dec 29, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/i2c">i2c</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/arduino">Arduino</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/raspberrypi">RaspberryPI</a>
+        
+      </span>
+      
+      <p>###连线
+Arduino I2C 连线:<br />
+<img src="/images/arduino-i2c-pins.jpg" alt="arduino.jpg" /><br />
+RaspberryPI I2C 连线:<br />
+<img src="/images/raspberry-pi-i2c-pins.jpg" alt="rasp.jpg" /><br />
+连线图：</p>
+
+<pre><code>	RPI               Arduino (Uno/Duemillanove)
+	--------------------------------------------
+	GPIO 0 (SDA) &lt;--&gt; Pin 4 (SDA)
+	GPIO 1 (SCL) &lt;--&gt; Pin 5 (SCL)
+	Ground       &lt;--&gt; Ground
+
+</code></pre>
+
+<p><img src="/images/RaspberryPI-I2c-Arduino.png" alt="rasp-arduino.jpg" /></p>
+
+<p>###Arduino端代码</p>
+
+<pre><code>#include &lt;Wire.h&gt;
+
+#define SLAVE_ADDRESS 0x04
+int number = 0;
+int state = 0;
+
+void setup() {
+    pinMode(13, OUTPUT);
+    Serial.begin(9600);         // start serial for output
+    // initialize i2c as slave
+    Wire.begin(SLAVE_ADDRESS);
+
+    // define callbacks for i2c communication
+    Wire.onReceive(receiveData);
+    Wire.onRequest(sendData);
+
+    Serial.println(&quot;Ready!&quot;);
+}
+
+void loop() {
+    delay(100);
+}
+
+// callback for received data
+void receiveData(int byteCount){
+
+    while(Wire.available()) {
+        number = Wire.read();
+        Serial.print(&quot;data received: &quot;);
+        Serial.println(number);
+
+        if (number == 1){
+
+            if (state == 0){
+                digitalWrite(13, HIGH); // set the LED on
+                state = 1;
+            }
+            else{
+                digitalWrite(13, LOW); // set the LED off
+                state = 0;
+            }
+         }
+     }
+}
+
+// callback for sending data
+void sendData(){
+    Wire.write(number);
+}
+
+</code></pre>
+
+<p>###RaspberryPI端准备
+在/etc/modules中增加一行:</p>
+
+<pre><code>	i2c-dev
+
+</code></pre>
+
+<p>注释掉黑名单：</p>
+
+<pre><code>	$ cat /etc/modprobe.d/raspi-blacklist.conf
+	# blacklist spi and i2c by default (many users don't need them)
+	# blacklist spi-bcm2708
+	#blacklist i2c-bcm2708
+
+</code></pre>
+
+<p>安装i2c工具：</p>
+
+<pre><code>	apt-get install i2c-tools
+
+</code></pre>
+
+<p>安装python库：</p>
+
+<pre><code>	apt-get install python-smbus
+
+</code></pre>
+
+<p>探测i2c设备</p>
+
+<pre><code>	i2cdetect -y 0
+
+</code></pre>
+
+<p>如果不是root用户，例如，如果是pi用户，则需要将当前用户增加到i2c组中:</p>
+
+<pre><code>	$ sudo adduser pi i2c
+
+</code></pre>
+
+<p>###RaspberryPI端代码</p>
+
+<pre><code>import smbus
+import time
+# for RPI version 1, use &quot;bus = smbus.SMBus(0)&quot;
+bus = smbus.SMBus(0)
+
+# This is the address we setup in the Arduino Program
+address = 0x04
+
+def writeNumber(value):
+    bus.write_byte(address, value)
+    # bus.write_byte_data(address, 0, value)
+    return -1
+
+def readNumber():
+    number = bus.read_byte(address)
+    # number = bus.read_byte_data(address, 1)
+    return number
+
+while True:
+    var = input(&quot;Enter 1 - 9: &quot;)
+    if not var:
+        continue
+
+    writeNumber(var)
+    print &quot;RPI: Hi Arduino, I sent you &quot;, var
+    # sleep one second
+    time.sleep(1)
+
+    number = readNumber()
+    print &quot;Arduino: Hey RPI, I received a digit &quot;, number
+    print
+
+</code></pre>
+
+<p>运行代码时要注意，0～255的数字输入进去，会在arduino i2c slave端收到对应的数据，并原封不动的被返回。超过255的数值将溢出。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/12/29/little-tricky-on-spi/">Little tricky on SPI</a>
       </h1>
       <span class="post-date">Dec 29, 2013 
@@ -845,72 +1008,6 @@ Thus the code could alter to :</p>
 <p>Both are OK for detecting the distance.<br />
 ###Effect
 When you hold your hands or other object to the ultrasound in less than 10cm, the led status will be changed in 1 seconds.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/12/27/hc-sr501ren-ti-gan-ying-mo-kuai-and-arduino/">HC-SR501人体感应模块 &amp;amp; Arduino</a>
-      </h1>
-      <span class="post-date">Dec 27, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/arduino">Arduino</a>
-        
-      </span>
-      
-      <p>###连线图
-led &ndash; pin 6, SR501 pin 7.<br />
- <img src="/images/wiring1.jpg" alt="/images/wiring1.jpg" />
-###代码</p>
-
-<pre><code>//红外感应
-//信号接 7 端口
-//LED will be 6 port
-int sigpin = 7;
-int ledpin = 6;
- 
-void setup()
-{
-  pinMode(sigpin, INPUT);
-  pinMode(ledpin, OUTPUT);
-  digitalWrite(ledpin, HIGH);
-  
-  Serial.begin(9600);  // 打开串口，设置波特率为9600 bps
-}
- 
-int storefun = 0;
-int ledstatus = HIGH;
-
-void loop()
-{
-  int in = digitalRead(sigpin); 
-  
-  
-  //Change the led ON/OFF accoriding to the status sensor
-  if(in != storefun)
-  {
-    Serial.println(&quot;They are not equal!&quot;);
-    if(ledstatus == LOW)
-    {
-      digitalWrite(ledpin,HIGH);
-      ledstatus = HIGH;
-    }
-    else if(ledstatus == HIGH)
-    {
-      digitalWrite(ledpin, LOW);
-      ledstatus = LOW;
-    }
-  }
-  storefun = in; 
-  Serial.println(in); //有人的时候输出高电平1 无人0
-  Serial.println(storefun);
-  Serial.println(&quot;***&quot;);
-  delay(2000);    
-}
-
-</code></pre>
 
       
     </div>

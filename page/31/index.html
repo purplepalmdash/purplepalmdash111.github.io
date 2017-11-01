@@ -105,6 +105,83 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/04/05/extend-vagrants-disk/">Extend Vagrant&#39;s Disk</a>
+      </h1>
+      <span class="post-date">Apr 5, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>In Vagrantfile, edit the following definition:</p>
+
+<pre><code>  config.vm.provider &quot;virtualbox&quot; do |vb|
+  #   # Display the VirtualBox GUI when booting the machine
+  #   vb.gui = true
+  #
+  #   # Customize the amount of memory on the VM:
+    vb.memory = &quot;1024&quot;
+    file_to_disk = File.realpath( &quot;.&quot; ).to_s + &quot;/disk.vdi&quot;
+    if ARGV[0] == &quot;up&quot; &amp;&amp; ! File.exist?(file_to_disk) 
+      puts &quot;Creating 5GB disk #{file_to_disk}.&quot;
+      vb.customize [
+        'createhd', 
+        '--filename', file_to_disk, 
+        '--format', 'VDI', 
+        '--size', 5000 * 1024 # 5 GB
+        ] 
+      vb.customize [
+        'storageattach', :id, 
+        '--storagectl', 'SATA', 
+        '--port', 1, '--device', 0, 
+        '--type', 'hdd', '--medium', 
+        file_to_disk
+        ]
+    end
+    #config.vm.provision &quot;shell&quot;, path: &quot;scripts/add_new_disk.sh&quot;
+  end
+  config.vm.provision &quot;shell&quot;, path: &quot;scripts/add_new_disk.sh&quot;
+</code></pre>
+
+<p>The <code>add_new_disk.sh</code> should be written like following:</p>
+
+<pre><code>set -e
+set -x
+
+if [ -f /etc/disk_added_date ]
+then
+   echo &quot;disk already added so exiting.&quot;
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/sdb &lt;&lt;EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/sdb1
+vgextend VolGroup /dev/sdb1
+lvextend /dev/VolGroup/lv_root
+resize2fs /dev/VolGroup/lv_root
+
+date &gt; /etc/disk_added_date
+</code></pre>
+
+<p>Notice: this won&rsquo;t fit for Ubuntu Snappy Core.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2016/04/01/nodemcu-and-1602i2c-1/">NodeMCU and 1602I2C(1)</a>
       </h1>
       <span class="post-date">Apr 1, 2016 
@@ -527,233 +604,6 @@ debmirror       -a $arch \
 </code></pre>
 
 <p>I think this is only works for debian.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/27/tips-on-nodemcu/">Tips On NodeMCU</a>
-      </h1>
-      <span class="post-date">Mar 27, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="电路图">电路图</h3>
-
-<p>在淘宝上买的NodeMCU是v1.0版的, v0.9版和v1.0版的差别如下:</p>
-
-<p><img src="/images/2016_03_27_09_41_53_653x244.jpg" alt="/images/2016_03_27_09_41_53_653x244.jpg" /></p>
-
-<p>1.0版的连线如图:</p>
-
-<p><img src="/images/NodeMCU__v1.0_pinout.jpg" alt="/images/NodeMCU__v1.0_pinout.jpg" /></p>
-
-<h3 id="烧写固件">烧写固件</h3>
-
-<p>ArchLinux下,可以通过python程序直接烧写固件.</p>
-
-<p>下载integer版本的固件,</p>
-
-<pre><code>$ wget https://github.com/nodemcu/nodemcu-firmware/releases/download/0.9.6-dev_20150704/nodemcu_integer_0.9.6-dev_20150704.bin
-</code></pre>
-
-<p>下载esp-tool, ArchLinux需要安装python2版本的pyserial库才能运行该软件:</p>
-
-<pre><code>$ git clone https://github.com/themadinventor/esptool.git
-$ sudo pacman -S python2-pyserial
-$ sudo python2 ./esptool.py --port /dev/ttyUSB0 --write_flash 0x0000 ../nodemcu_integer_0.9.6-dev_20150704.bin
-</code></pre>
-
-<h3 id="minicom串口">Minicom串口</h3>
-
-<p>Minicom串口配置如下:</p>
-
-<p><img src="/images/2016_03_27_10_09_12_746x325.jpg" alt="/images/2016_03_27_10_09_12_746x325.jpg" /></p>
-
-<p>烧写完固件后,最简单的测试如下:</p>
-
-<pre><code>&gt; print &quot;Hello World&quot;
-Hello World
-</code></pre>
-
-<p>同时我们可以看下NodeMCU的版本,命令如下:</p>
-
-<pre><code>&gt; majorVer, minorVer, devVer, chipid, flashid, flashsize, flashmode, flashspeed = node.info();
-&gt; print(&quot;NodeMCU &quot;..majorVer..&quot;.&quot;..minorVer..&quot;.&quot;..devVer)
-NodeMCU 0.9.6
-</code></pre>
-
-<p>可以看到我们使用的固件版本是0.9.6的.</p>
-
-<h3 id="闪烁led">闪烁LED</h3>
-
-<p>NodeMCU支持LUA编程,为此我们需要准备另一个写入LUA脚本的小程序:</p>
-
-<pre><code>$ git clone https://github.com/4refr0nt/luatool.git
-</code></pre>
-
-<p>NodeMCU板上自带有两个LED, 我们先点亮D4口,即GPIO2口上的LED:</p>
-
-<p>程序照搬
-<a href="http://esp8266.co.uk/recipes/blink-demo/">http://esp8266.co.uk/recipes/blink-demo/</a></p>
-
-<pre><code>-- Config
-local pin = 4            --&gt; GPIO2
-local value = gpio.LOW
-local duration = 1000    --&gt; 1 second
-
-
--- Function toggles LED state
-function toggleLED ()
-    if value == gpio.LOW then
-        value = gpio.HIGH
-    else
-        value = gpio.LOW
-    end
-
-    gpio.write(pin, value)
-end
-
-
--- Initialise the pin
-gpio.mode(pin, gpio.OUTPUT)
-gpio.write(pin, value)
-
-
--- Create an interval
-tmr.alarm(0, duration, 1, toggleLED)
-</code></pre>
-
-<p>烧写到板子上:</p>
-
-<pre><code>$ sudo python2 luatool/luatool/luatool.py --port /dev/ttyUSB0 --src blinkLED/init.lua --dest init.lua --restart
-</code></pre>
-
-<p>把<code>pin = 4</code>改为<code>pin = 0</code>, 则可以点亮另一个LED.</p>
-
-<h3 id="wifi控制led">WIFI控制LED</h3>
-
-<p>注意,需要把init.lua文件里的第二行改为你自家的WIFI SSID和密码:</p>
-
-<pre><code>$ mkdir webLED
-$ vim webLED/init.lua
-wifi.setmode(wifi.STATION)
-wifi.sta.config(&quot;SSID&quot;,&quot;PASSWORD&quot;)
-print(wifi.sta.getip())
-led1 = 0
-led2 = 4
-gpio.mode(led1, gpio.OUTPUT)
-gpio.mode(led2, gpio.OUTPUT)
-srv=net.createServer(net.TCP)
-srv:listen(80,function(conn)
-    conn:on(&quot;receive&quot;, function(client,request)
-        local buf = &quot;&quot;;
-        local _, _, method, path, vars = string.find(request, &quot;([A-Z]+) (.+)?(.+) HTTP&quot;);
-        if(method == nil)then
-            _, _, method, path = string.find(request, &quot;([A-Z]+) (.+) HTTP&quot;);
-        end
-        local _GET = {}
-        if (vars ~= nil)then
-            for k, v in string.gmatch(vars, &quot;(%w+)=(%w+)&amp;*&quot;) do
-                _GET[k] = v
-            end
-        end
-        buf = buf..&quot;&lt;h1&gt; ESP8266 Web Server&lt;/h1&gt;&quot;;
-        buf = buf..&quot;&lt;p&gt;GPIO0 &lt;a href=\&quot;?pin=ON1\&quot;&gt;&lt;button&gt;ON&lt;/button&gt;&lt;/a&gt;&amp;nbsp;&lt;a href=\&quot;?pin=OFF1\&quot;&gt;&lt;button&gt;OFF&lt;/button&gt;&lt;/a&gt;&lt;/p&gt;&quot;;
-        buf = buf..&quot;&lt;p&gt;GPIO2 &lt;a href=\&quot;?pin=ON2\&quot;&gt;&lt;button&gt;ON&lt;/button&gt;&lt;/a&gt;&amp;nbsp;&lt;a href=\&quot;?pin=OFF2\&quot;&gt;&lt;button&gt;OFF&lt;/button&gt;&lt;/a&gt;&lt;/p&gt;&quot;;
-        local _on,_off = &quot;&quot;,&quot;&quot;
-        if(_GET.pin == &quot;OFF1&quot;)then
-            gpio.write(led1, gpio.HIGH);
-        elseif(_GET.pin == &quot;ON1&quot;)then
-            gpio.write(led1, gpio.LOW);
-        elseif(_GET.pin == &quot;OFF2&quot;)then
-            gpio.write(led2, gpio.HIGH);
-        elseif(_GET.pin == &quot;ON2&quot;)then
-            gpio.write(led2, gpio.LOW);
-        end
-        client:send(buf);
-        client:close();
-        collectgarbage();
-    end)
-end)
-$ sudo python2 luatool/luatool/luatool.py --port /dev/ttyUSB0 --src webLED/init.lua --dest init.lua --restartkk
-</code></pre>
-
-<p>串口上可以得到ESP板的IP地址:</p>
-
-<pre><code>&gt; print(wifi.sta.getip())
-192.168.177.6   255.255.255.0   192.168.177.1
-</code></pre>
-
-<p>现在可以通过访问主机的页面<code>http://192.168.177.6</code>来设置LED了.</p>
-
-<p><img src="/images/2016_03_27_10_52_37_430x215.jpg" alt="/images/2016_03_27_10_52_37_430x215.jpg" /></p>
-
-<h3 id="arduino版led">Arduino版LED</h3>
-
-<p>Arduino默认是不支持ESP的,需要安装插件来支持.<br />
-File -&gt; Preferences -&gt; Settings中, 如下图所示, 填json定义网址<br />
-<a href="http://arduino.esp8266.com/stable/package_esp8266com_index.json">http://arduino.esp8266.com/stable/package_esp8266com_index.json</a></p>
-
-<p><img src="/images/2016_03_27_13_25_19_905x639.jpg" alt="/images/2016_03_27_13_25_19_905x639.jpg" /></p>
-
-<p>而后打开Tools -&gt; Boards -&gt; Board Manager, 自动刷新后, 安装ESP8266相关的库:</p>
-
-<p><img src="/images/2016_03_27_13_28_14_784x425.jpg" alt="/images/2016_03_27_13_28_14_784x425.jpg" /></p>
-
-<p>安装完毕后就可以使用ESP对应的Board了.</p>
-
-<p>这里的代码实现了LED的闪烁, 源代码如下:</p>
-
-<pre><code>/*LED_Breathing.ino Arduining.com  20 AUG 2015
-Using NodeMCU Development Kit V1.0
-Going beyond Blink sketch to see the blue LED breathing.
-A PWM modulation is made in software because GPIO16 can't
-be used with analogWrite().
-*/
-
-#define LED     D0        // Led in NodeMCU at pin GPIO16 (D0).
- 
-#define BRIGHT    350     //max led intensity (1-500)
-#define INHALE    1250    //Inhalation time in milliseconds.
-#define PULSE     INHALE*1000/BRIGHT
-#define REST      1000    //Rest Between Inhalations.
-
-//----- Setup function. ------------------------
-void setup() {                
-  pinMode(LED, OUTPUT);   // LED pin as output.    
-}
-
-//----- Loop routine. --------------------------
-void loop() {
-  //ramp increasing intensity, Inhalation: 
-  for (int i=1;i&lt;BRIGHT;i++){
-    digitalWrite(LED, LOW);          // turn the LED on.
-    delayMicroseconds(i*10);         // wait
-    digitalWrite(LED, HIGH);         // turn the LED off.
-    delayMicroseconds(PULSE-i*10);   // wait
-    delay(0);                        //to prevent watchdog firing.
-  }
-  //ramp decreasing intensity, Exhalation (half time):
-  for (int i=BRIGHT-1;i&gt;0;i--){
-    digitalWrite(LED, LOW);          // turn the LED on.
-    delayMicroseconds(i*10);          // wait
-    digitalWrite(LED, HIGH);         // turn the LED off.
-    delayMicroseconds(PULSE-i*10);  // wait
-    i--;
-    delay(0);                        //to prevent watchdog firing.
-  }
-  delay(REST);                       //take a rest...
-}
-</code></pre>
-
-<p>直接在Arduino IDE中编译验证即可.</p>
 
       
     </div>
