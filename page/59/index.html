@@ -105,6 +105,117 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/01/chef-for-deploying-openstack/">Chef For Deploying OpenStack</a>
+      </h1>
+      <span class="post-date">Jun 1, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<p>Following article records all of the steps for using chef for deploying OpenStack.</p>
+
+<p>Refers to:<br />
+<a href="http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/">http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/</a></p>
+
+<h3 id="change-vbox-files">Change vbox files</h3>
+
+<p>Edit the Vagrantfile for bring up the vbox, then startup the machine, modify its content , save it.</p>
+
+<pre><code>$ vim Vagrantfile
+    # -*- mode: ruby -*-
+    # vi: set ft=ruby :
+    Vagrant::Config.run do |config|
+    config.vm.box = &quot;Trusy64&quot;
+    config.vm.box_url = &quot;http://xxx.xxx.xxx.xxx/opscode_ubuntu-14.04_chef-provisionerless.box&quot;
+    config.vm.customize [&quot;modifyvm&quot;, :id, &quot;--memory&quot;, 1024]
+    end
+</code></pre>
+
+<p>Login to the running machine and modify its default repository from official to local repository.</p>
+
+<pre><code>$ vagrant up
+$ vagrant ssh
+(YourVagrantMachine) $ sudo vim /etc/apt/sources.list
+(YourVagrantMachine) $ sudo vim /etc/apt/apt.conf
+(YourVagrantMachine) $ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade
+</code></pre>
+
+<p>Now save your modification to the vbox file:</p>
+
+<pre><code>$ vagrant package --base vagrant_default_1433130468275_38998
+$ ls
+package.box Vagrantfile
+</code></pre>
+
+<h3 id="setup-chef-code">Setup Chef Code</h3>
+
+<p>First install the vagrant plugins via:</p>
+
+<pre><code>$ vagrant plugin install vagrant-berkshelf
+$ vagrant plugin install vagrant-chef-zero
+$ vagrant plugin install vagrant-omnibus
+$ vagrant plugin list
+</code></pre>
+
+<p>Get the repository from github, modify the file <code>vagrant_linux.rb</code>:</p>
+
+<pre><code>[xxxx@~/Code/Chef/MasterVersion]$ git clone https://github.com/stackforge/openstack-chef-repo.git
+$ cd openstack-chef-repo
+$ vim vagrant_linux.rb
+  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_centos-7.1_chef-provisionerless.box'
+  url 'http://xxx.xxx.xxx.xxx/opscode_centos-7.1_chef-provisionerless.box'
+
+  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_ubuntu-14.04_chef-provisionerless.box'
+  url 'http://xxx.xxx.xxx.xxx/package.box'
+
+  'vm.box' =&gt; 'ubuntu14'
+</code></pre>
+
+<p>Download all of the cookbooks, and modify the rubygems.org to Chinese mirror, Thanks for the fucking GreatFW!:</p>
+
+<pre><code>$ chef exec rake berks_vendor
+$ cp -r cookbooks cookbooks.back
+$ cd cookbooks
+$ find . -type f -exec sed -i -e 's/https:\/\/rubygems.org/http:\/\/mirrors.aliyun.com\/rubygems/g' {} \; 
+</code></pre>
+
+<p>Edit the ruby definition file for avoiding <code>Chef encountered an error attempting to load the node data for &quot;controller&quot;</code>:</p>
+
+<pre><code>$ vim ./aio-neutron.rb
+machine 'controller' do
+  add_machine_options vagrant_config: controller_config
++  chef_server( :chef_server_url =&gt; 'http://localhost:8889')
+  role 'allinone-compute'
+  role 'os-image-upload'
+
+</code></pre>
+
+<p>One Cookbook needs to modify, because it will automatically use source from <code>rubygems.org</code>, Thanks again for the fucking GreatFW!:</p>
+
+<pre><code>$ cd cookbooks
+$ vim ./mysql2_chef_gem/libraries/provider_mysql2_chef_gem_mysql.rb
+             options(&quot;--clear-sources --source http://mirrors.aliyun.com/rubygems/gems/mysql2-0.3.18.gem&quot;) 
+
+</code></pre>
+
+<p>Now begin to provision via:</p>
+
+<pre><code>$ chef exec rake aio_neutron 2&gt;&amp;1 | tee aio_neutron.txt
+</code></pre>
+
+<p>After installation and configuration, you could visit following URL for your OpenStack:</p>
+
+<p><a href="https://127.0.0.1:9443">https://127.0.0.1:9443</a></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/05/26/chef-setup/">Chef Setup</a>
       </h1>
       <span class="post-date">May 26, 2015 
@@ -1330,115 +1441,6 @@ root@Controller:~# nova image-list
 </code></pre>
 
 <p>注意我们看到了compute节点已经被加入进来。这样我们完成了添加计算服务，接下来我们将开始添加网络组件，这可能是最难的一部分。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM machine</a>
-      </h1>
-      <span class="post-date">May 25, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>In order to make exsiting kvm based machine to be lxc container, following is the steps.<br />
-Refers to:<br />
-<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
-
-<h3 id="convert-disk-formats">Convert Disk Formats</h3>
-
-<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
-
-<pre><code>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw
-</code></pre>
-
-<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
-
-<h3 id="lxc-the-kvm">LXC the KVM</h3>
-
-<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
-
-<pre><code> myvm.conf
-lxc.network.type = veth
-lxc.network.flags = up
-lxc.network.link = br0
-lxc.network.name = eth0
-lxc.network.ipv4 = xxx.xxx.10.230/24
-lxc.network.ipv4.gateway = xxx.xxx.0.176
-#lxc.network.link = lxcbr0
-lxc.utsname = myvminlxc
-
-lxc.tty = 4
-lxc.pts = 1024
-lxc.rootfs = /dev/mapper/loop0p1
-lxc.arch = amd64
-lxc.cap.drop = sys_module mac_admin
-
-lxc.cgroup.devices.deny = a
-# Allow any mknod (but not using the node)
-lxc.cgroup.devices.allow = c *:* m
-lxc.cgroup.devices.allow = b *:* m
-# /dev/null and zero
-lxc.cgroup.devices.allow = c 1:3 rwm
-lxc.cgroup.devices.allow = c 1:5 rwm
-# consoles
-lxc.cgroup.devices.allow = c 5:1 rwm
-lxc.cgroup.devices.allow = c 5:0 rwm
-#lxc.cgroup.devices.allow = c 4:0 rwm
-#lxc.cgroup.devices.allow = c 4:1 rwm
-# /dev/{,u}random
-lxc.cgroup.devices.allow = c 1:9 rwm
-lxc.cgroup.devices.allow = c 1:8 rwm
-lxc.cgroup.devices.allow = c 136:* rwm
-lxc.cgroup.devices.allow = c 5:2 rwm
-# rtc
-lxc.cgroup.devices.allow = c 254:0 rwm
-#fuse
-lxc.cgroup.devices.allow = c 10:229 rwm
-#tun
-lxc.cgroup.devices.allow = c 10:200 rwm
-#full
-lxc.cgroup.devices.allow = c 1:7 rwm
-#hpet
-lxc.cgroup.devices.allow = c 10:228 rwm
-#kvm
-lxc.cgroup.devices.allow = c 10:232 rwm
-</code></pre>
-
-<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
-
-<pre><code>$ sudo kpartx -a Contrail.img
-</code></pre>
-
-<p>Now start the machine via:</p>
-
-<pre><code>$ sudo lxc-start -n myvminlxc -f ./myvm.conf
-</code></pre>
-
-<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
-
-<h3 id="troubleshooting">TroubleShooting</h3>
-
-<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
-
-<pre><code>$ sudo vim /etc/selinux/config
-#SELINUX=permissive
-SELINUX=disabled
-
-</code></pre>
-
-<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
-
-<pre><code>kpartx -a /home/xxxxx/iso/Contrail.raw
-lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
-
-</code></pre>
 
       
     </div>

@@ -105,6 +105,98 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/22/coreostips/">CoreOSTips</a>
+      </h1>
+      <span class="post-date">Dec 22, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="add-additional-ssh-keys">Add additional ssh keys</h3>
+
+<p>Adding new keys into the deployed system:</p>
+
+<pre><code># echo 'ssh-rsa AAAAB3Nza.......  key@host' | update-ssh-keys -a core
+</code></pre>
+
+<h3 id="write-files">Write files</h3>
+
+<p>Take <code>/etc/environment</code> file for example:</p>
+
+<pre><code>core@coreos1 ~ $ cat /usr/share/oem/cloud-config.yml 
+#cloud-config
+write_files:
+    - path: /etc/environment
+      permissions: 0644
+      content: |
+        COREOS_PUBLIC_IPV4=172.17.8.201
+        COREOS_PRIVATE_IPV4=172.17.8.201
+</code></pre>
+
+<h3 id="add-user">Add User</h3>
+
+<p>Also add in the file <code>/usr/share/oem/cloud-config.yml</code>, like following:</p>
+
+<pre><code>users:
+  - name: &quot;dash&quot;
+    passwd: &quot;xxxxxxxxxxxxxxxxxx&quot;
+    groups:
+      - &quot;sudo&quot;
+      - &quot;docker&quot;
+    ssh-authorized-keys:
+      - &quot;ssh-rsa ADD ME&quot;
+</code></pre>
+
+<p>Password could be generated via <code>openssl -1 &quot;YourPasswd&quot;</code></p>
+
+<h3 id="use-ansible">Use Ansible</h3>
+
+<p>Install via:</p>
+
+<pre><code>$ sudo ansible-galaxy install defunctzombie.coreos-bootstrap
+$ sudo vim /etc/ansible/roles/defunctzombie.coreos-bootstrap/files/bootstrap.sh
+if [[ -e $HOME/pypy-5.6-linux_x86_64-portable.tar.bz2 ]]; then
+  tar -xjf $HOME/pypy-5.6-linux_x86_64-portable.tar.bz2
+  #rm -rf $HOME/pypy-$PYPY_VERSION-linux64.tar.bz2
+else
+  wget -O - https://bitbucket.org/pypy/pypy/downloads/pypy-$PYPY_VERSION-linux64.tar.bz2 |tar -xjf -
+fi
+
+rm -rf pypy
+mv -n pypy-5.6-linux_x86_64-portable pypy
+</code></pre>
+
+<p>Cause the old version 5.1.0 will have problems, we replace it with 5.6.</p>
+
+<p>Create playbook and inventory file:</p>
+
+<pre><code>$ vim site.yml 
+- hosts: coreos
+  gather_facts: False
+  roles:
+    - defunctzombie.coreos-bootstrap
+$ vim inventory
+[coreos]
+172.17.8.221
+172.17.8.222
+172.17.8.223
+
+[coreos:vars]
+ansible_ssh_user=core
+ansible_python_interpreter=/home/core/bin/python
+$ ansible-playbook -i inventory site.yml
+$ ansible -i inventory all -m ping
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/12/21/trycoreos3/">TryCoreOS(3)</a>
       </h1>
       <span class="post-date">Dec 21, 2016 
@@ -835,62 +927,6 @@ Hello World , build me now!
 <p>如果需要用mesos来自动deploy app，可以参考:</p>
 
 <p><a href="http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/">http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/</a></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/11/offlineinstalljavaonubuntu1404/">OfflineInstallJavaOnUbuntu1404</a>
-      </h1>
-      <span class="post-date">Dec 11, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>在ubuntu14.04上搭建mesos时，需要安装jdk8或jdk9，然而官方仓库中没有类似的选项，
-因而有两种work-around，第一种是手动安装jdk， 第二种是使用第三方库安装.</p>
-
-<h3 id="手动安装">手动安装</h3>
-
-<p>下载安装包:</p>
-
-<pre><code>$ wget --header &quot;Cookie: oraclelicense=accept-securebackup-cookie&quot;
-http://download.oracle.com/otn-pub/java/jdk/8u111-b14/jdk-8u111-linux-x64.tar.gz
-</code></pre>
-
-<p>如果是jdk9，则下载安装包为:</p>
-
-<pre><code>$ wget
-http://www.java.net/download/java/jdk9/archive/140/binaries/jdk-9-ea+140_linux-x64_bin.tar.gz
-</code></pre>
-
-<p>下载完毕后，安装步骤如下:</p>
-
-<pre><code>$ sudo bash
-# tar -zxf jdk-9-ea+140_linux-x64_bin.tar.gz -C /opt/jdk/
-# update-alternatives --install /usr/bin/java java /opt/jdk/jdk-9/bin/java 100
-# update-alternatives --install /usr/bin/javac javac /opt/jdk/jdk-9/bin/javac 100
-# update-alternatives --display java
-# update-alternatives --display javac
-</code></pre>
-
-<h3 id="第三方库">第三方库</h3>
-
-<p>激活ppa库如下:</p>
-
-<pre><code>$ sudo add-apt-repository ppa:webupd8team/java
-$ sudo apt-get update
-$ sudo apt-get install oracle-java8-installer
-$ sudo apt-get install oracle-java8-set-default
-</code></pre>
-
-<p>在安装过程中需要从oracle官方网站下载安装包，为了避免重复下载过程，可以将安装包直接拷贝到
-<code>/var/cache/oracle-jdk9-installer</code>目录或者<code>/var/cache/oracle-jdk8-installer</code>目录。</p>
 
       
     </div>

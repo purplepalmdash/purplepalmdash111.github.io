@@ -105,6 +105,156 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/11/write-python-weather-app-on-heroku-8/">Write Python Weather APP on Heroku(8)</a>
+      </h1>
+      <span class="post-date">May 11, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
+        
+      </span>
+      
+      
+
+<h3 id="deploy-on-heroku">Deploy on Heroku</h3>
+
+<p>The deployed version is listed as following:</p>
+
+<pre><code>#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Set default encoding: utf-8
+import sys;
+reload(sys);
+# Setting the utf-8 format
+sys.setdefaultencoding(&quot;utf8&quot;)
+
+import os
+import logging
+import string
+from celery import Celery
+from celery.task import periodic_task
+from datetime import datetime,timedelta
+from os import environ
+
+
+# For retrieving temperature/humidity
+import pywapi
+import urllib2
+from urllib2 import ProxyHandler
+import re
+from BeautifulSoup import BeautifulSoup
+
+# For using database(Postgresql)
+# from flash.ext.sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Column, Table, ForeignKey
+from sqlalchemy import Integer, String, DateTime
+
+
+# redis configuration for celery
+### Local, should be change to remote when deploying to heroku
+# REDIS_URL = environ.get('REDISTOGO_URL', 'redis://localhost')
+### Heroku Ways
+REDIS_URL = environ.get('REDISCLOUD_URL')
+
+
+celery = Celery('tasks', broker=REDIS_URL)
+
+# Fetch 
+
+
+# Define Periodic Tasks
+@periodic_task(run_every=timedelta(minutes=60))
+# Funciton for fetching data and store it in Postgres
+def fetch_and_store_data():
+    # Fetching the weather information from Yahoo. 
+    Yahoo_Result = pywapi.get_weather_from_yahoo('CHXX0099')
+    Current_Temp = string.lower(Yahoo_Result['condition']['temp'])
+    Current_Humi = string.lower(Yahoo_Result['atmosphere']['humidity'])
+    Tomorrow_Forecast = Yahoo_Result['forecasts'][0]
+    Twenty_Four_Hours = Yahoo_Result['forecasts'][1]
+    Fourty_Eight_Hours = Yahoo_Result['forecasts'][2]
+    Seventy_Two_Hours = Yahoo_Result['forecasts'][3]
+    # !!! comment proxy related for deploying to heroku !!! #
+    # proxy = urllib2.ProxyHandler({'http': '1xx.x.xx.xxx:2xxx'})
+    # opener = urllib2.build_opener(proxy)
+    # urllib2.install_opener(opener)
+    # !!! comment out end #
+    page = urllib2.urlopen(&quot;http://www.pm25.in/nanjing&quot;)
+    soup = BeautifulSoup(page)                      #
+    # Find the detailed table from the soup.        #
+    table = soup.find('table', {'id':'detail-data'})#
+    # Fetch the XuanWuHu, if not, use MaiGaoQiao ins#tead. 
+    rows = table.findAll('tr')                      #
+    for subrows in rows:                            #
+        if &quot;玄武湖&quot; in subrows.text:                #
+            XuanwuLake = subrows                    #
+        else:                                       #
+            if &quot;迈皋桥&quot; in subrows.text:            #
+                XuanwuLake = subrows                #
+    XuanwuLake_subitem = XuanwuLake.findAll('td')   #
+    # Here we will get an array, fetch out the text #for the content from this array.
+    # Fetched origin data, different from cnpm25.cn #
+    pm_25_orig = XuanwuLake_subitem[4].text         #
+    pm_10_orig = XuanwuLake_subitem[5].text
+    # Open the Database
+    # Local Engine
+    # engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb',echo=True)
+    # Heroku Engine
+    db_conn = environ['DATABASE_URL']
+    engine = create_engine(db_conn)
+
+    metadata=MetaData(bind=engine)
+    
+    # Definition of the weather table
+    weather_table=Table('weather',metadata,
+    	Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+    	Column('Temperature', Integer),
+    	Column('Humidity', Integer),
+    	Column('PmTen', Integer),
+    	Column('PmTwoFive', Integer),
+    )
+
+    # Create the table in mylocaldb
+    metadata.create_all(checkfirst=True)
+
+    # Record Insertion
+    # First generate an insertion sentense:
+    ins = weather_table.insert()
+    # Really insert into the Database
+    # ins = weather_table.insert().values(Insert_Time=datetime.datetime.utcnow(), Temperature=25, Humidity=75, PmTen=100, PmTwoFive=55)   # Example
+    ins = weather_table.insert().values(Insert_Time=datetime.utcnow(), Temperature=Current_Temp, Humidity=Current_Humi, PmTen=int(pm_10_orig), PmTwoFive=int(pm_25_orig))
+    # Connect to engine and execute.
+    conn = engine.connect()
+    result = conn.execute(ins)
+
+    #return Current_Temp
+    return pm_25_orig
+
+
+# Every 3 minutes we will see debug information, from heroku log
+# @periodic_task(run_every=timedelta(minutes=3))
+# @periodic_task(run_every=timedelta(seconds=3))
+# def print_fib():
+#     #logging.info(fib(30))
+#     logging.info(&quot;This could be viewed in logging!&quot;)
+
+</code></pre>
+
+<p>This version use remote service, and it will handle the fetching/updating every 60 minutes.</p>
+
+<h3 id="prevent-heroku-from-sleeping">Prevent Heroku from Sleeping</h3>
+
+<p>Register a service at <a href="https://uptimerobot.com/">https://uptimerobot.com/</a>, it will automatically ping or get http(s) service from your web apps.</p>
+
+<p>Until now, almost all of the back-end has been set up. We can fetch the data and periodly insert into the database, and our web app will continue to run(Never sleep).<br />
+Tomorrow we will try to write a beautiful front-end for our webapp.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/05/10/celery-and-rabbitmq-on-archlinux/">Celery and RabbitMQ on ArchLinux</a>
       </h1>
       <span class="post-date">May 10, 2014 
@@ -676,104 +826,6 @@ origin	git@github.com:kkkttt/herokuWeatherApp.git (push)
 </code></pre>
 
 <p>Now open your browser and visit &ldquo;<a href="http://python-weather-app.herokuapp.com/&quot;">http://python-weather-app.herokuapp.com/&quot;</a> you will see the webpage displays &ldquo;Hello World!&rdquo;.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/05/09/write-python-weather-app-on-heroku-2/">Write Python Weather APP on Heroku(2)</a>
-      </h1>
-      <span class="post-date">May 9, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
-        
-      </span>
-      
-      
-
-<h3 id="get-current-weather-data">Get Current Weather Data</h3>
-
-<p>Now we begin to change our APP to a real funny staff. First we change the hello.py and begin to write our own &ldquo;genhtml.py&rdquo;</p>
-
-<pre><code>$ mv hello.py genhtml.py
-$ cat Procfile
-web: gunicorn genhtml:app
-
-</code></pre>
-
-<p>We know there is an python library which we could install from pip named &ldquo;pywapi&rdquo;, simply install it via:</p>
-
-<pre><code>(venv2) $ pip install pywapi
-
-</code></pre>
-
-<p>If your pip&rsquo;s version is 1.5.1, then notice you have to use following command for installing the pywapi:</p>
-
-<pre><code>(venv2) $ pip install pywapi --allow-external pywapi --allow-unverified pywapi
-Downloading/unpacking pywapi
-  pywapi is potentially insecure and unverifiable.
-  Downloading pywapi-0.3.8.tar.gz
-  Running setup.py (path:/home/Trusty/code/herokuWeatherApp/venv/build/pywapi/setup.py) egg_info for package pywapi
-    
-Installing collected packages: pywapi
-  Running setup.py install for pywapi
-    
-Successfully installed pywapi
-Cleaning up...
-
-</code></pre>
-
-<p>Now change the genhtml.py to following content:</p>
-
-<pre><code>import os
-from flask import Flask
-
-import pywapi
-import string
-
-app = Flask(__name__)
-
-@app.route('/')
-
-# Generate the Nanjing Weather Data
-def genhtml():
-    Yahoo_Result = pywapi.get_weather_from_yahoo('CHXX0099')
-    Current_Temp = string.lower(Yahoo_Result['condition']['temp'])
-    Current_Humi = string.lower(Yahoo_Result['atmosphere']['humidity'])
-    Tomorrow_Forecast = Yahoo_Result['forecasts'][0]
-    Twenty_Four_Hours = Yahoo_Result['forecasts'][1]
-    Fourty_Eight_Hours = Yahoo_Result['forecasts'][2]
-    Seventy_Two_Hours = Yahoo_Result['forecasts'][3]
-    return Current_Temp
-
-</code></pre>
-
-<p>After modification, we use &ldquo;foreman start&rdquo; for previewing the result, we can see the webpage returns the current temperature of Nanjing, its value is 25, as in following picture:<br />
-<img src="/images/current_temp.jpg" alt="/images/current_temp.jpg" /></p>
-
-<p>This shows the pywapi could be work together with other components, we will continue for next step.<br />
-###Deployment On Heroku
-You need to change the requirement.txt file like following:</p>
-
-<pre><code>$ cat requirements.txt
---allow-all-external
---allow-unverified pywapi
-Flask==0.10.1
-Jinja2==2.7.2
-MarkupSafe==0.23
-Werkzeug==0.9.4
-gunicorn==18.0
-itsdangerous==0.24
-pywapi==0.3.8
-wsgiref==0.1.2
-
-</code></pre>
-
-<p>Then run &ldquo;git push heroku master&rdquo;, open your browser and visit <a href="http://python-weather-app.herokuapp.com/">http://python-weather-app.herokuapp.com/</a>, the output the same as in local.</p>
-
-<p>By now, we have created a very simple app on getting the current temperature of nanjing, next chapter we will use database for timely record the data.</p>
 
       
     </div>

@@ -105,6 +105,224 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/04/01/you-guan-bing-fa/">有关并发</a>
+      </h1>
+      <span class="post-date">Apr 1, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/app2e">app2e</a>
+        
+      </span>
+      
+      <p>app2e中有几个很好的关于并发实现的例子，这里加以详细解析。<br />
+###简单的echo服务器
+所谓echo服务器就是将客户端的输入简单的通过socket回送回来。代码实现如下：<br /></p>
+
+<pre><code>#include &lt;csapp.h&gt;
+
+void echo(int connfd);
+
+int main(int argc, char **argv)
+{
+	int listenfd, connfd, port, clientlen;
+	struct sockaddr_in clientaddr;
+	struct hostent *hp;
+	char *haddrp;
+
+	if(argc != 2) {
+		fprintf(stderr, &quot;usage: %s &lt;port&gt;\n&quot;, argv[0]);
+		return 1;
+	}
+	port = atoi(argv[1]);
+
+	listenfd = Open_listenfd(port);
+	while(1) {
+		clientlen = sizeof(clientaddr);
+		connfd = Accept(listenfd, (SA *)&amp;clientaddr, &amp;clientlen);
+
+		/* determin the domain name and IP address of the client */
+		hp = Gethostbyaddr((const char*)&amp;clientaddr.sin_addr.s_addr, 
+				sizeof(clientaddr.sin_addr.s_addr), AF_INET);
+		haddrp = inet_ntoa(clientaddr.sin_addr);
+		printf(&quot;server conected to %s (%s)\n&quot;, hp-&gt;h_name, haddrp);
+		echo(connfd);
+		Close(connfd);
+	}
+	return 0;
+}
+
+void echo(int connfd)
+{
+	size_t n;
+	char buf[MAXLINE];
+	rio_t rio;
+
+	Rio_readinitb(&amp;rio, connfd);
+	while((n = Rio_readlineb(&amp;rio, buf, MAXLINE)) != 0) {
+		printf(&quot;server received %d bytes\n&quot;, n);
+		Rio_writen(connfd, buf, n);
+	}
+}
+
+</code></pre>
+
+<p>从代码来看，这是一个很典型的socket通信的例子。连接一旦建立成功，server段会打印出client端的IP地址，并一直在echo程序中晃荡。因为echo()中有while()函数会一直等着从connfd文件描述符读入输入行。当得到来自socket fd的输入时，会打印出接收到的字符个数，并将其写入到socket文件描述符中，由此client段会得到回显字符。<br />
+###利用进程实现并发
+上面的简单echo服务器是没法接受一个以上的连接的。因此我们写出echo服务器的第二版，利用子进程实现echo服务器。<br /></p>
+
+<pre><code>/* 
+ * echoserverp.c - A concurrent echo server based on processes
+ */
+/* $begin echoserverpmain */
+#include &quot;csapp.h&quot;
+void echo(int connfd);
+
+void sigchld_handler(int sig) //line:conc:echoserverp:handlerstart
+{
+    while (waitpid(-1, 0, WNOHANG) &gt; 0)
+	;
+    return;
+} //line:conc:echoserverp:handlerend
+
+int main(int argc, char **argv) 
+{
+    int listenfd, connfd, port;
+    socklen_t clientlen=sizeof(struct sockaddr_in);
+    struct sockaddr_in clientaddr;
+
+    if (argc != 2) {
+	fprintf(stderr, &quot;usage: %s &lt;port&gt;\n&quot;, argv[0]);
+	exit(0);
+    }
+    port = atoi(argv[1]);
+
+    Signal(SIGCHLD, sigchld_handler);
+    listenfd = Open_listenfd(port);
+    while (1) {
+	connfd = Accept(listenfd, (SA *) &amp;clientaddr, &amp;clientlen);
+	if (Fork() == 0) { 
+	    Close(listenfd); /* Child closes its listening socket */
+	    echo(connfd);    /* Child services client */ //line:conc:echoserverp:echofun
+	    Close(connfd);   /* Child closes connection with client */ //line:conc:echoserverp:childclose
+	    exit(0);         /* Child exits */
+	}
+	Close(connfd); /* Parent closes connected socket (important!) */ //line:conc:echoserverp:parentclose
+    }
+} 
+
+void echo(int connfd)
+{
+	size_t n;
+	char buf[MAXLINE];
+	rio_t rio;
+
+	Rio_readinitb(&amp;rio, connfd);
+	while((n = Rio_readlineb(&amp;rio, buf, MAXLINE)) != 0) {
+		printf(&quot;server received %d bytes\n&quot;, n);
+		Rio_writen(connfd, buf, n);
+	}
+}
+
+
+/* $end echoserverpmain */
+
+</code></pre>
+
+<p>编译和运行命令如下：<br /></p>
+
+<pre><code>	$ gcc -o echoserverp echoserverp.c -lcsapp -lpthread
+	$ ./echoserverp 3344
+	$ ./echoclient localhost 3344
+
+</code></pre>
+
+<p>在多个终端上执行完./echoclient localhost 3344后，我们可以用ps -ef | grep echoserverp来检查当前系统中的进程个数:<br /></p>
+
+<pre><code>	$ ps -ef | grep echoserverp
+	Trusty     30404  8497  0 17:19 pts/9    00:00:00 ./echoserverp 3344
+	Trusty     30651 30404  0 17:19 pts/9    00:00:00 ./echoserverp 3344
+	Trusty     31174 30404  0 17:20 pts/9    00:00:00 ./echoserverp 3344
+
+</code></pre>
+
+<p>这里看到，在有3个client端连接时，存在3个echoserverp运行实例。<br /></p>
+
+<p>实现的关键在于：<br />
+1. 使用信号, SIGCHLD用于回收僵死进程。
+2. Fork()函数创建子进程。
+3. 创建完子进程后，父进程需要关闭已经建立的socket连接。而子进程则需要关闭它的监听描述符。</p>
+
+<p>优缺点比较：<br />
+父子进程共享文件表，但是不共享用户地址空间。使得一个进程不可能不小心覆盖到另一个进程的虚拟存储器。但是独立的地址空间使得进程共享状态信息变得困难，它们需要用IPC来显示通信。而且进程通常比较慢，因为进程控制和IPC的开销很高。IPC,进程间通信。<br />
+###基于I/O多路复用的并发编程</p>
+
+<pre><code>/* $begin select */
+#include &quot;csapp.h&quot;
+void echo(int connfd);
+void command(void);
+
+int main(int argc, char **argv) 
+{
+    int listenfd, connfd, port;
+    socklen_t clientlen = sizeof(struct sockaddr_in);
+    struct sockaddr_in clientaddr;
+    fd_set read_set, ready_set;
+
+    if (argc != 2) {
+	fprintf(stderr, &quot;usage: %s &lt;port&gt;\n&quot;, argv[0]);
+	exit(0);
+    }
+    port = atoi(argv[1]);
+    listenfd = Open_listenfd(port);  //line:conc:select:openlistenfd
+
+    FD_ZERO(&amp;read_set);              /* Clear read set */ //line:conc:select:clearreadset
+    FD_SET(STDIN_FILENO, &amp;read_set); /* Add stdin to read set */ //line:conc:select:addstdin
+    FD_SET(listenfd, &amp;read_set);     /* Add listenfd to read set */ //line:conc:select:addlistenfd
+
+    while (1) {
+	ready_set = read_set;
+	Select(listenfd+1, &amp;ready_set, NULL, NULL, NULL); //line:conc:select:select
+	if (FD_ISSET(STDIN_FILENO, &amp;ready_set)) //line:conc:select:stdinready
+	    command(); /* Read command line from stdin */
+	if (FD_ISSET(listenfd, &amp;ready_set)) { //line:conc:select:listenfdready
+	    connfd = Accept(listenfd, (SA *)&amp;clientaddr, &amp;clientlen);
+	    echo(connfd); /* Echo client input until EOF */
+	    Close(connfd);
+	}
+    }
+}
+
+void command(void) {
+    char buf[MAXLINE];
+    if (!Fgets(buf, MAXLINE, stdin))
+	exit(0); /* EOF */
+    printf(&quot;%s&quot;, buf); /* Process the input command */
+}
+
+void echo(int connfd)
+{
+	size_t n;
+	char buf[MAXLINE];
+	rio_t rio;
+
+	Rio_readinitb(&amp;rio, connfd);
+	while((n = Rio_readlineb(&amp;rio, buf, MAXLINE)) != 0) {
+		printf(&quot;server received %d bytes\n&quot;, n);
+		Rio_writen(connfd, buf, n);
+	}
+}
+
+/* $end select */
+
+</code></pre>
+
+<p>这个例子测试时需要注意的是，当客户端有连接时，终端输入将失效。一个更好的解决方案是使用更细粒度的多路复用，服务器每次循环回送一个文本行。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/03/30/remote-ssh-and-vnc-forwarding/">Remote SSH and VNC Forwarding</a>
       </h1>
       <span class="post-date">Mar 30, 2014 
@@ -388,103 +606,6 @@ Put something into the RedisQueue:<br /></p>
 </code></pre>
 
 <p>###Rewrite Dictionary Program</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/03/20/re-compile-kernel-for-supporting-512m-memory-for-raspberrypi-in-qemu/">Re-compile Kernel For Supporting 512M Memory For RaspberryPI In Qemu</a>
-      </h1>
-      <span class="post-date">Mar 20, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/raspberrypi">RaspberryPI</a>
-        
-      </span>
-      
-      <p>###Cross Compiler Prepration
-Get the cross-compiler from github:<br /></p>
-
-<pre><code>	[Trusty@XXXyyy tools]$ pwd
-	/media/y/raspberryPI/tools
-	[Trusty@XXXyyy tools]$ git clone git://github.com/raspberrypi/tools.git
-
-</code></pre>
-
-<p>Add the cross-compiler to system path:<br /></p>
-
-<pre><code>	export PATH=&quot;/media/y/raspberryPI/tools/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin:$PATH&quot;
-
-</code></pre>
-
-<p>Now input &ldquo;arm-linux-g&rdquo; + tab you will see the cross-compiler is ready.<br />
-###Prepare the kernel
-Get the kernel source from github:<br /></p>
-
-<pre><code>	git clone git://github.com/raspberrypi/linux.git
-
-</code></pre>
-
-<p>Now we need to get the patches for supporting the raspberryPI, Torlus has done the patches which could also be downloaded from github:<br /></p>
-
-<p>Now we need to configure the kernel:<br /></p>
-
-<pre><code>	cd linux
-	make ARCH=arm versatile_defconfig
-
-</code></pre>
-
-<p>NO, I MADE A MISTAKE, IT SHOULDN&rsquo;T COMPILE KERNEL, SHOULD COMPILE QEMU!!!</p>
-
-<p>###Compile qemu
-Get the modified qemu branch from github:<br /></p>
-
-<pre><code>	git clone git://github.com/Torlus/qemu.git
-
-</code></pre>
-
-<p>Switch to &lsquo;rpi&rsquo; branch:<br /></p>
-
-<pre><code>	git fetch origin
-	git branch -v -a # List the available branches.
-	git checkout -b raspberry origin/rpi	# Checkout the origin/rpi to local raspberry
-	git fetch
-	git checkout raspberry
-
-</code></pre>
-
-<p>Begin to configure qemu, notice we have to use python2 for configuring the qemu:<br /></p>
-
-<pre><code>	workon venv2
-	./configure --help
-	./configure --target-list=&quot;arm-softmmu arm-linux-user&quot; --enable-sdl 
-
-</code></pre>
-
-<p>Now begin to make the qemu, use -j8 for speeding up, adjust the number according to your own machine:<br /></p>
-
-<pre><code>	make -j8
-
-</code></pre>
-
-<p>Now under the following directory you will get the qemu-system-arm:<br /></p>
-
-<pre><code>	$ pwd
-	/media/y/raspberryPI/qemu/arm-softmmu
-
-</code></pre>
-
-<p>Get the kernel.img from the SD image. <br /></p>
-
-<p>###Use the compiled qemu for running
-We have to change the scripts for running the qemu:<br /></p>
-
-<pre><code>	/media/y/raspberryPI/qemu/arm-softmmu/qemu-system-arm -net nic,macaddr=$macaddr -net user -kernel kernel.img -cpu arm1176 -m 512 -M raspi -no-reboot -serial stdio -append &quot;rw earlyprintk loglevel=8 panic=120 keep_bootcon rootwait dma.dmachans=0x7f35 bcm2708_fb.fbwidth=1024 bcm2708_fb.fbheight=768 bcm2708.boardrev=0xf bcm2708.serial=0xcad0eedf smsc95xx.macaddr=B8:27:EB:D0:EE:DF sdhci-bcm2708.emmc_clock_freq=100000000 vc_mem.mem_base=0x1c000000 vc_mem.mem_size=0x20000000  dwc_otg.lpm_enable=0 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait&quot; -sd 2014-01-07-wheezy-raspbian.img  -device usb-kbd -device usb-mouse -usbdevice net 
-
-</code></pre>
-
-<p>Now we can run the raspberryPI in QEMU with 512MB memory, but, the network is still unavailable.</p>
 
       
     </div>

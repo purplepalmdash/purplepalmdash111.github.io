@@ -105,6 +105,49 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/08/chef-troubleshooting-2/">Chef TroubleShooting 2</a>
+      </h1>
+      <span class="post-date">Jun 8, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      <p>The ssl checking for adding new nodes is still a horrible procedure, following shows the correct steps for adding new node:</p>
+
+<p>On Chef Workstation, add node via its ip address rather than via its hostname:</p>
+
+<pre><code>$ knife bootstrap 172.16.0.12 -x username_on_12 -P password_on_12 --sudo
+</code></pre>
+
+<p>The example knife.rb file should be written like following:</p>
+
+<pre><code>current_dir = File.dirname(__FILE__)
+log_level                :info
+log_location             STDOUT
+node_name                &quot;nodename&quot;
+client_key               &quot;#{current_dir}/node.pem&quot;
+validation_client_name   &quot;nodename&quot;
+validation_key           &quot;#{current_dir}/node_org.pem&quot;
+chef_server_url          &quot;https://tmpChefServer/organizations/nodename&quot;
+syntax_check_cache_path  &quot;#{ENV['HOME']}/.chef/syntaxcache&quot;
+cookbook_path            [&quot;#{current_dir}/../cookbooks&quot;]
+</code></pre>
+
+<p>On Chef Client, first fetching the ssl, then manually passed the verification.</p>
+
+<pre><code>$ knife ssl fetch --config /etc/chef/client.rb
+$ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxxxx.pem
+</code></pre>
+
+<p>On Chef Server, bootstrap again via the same command, now you could work.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a>
       </h1>
       <span class="post-date">Jun 8, 2015 
@@ -417,117 +460,6 @@ $ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxx
 </code></pre>
 
 <p>Now bootstrap again, and you will see the node could be added into the Chef-Server&rsquo;s system.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/01/chef-for-deploying-openstack/">Chef For Deploying OpenStack</a>
-      </h1>
-      <span class="post-date">Jun 1, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>Following article records all of the steps for using chef for deploying OpenStack.</p>
-
-<p>Refers to:<br />
-<a href="http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/">http://ehaselwanter.com/en/blog/2014/10/15/deploying-openstack-with-stackforge-chef-zero-style/</a></p>
-
-<h3 id="change-vbox-files">Change vbox files</h3>
-
-<p>Edit the Vagrantfile for bring up the vbox, then startup the machine, modify its content , save it.</p>
-
-<pre><code>$ vim Vagrantfile
-    # -*- mode: ruby -*-
-    # vi: set ft=ruby :
-    Vagrant::Config.run do |config|
-    config.vm.box = &quot;Trusy64&quot;
-    config.vm.box_url = &quot;http://xxx.xxx.xxx.xxx/opscode_ubuntu-14.04_chef-provisionerless.box&quot;
-    config.vm.customize [&quot;modifyvm&quot;, :id, &quot;--memory&quot;, 1024]
-    end
-</code></pre>
-
-<p>Login to the running machine and modify its default repository from official to local repository.</p>
-
-<pre><code>$ vagrant up
-$ vagrant ssh
-(YourVagrantMachine) $ sudo vim /etc/apt/sources.list
-(YourVagrantMachine) $ sudo vim /etc/apt/apt.conf
-(YourVagrantMachine) $ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade
-</code></pre>
-
-<p>Now save your modification to the vbox file:</p>
-
-<pre><code>$ vagrant package --base vagrant_default_1433130468275_38998
-$ ls
-package.box Vagrantfile
-</code></pre>
-
-<h3 id="setup-chef-code">Setup Chef Code</h3>
-
-<p>First install the vagrant plugins via:</p>
-
-<pre><code>$ vagrant plugin install vagrant-berkshelf
-$ vagrant plugin install vagrant-chef-zero
-$ vagrant plugin install vagrant-omnibus
-$ vagrant plugin list
-</code></pre>
-
-<p>Get the repository from github, modify the file <code>vagrant_linux.rb</code>:</p>
-
-<pre><code>[xxxx@~/Code/Chef/MasterVersion]$ git clone https://github.com/stackforge/openstack-chef-repo.git
-$ cd openstack-chef-repo
-$ vim vagrant_linux.rb
-  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_centos-7.1_chef-provisionerless.box'
-  url 'http://xxx.xxx.xxx.xxx/opscode_centos-7.1_chef-provisionerless.box'
-
-  #url 'http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_ubuntu-14.04_chef-provisionerless.box'
-  url 'http://xxx.xxx.xxx.xxx/package.box'
-
-  'vm.box' =&gt; 'ubuntu14'
-</code></pre>
-
-<p>Download all of the cookbooks, and modify the rubygems.org to Chinese mirror, Thanks for the fucking GreatFW!:</p>
-
-<pre><code>$ chef exec rake berks_vendor
-$ cp -r cookbooks cookbooks.back
-$ cd cookbooks
-$ find . -type f -exec sed -i -e 's/https:\/\/rubygems.org/http:\/\/mirrors.aliyun.com\/rubygems/g' {} \; 
-</code></pre>
-
-<p>Edit the ruby definition file for avoiding <code>Chef encountered an error attempting to load the node data for &quot;controller&quot;</code>:</p>
-
-<pre><code>$ vim ./aio-neutron.rb
-machine 'controller' do
-  add_machine_options vagrant_config: controller_config
-+  chef_server( :chef_server_url =&gt; 'http://localhost:8889')
-  role 'allinone-compute'
-  role 'os-image-upload'
-
-</code></pre>
-
-<p>One Cookbook needs to modify, because it will automatically use source from <code>rubygems.org</code>, Thanks again for the fucking GreatFW!:</p>
-
-<pre><code>$ cd cookbooks
-$ vim ./mysql2_chef_gem/libraries/provider_mysql2_chef_gem_mysql.rb
-             options(&quot;--clear-sources --source http://mirrors.aliyun.com/rubygems/gems/mysql2-0.3.18.gem&quot;) 
-
-</code></pre>
-
-<p>Now begin to provision via:</p>
-
-<pre><code>$ chef exec rake aio_neutron 2&gt;&amp;1 | tee aio_neutron.txt
-</code></pre>
-
-<p>After installation and configuration, you could visit following URL for your OpenStack:</p>
-
-<p><a href="https://127.0.0.1:9443">https://127.0.0.1:9443</a></p>
 
       
     </div>

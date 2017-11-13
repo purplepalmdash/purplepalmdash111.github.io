@@ -105,6 +105,324 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/14/setup-the-cobbler-server/">Setup the Cobbler Server</a>
+      </h1>
+      <span class="post-date">May 14, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>The reference material is mainly from:<br />
+<a href="http://www.cobblerd.org/manuals/quickstart/">http://www.cobblerd.org/manuals/quickstart/</a></p>
+
+<h3 id="prepartion">Prepartion</h3>
+
+<p>First install the CentOS6.6, choose the basic server.<br />
+After installation, update to the latest system via <code>yum -y update</code>.<br />
+Disable the SELinux via:</p>
+
+<pre><code># vim /etc/selinux/config
+#SELINUX=enforcing                                                                                                                       │
+SELINUX=disabled 
+
+</code></pre>
+
+<p>Then restart the compute.<br />
+Add epel repository:</p>
+
+<pre><code># wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
+# yum update
+# yum install -y cobbler cobbler-web
+
+</code></pre>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>Change the default password:</p>
+
+<pre><code># openssl passwd -1                                                                                                     │
+Password:                                                                                                                                 │
+Verifying - Password:                                                                                                                     │
+igaowugoauwgoueougo
+[root@CobblerServer ~]# vim /etc/cobbler/settings          
+default_password_crypted: &quot;agowuoguwoawoguwoe&quot;
+
+</code></pre>
+
+<p>Set the Server and Next_Server to the specified IP Address, DO NOT use 0.0.0.0:</p>
+
+<pre><code># default, localhost
+server: 10.3.3.3.
+
+# default, localhost
+next_server: 10.3.3.3
+
+</code></pre>
+
+<p>Enable the dhcp managed:</p>
+
+<pre><code>manage_dhcp: 0
+
+</code></pre>
+
+<p>Edit the dhcp template via:</p>
+
+<pre><code>vi /etc/cobbler/dhcp.template
+subnet 10.3.3.0 netmask 255.255.255.0 {
+     option routers             10.3.3.1;                                                                                                  
+     range dynamic-bootp        10.3.3.4 10.3.3.254;
+     option domain-name-servers 114.114.114.114, 8.8.8.8;     
+     option subnet-mask         255.255.255.0;         
+     filename                   &quot;/pxelinux.0&quot;;       
+     default-lease-time         21600;           
+     max-lease-time             43200;      
+     next-server                $next_server; 
+}          
+
+</code></pre>
+
+<p>Start and check the service status:</p>
+
+<pre><code>[root@CobblerServer ~]# service cobblerd start                                                                                           
+Starting cobbler daemon:                                   [  OK  ]
+[root@CobblerServer ~]# chkconfig cobblerd on                     
+[root@CobblerServer ~]# chkconfig httpd on                     
+[root@CobblerServer ~]# service cobblerd status                  
+cobblerd (pid 1564) is running...     
+
+</code></pre>
+
+<p>Better you restart the machine and verify your installation via:</p>
+
+<pre><code>[root@CobblerServer ~]# cobbler check
+The following are potential configuration items that you may want to fix:
+
+1 : dhcpd is not installed
+2 : some network boot-loaders are missing from /var/lib/cobbler/loaders, you may run 'cobbler get-loaders' to download them, or, if you only want to handle x86/x86_64 netbooting, you may ensure that you have installed a *recent* version of the syslinux package installed and can ignore this message entirely.  Files in this directory, should you want to support all architectures, should include pxelinux.0, menu.c32, elilo.efi, and yaboot. The 'cobbler get-loaders' command is the easiest way to resolve these requirements.
+3 : change 'disable' to 'no' in /etc/xinetd.d/rsync
+4 : since iptables may be running, ensure 69, 80/443, and 25151 are unblocked
+5 : debmirror package is not installed, it will be required to manage debian deployments and repositories
+6 : ksvalidator was not found, install pykickstart
+7 : fencing tools were not found, and are required to use the (optional) power management features. install cman or fence-agents to use them
+
+</code></pre>
+
+<p>OOOOPs, so many errors, so first install dhcpd:</p>
+
+<pre><code># yum install -y dhcpd
+# chkconfig dhcpd on
+# chkconfig xinetd on
+
+</code></pre>
+
+<p>Manullly edit the dhcpd configuration file as in following files:</p>
+
+<pre><code>[root@CobblerServer ~]# cat /etc/dhcp/dhcpd.conf 
+#
+# DHCP Server Configuration file.
+#   see /usr/share/doc/dhcp*/dhcpd.conf.sample
+#   see 'man 5 dhcpd.conf'
+#
+# create new
+# specify domain name
+option domain-name &quot;server.world&quot;;
+# specify name server's hostname or IP address
+option domain-name-servers 114.114.114.114;
+# default lease time
+default-lease-time 600;
+# max lease time
+max-lease-time 7200;
+# this DHCP server to be declared valid
+authoritative;
+# specify network address and subnet mask
+subnet 10.3.3.0 netmask 255.255.255.0 {
+    # specify the range of lease IP address
+    range dynamic-bootp 10.3.3.4 10.3.3.254;
+    # specify broadcast address
+    option broadcast-address 10.3.3.255;
+    # specify default gateway
+    option routers 10.3.3.1;
+}
+# service dhcpd restart
+
+</code></pre>
+
+<p>One trouble after another, solve them:<br />
+Get Loaders:</p>
+
+<pre><code>[root@CobblerServer ~]# cobbler get-loaders
+
+</code></pre>
+
+<p>Enable the rsync configuration:</p>
+
+<pre><code>  # vim /etc/xinetd.d/rsync 
+        disable = no
+
+</code></pre>
+
+<p>Add the following lines into the /etc/sysconfig/iptables:</p>
+
+<pre><code>:OUTPUT ACCEPT [0:0]
+-A INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT 
+-A INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT 
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+</code></pre>
+
+<p>Or:</p>
+
+<pre><code># iptables -I INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT
+# iptables -I INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT
+
+
+</code></pre>
+
+<p>The difference is the latter won&rsquo;t last for long once the machine got restarted.</p>
+
+<p>Install following packages:</p>
+
+<pre><code>[root@CobblerServer ~]# yum install -y debmirror pykickstart cman
+
+</code></pre>
+
+<p>Now check again:</p>
+
+<pre><code>$ cobbler check
+$ cobbler sync
+
+</code></pre>
+
+<h3 id="import-iso">Import ISO</h3>
+
+<p>I use the CentOS7 iso(CentOS-7-x86_64-Everything-1503-01.iso).</p>
+
+<pre><code>[root@CobblerServer ~]# mount -o loop -t iso9660 ./CentOS-7-x86_64-Everything-1503-01.iso  /mnt
+[root@CobblerServer ~]# cobbler import --name=CentOS-7 --arch=x86_64 --path=/mnt
+path=/mnt
+task started: 2015-05-14_035209_import
+task started (id=Media import, time=Thu May 14 03:52:09 2015)
+Found a candidate signature: breed=redhat, version=rhel6
+Found a candidate signature: breed=redhat, version=rhel7
+Found a matching signature: breed=redhat, version=rhel7
+Adding distros from path /var/www/cobbler/ks_mirror/CentOS-7-x86_64:
+creating new distro: CentOS-7-x86_64
+trying symlink: /var/www/cobbler/ks_mirror/CentOS-7-x86_64 -&gt; /var/www/cobbler/links/CentOS-7-x86_64
+creating new profile: CentOS-7-x86_64
+associating repos
+checking for rsync repo(s)
+checking for rhn repo(s)
+checking for yum repo(s)
+starting descent into /var/www/cobbler/ks_mirror/CentOS-7-x86_64 for CentOS-7-x86_64
+processing repo at : /var/www/cobbler/ks_mirror/CentOS-7-x86_64
+need to process repo/comps: /var/www/cobbler/ks_mirror/CentOS-7-x86_64
+looking for /var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata/*comps*.xml
+Keeping repodata as-is :/var/www/cobbler/ks_mirror/CentOS-7-x86_64/repodata
+*** TASK COMPLETE ***
+
+</code></pre>
+
+<p>Check it via:</p>
+
+<pre><code>[root@CobblerServer ~]# cobbler distro list
+   CentOS-7-x86_64
+[root@CobblerServer ~]# cobbler profile list
+   CentOS-7-x86_64
+[root@CobblerServer ~]# cobbler distro report --name=CentOS-7-x86_64
+Name                           : CentOS-7-x86_64
+Architecture                   : x86_64
+TFTP Boot Files                : {}
+Breed                          : redhat
+Comment                        : 
+Fetchable Files                : {}
+Initrd                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/initrd.img
+Kernel                         : /var/www/cobbler/ks_mirror/CentOS-7-x86_64/images/pxeboot/vmlinuz
+Kernel Options                 : {}
+Kernel Options (Post Install)  : {}
+Kickstart Metadata             : {'tree': 'http://@@http_server@@/cblr/links/CentOS-7-x86_64'}
+Management Classes             : []
+OS Version                     : rhel7
+Owners                         : ['admin']
+Red Hat Management Key         : &lt;&lt;inherit&gt;&gt;
+Red Hat Management Server      : &lt;&lt;inherit&gt;&gt;
+Template Files                 : {}
+
+</code></pre>
+
+<h3 id="installation">Installation</h3>
+
+<p>Install the system, via setup a machine which boot from PXE in the same subnet, then this machine will hint you with installing the corresponding system.<br />
+The new system&rsquo;s username/password is the same as we set in the cobbler configuration file.</p>
+
+<h3 id="enable-web-interface">Enable Web Interface</h3>
+
+<p>Change the default password via:</p>
+
+<pre><code>$ cp /etc/cobbler/users.digest /etc/cobbler/users.digest.back
+$ htdigest /etc/cobbler/users.digest &quot;Cobbler&quot; cobbler
+
+</code></pre>
+
+<p>Now restart the cobblerd, you could visit following URL for visiting the Web Inteface:<br />
+<a href="http://10.3.3.3/cobbler_web">http://10.3.3.3/cobbler_web</a></p>
+
+<h3 id="import-multiple-isos">Import Multiple ISOs</h3>
+
+<p>Import the first iso as usual.</p>
+
+<pre><code># mount -o loop -t iso9660 ./CentOS-6.6-x86_64-bin-DVD1.iso  /mnt
+# cobbler import --name=CentOS-6.6 --arch=x86_64 --path=/mnt
+
+</code></pre>
+
+<p>The Second iso first mount to /mnt1/ directory, then import with following command:</p>
+
+<pre><code>#  rsync -a '/mnt1/' /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/ --exclude-from=/etc/cobbler/rsync.exclude --progress
+#  COMPSXML=$(ls /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64/repodata/*comps*.xml)
+#  createrepo -c cache -s sha --update --groupfile ${COMPSXML} /var/www/cobbler/ks_mirror/CentOS-6.6-x86_64
+
+</code></pre>
+
+<p>Verify it via:</p>
+
+<pre><code># cobbler distro list
+# cobbler profile list
+# cobbler distro report --name=CentOS-6.6-x86_64
+
+</code></pre>
+
+<p>Verify it via installing a new machine running CentOS6.6.</p>
+
+<h3 id="trouble-shooting-on-fence">Trouble-Shooting on fence</h3>
+
+<p>Lacking of fence equipment.</p>
+
+<p>Trouble shooting for controlling the Systems(which is the node information which added into cobbler system).<br />
+For Power Management:</p>
+
+<pre><code>[root@CobblerServer ~]# cobbler system poweroff --name Node1
+task started: 2015-05-14_064600_power
+task started (id=Power management (off), time=Thu May 14 06:46:00 2015)
+cobbler power configuration is:
+      type   : virsh
+      address: qemu+ssh://root@10.3.3.1/system
+      user   : root
+      id     : CobblerTest
+running: /usr/sbin/fence_virsh
+received on stdout: 
+received on stderr: Unable to connect/login to fencing device
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/05/11/automatically-recover-ssh-connection/">Automatically Recover SSH Connection</a>
       </h1>
       <span class="post-date">May 11, 2015 
@@ -937,314 +1255,6 @@ routes=0.0.0.0/0
 
 <p>非HA方式部署，需要花费内存为:<br />
 3+3+2+2=10G, 再加上Fuel Controller本身的3G,在16G的台式机上可以做到。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/05/building-chromeos-steps/">Building ChromeOS Steps</a>
-      </h1>
-      <span class="post-date">May 5, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>My aim is for enable the bluetooth Networking in my Chromebook, AKA BNEP, so first I have to build out some experimentation platforms for investigation, following is the steps for building out the ChromeOS Images and let it run under kvm based virtual machine.</p>
-
-<h3 id="prerequistites">Prerequistites</h3>
-
-<p>I use a 6-Giga-Byte memory machine for building, first install following packages:</p>
-
-<pre><code>$ sudo apt-get install git-core gitk git-gui subversion curl
-
-</code></pre>
-
-<p>Since I am in china mainland, the connection to googlesourcecode is blocked by Great Fire Wall(Fuck you!), I have to use proxychains for automatically convert my TCP/UDP flow to sock flow. That&rsquo;s why in some steps I use proxychains4 in front of the commands. If you are free to reach Internet, you should remove the proxychains4 in front of each command.<br />
-Then install <code>depot_tools</code>.</p>
-
-<pre><code>dasdh@BuildMaasImage:~/Code$ pwd
-/home/dasdh/Code
-dasdh@BuildMaasImage:~/Code$ mkdir depot_tools
-dasdh@BuildMaasImage:~/Code$ proxychains4  git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-$ export PATH=`pwd`/depot_tools:&quot;$PATH&quot;
-$ echo $PATH
-/home/dasdh/Code/depot_tools:/home/dasdh/Code/depot_tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
-
-</code></pre>
-
-<p>Config git:</p>
-
-<pre><code>dasdh@BuildMaasImage:~/Code$ git config --global user.email &quot;kkkttt@gmail.com&quot;
-dasdh@BuildMaasImage:~/Code$ git config --global user.name &quot;Dash&quot;
-
-</code></pre>
-
-<p>Maybe in the future you will use github repository, better you use <code>ssh-keygen</code> to generate the public ssh key and upload it to github.    Make sure your architecture is x86_64, and add following into your ~/.bashrc:</p>
-
-<pre><code>dasdh@BuildMaasImage:~/Code$ uname -m
-x86_64
-dasdh@BuildMaasImage:~/Code$ cat ~/.bashrc | grep umask
-umask 022
-
-</code></pre>
-
-<h3 id="get-source-code">Get Source Code</h3>
-
-<p>Get the code via following commands:</p>
-
-<pre><code>dasdh@BuildMaasImage:~$ mkdir chromiumos
-dasdh@BuildMaasImage:~$ pwd
-/home/dasdh
-
-</code></pre>
-
-<p>Then get the credential for chromiumOS( go to <a href="https://chromium-review.googlesource.com/new-password">https://chromium-review.googlesource.com/new-password</a> for getting the commands):</p>
-
-<pre><code>$  touch ~/.gitcookies
-$  chmod 0600 ~/.gitcookies
-$  git config --global http.cookiefile ~/.gitcookies
-$  tr , \\t &lt;&lt;\__END__ &gt;&gt;~/.gitcookies
- .googlesource.com,TRUE,/,TRUE,2147483647,o,git-kkkttt.gmail.com=1/goeugoueogewoguoweugoawohouaohuowauhoaeuo
- __END__
-$  git config --global &quot;url.https://chromium.googlesource.com/a/.insteadOf&quot; &quot;https://chromium.googlesource.com/&quot;
-$  git config --global --add &quot;url.https://chromium.googlesource.com/a/.insteadOf&quot; &quot;https://chromium.googlesource.com/a/&quot;
-$  proxychains4 git ls-remote https://chromium.googlesource.com/a/chromiumos/manifest.git
-
-</code></pre>
-
-<p>The final output result should be a list of file.<br />
-Because the google source code use https connection, so we need to define the .netrc like following:</p>
-
-<pre><code>$ touch ~/.netrc
-$ chmod 0600 ~/.netrc
-$ vim ~/.netrc
-machine chromium.googlesource.com
-login git-kkkttt.gmail.com
-password agowugoweugowugouwoguoweugoeugo
-
-machine chromium-review.googlesource.com
-login git-kkkttt.gmail.com
-password agowugoweugowugouwoguoweugoeugo
-
-</code></pre>
-
-<p>Now your configuration is ready, initialize the repository via:</p>
-
-<pre><code>$ proxychains4 repo init -u https://chromium.googlesource.com/chromiumos/manifest.git --repo-url https://chromium.googlesource.com/external/repo.git
-$ proxychains4 repo sync 
-
-</code></pre>
-
-<p>repo sync will take a very long time for getting all of the source code down, and it will takes arount 8G disk size.</p>
-
-<h3 id="build-source-code">Build Source Code</h3>
-
-<p>After source code is avaiable, start building it via:</p>
-
-<pre><code>$ proxychains cros_sdk
-
-</code></pre>
-
-<p>Since the proxychains failed, I&rsquo;ve enable the redsocks for crossing the GFW, in the last part of this article shows its installation and configuration.<br />
-Using redsocks we could continue the building:</p>
-
-<pre><code>$ cros_sdk
-dasdh@BuildMaasImage ~/trunk/src/scripts $ 
-
-</code></pre>
-
-<p>Now start building via:</p>
-
-<pre><code>#  export BOARD=amd64-generic
-# ./setup_board --board=${BOARD}
-# ./set_shared_user_password.sh
-# ./build_packages --board=${BOARD}
-# ./build_image --board=${BOARD} --noenable_rootfs_verification dev
-
-</code></pre>
-
-<p>If you met hostname error, make sure your hostname is added in <code>/etc/hosts</code>.</p>
-
-<p>The building result is listed as:</p>
-
-<pre><code>(cr) dasdh@BuildMaasImage ~/trunk/src/build/images/amd64-generic/R44-7040.0.2015_05_06_0543-a1 $ pwd
-/home/dasdh/trunk/src/build/images/amd64-generic/R44-7040.0.2015_05_06_0543-a1
-(cr) dasdh@BuildMaasImage ~/trunk/src/build/images/amd64-generic/R44-7040.0.2015_05_06_0543-a1 $ ls -l -h
-total 1.2G
--rw-r--r-- 1 dasdh eng  399 May  6 05:52 boot.config
--rw-r--r-- 1 dasdh eng  214 May  6 05:49 boot.desc
--rw-r--r-- 1 dasdh eng 2.5G May  6 05:52 chromiumos_image.bin
--rw-r--r-- 1 dasdh eng  586 May  6 05:52 config.txt
-drwxr-xr-x 2 dasdh eng 4.0K May  6 05:52 esp
--rwxr-xr-x 1 dasdh eng 5.6K May  6 05:43 mount_image.sh
--rwxr-xr-x 1 dasdh eng 4.8K May  6 05:43 pack_partitions.sh
--rw-r--r-- 1 dasdh eng  12K May  6 05:43 partition_script.sh
--rwxr-xr-x 1 dasdh eng 4.7K May  6 05:43 umount_image.sh
--rwxr-xr-x 1 dasdh eng 5.0K May  6 05:43 unpack_partitions.sh
-
-</code></pre>
-
-<p>I think the chromiumos_image.bin is what we want.</p>
-
-<h3 id="redsocks">RedSocks</h3>
-
-<p>Download the redsocks source code and compile it:</p>
-
-<pre><code># cd /opt/src
-# git clone https://github.com/darkk/redsocks.git
-# cd redsocks
-# apt-get install libevent-dev 
-# make 
-
-</code></pre>
-
-<p>Write configuration files:</p>
-
-<pre><code># cat redsocks.sh
-#! /bin/sh
-
-case &quot;$1&quot; in
-  start|&quot;&quot;)
-    cd /opt/src/redsocks
-    if [ -e redsocks.log ] ; then
-      rm redsocks.log
-    fi
-    ./redsocks -p /opt/src/redsocks/redsocks.pid #set daemon = on in config file
-    # start redirection
-    iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDIRECT --to 12345
-    iptables -t nat -A OUTPUT -p tcp --dport 443 -j REDIRECT --to 12345
-    ;;
-
-  stop)
-    cd /opt/src/redsocks
-    if [ -e redsocks.pid ]; then
-      kill `cat redsocks.pid`
-      rm redsocks.pid
-    else
-      echo already killed, anyway, I will try killall
-      killall -9 redsocks
-    fi
-    # stop redirection
-    iptables -t nat -F OUTPUT
-    ;;
-
-  start_ssh)
-    #ssh -NfD 1234 user@example.cc #TODO: change it!!!
-    ssh -NfD 1234 544644af4382ec37bc0009da@weatherapp-kkkttt.rhcloud.com
-    ;;
-
-  stop_ssh)
-    ps aux|grep &quot;ssh -NfD 1234&quot;|awk '{print $2}'|xargs kill
-    ;;
-
-  clean_dns)
-    iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED -m gfw -j DROP -m comment --comment &quot;drop gfw dns hijacks&quot;
-    ;;
-
-  *)
-    echo &quot;Usage: redsocks start|stop|start_ssh|stop_ssh|clean_dns&quot; &gt;&amp;2
-    exit 3
-    ;;
-esac
-# cat redsocks.conf
-base {
-        // debug: connection progress &amp; client list on SIGUSR1
-        log_debug = on;
-
-        // info: start and end of client session
-        log_info = on;
-
-        /* possible `log' values are:
-         *   stderr
-         *   file:/path/to/file
-         *   syslog:FACILITY  facility is any of &quot;daemon&quot;, &quot;local0&quot;...&quot;local7&quot;
-         */
-        log = stderr;
-
-        // detach from console
-        daemon = on;
-
-        /* Change uid, gid and root directory, these options require root
-         * privilegies on startup.
-         * Note, your chroot may requre /etc/localtime if you write log to syslog.
-         * Log is opened before chroot &amp; uid changing.
-         */
-        // user = nobody;
-        // group = nobody;
-        // chroot = &quot;/var/chroot&quot;;
-
-        /* possible `redirector' values are:
-         *   iptables   - for Linux
-         *   ipf        - for FreeBSD
-         *   pf         - for OpenBSD
-         *   generic    - some generic redirector that MAY work
-         */
-        redirector = iptables;
-}
-
-redsocks {
-        /* `local_ip' defaults to 127.0.0.1 for security reasons,
-         * use 0.0.0.0 if you want to listen on every interface.
-         * `local_*' are used as port to redirect to.
-         */
-        local_ip = 127.0.0.1;
-        local_port = 12345;
-
-        // `ip' and `port' are IP and tcp-port of proxy-server
-        ip = 127.0.0.1;
-        port = 1234;
-
-        // known types: socks4, socks5, http-connect, http-relay
-        type = socks5;
-}
-
-
-</code></pre>
-
-<p>Everytime you use the redsocks, enable it via:</p>
-
-<pre><code># ./redsocks.sh start_ssh
-# ./redsocks.sh start
-
-</code></pre>
-
-<p>Disable it via:</p>
-
-<pre><code># ./redsocks.sh stop
-# ./redsocks.sh stop_ssh
-
-</code></pre>
-
-<h3 id="run-chromeos-in-kvm">Run ChromeOS in kvm</h3>
-
-<p>Now Transfer the image to image for vm:</p>
-
-<pre><code>$ export BOARD=amd64-generic
-(cr) dasdh@BuildMaasImage ~/trunk/src/build/images/amd64-generic/latest $ cd ~/trunk/src/scripts/
-(cr) ((df83602...)) dasdh@BuildMaasImage ~/trunk/src/scripts $ ./image_to_vm.sh --board=${BOARD}
-Resizing stateful partition to 3072MB
-
-</code></pre>
-
-<p>Verify if kvm is supported on your system:</p>
-
-<pre><code>dasdh@BuildMaasImage:~/src/scripts$ kvm-ok
-INFO: /dev/kvm exists                                                                                                                          
-KVM acceleration can be used      
-
-</code></pre>
-
-<p>Now run via:</p>
-
-<pre><code>$ cd ~/chromiumos/src/scripts
-$ ./bin/cros_start_vm --image_path=../build/images/${BOARD}/latest/chromiumos_qemu_image.bin
-
-</code></pre>
 
       
     </div>
