@@ -105,6 +105,253 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/">安装Icehouse@Ubuntu14.04(3)</a>
+      </h1>
+      <span class="post-date">Apr 13, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Image Service 用于提供给用户用于快速启动虚拟机的镜像文件，这样的服务称为glance服务。</p>
+
+<h3 id="glance服务数据库设定">Glance服务数据库设定</h3>
+
+<p>在mysql中创建glance数据库:</p>
+
+<pre><code>root@JunoController:~#  mysql -u root -p
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 33
+Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+
+Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]&gt; CREATE DATABASE glance;
+Query OK, 1 row affected (0.01 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY 'xxxx'
+    -&gt; ;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY 'xxxx';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; quit;
+Bye
+
+</code></pre>
+
+<h3 id="创建glance的user-role-tenant权限">创建Glance的user/role/tenant权限</h3>
+
+<p>用admin的权限，创建以下权限：</p>
+
+<pre><code>root@JunoController:~#  source ~/openstack/admin-openrc.sh
+
+</code></pre>
+
+<p>创建glance用户:</p>
+
+<pre><code>root@JunoController:~# keystone user-create --name glance --pass engine
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |                                  |
+| enabled  |               True               |
+|    id    | c706febbcc8843fb97383c9fdfba6214 |
+|   name   |              glance              |
+| username |              glance              |
++----------+----------------------------------+
+
+</code></pre>
+
+<p>用户glance属于admin角色，使用service tanant:</p>
+
+<pre><code>keystone user-role-add --user glance --tenant service --role admin
+
+</code></pre>
+
+<p>在keystone注册glance服务:</p>
+
+<pre><code>root@JunoController:~# keystone service-create --name glance --type image --description &quot;OpenStack Image Service&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |     OpenStack Image Service      |
+|   enabled   |               True               |
+|      id     | 3d52d2992b9f423eb9868304e4405fab |
+|     name    |              glance              |
+|     type    |              image               |
++-------------+----------------------------------+
+
+</code></pre>
+
+<p>在keystone创建服务的end-point:</p>
+
+<pre><code>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ image / {print $2}') --publicurl http://10.17.17.211:9292 --internalurl http://10.17.17.211:9292 --adminurl http://10.17.17.211:9292 --region regionOne
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |     http://10.17.17.211:9292     |
+|      id     | f44400bebc07408d8e0f4e70a0d18475 |
+| internalurl |     http://10.17.17.211:9292     |
+|  publicurl  |     http://10.17.17.211:9292     |
+|    region   |            regionOne             |
+|  service_id | 3d52d2992b9f423eb9868304e4405fab |
++-------------+----------------------------------+
+
+</code></pre>
+
+<h3 id="安装glance服务">安装Glance服务</h3>
+
+<p>安装:</p>
+
+<pre><code>apt-get -y install glance python-glanceclient
+
+</code></pre>
+
+<p>配置:</p>
+
+<pre><code># vim /etc/glance/glance-api.conf
+[database]
+# sqlite_db = /var/lib/glance/glance.sqlite
+backend = sqlalchemy
+connection = mysql://glance:engine@10.17.17.211/glance
+
+[keystone_authtoken]
+auth_uri = http://10.17.17.211:5000
+auth_host = 10.17.17.211
+auth_port = 35357
+auth_protocol = http
+admin_tenant_name = service
+admin_user = glance
+admin_password = engine
+#  vim /etc/glance/glance-registry.conf
+[database]
+# The file name to use with SQLite (string value)
+#sqlite_db = /var/lib/glance/glance.sqlite
+backend = sqlalchemy
+connection = mysql://glance:engine@10.17.17.211/glance
+
+[keystone_authtoken]
+auth_uri = http://10.17.17.211:5000
+auth_host = 10.17.17.211
+auth_port = 35357
+auth_protocol = http
+admin_tenant_name = service
+admin_user = glance
+admin_password = engine
+# rm -f /var/lib/glance/glance.sqlite
+# su -s /bin/sh -c &quot;glance-manage db_sync&quot; glance
+
+</code></pre>
+
+<p>这里会碰到一个问题，解决方案如下:</p>
+
+<pre><code>root@JunoController:~# su -s /bin/sh -c &quot;glance-manage db_sync&quot; glance
+2015-04-13 17:20:22.637 9455 CRITICAL glance [-] ValueError: Tables &quot;migrate_version&quot; have non utf8 collation, please make sure all tables are CHARSET=utf8
+
+root@JunoController:~# mysql -u root -p glance
+Enter password: 
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 29
+Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+
+Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [glance]&gt; alter table migrate_version convert to character set utf8 collate utf8_unicode_ci;
+Query OK, 1 row affected (0.09 sec)                
+Records: 1  Duplicates: 0  Warnings: 0
+
+MariaDB [glance]&gt; flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [glance]&gt; quit;
+Bye
+
+</code></pre>
+
+<p>重启服务，</p>
+
+<pre><code>root@JunoController:~# service glance-registry restart
+root@JunoController:~# service glance-api restart
+
+</code></pre>
+
+<h3 id="验证glance服务">验证Glance服务</h3>
+
+<p>首先下载镜像:</p>
+
+<pre><code># wget http://cdn.download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img
+
+</code></pre>
+
+<p>创建Glance可见镜像:</p>
+
+<pre><code># glance image-create --name &quot;cirros-0.3.3-x86_64&quot; --file cirros-0.3.3-x86_64-disk.img --disk-format qcow2 --container-format bare --is-public True --progress
+[=============================&gt;] 100%
++------------------+--------------------------------------+
+| Property         | Value                                |
++------------------+--------------------------------------+
+| checksum         | 133eae9fb1c98f45894a4e60d8736619     |
+| container_format | bare                                 |
+| created_at       | 2015-04-13T09:27:54                  |
+| deleted          | False                                |
+| deleted_at       | None                                 |
+| disk_format      | qcow2                                |
+| id               | 68f14900-8b25-4329-ad56-8fbd497c6812 |
+| is_public        | True                                 |
+| min_disk         | 0                                    |
+| min_ram          | 0                                    |
+| name             | cirros-0.3.3-x86_64                  |
+| owner            | ea1f0a6b15dc4796958f087c38756ed1     |
+| protected        | False                                |
+| size             | 13200896                             |
+| status           | active                               |
+| updated_at       | 2015-04-13T09:27:54                  |
+| virtual_size     | None                                 |
++------------------+--------------------------------------+
+
+</code></pre>
+
+<p>检查镜像:</p>
+
+<pre><code>root@JunoController:~# ls /var/lib/glance/images/
+68f14900-8b25-4329-ad56-8fbd497c6812
+
+</code></pre>
+
+<p>列出可用镜像:</p>
+
+<pre><code>root@JunoController:~# glance image-list
++--------------------------------------+---------------------+-------------+------------------+----------+--------+
+| ID                                   | Name                | Disk Format | Container Format | Size     | Status |
++--------------------------------------+---------------------+-------------+------------------+----------+--------+
+| 68f14900-8b25-4329-ad56-8fbd497c6812 | cirros-0.3.3-x86_64 | qcow2       | bare             | 13200896 | active |
++--------------------------------------+---------------------+-------------+------------------+----------+--------+
+
+</code></pre>
+
+<p>好了，现在glance服务可以使用了，接下来将创建compute节点和网络节点。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-4/">安装Icehouse@Ubuntu14.04(4)</a>
       </h1>
       <span class="post-date">Apr 13, 2015 
@@ -1296,145 +1543,6 @@ Supported formats: vvfat vpc vmdk vhdx vdi sheepdog sheepdog sheepdog rbd raw ho
 <p>After, qemu-img:</p>
 
 <pre><code>Supported formats: vvfat vpc vmdk vhdx vdi sheepdog sheepdog sheepdog rbd raw host_cdrom host_floppy host_device file qed qcow2 qcow parallels nbd nbd nbd gluster gluster gluster gluster dmg tftp ftps ftp https http cow cloop bochs blkverify blkdebug
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/30/whole-process-for-deploying-contrail/">Whole Process For Deploying Contrail</a>
-      </h1>
-      <span class="post-date">Mar 30, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      <p>Following are the steps, enjoy them:</p>
-
-<pre><code># First bootstrap the environment.   
-juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints=&quot;mem=3G&quot;
-
-#####################################################
-# Machine 0, hold 9 services. 3G mem. trusty
-# Memory: 3G
-# Service: 10
-#####################################################
-
-
-# Since machine 0 is ready for using, deploy services to this node via following commands:     
-# Juju-gui is for monitoring the status and the components
-# 1. juju-gui
-juju deploy --to 0 --repository=/home/Trusty/charms/ local:trusty/juju-gui
-# 2. rabbitmq-server
-juju deploy --to lxc:0 --repository=/home/Trusty/charms/ local:trusty/rabbitmq-server
-# 3. mysql
-juju deploy --to lxc:0 --repository=/home/Trusty/charms/ local:trusty/mysql
-# 4. keystone
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/keystone
-# 5. openstack-Trustyboard
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/openstack-Trustyboard
-
-# 6. nova-cloud-controller
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/nova-cloud-controller --config=/home/Trusty/Code/deploy/nova-cloud-controller-config.yaml 
-# 7. glance to lxc:0
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/glance
-# 8. contrail-configuration to lxc:0
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/contrail-configuration
-# 9. control-control to lxc:0
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/contrail-control
-# 10. neutron-api to lxc:0
-juju deploy --to lxc:0 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/neutron-api --config=/home/Trusty/Code/deploy/neutron-api.yaml
-
-# Now add the first node for nova-compute.   
-juju set-constraints &quot;mem=900M&quot;
-#####################################################
-# Machine 1, hold nova-compute service, 2G with nested CPU, trusty
-# Memory: 2G
-# Service: 1
-#####################################################
-
-# Add name specified machine, which memory is 2048M, with cpu nested for kvm
-juju add-machine MaasOpenContrail4
-# Machine 1 will be added into the Juju environment, deploy nova-compute into this node
-juju deploy --to 1 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/nova-compute
-
-#####################################################
-# Machine 2, hold neutron-gateway service, 1G , trusty
-# Memory: 1G
-# Service: 1
-#####################################################
-# Add neutron-gateway to 1G based machine , it may fail, so you could remove-machine, and re-add again. via `juju destroy-machine 2 --force`  
-juju add-machine MaasOpenContrail7
-juju deploy --to 4 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/quantum-gateway neutron-gateway
-
-#####################################################
-# Machine 3, hold cassandra and zookeeper serivce, 4G, precise.
-# Memory: 4G
-# Service: 2
-#####################################################
-# First we should change the default deployed system version to precise. 
-juju set-environment default-series=precise
-# Add new machine, whose memory is 4G.
-juju add-machine MaasOpenContrail5
-# Deploy cassandra to 4G Node
-juju deploy --to 5 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:precise/cassandra --config=/home/Trusty/Code/deploy/cassandra.yaml
-# Also use this machine for deploy a lxc based service, zookeeper, which is also based on precise.
-juju deploy --to lxc:5 --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:precise/zookeeper
-
-
-# Well, set the default environment from precise to trusty
-juju set-environment default-series=trusty
-
-# Finally deploy  neutron-contrail
-juju deploy --repository=/home/Trusty/Code/deployOpenContrail/contrail-deployer/src/charms/ local:trusty/neutron-contrail
-
-
-
-#####################################################
-#####################################################
-# Well the deploy is finished, then add relationship
-#####################################################
-#####################################################
-juju add-relation keystone mysql
-juju add-relation nova-cloud-controller mysql
-juju add-relation nova-cloud-controller rabbitmq-server
-juju add-relation nova-cloud-controller glance
-juju add-relation nova-cloud-controller keystone
-juju add-relation neutron-gateway mysql
-juju add-relation neutron-gateway:amqp rabbitmq-server:amqp
-juju add-relation neutron-gateway nova-cloud-controller
-juju add-relation nova-compute:shared-db mysql:shared-db
-juju add-relation nova-compute:amqp rabbitmq-server:amqp
-juju add-relation nova-compute glance
-juju add-relation nova-compute nova-cloud-controller
-juju add-relation glance mysql
-juju add-relation glance keystone
-juju add-relation openstack-Trustyboard keystone
-juju add-relation neutron-api mysql
-juju add-relation neutron-api rabbitmq-server
-juju add-relation neutron-api nova-cloud-controller
-juju add-relation neutron-api:identity-service keystone:identity-service
-juju add-relation neutron-api:identity-admin keystone:identity-admin
-juju add-relation contrail-configuration:cassandra cassandra:database
-juju add-relation contrail-configuration zookeeper
-juju add-relation contrail-configuration rabbitmq-server
-juju add-relation contrail-configuration keystone
-juju add-relation contrail-configuration neutron-gateway
-juju add-relation neutron-api contrail-configuration
-juju add-relation contrail-control contrail-configuration
-juju add-relation nova-compute neutron-contrail
-juju add-relation neutron-contrail contrail-control
-juju add-relation neutron-contrail neutron-gateway
-juju add-relation neutron-contrail contrail-configuration
-juju add-relation neutron-contrail keystone
-
-
-# change the passwd of OpenStack:    
-juju set keystone admin-password=&quot;helloworld&quot;
 
 </code></pre>
 

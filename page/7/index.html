@@ -105,6 +105,107 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/06/28/workingtipsonansiblepull/">WorkingTipsOnAnsiblePull</a>
+      </h1>
+      <span class="post-date">Jun 28, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="environment-preparation">Environment Preparation</h3>
+
+<p>Create the vagrant environment via following Vagrantfile:</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi : set ft=ruby :
+
+Vagrant.configure(2) do |config|
+
+  config.ssh.insert_key = false # Use the same insecure key provided from box for each machine
+  config.vm.box = &quot;UbuntuTrusty3G&quot; 
+  config.vm.provision :shell, path: &quot;initial.sh&quot;
+  config.vm.box_check_update = false # do not check for updates  ( not recommended , just for demo )
+  config.vm.boot_timeout = 700
+  #config.hostmanager.enabled = true
+  config.hostmanager.enabled = false
+  config.hostmanager.ignore_private_ip = false
+   
+   N = 2
+   (1..N).each do |i| # do for each server i
+     config.vm.define &quot;testnode#{i}&quot; do |config|  # do on node i
+     config.vm.hostname = &quot;testnode#{i}&quot;
+     puts &quot; testnode#{i}  &quot;
+     config.vm.network &quot;private_network&quot;, ip: &quot;192.168.56.3#{i}&quot;
+     config.vm.provider &quot;virtualbox&quot; do |v| # virtual box configuration
+       v.memory = &quot;256&quot;
+       v.cpus = 1
+        if ! File.exist?(&quot;testnode#{i}_disk_a.vdi&quot;) # create disks only once 
+           v.customize ['createhd', '--filename', &quot;testnode#{i}_disk_a.vdi&quot;, '--size', 8192 ]
+           #v.customize ['createhd', '--filename', &quot;testnode#{i}_disk_b.vdi&quot;, '--size', 8192 ]
+           v.customize ['storageattach', :id, '--storagectl', 'SATA', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', &quot;testnode#{i}_disk_a.vdi&quot;]
+           #v.customize ['storageattach', :id, '--storagectl', 'SATA', '--port', 2, '--device', 0, '--type', 'hdd', '--medium', &quot;testnode#{i}_disk_b.vdi&quot;]
+        end #  create disks only once 
+     end # end virtual box configuration
+
+     end # do on node i
+   end # for each server i
+
+end  # end Vagrant.configure(2)
+</code></pre>
+
+<p>The initial.sh could be refered to previous post, for extending the 3G&rsquo;s disk into 11G(3G+8G).</p>
+
+<h3 id="package-preparation">Package Preparation</h3>
+
+<p>Via following commands:<br />
+Common packages(cron is created by default):</p>
+
+<pre><code># apt-get -y update
+# apt-get install -y git cron sshpass
+</code></pre>
+
+<p>lb packages:</p>
+
+<pre><code># apt-get install -y haproxy socat
+</code></pre>
+
+<p>web packages:</p>
+
+<pre><code># apt-get install -y nginx
+</code></pre>
+
+<p>mgmt node:</p>
+
+<pre><code># apt-add-repository -y ppa:ansible/ansible
+# apt-get install -y ansible
+</code></pre>
+
+<p>OK, all of the deb packages are available, so collect them and create your own deb repository via following command:</p>
+
+<pre><code># mkdir -p /root/pkgs/
+# cd /var/cache/apt/archives/
+# find . | grep deb$ | xargs -I % cp % /root/pkgs/
+# dpkg-scanpackages . /dev/null | gzip -9c &gt; Packages.gz
+</code></pre>
+
+<p>Now upload the folder of <code>root/pkgs</code> to your web server, you local repository is OK now.<br />
+Be sure to ignore authentification of pkgs:</p>
+
+<pre><code># vim /etc/apt/apt.conf.d/99myown
+APT::Get::AllowUnauthenticated &quot;true&quot;;
+# vim /etc/apt/sources.list
+deb http://192.168.0.220/UbuntuTrusty3G/ /
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/06/22/createrhel6dockerimage/">CreateRHEL6DockerImage</a>
       </h1>
       <span class="post-date">Jun 22, 2017 
@@ -752,38 +853,6 @@ $ gitlab-ctl restart
 <h3 id="下一步">下一步</h3>
 
 <p>研究gitlab ci与kubernetes的集成。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/05/25/thinkinginoc/">ThinkingInOC</a>
-      </h1>
-      <span class="post-date">May 25, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/life">Life</a>
-        
-      </span>
-      
-      <p>昨天看到teambition上有关一键启停的描述，提到了有关GPS模块和
-噪音传感器模块的表述。这就很奇怪了。</p>
-
-<p>不错，把传感器和开发板衔接在一起是个很简单的活，但问题是你要
-用这些数据来做什么？譬如说，噪音传感器，它会感知声音，那么这个
-声音信号产生的电流值可以用来控制某个条件。一个办公室里的人说话
-声音大，会不会被鉴定为噪音？而一个服务器跑满，风扇也算是噪音吧。</p>
-
-<p>而GPS模块就更为诡异，不知道为什么要平白无故的添加这个模块上去，
-难道是为了看一体机卖了多少台，都处于某个位置吗？而GPS模块到底
-是采用室外的还是基于SIM卡的，也值得商量。</p>
-
-<p>越来越像一个手机，或者说，把服务器做成像一个玩具。对此我只能表示
-遗憾，好大喜功的老板和无事生非的中层，硬是鼓捣出来这么一个怪胎。</p>
-
-<p>还好我已经离开了OC，回头看看这一摊烂泥，只能从心底为自己感觉
-到庆幸万分。</p>
 
       
     </div>

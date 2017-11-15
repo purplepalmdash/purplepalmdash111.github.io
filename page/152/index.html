@@ -105,6 +105,82 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/07/archlinuxwang-luo-pei-zhi-wen-ti/">ArchLinux DHCP配置问题</a>
+      </h1>
+      <span class="post-date">Jul 7, 2013 
+      </span>
+      
+      <p>安装完ArchLinux后，发现网卡无法从路由器通过dhcp得到地址，ArchLinux的dhcp客户端是dhcpcd,默认配置文件。路由器型号是TP-link WR340G v5, 2010年入手的。</p>
+
+<p>手动调用dhcpcd时候发现LOG里有NAK消息爆出。</p>
+
+<p>翻了下Arch的论坛，这个问题是由于dhcpcd的参数配置引发的，某些dhcpcd向路由器请求的参数无法得到而导致，个人觉得大约是WR340G版本够老，无法提供这些个参数。</p>
+
+<p>##解决方案一：</p>
+
+<p>编辑/etc/dhcpcd.conf， 注释掉classless_static_routes 和 interface_mtu即可:</p>
+
+<pre><code>	# option classless_static_routes
+	
+	# Respect the network MTU.
+	# option interface_mtu
+</code></pre>
+
+<p>而后我们可以用systemd在每次启动的时候自动调用dhcpcd绑定地址:</p>
+
+<pre><code>	$ systemctl enable dhcpcd@enp0s25
+	$ systemctl start dhcpcd@enp0s25
+</code></pre>
+
+<p>##解决方案二:</p>
+
+<p>安装dhclient:</p>
+
+<pre><code>	$ pacman -S dhclient
+	$ dhclient enp0s25
+</code></pre>
+
+<p>这种方法需要每次手动输入，不过我们可以使用netctl包来自动管理网络接口信息：</p>
+
+<pre><code>	$ cp /etc/netctl/examples/ethernet-dhcp /etc/netctl/ethernet-dhcp
+</code></pre>
+
+<p>由netctl.profile查到指定dhcp客户端的字段，而后在/etc/netctl/ethernet-dhcp文件中添加：</p>
+
+<pre><code>	DHCPClient=dhclient
+	# !!! 别忘了修改dhcp侦听的设备地址：
+	# Interface=eth0
+	Interface=enp0s25
+</code></pre>
+
+<p>把ethernet-dhcp作为netctl的默认启动配置文件：</p>
+
+<pre><code>	$ netctl enable ethernet-dhcp
+</code></pre>
+
+<p>立即开启netctl:</p>
+
+<pre><code>	$ netctl start ethernet-dhcp
+</code></pre>
+
+<p>查看netctl服务运行情况，我的网络是桥接的，和依据上面步骤配出来的字段会有所不同</p>
+
+<pre><code>	$ systemctl list-units -t service | grep netctl
+	netctl@bridge.service        loaded active exited  Example Bridge connection
+</code></pre>
+
+<p>如果切换了网络环境，例如如果在待机唤醒时处于另一网络中，则需要用下列命令重新配置网络:</p>
+
+<pre><code>	$ netctl restart ethernet-dhcp
+</code></pre>
+
+<p>两种方法各有千秋，前者比较灵活，但是遇到复杂网络配置的时候可能会很棘手，譬如多网卡/桥接等模型时容易把人弄晕。后者配置选项很多，但一劳永逸。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/07/07/qemukuai-su-shang-shou/">Qemu快速上手</a>
       </h1>
       <span class="post-date">Jul 7, 2013 
@@ -506,48 +582,6 @@ recordfail
 <p>使用改动后的grub启动系统。在Grub2中一般是按F10, Grub中则是回车后按&rdquo;b&rdquo;键，具体需参考grub的帮助。</p>
 
 <p>系统启动到shell后, 输入passwd username重设自己的密码后，reboot系统即可。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/05/zai-centosshang-an-zhuang-ji-yu-qemude-xu-ni-ji-2/">在CentOS上安装基于qemu的虚拟机(2)</a>
-      </h1>
-      <span class="post-date">Jul 5, 2013 
-      </span>
-      
-      <p>1. 启动完毕后客户机无法得到网络地址：</p>
-
-<p>故事的小插曲：由于虚拟机是“偷”跑在某台服务器上，不便在系统路径里留下痕迹，只能使用CPU/内存资源，采取了挂载NFS文件系统的方法，Qemu和vde均自行编译，先于vde编译的Qemu在配置的时候未能激活vde选项，造成客户机中无法找到vde配置的网络。</p>
-
-<p>现象:重新编译qemu,使用下列命令时报错：</p>
-
-<pre><code>./configure --prefix=Your_place_here --target-list=&quot;i386-softmmu \
-x86_64-softmmu  i386-linux-user x86_64-linux-user&quot; --enable-kvm \
---enable-user --enable-vde
-</code></pre>
-
-<p>安装vde2到系统路径后重编译qemu成功。而后</p>
-
-<pre><code>$ export LD_LIBRARY_PATH=/usr/lib:$LD_LIBRARY_PATH
-</code></pre>
-
-<p>则可正常启动vde/qemu</p>
-
-<p>2. 开启Linux内核的forwarding, 这样客户机可以接入Internet.</p>
-
-<pre><code>echo 1&gt;/proc/sys/net/ipv4/ip_forward 
-</code></pre>
-
-<p>3. 增加更多的核:</p>
-
-<p>在启动参数中添加:</p>
-
-<pre><code>-cpu host -smp cores=2,threads=1 
-</code></pre>
-
-<p>To be continued.</p>
 
       
     </div>

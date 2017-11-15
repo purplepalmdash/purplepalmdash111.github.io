@@ -105,6 +105,283 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/15/usemesosforci/">UseMesosForCI</a>
+      </h1>
+      <span class="post-date">Dec 15, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>参考了<a href="http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute/">http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute/</a></p>
+
+<h3 id="nodejs程序">Nodejs程序</h3>
+
+<p>app.js程序如下:</p>
+
+<pre><code class="language-javascript">// Load the http module to create an http server.
+var http = require('http');
+ 
+// Configure our HTTP server to respond with Hello World to all requests.
+var server = http.createServer(function (request, response) {
+  response.writeHead(200, {&quot;Content-Type&quot;: &quot;text/plain&quot;});
+  response.end(&quot;Hello World&quot;);
+});
+ 
+// Listen on port 8000, IP defaults to &quot;0.0.0.0&quot;
+server.listen(8000);
+ 
+// Put a friendly message on the terminal
+console.log(&quot;Server running at http://127.0.0.1:8000/&quot;);
+</code></pre>
+
+<p>配置文件package.json如下:</p>
+
+<pre><code>{
+  &quot;name&quot;: &quot;hello-world&quot;,
+  &quot;description&quot;: &quot;hello world&quot;,
+  &quot;version&quot;: &quot;0.0.1&quot;,
+  &quot;private&quot;: true,
+  &quot;dependencies&quot;: {
+    &quot;express&quot;: &quot;3.x&quot;
+  },
+  &quot;scripts&quot;: {&quot;start&quot;: &quot;node app.js&quot;}
+}
+</code></pre>
+
+<p>创建容器的Dockerfile定义如下:</p>
+
+<pre><code>FROM google/nodejs
+ 
+WORKDIR /app
+ADD package.json /app/
+RUN npm install
+ADD . /app
+ 
+EXPOSE 8000
+CMD []
+ENTRYPOINT [&quot;/nodejs/bin/npm&quot;, &quot;start&quot;]
+</code></pre>
+
+<p>于是我们可以编译出自定义的容器镜像:</p>
+
+<pre><code>$ docker build -t my_nodejs_image .
+$ docker run -p 8000:8000 my_nodejs_image
+</code></pre>
+
+<p>这时候访问<code>http://localhost:8000</code>即可看到APP有<code>hello world</code>的输出。</p>
+
+<h3 id="引入jenkins">引入Jenkins</h3>
+
+<p>获取docker的group id:</p>
+
+<pre><code># cat /etc/group | grep -i docker
+docker:x:998:vagrant
+</code></pre>
+
+<p>定义Dockerfile， 注意我们这里有998的替代:</p>
+
+<pre><code>FROM jenkins
+
+MAINTAINER ContainerSolutions
+
+USER root
+#TODO the group ID for docker group on my Ubuntu is 125, therefore I can only
+# run docker commands if I have same group id inside. 
+# Otherwise the socket file is not accessible.
+RUN groupadd -g 998 docker; usermod -a -G docker jenkins 
+USER jenkins
+</code></pre>
+
+<p>编译docke镜像:</p>
+
+<pre><code># docker build -t dash/jenkins_with_docker .
+# docker images | grep dash
+dash/jenkins_with_docker                 latest              6dc4c6263f78
+25 seconds ago      712 MB
+</code></pre>
+
+<p>创建docker-compose.yml文件:</p>
+
+<pre><code>jenkins:
+  image: dash/jenkins_with_docker
+  volumes:
+    - jenkins-stuff:/var/jenkins_home
+    - .:/var/jenkins_data
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /usr/bin/docker:/usr/bin/docker
+  ports: 
+    - &quot;8081:8080&quot;
+registry:
+  image: registry
+  environment:
+    - STORAGE_PATH=/registry
+  volumes:
+    - registry-stuff:/registry
+  ports: 
+    - &quot;5000:5000&quot;
+</code></pre>
+
+<p>现在运行<code>docker-compose up</code>，并检查服务状态,
+如果之前已经运行过，则需要删除以前的卷，<code>docker volume rm jenkins-stuff</code></p>
+
+<pre><code>root@ci:~# netstat -anp | grep 5000
+tcp6       0      0 :::5000                 :::*                    LISTEN
+1983/docker-proxy
+root@ci:~# netstat -anp | grep 8081
+tcp6       0      0 :::8081                 :::*                    LISTEN
+1917/docker-proxy
+</code></pre>
+
+<p>可以通过访问<code>http://localhost:8081</code>来查看jenkins界面。</p>
+
+<p><img src="/images/2016_12_15_21_54_18_773x321.jpg" alt="/images/2016_12_15_21_54_18_773x321.jpg" /></p>
+
+<p>获取密码的步骤如下:</p>
+
+<pre><code># docker ps | grep -i dash
+CONTAINER ID        IMAGE                      COMMAND
+CREATED              STATUS              PORTS
+NAMES
+dashcompose_registry_1
+74aeca2d56c5        dash/jenkins_with_docker   &quot;/bin/tini -- /usr/lo&quot;   About
+a minute ago   Up About a minute   50000/tcp, 0.0.0.0:8081-&gt;8080/tcp
+dashcompose_jenkins_1
+# docker exec -it 74aeca2d56c5 /bin/bash
+jenkins@74aeca2d56c5:/$ cat /var/jenkins_home/secrets/initialAdminPassword
+e8902ae0e7d84cc6848fb79cf7e64538
+</code></pre>
+
+<p>选择不添加任何插件，直接进入到jenkins.</p>
+
+<p><img src="/images/2016_12_15_21_58_16_669x452.jpg" alt="/images/2016_12_15_21_58_16_669x452.jpg" /></p>
+
+<p>查看已经添加的卷的详细信息:</p>
+
+<pre><code># docker volume ls
+DRIVER              VOLUME NAME
+local
+049c2b4d14069f74ded6ed1286694a7a43b391aac5345f63fdb23b6c0a453d32
+local
+8ad894e25c1fd64b229bd4cb777ea37895b15acfeeee9e4de1cb07ef7e1e1649
+local
+9033c8aa23972d703e54aed1647516577866aff738929f09e4070106b24a5edf
+local
+f8c0327e154ceb284e9444fba4dfa53b7d92651c9fce44611d98873adb1e5051
+local               jenkins-stuff
+local               registry-stuff
+# docker volume inspect jenkins-stuff
+[
+    {
+        &quot;Name&quot;: &quot;jenkins-stuff&quot;,
+        &quot;Driver&quot;: &quot;local&quot;,
+        &quot;Mountpoint&quot;: &quot;/var/lib/docker/volumes/jenkins-stuff/_data&quot;,
+        &quot;Labels&quot;: null,
+        &quot;Scope&quot;: &quot;local&quot;
+    }
+]
+</code></pre>
+
+<p>可以看到我们添加的卷挂载的目录， 那么建立以下的目录:</p>
+
+<pre><code>$ sudo mkdir /var/lib/docker/volumes/jenkins-stuff/_data/workspace/dockerbuild
+</code></pre>
+
+<p>创建两个脚本，一个用来编译，一个用来推送已经编译好的docker镜像:</p>
+
+<pre><code># cat build.sh 
+#!/bin/bash
+ 
+if [ -z &quot;${1}&quot; ]; then
+   version=&quot;latest&quot;
+else
+   version=&quot;${1}&quot;
+fi
+ 
+cd nodejs_app
+docker build -t localhost:5000/containersol/nodejs_app:${version} .
+cd ..
+# cat push.sh 
+#!/bin/bash
+
+if [ -z &quot;${1}&quot; ]; then
+   version=&quot;latest&quot;
+else
+   version=&quot;${1}&quot;
+fi
+
+docker push localhost:5000/containersol/nodejs_app:&quot;${version}&quot;
+</code></pre>
+
+<p>同样将我们的app拷贝到这个目录下，目录树如下：</p>
+
+<pre><code># tree
+.
+├── build.sh
+├── nodejs_app
+│   ├── app.js
+│   ├── Dockerfile
+│   └── package.json
+└── push.sh
+
+1 directory, 5 files
+</code></pre>
+
+<p>Jenkins里新建的project中，build选项如下:</p>
+
+<p><img src="/images/2016_12_16_09_39_40_888x659.jpg" alt="/images/2016_12_16_09_39_40_888x659.jpg" /></p>
+
+<p>现在触发编译，直接点击<code>build now</code>，则可以看到每一次执行的build中的console out.</p>
+
+<p><img src="/images/2016_12_16_09_41_09_343x258.jpg" alt="/images/2016_12_16_09_41_09_343x258.jpg" /></p>
+
+<p>编译完毕后，可以看到docker镜像库中新添加的镜像:</p>
+
+<pre><code># docker images
+REPOSITORY                               TAG                 IMAGE ID            CREATED             SIZE
+localhost:5000/containersol/nodejs_app   10                  18462939f95d        11 minutes ago      502 MB
+localhost:5000/containersol/nodejs_app   11                  18462939f95d        11 minutes ago      502 MB
+localhost:5000/containersol/nodejs_app   9                   c163d485bce3        13 minutes ago      502 MB
+</code></pre>
+
+<p>验证方法则是手动执行该镜像的实例，例如我们修改app.js:</p>
+
+<pre><code># vim app.js 
+// Load the http module to create an http server.
+var http = require('http');
+ 
+// Configure our HTTP server to respond with Hello World to all requests.
+var server = http.createServer(function (request, response) {
+  response.writeHead(200, {&quot;Content-Type&quot;: &quot;text/plain&quot;});
+  response.end(&quot;Hello World , build me now!&quot;);
+});
+</code></pre>
+
+<p>触发build并验证后，可以看到输出为:</p>
+
+<pre><code># curl http://127.0.0.1:8000
+Hello World , build me now!
+</code></pre>
+
+<h3 id="tbd">TBD</h3>
+
+<p>可以映射jenkins默认编译目录为某个本地目录，或者在Jenkins容器配置文件中
+指定好其编译目录。</p>
+
+<p>可以将jenkins与git结合。</p>
+
+<p>如果需要用mesos来自动deploy app，可以参考:</p>
+
+<p><a href="http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/">http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/</a></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/12/11/offlineinstalljavaonubuntu1404/">OfflineInstallJavaOnUbuntu1404</a>
       </h1>
       <span class="post-date">Dec 11, 2016 
@@ -439,148 +716,6 @@ for url in url_list:
 <p>Manually get the result, and this time we get the uuid.</p>
 
 <p>a tip for reverse the output is using <code>tac</code> rather than <code>cat</code>.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/06/tipsoncassandraonkubernetes/">TipsOnCassandraOnKubernetes</a>
-      </h1>
-      <span class="post-date">Dec 6, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      <p>First download the image from gcr.io:</p>
-
-<pre><code>$ sudo docker pull gcr.io/google-samples/cassandra:v11
-</code></pre>
-
-<p>Create a replicas using following yaml file:</p>
-
-<pre><code>apiVersion: v1
-kind: ReplicationController
-metadata:
-  name: cassandra
-  # The labels will be applied automatically
-  # from the labels in the pod template, if not set
-  # labels:
-    # app: cassandra
-spec:
-  replicas: 1
-  # The selector will be applied automatically
-  # from the labels in the pod template, if not set.
-  # selector:
-      # app: cassandra
-  template:
-    metadata:
-      labels:
-        app: cassandra
-    spec:
-      containers:
-        - command:
-            - /run.sh
-          resources:
-            limits:
-              cpu: 0.5
-          env:
-            - name: MAX_HEAP_SIZE
-              value: 512M
-            - name: HEAP_NEWSIZE
-              value: 100M
-            - name: CASSANDRA_SEED_PROVIDER
-              value: &quot;io.k8s.cassandra.KubernetesSeedProvider&quot;
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-          image: gcr.io/google-samples/cassandra:v11
-          name: cassandra
-          ports:
-            - containerPort: 7000
-              name: intra-node
-            - containerPort: 7001
-              name: tls-intra-node
-            - containerPort: 7199
-              name: jmx
-            - containerPort: 9042
-              name: cql
-          volumeMounts:
-            - mountPath: /cassandra_data
-              name: data
-      volumes:
-        - name: data
-          emptyDir: {}
-</code></pre>
-
-<p>Create rc:</p>
-
-<pre><code>$ kubectl create -f cassandra-controller.yaml
-</code></pre>
-
-<p>Also create a service using following yaml definition:</p>
-
-<pre><code>apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: cassandra
-  name: cassandra
-spec:
-  clusterIP: None
-  ports:
-    - port: 9042
-  selector:
-    app: cassandra
-</code></pre>
-
-<p>Start the service via:</p>
-
-<pre><code>$ kubectl create -f cassandra-service.yaml 
-</code></pre>
-
-<p>Now scale the replica via:</p>
-
-<pre><code>$  kubectl scale rc cassandra --replicas=2 
-replicationcontroller &quot;cassandra&quot; scaled
-</code></pre>
-
-<p>Get the pods name and docker exec the command <code>nodetool status</code> to view the cassandra cluster status:</p>
-
-<pre><code> kubectl exec -ti cassandra-0px0a -- nodetool status
-Datacenter: datacenter1
-=======================
-Status=Up/Down
-|/ State=Normal/Leaving/Joining/Moving
---  Address     Load       Tokens       Owns (effective)  Host ID                               Rack
-UN  172.17.0.5  65.61 KiB  32           100.0%            fe61ce57-2a8b-462c-8fbf-12c69461f17c  rack1
-UN  172.17.0.6  84.76 KiB  32           100.0%            c9b78b8c-f207-41f8-b3f7-d962dbebe687  rack1
-</code></pre>
-
-<p>Now scale the replicas to 4 and examine the result:</p>
-
-<pre><code>$ kubectl scale rc cassandra --replicas=4            
-replicationcontroller &quot;cassandra&quot; scaled
-$ kubectl exec -ti cassandra-0px0a -- nodetool status
-Datacenter: datacenter1
-=======================
-Status=Up/Down
-|/ State=Normal/Leaving/Joining/Moving
---  Address     Load       Tokens       Owns (effective)  Host ID                               Rack
-UN  172.17.0.5  65.61 KiB  32           50.8%             fe61ce57-2a8b-462c-8fbf-12c69461f17c  rack1
-UN  172.17.0.7  48.33 KiB  32           40.0%             2b9fcbed-e737-496e-b960-d3d32b3091f5  rack1
-UN  172.17.0.6  84.76 KiB  32           55.4%             c9b78b8c-f207-41f8-b3f7-d962dbebe687  rack1
-UN  172.17.0.8  58.09 KiB  32           53.8%             5ba29b11-7366-48d8-b3ed-ddefbd6f2e28  rack1
-</code></pre>
-
-<p>See now you could play happily with cassandra on kubernetes.</p>
 
       
     </div>

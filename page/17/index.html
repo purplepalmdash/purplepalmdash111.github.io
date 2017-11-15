@@ -105,6 +105,352 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/23/loadbalancingincoreos/">LoadBalancingInCoreOS</a>
+      </h1>
+      <span class="post-date">Dec 23, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>这几天一直在把玩CoreOS，
+主要参考的是DigitalOcean上的tutorial以及《CoreOS实践之路》这本书，
+奈何文章离如今年代已经久远，一直搭建不成功. 几经周折后终于在一篇guideline
+的指导下把负载均衡的服务跑通，这里是搭建该服务的步骤和心得。</p>
+
+<p>参考网址:</p>
+
+<p><a href="http://blog.dixo.net/2015/02/load-balancing-with-coreos/">http://blog.dixo.net/2015/02/load-balancing-with-coreos/</a></p>
+
+<h3 id="架构图">架构图</h3>
+
+<p>该网址中列举的的架构图如下:</p>
+
+<p><img src="/images/2016_12_23_19_10_52_1450x1029.jpg" alt="/images/2016_12_23_19_10_52_1450x1029.jpg" /></p>
+
+<p>刚开始看到这个图是有点发蒙的，这里简单说一下操作步骤，与图中一一对应.</p>
+
+<ol>
+<li><code>CoreOS Machine B</code>和<code>Core Machine C</code>是两个CoreOS系统节点，位于其上分别
+运行了两个apache容器，B上的容器监听8001端口，C上的容器监听8002端口。<br /></li>
+<li>两个apache容器将自身的IP和端口发布到etcd服务(etcd.service).<br /></li>
+<li><code>CoreOS Machine
+A</code>上运行了三个单元，分别是nginx服务、confdata服务、confd服务.
+其中nginx服务在配置好的负载均衡后端上分发http请求。confdata服务主要用于
+为nginx配置文件共享数据卷。confd服务查看etcd中元数据的变化，根据这些变化
+在共享数据卷中写入新的配置文件.<br /></li>
+<li>详细说明一下confd的作用，A. 发现coreos集群中可用的apache容器. B. 实时生成
+nginx.conf文件，并将此文件写入到共享存储. C. 写入完成后，通知docker给nginx发送
+一个HUP信号. D. Docker发送HUP信号给nginx容器后，容器将重新加载其配置文件。<br /></li>
+</ol>
+
+<p>以上就是我对架构图的解读。接下来将一步步来实现这个负载均衡。</p>
+
+<h3 id="先决条件">先决条件</h3>
+
+<p>一个3节点的CoreOS集群<br />
+有效的/etc/environment文件(有时候需要手动生成)
+相关的容器(制作流程见后)</p>
+
+<h3 id="容器镜像制作">容器镜像制作</h3>
+
+<h4 id="apache容器">Apache容器</h4>
+
+<p>在某台安装好Docker的机器上，或者直接在CoreOS节点机上，运行:</p>
+
+<pre><code>$ docker run -i -t ubuntu:14.04 /bin/bash
+# apt-get update
+# apt-get install apache2
+# sudo bash
+# echo &quot;&lt;h1&gt;Running from Docker on CoreOS&lt;/h1&gt;&quot; &gt; /var/www/html/index.html
+# exit
+</code></pre>
+
+<p>现在开始打包容器:</p>
+
+<pre><code>$ docker ps -l
+$ docker commit  container_ID dash/apache
+$ docker save dash/apache&gt;myapache.tar
+</code></pre>
+
+<p>将生成的tar文件分发到所有CoreOS节点上，使用<code>docker load&lt;./myapache.tar</code>加载之.</p>
+
+<h4 id="nginx容器">nginx容器</h4>
+
+<p>直接使用官方的nginx:latest即可</p>
+
+<h4 id="nginx-lb容器">nginx-lb容器</h4>
+
+<p>使用Dockerfile生成:</p>
+
+<pre><code>$ vim Dockerfile
+FROM ubuntu:14.04
+
+RUN apt-get update &amp;&amp; \
+    DEBIAN_FRONTEND=noninteractive apt-get -y install curl &amp;&amp; \
+    curl -o /usr/bin/confd -L https://github.com/kelseyhightower/confd/releases/download/v0.7.1/confd-0.7.1-linux-amd64 &amp;&amp; \
+    chmod 755 /usr/bin/confd  &amp;&amp; curl -sSL http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/internet | sh -
+
+ADD etc/confd/ /etc/confd
+
+CMD /usr/bin/confd -interval=60 -node=http://$COREOS_PRIVATE_IPV4:4001
+</code></pre>
+
+<p>编译方法为<code>sudo docker build -t myconfd .</code></p>
+
+<p>而后的打包和解包方法同上。奇怪的是，我制作的镜像到最后居然无法启动，所以直接pull
+了作者制作的镜像:</p>
+
+<pre><code>$ sudo docker pull lordelph/confd-demo
+</code></pre>
+
+<h3 id="创建apache服务">创建apache服务</h3>
+
+<p>创建apache.service配置文件如下:</p>
+
+<pre><code>$ vim apache.service 
+[Unit]
+Description=Basic web service port %i
+After=docker.service
+Requires=docker.service
+
+[Service]
+EnvironmentFile=/etc/environment
+ExecStartPre=-/usr/bin/docker kill apache-%i
+ExecStartPre=-/usr/bin/docker rm apache-%i
+ExecStartPre=/usr/bin/etcdctl set /test/apache-%i ${COREOS_PRIVATE_IPV4}:%i
+ExecStart=/usr/bin/docker run --rm --name apache-%i -p ${COREOS_PRIVATE_IPV4}:%i:80 dash/apache  /usr/sbin/apache2ctl -D FOREGROUND
+ExecStop=/usr/bin/etcdctl rm /test/apache-%i
+ExecStop=/usr/bin/docker stop -t 3 apache-%i
+</code></pre>
+
+<p>这里要说明的几点是: 在创建该服务前将清空该节点上所有的同名容器运行历史，并在etcd中设置
+一个键值为<code>/test/apache-%i</code>的数据条目。关闭该服务则停止容器的运行，并删除该键值.</p>
+
+<p><code>COREOS_PRIVATE_IPV4</code>这个值由<code>/etc/environment</code>中给出，因而事先需要
+在每个节点上核查是否存在该值:</p>
+
+<pre><code>core@coreos1 ~/lb $ cat /etc/environment 
+COREOS_PUBLIC_IPV4=172.17.8.201
+COREOS_PRIVATE_IPV4=172.17.8.201
+</code></pre>
+
+<p><code>apache-%i</code>里的端口参数可以在启动时给定, %i占位符将被@后的值所代替。创建服务步骤如下:</p>
+
+<pre><code>$ ln -s apache.service apache@8001.service 
+$ ln -s apache.service apache@8002.service 
+$ fleetctl start apache@8001.service
+$ fleetctl start apache@8002.service
+</code></pre>
+
+<p>查看运行的服务单元:</p>
+
+<pre><code>$ fleetctl list-units
+UNIT			MACHINE				ACTIVE	SUB
+apache@8001.service	bea5741d.../172.17.8.203	active	running
+apache@8002.service	dd464e69.../172.17.8.202	active	running
+</code></pre>
+
+<p>检查etcd中新添加的值:</p>
+
+<pre><code>$ etcdctl ls /test
+/test/apache-8001
+/test/apache-8002
+</code></pre>
+
+<p>key对应的value:</p>
+
+<pre><code>$ etcdctl get /test/apache-8001
+172.17.8.203:8001
+</code></pre>
+
+<h3 id="confd数据卷">confd数据卷</h3>
+
+<p>用于创建confd数据卷的service定义文件如下:</p>
+
+<pre><code>$ vim confdata.service 
+[Unit]
+Description=Configuration Data Volume Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+EnvironmentFile=/etc/environment
+
+#we aren't a normal service, we just need to ensure that a data volume
+#exists, and create one if it doesn't
+Type=oneshot
+RemainAfterExit=yes
+
+ExecStartPre=-/usr/bin/docker rm conf-data
+ExecStart=/usr/bin/docker run -v /etc/nginx --name conf-data nginx echo &quot;created new data container&quot;
+</code></pre>
+
+<p>这里的技巧在于<code>oneshot</code>属性，它告知systemd我们只希望该服务运行且只运行一次。<code>RemainAfterExit</code>告诉
+服务正常退出，因而我们可以在正常推出的服务上使用它创建的数据卷。</p>
+
+<p>运行该服务:</p>
+
+<pre><code>$ fleetctl start confdata.service
+$ fleetctl list-units
+UNIT			MACHINE				ACTIVE	SUB
+apache@8001.service	bea5741d.../172.17.8.203	active	running
+apache@8002.service	dd464e69.../172.17.8.202	active	running
+confdata.service	f22aee5d.../172.17.8.201	active	exited
+</code></pre>
+
+<p>可以使用以下一系列命令检查我们生成的数据卷, 注意要使用root才能看到该卷里的实际内容:</p>
+
+<pre><code>$ docker volume ls
+DRIVER              VOLUME NAME
+local               c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f
+core@coreos1 ~/lb $ docker volume inspect c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f
+[
+    {
+        &quot;Name&quot;: &quot;c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f&quot;,
+        &quot;Driver&quot;: &quot;local&quot;,
+        &quot;Mountpoint&quot;: &quot;/var/lib/docker/volumes/c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f/_data&quot;,
+        &quot;Labels&quot;: null
+    }
+]
+core@coreos1 ~/lb $ sudo bash
+coreos1 lb # cd /var/lib/docker/volumes/c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f/_data
+coreos1 _data # ls
+conf.d  fastcgi_params  koi-utf  koi-win  mime.types  modules  nginx.conf  scgi_params  uwsgi_params  win-utf
+</code></pre>
+
+<h3 id="confd服务">confd服务</h3>
+
+<p>confd.service文件定义如下:</p>
+
+<pre><code>$ vim confd.service 
+[Unit]
+Description=Configuration Service
+
+#our data volume must be ready
+After=confdata.service
+Requires=confdata.service
+
+
+[Service]
+EnvironmentFile=/etc/environment
+
+
+#kill any existing confd
+ExecStartPre=-/usr/bin/docker kill %n
+ExecStartPre=-/usr/bin/docker rm %n
+
+#preload container...this ensures we fail if our registry is down and we can't
+#obtain the build we're expecting
+
+#we need to provide our confd container with the IP it can reach etcd
+#on, the docker socket so it send HUP signals to nginx, and our data volume
+ExecStart=/usr/bin/docker run --rm \
+  -e COREOS_PRIVATE_IPV4=${COREOS_PRIVATE_IPV4} \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --volumes-from=conf-data \
+  --name %n \
+  lordelph/confd-demo
+
+ExecStop=/usr/bin/docker stop -t 3 %n
+Restart=on-failure
+
+[X-Fleet]
+#we need to be on the same machine as confdata.service
+MachineOf=confdata.service
+</code></pre>
+
+<p>注意，我们这里直接使用了网页中作者制作的镜像，指定了<code>conf-data</code>数据卷(<code>--volumes-from=conf-data</code>).</p>
+
+<pre><code>$ fleetctl list-units
+UNIT			MACHINE				ACTIVE	SUB
+apache@8001.service	bea5741d.../172.17.8.203	active	running
+apache@8002.service	dd464e69.../172.17.8.202	active	running
+confd.service		f22aee5d.../172.17.8.201	active	running
+confdata.service	f22aee5d.../172.17.8.201	active	exited
+</code></pre>
+
+<p>检查配置文件是否被更新:</p>
+
+<pre><code>coreos1 _data # grep -A6 'upstream backend' ./nginx.conf 
+    upstream backend {
+        
+            server 172.17.8.202:8002;
+        
+            server 172.17.8.203:8001;
+        
+    }
+coreos1 _data # pwd
+/var/lib/docker/volumes/c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f/_data
+</code></pre>
+
+<p>或者直接进入容器检查:</p>
+
+<pre><code># docker run --rm -ti --volumes-from=conf-data nginx \
+# grep -A6 'upstream backend' /etc/nginx/nginx.conf
+    upstream backend {
+        
+            server 172.17.8.101:8001;
+        
+            server 172.17.8.102:8002;
+        
+    }
+</code></pre>
+
+<h3 id="nginx服务">nginx服务</h3>
+
+<p>这个服务很简单，定义文件如下:</p>
+
+<pre><code>$ vim nginx.service 
+[Unit]
+Description=Nginx Service
+After=confd.service
+
+#we won't want it to require the service - that would stop us restarting
+#it, which is safe
+#Requires=confd.service
+
+[Service]
+EnvironmentFile=/etc/environment
+ExecStartPre=-/usr/bin/docker kill %n
+ExecStartPre=-/usr/bin/docker rm %n
+#ExecStartPre=/usr/bin/docker pull nginx
+ExecStart=/usr/bin/docker run --name %n -p 80:80 --volumes-from=conf-data nginx
+ExecStop=/usr/bin/docker stop -t 3 %n
+Restart=on-failure
+
+[X-Fleet]
+#we need to be on the same machine as confdata
+MachineOf=confdata.service
+</code></pre>
+
+<p>这个服务被定义为只能在运行了confdata.service的机器上运行，实际上因为我们为了使用
+<code>conf-data</code>数据卷。<br />
+启动并检查服务:</p>
+
+<pre><code>$ fleetctl start nginx.service
+$ fleetctl list-units
+UNIT			MACHINE				ACTIVE	SUB
+apache@8001.service	bea5741d.../172.17.8.203	active	running
+apache@8002.service	dd464e69.../172.17.8.202	active	running
+confd.service		f22aee5d.../172.17.8.201	active	running
+confdata.service	f22aee5d.../172.17.8.201	active	exited
+nginx.service		f22aee5d.../172.17.8.201	active	running
+</code></pre>
+
+<h3 id="测试">测试</h3>
+
+<p>打开浏览器，访问<code>172.17.8.201</code>，即可看到apache服务的页面。<br />
+可以使用tcpdump来查看流量走向，然而需要安装toolbox: <code>/usr/bin/toolbox</code>.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/12/22/coreostips/">CoreOSTips</a>
       </h1>
       <span class="post-date">Dec 22, 2016 
@@ -650,283 +996,6 @@ member 23798f79754d53b7 is healthy: got healthy result from http://172.17.8.203:
 member 5acdd34e67ade1d7 is healthy: got healthy result from http://172.17.8.202:2379
 cluster is healthy
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/15/usemesosforci/">UseMesosForCI</a>
-      </h1>
-      <span class="post-date">Dec 15, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>参考了<a href="http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute/">http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute/</a></p>
-
-<h3 id="nodejs程序">Nodejs程序</h3>
-
-<p>app.js程序如下:</p>
-
-<pre><code class="language-javascript">// Load the http module to create an http server.
-var http = require('http');
- 
-// Configure our HTTP server to respond with Hello World to all requests.
-var server = http.createServer(function (request, response) {
-  response.writeHead(200, {&quot;Content-Type&quot;: &quot;text/plain&quot;});
-  response.end(&quot;Hello World&quot;);
-});
- 
-// Listen on port 8000, IP defaults to &quot;0.0.0.0&quot;
-server.listen(8000);
- 
-// Put a friendly message on the terminal
-console.log(&quot;Server running at http://127.0.0.1:8000/&quot;);
-</code></pre>
-
-<p>配置文件package.json如下:</p>
-
-<pre><code>{
-  &quot;name&quot;: &quot;hello-world&quot;,
-  &quot;description&quot;: &quot;hello world&quot;,
-  &quot;version&quot;: &quot;0.0.1&quot;,
-  &quot;private&quot;: true,
-  &quot;dependencies&quot;: {
-    &quot;express&quot;: &quot;3.x&quot;
-  },
-  &quot;scripts&quot;: {&quot;start&quot;: &quot;node app.js&quot;}
-}
-</code></pre>
-
-<p>创建容器的Dockerfile定义如下:</p>
-
-<pre><code>FROM google/nodejs
- 
-WORKDIR /app
-ADD package.json /app/
-RUN npm install
-ADD . /app
- 
-EXPOSE 8000
-CMD []
-ENTRYPOINT [&quot;/nodejs/bin/npm&quot;, &quot;start&quot;]
-</code></pre>
-
-<p>于是我们可以编译出自定义的容器镜像:</p>
-
-<pre><code>$ docker build -t my_nodejs_image .
-$ docker run -p 8000:8000 my_nodejs_image
-</code></pre>
-
-<p>这时候访问<code>http://localhost:8000</code>即可看到APP有<code>hello world</code>的输出。</p>
-
-<h3 id="引入jenkins">引入Jenkins</h3>
-
-<p>获取docker的group id:</p>
-
-<pre><code># cat /etc/group | grep -i docker
-docker:x:998:vagrant
-</code></pre>
-
-<p>定义Dockerfile， 注意我们这里有998的替代:</p>
-
-<pre><code>FROM jenkins
-
-MAINTAINER ContainerSolutions
-
-USER root
-#TODO the group ID for docker group on my Ubuntu is 125, therefore I can only
-# run docker commands if I have same group id inside. 
-# Otherwise the socket file is not accessible.
-RUN groupadd -g 998 docker; usermod -a -G docker jenkins 
-USER jenkins
-</code></pre>
-
-<p>编译docke镜像:</p>
-
-<pre><code># docker build -t dash/jenkins_with_docker .
-# docker images | grep dash
-dash/jenkins_with_docker                 latest              6dc4c6263f78
-25 seconds ago      712 MB
-</code></pre>
-
-<p>创建docker-compose.yml文件:</p>
-
-<pre><code>jenkins:
-  image: dash/jenkins_with_docker
-  volumes:
-    - jenkins-stuff:/var/jenkins_home
-    - .:/var/jenkins_data
-    - /var/run/docker.sock:/var/run/docker.sock
-    - /usr/bin/docker:/usr/bin/docker
-  ports: 
-    - &quot;8081:8080&quot;
-registry:
-  image: registry
-  environment:
-    - STORAGE_PATH=/registry
-  volumes:
-    - registry-stuff:/registry
-  ports: 
-    - &quot;5000:5000&quot;
-</code></pre>
-
-<p>现在运行<code>docker-compose up</code>，并检查服务状态,
-如果之前已经运行过，则需要删除以前的卷，<code>docker volume rm jenkins-stuff</code></p>
-
-<pre><code>root@ci:~# netstat -anp | grep 5000
-tcp6       0      0 :::5000                 :::*                    LISTEN
-1983/docker-proxy
-root@ci:~# netstat -anp | grep 8081
-tcp6       0      0 :::8081                 :::*                    LISTEN
-1917/docker-proxy
-</code></pre>
-
-<p>可以通过访问<code>http://localhost:8081</code>来查看jenkins界面。</p>
-
-<p><img src="/images/2016_12_15_21_54_18_773x321.jpg" alt="/images/2016_12_15_21_54_18_773x321.jpg" /></p>
-
-<p>获取密码的步骤如下:</p>
-
-<pre><code># docker ps | grep -i dash
-CONTAINER ID        IMAGE                      COMMAND
-CREATED              STATUS              PORTS
-NAMES
-dashcompose_registry_1
-74aeca2d56c5        dash/jenkins_with_docker   &quot;/bin/tini -- /usr/lo&quot;   About
-a minute ago   Up About a minute   50000/tcp, 0.0.0.0:8081-&gt;8080/tcp
-dashcompose_jenkins_1
-# docker exec -it 74aeca2d56c5 /bin/bash
-jenkins@74aeca2d56c5:/$ cat /var/jenkins_home/secrets/initialAdminPassword
-e8902ae0e7d84cc6848fb79cf7e64538
-</code></pre>
-
-<p>选择不添加任何插件，直接进入到jenkins.</p>
-
-<p><img src="/images/2016_12_15_21_58_16_669x452.jpg" alt="/images/2016_12_15_21_58_16_669x452.jpg" /></p>
-
-<p>查看已经添加的卷的详细信息:</p>
-
-<pre><code># docker volume ls
-DRIVER              VOLUME NAME
-local
-049c2b4d14069f74ded6ed1286694a7a43b391aac5345f63fdb23b6c0a453d32
-local
-8ad894e25c1fd64b229bd4cb777ea37895b15acfeeee9e4de1cb07ef7e1e1649
-local
-9033c8aa23972d703e54aed1647516577866aff738929f09e4070106b24a5edf
-local
-f8c0327e154ceb284e9444fba4dfa53b7d92651c9fce44611d98873adb1e5051
-local               jenkins-stuff
-local               registry-stuff
-# docker volume inspect jenkins-stuff
-[
-    {
-        &quot;Name&quot;: &quot;jenkins-stuff&quot;,
-        &quot;Driver&quot;: &quot;local&quot;,
-        &quot;Mountpoint&quot;: &quot;/var/lib/docker/volumes/jenkins-stuff/_data&quot;,
-        &quot;Labels&quot;: null,
-        &quot;Scope&quot;: &quot;local&quot;
-    }
-]
-</code></pre>
-
-<p>可以看到我们添加的卷挂载的目录， 那么建立以下的目录:</p>
-
-<pre><code>$ sudo mkdir /var/lib/docker/volumes/jenkins-stuff/_data/workspace/dockerbuild
-</code></pre>
-
-<p>创建两个脚本，一个用来编译，一个用来推送已经编译好的docker镜像:</p>
-
-<pre><code># cat build.sh 
-#!/bin/bash
- 
-if [ -z &quot;${1}&quot; ]; then
-   version=&quot;latest&quot;
-else
-   version=&quot;${1}&quot;
-fi
- 
-cd nodejs_app
-docker build -t localhost:5000/containersol/nodejs_app:${version} .
-cd ..
-# cat push.sh 
-#!/bin/bash
-
-if [ -z &quot;${1}&quot; ]; then
-   version=&quot;latest&quot;
-else
-   version=&quot;${1}&quot;
-fi
-
-docker push localhost:5000/containersol/nodejs_app:&quot;${version}&quot;
-</code></pre>
-
-<p>同样将我们的app拷贝到这个目录下，目录树如下：</p>
-
-<pre><code># tree
-.
-├── build.sh
-├── nodejs_app
-│   ├── app.js
-│   ├── Dockerfile
-│   └── package.json
-└── push.sh
-
-1 directory, 5 files
-</code></pre>
-
-<p>Jenkins里新建的project中，build选项如下:</p>
-
-<p><img src="/images/2016_12_16_09_39_40_888x659.jpg" alt="/images/2016_12_16_09_39_40_888x659.jpg" /></p>
-
-<p>现在触发编译，直接点击<code>build now</code>，则可以看到每一次执行的build中的console out.</p>
-
-<p><img src="/images/2016_12_16_09_41_09_343x258.jpg" alt="/images/2016_12_16_09_41_09_343x258.jpg" /></p>
-
-<p>编译完毕后，可以看到docker镜像库中新添加的镜像:</p>
-
-<pre><code># docker images
-REPOSITORY                               TAG                 IMAGE ID            CREATED             SIZE
-localhost:5000/containersol/nodejs_app   10                  18462939f95d        11 minutes ago      502 MB
-localhost:5000/containersol/nodejs_app   11                  18462939f95d        11 minutes ago      502 MB
-localhost:5000/containersol/nodejs_app   9                   c163d485bce3        13 minutes ago      502 MB
-</code></pre>
-
-<p>验证方法则是手动执行该镜像的实例，例如我们修改app.js:</p>
-
-<pre><code># vim app.js 
-// Load the http module to create an http server.
-var http = require('http');
- 
-// Configure our HTTP server to respond with Hello World to all requests.
-var server = http.createServer(function (request, response) {
-  response.writeHead(200, {&quot;Content-Type&quot;: &quot;text/plain&quot;});
-  response.end(&quot;Hello World , build me now!&quot;);
-});
-</code></pre>
-
-<p>触发build并验证后，可以看到输出为:</p>
-
-<pre><code># curl http://127.0.0.1:8000
-Hello World , build me now!
-</code></pre>
-
-<h3 id="tbd">TBD</h3>
-
-<p>可以映射jenkins默认编译目录为某个本地目录，或者在Jenkins容器配置文件中
-指定好其编译目录。</p>
-
-<p>可以将jenkins与git结合。</p>
-
-<p>如果需要用mesos来自动deploy app，可以参考:</p>
-
-<p><a href="http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/">http://container-solutions.com/continuous-delivery-with-docker-on-mesos-in-less-than-a-minute-part-2/</a></p>
 
       
     </div>

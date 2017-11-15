@@ -105,6 +105,153 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/10/23/tips-on-ceph-on-docker/">Tips On Ceph On Docker</a>
+      </h1>
+      <span class="post-date">Oct 23, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="installation">Installation</h3>
+
+<p>Pull the docker image via:</p>
+
+<pre><code>$ sudo docker pull ceph/demo
+</code></pre>
+
+<h3 id="run-ceph">Run Ceph</h3>
+
+<p>Run the container via:</p>
+
+<pre><code># sudo docker run -d --net=host -e MON_IP=192.168.10.190 -e CEPH_NETWORK=192.168.10.0/24
+ceph/demo
+</code></pre>
+
+<p>View the docker instance via:</p>
+
+<pre><code># docker ps
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+cbe567594adb        ceph/demo           &quot;/entrypoint.sh&quot;    About an hour ago   Up About an hour                        furious_hopper 
+# docker exec -it cbe567594adb
+</code></pre>
+
+<h3 id="ceph-operation">Ceph Operation</h3>
+
+<p>View the ceph processes:</p>
+
+<pre><code>root@monitor:/# ps -ef | grep &quot;ceph&quot;                                                                                                                                 
+root         1     0  0 13:16 ?        00:00:00 /usr/bin/python /usr/bin/ceph -w
+root        32     1  0 13:16 ?        00:00:01 ceph-mon -i monitor --public-addr 192.168.10.190:6789
+root       201     1  0 13:16 ?        00:00:06 ceph-osd -i 0 -k /var/lib/ceph/osd/ceph-0/keyring
+root       412     1  0 13:16 ?        00:00:01 ceph-mds --cluster=ceph -i 0
+root       470     1  0 13:16 ?        00:00:03 radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway -k /var/lib/ceph/radosgw/monitor/keyring --rgw-socket-path= --rgw-frontends=civetweb port=80
+root       473     1  0 13:16 ?        00:00:01 /usr/bin/python /usr/bin/ceph-rest-api -n client.admin
+root      1703  1557  0 14:37 ?        00:00:00 grep --color=auto ceph
+</code></pre>
+
+<p>View Ceph Status:</p>
+
+<pre><code>root@monitor:/# ceph -s
+    cluster c3470b36-8d03-4dbb-8af4-d4353ea54973
+     health HEALTH_OK
+     monmap e1: 1 mons at {monitor=192.168.10.190:6789/0}
+            election epoch 2, quorum 0 monitor
+     mdsmap e5: 1/1/1 up {0=0=up:active}
+     osdmap e22: 1 osds: 1 up, 1 in
+      pgmap v75: 144 pgs, 11 pools, 6796 bytes data, 70 objects
+            3789 MB used, 287 GB / 291 GB avail
+                 144 active+clean
+</code></pre>
+
+<p>Create a new user:</p>
+
+<pre><code># radosgw-admin user create --uid=&quot;xxxx&quot; --display-name=&quot;XXXX YYYY&quot; --email=xxxyyy@gmail.com
+</code></pre>
+
+<p>Remember the output of the <code>access_key</code> and <code>secret_key</code>.</p>
+
+<h3 id="configure-ceph">Configure Ceph</h3>
+
+<p>Install softwares:</p>
+
+<pre><code># apt-get update -y
+# apt-get install -y python
+# apt-get install -y python-pip
+# pip install boto
+# pip install ipython
+# pip install s3cmd
+# apt-get install -y vim
+</code></pre>
+
+<p>Use the <code>list_buckets.py</code> file:</p>
+
+<pre><code># cat list_buckets.py
+import boto
+import boto.s3.connection
+
+access_key =  '5S5YPYC46EVYG9MF0RSR'
+secret_key = 'hEcgOMoNOp6jmYnt3G6qqJiT7mV5A8zBR9g6o38Z'
+
+conn = boto.connect_s3(
+        aws_access_key_id = access_key,
+        aws_secret_access_key = secret_key,
+        host = 'localhost',
+        is_secure=False,
+        calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+        )
+</code></pre>
+
+<p>In ipython, use following commands for create a new bucket:</p>
+
+<pre><code>In [8]: conn.create_bucket(&quot;fuck&quot;)                                        
+Out[8]: &lt;Bucket: fuck&gt;
+
+In [9]: conn.get_all_buckets()                                                 
+Out[9]: [&lt;Bucket: fuck&gt;]
+</code></pre>
+
+<p>Download the s3cfg file from :</p>
+
+<p><a href="https://github.com/tobegit3hub/.s3cfg/blob/master/.s3cfg">https://github.com/tobegit3hub/.s3cfg/blob/master/.s3cfg</a></p>
+
+<p>Also configure its <code>access_key</code> and <code>secret_key</code>, save it in your root
+directory, run following commands, you will see the buckets:</p>
+
+<pre><code># s3cmd ls                                                                                                                                             
+2015-10-23 13:25  s3://fuck
+</code></pre>
+
+<h3 id="mount-ceph-in-linux">Mount Ceph In Linux</h3>
+
+<p>In Ubuntu machine, install ceph:</p>
+
+<pre><code>$ sudo apt-get install ceph
+</code></pre>
+
+<p>Get the admin&rsquo;s password(In Ceph Container):</p>
+
+<pre><code># ceph-authtool --print-key /etc/ceph/ceph.client.admin.keyring 
+AQAmMypWs06BGxAAQ1rQyFqFJ25xaDye4c9kyQ==
+</code></pre>
+
+<p>Now mount it via:</p>
+
+<pre><code>$ sudo mount -t ceph 192.168.10.190:/ /mnt -o name=admin,secret=AQAmMypWs06BGxAAQ1rQyFqFJ25xaDye4c9kyQ==
+$ sudo touch /mnt/abc
+</code></pre>
+
+<p>Via <code>ceph -s</code> we could see the <code>pgmap v86</code> changes, which indicates the data
+has been written into the ceph.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/10/19/todothings-1/">ToDoThings(1)</a>
       </h1>
       <span class="post-date">Oct 19, 2015 
@@ -438,43 +585,6 @@ net.ipv6.conf.all.forwarding=1
 <a href="https://synergy-project.org/nightly">https://synergy-project.org/nightly</a></p>
 
 <p>Use the nightly built synergy you could got the keyboard sharing working well.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/10/14/tips-on-cloud-init-and-cloudstack/">Tips on Cloud-Init and CloudStack(2)</a>
-      </h1>
-      <span class="post-date">Oct 14, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="cloudmonkey-resize">Cloudmonkey Resize</h3>
-
-<p>First deploy the VM in <code>stopped</code> status:</p>
-
-<pre><code>(local) mycloudmonkey&gt; deploy virtualmachine startvm=false
-serviceofferingid=683f31f8-a939-468e-b4de-4512a8ccff8e
-templateid=13fb2961-533e-4a7d-80f9-21d860269aad
-zoneid=78509dc3-c828-429c-8154-9fffbc09384c
-networkids=7c6e7e6b-6aa2-4f95-a835-8d18bf930061 name=testuserdata50G userdata='...`
-
-</code></pre>
-
-<p>Now resize the root volume into 50G size:</p>
-
-<pre><code>
-deploy virtualmachine serviceofferingid=ff775183-282b-48d7-b08e-eff51fef7683
-templateid=67ca66ea-b021-4f91-ac8c-ff95f2576c9d
-zoneid=1a258852-831c-4612-94f4-2551a98667bb name=testuserdata
-userdata='Q29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0iCk1JTUUtVmVyc2lvbjogMS4wCgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQveC1zaGVsbHNjcmlwdDsgY2hhcnNldD0idXMtYXNjaWkiCk1JTUUtVmVyc2lvbjogMS4wCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQKQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9ImhlbGxvX3dvcmxkLnNoIgoKIyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQhIiA+PiAvcm9vdC90ZXN0CgotLT09PT09PT09PT09PT09PTE5OTkwNTk5NzIyMDk4ODUyNjY9PQpDb250ZW50LVR5cGU6IHRleHQvY2xvdWQtY29uZmlnOyBjaGFyc2V0PSJ1cy1hc2NpaSIKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibXktdXNlci1kYXRhIgoKI2Nsb3VkLWNvbmZpZwpncm93cGFydDoKICBtb2RlOiBhdXRvCmNocGFzc3dkOiB7IGV4cGlyZTogRmFsc2UgfQpzc2hfcHdhdXRoOiBUcnVlCgpzc2hfYXV0aG9yaXplZF9rZXlzOgogLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUUNzMFA4aFNCM05qN2tmd2lRT01PQ0Z2RXVqd3JLZjVuUFdmdzdzbmplVzd3TnhCYi9pTHhqbGxIK0tJdjdpS0dRaGI5WGtpZ3dXelhjdktSRk9OQTF0UU5CUHBsUE9RQXhHYUpoYzcxYlhZTVRabWsxcmZ5L0U4bUZIQmJ3U0trdm04Z3oxaFVqQWFITHdiZ21iaUE3eUNDUkVXbVR1SWpudm1FZnJXYU92WERRZFFPb2RkSzFhZThKM3BnRUNtQ21mRldrQmR3Y1JaN05jTUxBSkVkYTNpYWtJbWdaR2NqTWNCc1hjUUNOcjN1RGlKbERvc1V6Mjg4L3grTnZteTlzcHZnc2x4RXVUV0VQWFRGY1l5eVBrUHdkTnlpQm5TaWFoZTExcUdUZkk0Z2IyWllEb3JDZU5Ca1QxdkVaY0psL1JqT3NKRUFXT04rbno3Nm16MmdhZCByb290QHItOS1WTSAKCnRpbWV6b25lOiBBc2lhL0Nob25ncWluZwoKLS09PT09PT09PT09PT09PT0xOTk5MDU5OTcyMjA5ODg1MjY2PT0tLQo='
-</code></pre>
 
       
     </div>

@@ -105,6 +105,112 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/13/libvirt-on-opensuse/">Libvirt On OpenSuse</a>
+      </h1>
+      <span class="post-date">Feb 13, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>In order to try OpenContrail, I installed it on Virtualbox based, but it got failed, I think maybe it&rsquo;s because virtualbox&rsquo;s nested virtualization is not OK. So that&rsquo;s why I have to try libvirt.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>Install the virt-manager related software via:</p>
+
+<pre><code>$ sudo zypper install kvm libvirt libvirt-python qemu virt-manager
+$ sudo zypper in patterns-openSUSE-kvm_server
+
+</code></pre>
+
+<p>Now if you directly call virt-manager you will got the following hint:</p>
+
+<pre><code> error: authentication failed: Authorization requires authentication but no agent is available.
+    error: failed to connect to the hypervisor
+
+</code></pre>
+
+<p>Or if you run <code>virsh -c qemu:///system</code> you will got the same hint message.<br />
+Solution is we have to enable the polkit service, add following script:</p>
+
+<pre><code>$ sudo vim /usr/bin/polkitexec
+#! /bin/bash
+
+prg=$1
+
+[ &quot;$prg&quot; ] || exec echo &quot;missing argument&quot;
+[ -x &quot;$prg&quot; ] || which $prg &amp;&gt;/dev/null || exec echo &quot;program not found: $1&quot;
+
+shift
+args=$*
+
+[ `id -u` -eq 0 ] &amp;&amp; exec $prg $args
+
+uname -m | grep -q 64 &amp;&amp; lib=/usr/lib64 || lib=/usr/lib
+
+if [ &quot;$DESKTOP_SESSION&quot; = &quot;kde&quot; ]; then 
+        pga=polkit-kde-authentication-agent-1
+        lpga=/usr/$lib/kde4/libexec/$pka
+else
+        pga=polkit-gnome-authentication-agent-1
+        lpga=/usr/lib/$pga
+fi
+
+case $DESKTOP_SESSION in
+        gnome|gnome-shell|cinnamon*) exec $prg $args ;;
+        *) ps nc -C $pga &amp;&gt;/dev/null &amp;&amp; exec $prg $args || { [ ! -x $lpga ] &amp;&amp; exec echo &quot;program not found: $lpga&quot; || $lpga &amp; $prg $args ;} ;;
+esac
+$ sudo chmod 777 /sur/bin/polkitexec
+$ vim ~/.zshrc
+# Wrap virt-manager with polkitexec. 
+alias virt-manager='polkitexec virt-manager'
+
+</code></pre>
+
+<p>Now the virt-manager could be run correctly.</p>
+
+<h3 id="trouble-shooting">Trouble-Shooting</h3>
+
+<p>If you met following error, add root to your kvm.conf is OK.</p>
+
+<pre><code>Could not access KVM kernel module: Permission denied
+failed to initialize KVM: Permission denied
+No accelerator found!
+
+</code></pre>
+
+<p>First change the priviledge:</p>
+
+<pre><code>#chown root:kvm /dev/kvm
+
+</code></pre>
+
+<p>Then modify the /etc/libvirt/qemu.conf:</p>
+
+<pre><code>#user=&quot;root&quot;
+user=&quot;root&quot;
+#group=&quot;root&quot;
+group=&quot;root&quot;
+
+</code></pre>
+
+<p>Restart the libvirtd and restart the virt-manager:</p>
+
+<pre><code>#service libvirtd restart
+
+</code></pre>
+
+<p>Now continue to install OpenContrail.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/02/10/build-opencontrail-on-centos7-local/">Build OpenContrail On CentOS7(Local)</a>
       </h1>
       <span class="post-date">Feb 10, 2015 
@@ -403,59 +509,6 @@ Our version of docker runs on OpenSuse is:</p>
 Docker version 1.4.1, build 5bc2ff8
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/06/build-pidgin-and-webqq/">Build Pidgin And WebQQ</a>
-      </h1>
-      <span class="post-date">Feb 6, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>Strangely my OpenSuse&rsquo;s official installation version&rsquo;s pidgin doesn&rsquo;t support webqq plugins. So I have to build from source and let it run as a webQQ&rsquo;s version of pidgin.</p>
-
-<h3 id="getting-source">Getting Source.</h3>
-
-<p>First download the source code from:<br />
-<a href="http://sourceforge.net/projects/pidgin/files/Pidgin/2.10.11/pidgin-2.10.11.tar.bz2/download?accel_key=62%3A1423272982%3Ahttp%253A//www.pidgin.im/download/source/%3A20b420a2%24f93cd8a6095e965a3448df4a97a1c4786bf0a085&amp;click_id=b8d33c98-ae69-11e4-8d6d-0200ac1d1d8d&amp;source=accel">http://sourceforge.net/projects/pidgin/files/Pidgin/2.10.11/pidgin-2.10.11.tar.bz2/download?accel_key=62%3A1423272982%3Ahttp%253A//www.pidgin.im/download/source/%3A20b420a2%24f93cd8a6095e965a3448df4a97a1c4786bf0a085&amp;click_id=b8d33c98-ae69-11e4-8d6d-0200ac1d1d8d&amp;source=accel</a><br />
-Install related packages:</p>
-
-<pre><code>$ sudo zypper in intltool
-$ sudo zypper in gtk3-devel
-$ sudo zypper in gtk2-devel
-$ sudo zypper in gstreamer-devel
-$ sudo zypper in libidn-devel
-$ sudo zypper in meanwhile-devel
-$ sudo zypepr in libavahi-devel
-$ sudo zypper in libavahi-glib-devel
-$ sudo zypper in libgnutls-openssl-devel
-$ sudo zypper in tcl-devel 
-$ sudo zypper in tk-devel 
-$ sudo zypper in gtkspell-devel
-
-
-</code></pre>
-
-<p>Configure pidign via:</p>
-
-<pre><code>./configure --prefix=/home/Trusty/bin --disable-screensaver  --disable-gstreamer --disable-vv
-
-</code></pre>
-
-<p>Notice here I disable the screensave support and gstreamer support.</p>
-
-<h3 id="make">Make</h3>
-
-<p>Via <code>make</code> and <code>make install</code> we could let it run.<br />
-Make install the corresponding plugins, and now your webqq is OK.</p>
 
       
     </div>

@@ -105,6 +105,152 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/01/24/centos-encryption/">CentOS Encryption</a>
+      </h1>
+      <span class="post-date">Jan 24, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="disk-configuration">Disk Configuration</h3>
+
+<p>Specify the disk like following, notice we don&rsquo;t activate the swap partition.</p>
+
+<p>Select the disk and do the following configuration:</p>
+
+<p><img src="/images/2017_01_24_10_19_50_492x504.jpg" alt="/images/2017_01_24_10_19_50_492x504.jpg" /></p>
+
+<p>Boot partition, should be 400MiB:</p>
+
+<p><img src="/images/2017_01_24_19_10_57_688x499.jpg" alt="/images/2017_01_24_19_10_57_688x499.jpg" /></p>
+
+<p>Root partition, should contains all of the left space:</p>
+
+<p><img src="/images/2017_01_24_19_11_21_654x422.jpg" alt="/images/2017_01_24_19_11_21_654x422.jpg" /></p>
+
+<h3 id="cryption">Cryption</h3>
+
+<p>Refers to:</p>
+
+<p><a href="http://www.gaztronics.net/howtos/luks.php">http://www.gaztronics.net/howtos/luks.php</a></p>
+
+<p>Generate the secret key file:</p>
+
+<pre><code># dd if=/dev/sdb of=luks-secret.key bs=1 count=4096
+# cryptsetup luksAddKey /dev/sda2 luks-secret.key --key-slot 1
+</code></pre>
+
+<p>Modify Dracut:</p>
+
+<pre><code># ls  /dev/disk/by-id | grep usb
+usb-SanDisk_Cruzer_Orbit_4C532000050606114400-0:0 -&gt; ../../sda
+usb-SanDisk_Cruzer_Orbit_4C532000050606114400-0:0-part1 -&gt; ../../sda1
+</code></pre>
+
+<p>Remember the id of sda, later we will use it for updating <code>cryptroot-ask.sh</code>
+file:</p>
+
+<pre><code># vim /usr/lib/dracut/modules.d/90crypt/cryptroot-ask.sh
+info &quot;luksOpen $device $luksname $luksfile $luksoptions&quot;
+
++++ # Unlock with USB key
++++ sleep 3
++++ udevsettle
++++ usbkey=/dev/disk/by-id/usb-SanDisk_Cruzer_Orbit_4C532000050606114400-0\:0
++++ if [ -e $usbkey ]; then
++++   ask_passphrase=0
++++   echo &quot;USB Key detected - unlocking partition $device ...&quot;
++++   dd if=$usbkey bs=1 count=4096 | cryptsetup luksOpen $device $luksname --key-file=-
++++ fi
+
+
+OLD_IFS=&quot;$IFS&quot;
+</code></pre>
+
+<p>Notice the prefixed <code>+++</code> is the added lines to this file.</p>
+
+<p>Also because the program <code>dd</code> is not loaded by default in CentOS, we need add
+following line into <code>/usr/lib/dracut/modules.d/90crypt/module-setup.sh</code>:</p>
+
+<pre><code># vim /usr/lib/dracut/modules.d/90crypt/module-setup.sh
+install() {
+    &lt;snip&gt;
+    dracut_need_initqueue
++++    inst /usr/bin/dd
+}
+</code></pre>
+
+<p>We need to modify <code>/etc/dracut.conf</code> to stop systemd from running the decryption
+process:</p>
+
+<pre><code># dracut modules to omit
+omit_dracutmodules+=&quot;systemd&quot;
+
+# dracut modules to add to the default
+add_dracutmodules+=&quot;crypt&quot;
+</code></pre>
+
+<p>Create the new initramfs via <code>dracut -f</code>, now insert the usb disk, the decryption
+will be automatically executed, enjoy your own usb disk encrypted system!</p>
+
+<h3 id="hacking">Hacking</h3>
+
+<p>For automatically dracut after system upgrading:</p>
+
+<pre><code># mkdir -p /root/archive
+# mkdir -p /root/scripts
+# cp /usr/lib/dracut/modules.d/90crypt/cryptroot-ask.sh  /root/archive
+# cp /usr/lib/dracut/modules.d/90crypt/module-setup.sh /root/archive
+# vim /root/scripts/update-dracut
+    #!/bin/bash
+    cp /root/archive/cryptroot-ask.sh /usr/share/dracut/modules.d/90crypt/
+    cp /root/archive/module-setup.sh /usr/share/dracut/modules.d/90crypt/
+    dracut -f
+    exit 0
+# chmod 777 /root/scripts/update-dracut
+</code></pre>
+
+<h3 id="disable-kernel-update">Disable Kernel Update</h3>
+
+<p>For we make the updates to initramfs, we&rsquo;d better disable kernel update for CentOS.</p>
+
+<pre><code>$ sudo vim /etc/yum.conf
+exclude=kernel*
+</code></pre>
+
+<p>Now via <code>yum update</code> you won&rsquo;t get your kernel related packages update.</p>
+
+<h3 id="lvm-based-encryption">LVM Based Encryption</h3>
+
+<p>If you use lvm based, then do following things:</p>
+
+<pre><code># cat /etc/crypttab 
+luks-189e8c45-2c62-4c08-acb6-b3264c435fd1 UUID=189e8c45-2c62-4c08-acb6-b3264c435fd1 none 
+# blkid
+/dev/sda1: LABEL=&quot;XENSERVER-6&quot; UUID=&quot;5CD6-02A1&quot; TYPE=&quot;vfat&quot; 
+/dev/sdb1: UUID=&quot;d13618c7-b166-4135-8cae-1c5b8c5110fc&quot; TYPE=&quot;xfs&quot; 
+/dev/sdb2: UUID=&quot;tZyuzH-wIpt-MtQv-gWsJ-Ld69-zjtQ-TfbL6z&quot; TYPE=&quot;LVM2_member&quot; 
+/dev/mapper/cl-00: UUID=&quot;189e8c45-2c62-4c08-acb6-b3264c435fd1&quot; TYPE=&quot;crypto_LUKS&quot; 
+/dev/mapper/luks-189e8c45-2c62-4c08-acb6-b3264c435fd1: UUID=&quot;f7a6d197-5afd-46e1-8a69-408de5278405&quot; TYPE=&quot;xfs&quot; 
+
+</code></pre>
+
+<p>Then your command should be like:</p>
+
+<pre><code># cryptsetup luksAddKey /dev/mapper/cl-00 luks-secret.key --key-slot 1
+</code></pre>
+
+<p>Make sure the partition is the same as the one you looked as <code>crypto_LUKS</code>.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/01/22/%E4%BD%BF%E7%94%A8usb%E7%A3%81%E7%9B%98%E6%97%A0%E5%AF%86%E7%A0%81%E7%99%BB%E5%BD%95%E5%8A%A0%E5%AF%86%E5%88%86%E5%8C%BA%E7%9A%84linux/">使用USB磁盘无密码登录加密分区的LINUX</a>
       </h1>
       <span class="post-date">Jan 22, 2017 
@@ -720,69 +866,6 @@ tmpfs                100M     0  100M   0% /run/user/1000
 /home/dash/.Private  6.8G  1.1G  5.4G  17% /home/dash
 tmpfs                100M     0  100M   0% /run/user/1001
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/01/13/%E5%B0%86%E7%BD%91%E7%AB%99%E8%BD%AC%E5%8C%96%E4%B8%BAandroid%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F/">将网站转化为Android应用程序</a>
-      </h1>
-      <span class="post-date">Jan 13, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a>
-        
-      </span>
-      
-      
-
-<p>写了几年博客，博文已有数百篇，于是我想能不能把每次需要上网搜索的过程改为在手机端本地查找呢？</p>
-
-<p>看了下网上的解决方案，参考了以下这个，可以作为静态网站APP化的第一步。</p>
-
-<p>参考链接:<br />
-<a href="http://www.vetbossel.in/convert-website-to-android-application/">http://www.vetbossel.in/convert-website-to-android-application/</a></p>
-
-<h3 id="构建开发环境">构建开发环境</h3>
-
-<p>ArchLinux下安装android-studio的方法是通过yaourt:</p>
-
-<pre><code>$ yaourt -S android-studio
-</code></pre>
-
-<p>需要注意的是，安装过程中需要访问Google网站，因而需要代理（你懂的）。而安装完毕后，需要安装本地模拟器，下载
-img也需要用到代理。确保你翻墙的速度够快。</p>
-
-<p>运行模拟器会出错，可以通过以下两个步骤来纠正:</p>
-
-<pre><code>$ yaourt glxinfo
-$ cd ~/Android/Sdk/tools/lib64/libstdc++/
-$ mv libstdc++.so.6 libstdc++.so.6.back
-$ ln -s /usr/lib/libstdc++.so.6 ~/Android/Sdk/tools/lib64/libstdc++/libstdc++.so.6
-</code></pre>
-
-<h3 id="开发">开发</h3>
-
-<p>开发步骤可以参考原文。</p>
-
-<p>值得注意的是，在<code>MainActivity.java</code>文件中，第一行需要改正为正确的包名，否则会出现编译错误。</p>
-
-<pre><code>- package com.example.vetri.websitetoapplication;
-+ package com.example.dash.websitetoapplication;
-</code></pre>
-
-<h3 id="执行">执行</h3>
-
-<p>实际运行的效果如下:</p>
-
-<p><img src="/images/2017_01_13_19_31_05_373x680.jpg" alt="/images/2017_01_13_19_31_05_373x680.jpg" /></p>
-
-<h3 id="想法">想法</h3>
-
-<p>在Android端已经可以有简单的Web服务器，考虑把hugo生成的网站内容上传到Android手机内的Web服务器上。</p>
-
-<p>因为网站是本地化的，所以可以去掉一切不需要的插件，例如disqus之类。</p>
 
       
     </div>
