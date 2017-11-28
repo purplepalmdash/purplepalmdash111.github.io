@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,223 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/16/switch-back-to-arch/">Switch Back To Arch</a>
+      </h1>
+      <span class="post-date">Feb 16, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<p>Since I Moved the city and changed the job, my laptop had to be returned to company, so I bought another HP 8460P which is almost the same as my old one. But this one got i7 4 core CPU and more powerful.<br />
+First I installed Ubuntu and start playing virtualization on it, after successfully installed OpenStack and OpenContrail I started to think change back to my archLinux, so following is the steps.</p>
+
+<h3 id="grub">grub</h3>
+
+<p>Use update-grub2 in Install Ubuntu, it will automatically scan all of the disks, cause I installed the archLinux in the second harddisk, it will add a new item in menu.lst, use this item we could reached ArchLinux.</p>
+
+<h3 id="libvirt">Libvirt</h3>
+
+<p>Enable the libvirtd.service via:</p>
+
+<pre><code>sudo systemctl enable libvirtd.service
+
+</code></pre>
+
+<p>Then restart the system.</p>
+
+<h3 id="nested-virtualization">Nested Virtualization</h3>
+
+<p>Manually we could do via:</p>
+
+<pre><code># modprobe -r kvm_intel
+# modprobe kvm_intel nested=1
+
+</code></pre>
+
+<p>Then check it via:</p>
+
+<pre><code>$ systool -m kvm_intel -v | grep nested
+    nested              = &quot;Y&quot;
+
+</code></pre>
+
+<p>Add it to automatically loaded kernel module:</p>
+
+<pre><code>$ cat /etc/modprobe.d/modprobe.conf
+options kvm_intel nested=1
+
+</code></pre>
+
+<p>Then next time it boots up, will enter the nested mode.</p>
+
+<p>Didn&rsquo;t solved, fuck!!!!!!!</p>
+
+<h3 id="mount-lvm-partitions">Mount LVM Partitions</h3>
+
+<p>The steps is listed as following:</p>
+
+<pre><code>[Trusty@~]$ sudo vgscan
+  Reading all physical volumes.  This may take a while...
+  Found volume group &quot;DashUbuntu-vg&quot; using metadata type lvm2
+[Trusty@~]$ sudo vgchange -ay DashUbuntu-vg
+  2 logical volume(s) in volume group &quot;DashUbuntu-vg&quot; now active
+[Trusty@~]$ sudo lvscan
+  ACTIVE            '/dev/DashUbuntu-vg/root' [690.48 GiB] inherit
+  ACTIVE            '/dev/DashUbuntu-vg/swap_1' [7.91 GiB] inherit
+[Trusty@~]$ sudo mount /dev/DashUbuntu-vg/root /mnt
+[Trusty@~]$ ls /mnt
+bin   etc         initrd.img.old  lost+found  opt   run   sys  var
+boot  home        lib             media       proc  sbin  tmp  vmlinuz
+dev   initrd.img  lib64           mnt         root  srv   usr  vmlinuz.old
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/15/libvirt-network-configuration/">Libvirt Network Configuration</a>
+      </h1>
+      <span class="post-date">Feb 15, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Since I want to use bridge network in libvirt, while the standard bridge networking is not available for me to use, so following tips is for creating and managing the networking.</p>
+
+<h3 id="enable-bridge">Enable Bridge</h3>
+
+<p>In host machine(OpenSuse), create bridge via:</p>
+
+<pre><code>$ sudo brctl addbr br0
+$ sudo brctl addif br0 eth0 
+
+</code></pre>
+
+<p>This will add eth0 to bridge 0, while in startup file of OpenSuse we will do following:</p>
+
+<pre><code># pwd
+/etc/sysconfig/network
+# cat ifcfg-eth0 
+BOOTPROTO='static'
+STARTMODE='ifplugd'
+IFPLUGD_PRIORITY='1'
+NAME='RTL8111/8168B PCI Express Gigabit Ethernet controller'
+USERCONTROL='no' 
+# cat ifcfg-br0 
+BOOTPROTO='static'
+STARTMODE='auto'
+IPADDR='192.168.0.xxx/24'
+NAME='Bridge For Virtualization'
+BRIDGE='yes'
+BRIDGE_PORTS='eth0'
+BRIDGE_FORWARDDELAY='0'
+
+</code></pre>
+
+<p>So next time reboot you will see br0 hold the address of <code>192.168.0.xxx</code>, this is the bridge port we have.</p>
+
+<h3 id="virtual-machine-configuration">Virtual Machine Configuration</h3>
+
+<p>First list all of the virtual machine we have</p>
+
+<pre><code>$ sudo virsh list --all
+ Id    Name                           State
+----------------------------------------------------
+ 2     Ubuntu12043                    running
+ -     OpenContrail                   shut off
+
+</code></pre>
+
+<p>Edit the one we want to edit via:</p>
+
+<pre><code>$ sudo virsh edit Ubuntu12043
+    &lt;interface type='bridge'&gt;
+      &lt;mac address='24:42:53:21:52:49'/&gt;
+      &lt;source bridge='br0'/&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
+    &lt;/interface&gt;
+
+</code></pre>
+
+<p>So next time when you boot-up the machine, it will have the physical network which connecting to br0.</p>
+
+<h3 id="configure-route">Configure route</h3>
+
+<p>In virtual machine, give the fixed ip address via:</p>
+
+<pre><code>$ sudo ifconfig eth0 192.168.188.188
+$ sudo ip route add 192.168.0.0/24 dev eth0
+$ sudo route add default gw 192.168.0.xxx
+$ sudo route -n
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface                                                                 
+0.0.0.0         192.168.0.119   0.0.0.0         UG    0      0        0 eth0                                                                  
+192.168.0.0     0.0.0.0         255.255.255.0   U     0      0        0 eth0                                                                  
+192.168.188.0   0.0.0.0         255.255.255.0   U     0      0        0 eth0   
+
+</code></pre>
+
+<p>We want make it permanent via:<br />
+First make the permanent ip address:</p>
+
+<pre><code># cat /etc/network/interfaces 
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+        address 192.168.188.188
+        netmask 255.255.255.0
+
+</code></pre>
+
+<p>Second we want to configure the route:</p>
+
+<pre><code>$ tail  /etc/rc.local
+ip route add 192.168.0.0/24 dev eth0
+route add default gw 192.168.0.xxx
+echo &quot;nameserver 114.114.114.114&quot;&gt;&gt;/etc/resolv.conf
+
+</code></pre>
+
+<p>This will set the route and the default gateway of your device, also the nameserver will be set.<br />
+But while in the host machine, you will add following iptables rules:</p>
+
+<pre><code># ip route add 192.168.188.0/24 dev br0
+# iptables -t nat -A POSTROUTING -s 192.168.188.0/24 -j SNAT --to 192.168.0.xxx
+# iptables -A FORWARD -s 192.168.188.188 -j ACCEPT
+
+</code></pre>
+
+<p>The iptables rules should be saved via <code>iptables-save</code>, while the route rules should be added into following file:</p>
+
+<pre><code>$  cat /etc/rc.d/after.local 
+ip route add 192.168.188.0/24 dev br0                
+
+</code></pre>
+
+<p>Now reboot the host machine, you route configuration will be saved.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -380,133 +597,6 @@ $ sudo rpm -ivh nginx
 Plus:</p>
 
 <pre><code>$ sudo apt-get install libglib2.0-dev libglib2.0
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/09/tips-for-building-opencontrail-on-ubuntu14-dot-04/">Tips for building opencontrail on Ubuntu14.04</a>
-      </h1>
-      <span class="post-date">Feb 9, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="dependencies">Dependencies</h3>
-
-<p>Install the following packages to make <code>scons</code> getting through:</p>
-
-<pre><code>$ sudo apt-get install -y scons git python-lxml wget gcc patch make unzip flex bison g++ libssl-dev autoconf automake libtool pkg-config vim python-dev python-setuptools libprotobuf-dev protobuf-compiler libsnmp-python libboost-dev libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev libboost-program-options-dev libboost-python-dev libboost-regex-dev libboost-system-dev libcurl4-openssl-dev google-mock libgoogle-perftools-dev liblog4cplus-dev libtbb-dev libhttp-parser-dev libxml2-dev libicu-dev
-$  sudo apt-get install libxml2-dev
-$  sudo apt-get install libboost-dev
-$  sudo apt-get install libboost-filesystem-dev
-$  sudo apt-get install libboost-program-options-dev
-$  sudo apt-get install libboost-system-dev libboost-regex-dev libboost-python-dev libboost-chrono-dev libtbb-dev
-
-</code></pre>
-
-<p>Then the linking should be OK.</p>
-
-<h3 id="making-packages">Making Packages</h3>
-
-<p>Install following packages for meeting the requirements of deb packages:</p>
-
-<pre><code>$ sudo apt-get install libcurl4-openssl-dev libboost-date-time-dev libboost-thread-dev google-mock libgoogle-perftools-dev libhttp-parser-dev
-
-</code></pre>
-
-<p>Then <code>make -f packages.make</code> you could get the generated deb files.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/07/play-docker-5/">Play Docker(5)</a>
-      </h1>
-      <span class="post-date">Feb 7, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Since I enabled OpenSuse, later all of the docker related operation could be operated on OpenSuse13.2.</p>
-
-<h3 id="installation">Installation</h3>
-
-<p>Install docker via:</p>
-
-<pre><code>$ sudo zypper in docker
-$ which docker
-/usr/bin/docker
-
-</code></pre>
-
-<h3 id="specify-storage-location">Specify Storage Location</h3>
-
-<p>The /var directory has the limitation, thus we have to specify the storage locateion in /etc/sysconfig/docker:</p>
-
-<pre><code>$ pwd
-/etc/sysconfig
-$  cat docker 
-
-## Path           : System/Management
-## Description    : Extra cli switches for docker daemon
-## Type           : string
-## Default        : &quot;&quot;
-## ServiceRestart : docker
-#
-DOCKER_OPTS=&quot;-g /home/xxxxxx/Code/Virtualization/Docker/docker/&quot;
-
-
-</code></pre>
-
-<p>Now we could use the nearly 2T Size /home partition for storing docker images..</p>
-
-<h3 id="use-china-resources">Use China Resources</h3>
-
-<p>The default dockhub is banned by GFW, so we have to use replacement repository in China.<br />
-Add the options to /ec/sysconfig/docker:</p>
-
-<pre><code>DOCKER_OPTS=&quot;-g /home/clouder/Code/Virtualization/Docker/docker/ --insecure-registry dl.dockerpool.com:5000&quot;
-
-</code></pre>
-
-<p>Then restart the docker via <code>systemctl restart docker</code>, after them we could use following command for pull back images:</p>
-
-<pre><code>$ sudo docker pull dl.dockerpool.com:5000/ubuntu:14.04
-
-</code></pre>
-
-<p>After pull back ,check the name of our fetched back ubuntu:14.04 is:</p>
-
-<pre><code>$ sudo docker images
-dl.dockerpool.com:5000/ubuntu            14.04               5506de2b643b        3 months ago        197.8 MB
-dl.dockerpool.com:5000/ubuntu            latest              5506de2b643b        3 months ago        197.8 MB
-
-</code></pre>
-
-<p>Change to a differenet tag name:</p>
-
-<pre><code>$ sudo docker tag dl.dockerpool.com:5000/ubuntu:14.04 ubuntu:14.04
-
-</code></pre>
-
-<p>Now check again and you will find the long and hard-to-remember name has been changed to <code>ubuntu:14.04</code>.<br />
-Our version of docker runs on OpenSuse is:</p>
-
-<pre><code>$ docker --version
-Docker version 1.4.1, build 5bc2ff8
 
 </code></pre>
 
@@ -1925,8 +2015,17 @@ Docker version 1.4.1, build 5bc2ff8
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1935,7 +2034,7 @@ Docker version 1.4.1, build 5bc2ff8
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

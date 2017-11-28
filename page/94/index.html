@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,275 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/22/enable-sshd-on-2440/">Enable sshd on 2440</a>
+      </h1>
+      <span class="post-date">Oct 22, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="package-preparation">Package Preparation</h3>
+
+<p>For openssh requires the following packages, first we have to download them all from internet.<br />
+zlib, openssl, openssh.</p>
+
+<pre><code>$ wget http://zlib.net/zlib-1.2.8.tar.gz
+$ wget https://www.openssl.org/source/openssl-0.9.8zc.tar.gz
+$ wget http://mirror.internode.on.net/pub/OpenBSD/OpenSSH/portable/openssh-6.7p1.tar.gz
+
+</code></pre>
+
+<h3 id="building">Building</h3>
+
+<h4 id="cross-compile-zlib">Cross-compile zlib</h4>
+
+<p>We have to manually change the following line in Makefile :</p>
+
+<pre><code>LDSHARED=gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+to
+LDSHARED=arm-linux-gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+
+</code></pre>
+
+<p>Then:</p>
+
+<pre><code>$ ./configure --prefix=/media/nfs/rootfs/usr/
+$ make CC=arm-linux-gcc AR=arm-linux-ar LD=arm-linux-ld
+$ make install
+
+</code></pre>
+
+<h4 id="cross-compile-openssh">Cross-compile openssh</h4>
+
+<p>Get the openssl&rsquo;s configure help menus:</p>
+
+<pre><code># ./Configure --help
+Usage: Configure [no-&lt;cipher&gt; ...] [enable-&lt;cipher&gt; ...] [experimental-&lt;cipher&gt; ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]shared] [[no-]zlib|zlib-dynamic] [enable-montasm] [no-asm] [no-dso] [no-krb5] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--with-xxx[=vvv]] [--test-sanity] os/compiler[:flags]
+
+</code></pre>
+
+<p>Then configure the building via:</p>
+
+<pre><code>$ ./Configure --prefix=/media/nfs/rootfs/usr os/compiler:/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
+$ make &amp;&amp; make install
+
+</code></pre>
+
+<h4 id="cross-compile-openssh-1">Cross-compile openssh</h4>
+
+<p>Configure the openssh via following command, the lib&rsquo;s directory should be adjust to previous installed directory:</p>
+
+<pre><code>$ /configure --host=arm-linux --with-libs --with-zlib=/media/nfs/rootfs/usr/ --with-ssl-dir=/media/nfs/rootfs/usr/ --disable-etc-default-login CC=/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
+
+</code></pre>
+
+<p>Make but don&rsquo;t install.<br />
+Install steps:</p>
+
+<pre><code>$ cp sshd /media/nfs/rootfs/usr/local/sbin/
+$ cp scp sftp ssh ssh-add ssh-agent ssh-keygen ssh-keyscan /media/nfs/rootfs/usr/local/bin/
+$ cp sftp-server ssh-keysign /media/nfs/rootfs/usr/local/libexec/
+
+</code></pre>
+
+<p>In 2440 board, run:</p>
+
+<pre><code>[root@TrustyArch busybox-1.22.1]# mkdir -p /usr/local/etc/
+[root@TrustyArch busybox-1.22.1]# mkdir -p /var/run/
+[root@TrustyArch busybox-1.22.1]# mkdir -p /var/empty/sshd
+[root@TrustyArch busybox-1.22.1]# chmod 755 /var/empty
+
+</code></pre>
+
+<p>Generate the key files:</p>
+
+<pre><code>$ ssh-keygen -t rsa -f ssh_host_rsa_key -N &quot;&quot;
+$ ssh-keygen -t rsa1 -f ssh_host_key -N &quot;&quot;
+$ ssh-keygen -t dsa -f ssh_host_dsa_key -N &quot;&quot;
+$ cp ssh_host_dsa_key ssh_host_dsa_key.pub ssh_host_key ssh_host_key.pub ssh_host_rsa_key ssh_host_rsa_key.pub /media/nfs/rootfs/usr/local/etc/
+
+</code></pre>
+
+<p>Add lines into /etc/passwd and /etc/group in embedded system rootfs:</p>
+
+<pre><code>$ cat /etc/passwd
+sshd:*:74:74:Privilege-separated SSH:/var/empty/sshd:/sbin/nologin
+$ cat /etc/group
+sshd:*:74:
+
+</code></pre>
+
+<p>Change the sshd_config file:</p>
+
+<pre><code>$ cp sshd_config /media/nfs/rootfs/usr/local/etc/
+$ vim /media/nfs/rootfs/usr/local/etc/sshd_config
+HostKey /usr/local/etc/ssh_host_key
+HostKey /usr/local/etc/ssh_host_rsa_key
+HostKey /usr/local/etc/ssh_host_dsa_key
+PermitRootLogin yes
+PermitEmptyPasswords yes
+UsePrivilegeSeparation no
+Subsystem	sftp	/usr/local/libexec/sftp-server
+
+</code></pre>
+
+<p>Then start the sshd via:</p>
+
+<pre><code>/usr/local/sbin/sshd
+
+</code></pre>
+
+<p>Good, we get segment fault, later will investigate this issue.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/21/install-openvpn-in-raspberrypi/">Install OpenVPN in RaspberryPI</a>
+      </h1>
+      <span class="post-date">Oct 21, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="packages">Packages</h3>
+
+<p>Raspberry PI runs ArchLinux, first install related packages.</p>
+
+<pre><code>$ sudo pacman -S openvpn
+$ sudo pacman -S easy-rsa
+$ sudo pacman -S dnsmasq
+
+</code></pre>
+
+<p>openvpn is the OpenVPN&rsquo;s Kernel.<br />
+easy-rsa is used for manage the keys.<br />
+dnsmasq will acts like the domain name server.</p>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>First Make the directory and copy the easy-rsa&rsquo;s files:</p>
+
+<pre><code># mkdir /etc/openvpn/easy-rsa
+[root@alarmpi ~]#  cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa
+[root@alarmpi ~]# ls /etc/openvpn/easy-rsa/
+build-ca	build-key-pkcs12  inherit-inter      sign-req
+build-dh	build-key-server  list-crl	     vars
+build-inter	build-req	  openssl-1.0.0.cnf  whichopensslcnf
+build-key	build-req-pass	  pkitool
+build-key-pass	clean-all	  revoke-full
+
+</code></pre>
+
+<p>Now go and run easy-rsa:</p>
+
+<pre><code>[root@alarmpi ~]# cd /etc/openvpn/easy-rsa/
+[root@alarmpi easy-rsa]# source vars
+NOTE: If you run ./clean-all, I will be doing a rm -rf on /etc/openvpn/easy-rsa/keys
+[root@alarmpi easy-rsa]# ./clean-all 
+[root@alarmpi easy-rsa]# ./build-ca
+
+
+</code></pre>
+
+<h3 id="generate-the-keys-and-certifications">Generate the keys and certifications</h3>
+
+<p>My name is <code>Trusty_delta</code>.</p>
+
+<pre><code>[root@alarmpi easy-rsa]# sh build-key-server Trusty_delta
+[root@alarmpi easy-rsa]# ls keys/Trusty_*
+keys/Trusty_delta.crt  keys/Trusty_delta.csr  keys/Trusty_delta.key
+
+</code></pre>
+
+<h3 id="diffie-hellman-parameters">Diffie-Hellman Parameters</h3>
+
+<p>This may takes extremely long time, especially on RaspberryPI, OMG&hellip;&hellip;.</p>
+
+<pre><code>[root@alarmpi easy-rsa]# sh build-dh 
+# cd keys
+# cp ca.crt delta.crt delta.key dh2048.pem /etc/openvpn
+# cd ..
+
+</code></pre>
+
+<h3 id="generate-the-private-key">Generate the private key</h3>
+
+<pre><code># source vars
+NOTE:If you run ./clean-all, I will be doing a rm -rf on /etc/openvpn/easy-rsa/keys
+root@delta:/etc/openvpn/easy-rsa# ./build-key laptop
+Generating a 1024 bit RSA private key
+
+</code></pre>
+
+<p>The private key called &ldquo;laptop&rdquo; then we could make a directory for holding private keys and copy them into that directory.</p>
+
+<pre><code># mkdir ~/ovpn-client
+# cp ca.crt laptop.crt laptop.key ~/ovpn-client
+
+</code></pre>
+
+<p>If you develier these 3 files to client, client could use them for connecting your VPN server.</p>
+
+<h3 id="openvpn-server">OpenVPN Server</h3>
+
+<p>Copy the server.conf file into /etc/openvpn/:</p>
+
+<pre><code># cd /usr/share/openvpn/examples/
+# cp server.conf /etc/openvpn/Trusty_delta.conf
+# vim Trusty_delta.conf
+cert delta.crt
+key delta.key
+dh dh2048.pem
+push &quot;redirect-gateway def1&quot;
+push &quot;dhcp-option DNS 172.8.0.1&quot;
+
+</code></pre>
+
+<p>Make service start automatically:</p>
+
+<pre><code># systemctl start openvpn@Trusty_delta.conf
+# systemctl enable openvpn@Trusty_delta.conf
+
+</code></pre>
+
+<p>Then we could test the vpn in other linux servers, using modified client.conf file.</p>
+
+<h3 id="check-service">Check service</h3>
+
+<p>Use netstat for check the status of openvpn server:</p>
+
+<pre><code>netstat -anp| grep openvpn
+
+</code></pre>
+
+<p>Following is directly copy from the ubuntu related.</p>
+
+<h3 id="dns-server">DNS Server</h3>
+
+<p>Edit the dnsmasq.conf:</p>
+
+<pre><code>listen-address = 127.0.0.1, 172.8.0.1
+bind-interfaces
+
+</code></pre>
+
+<p>Then restart the dnsmasq.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -510,105 +779,6 @@ Edit the /usr/share/lxc/templates/lxc-ubuntu file, add &ndash;no-check-gpg after
 </code></pre>
 
 <p>Now everything should goes OK, and you could enjoy the ubuntu installed on your lxc container.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/18/autorestart-autrace/">AutoRestart autrace</a>
-      </h1>
-      <span class="post-date">Oct 18, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>autrace is a proxy tool which I used for auto-converting the proxy for cross the firewall, it runs in remote server but sometimes it will runs into crash condition. Following is the command for auto-restart this proxy tool.</p>
-
-<pre><code>$ cat autrace.sh
-#!/bin/sh
-while true; do
-   /home/xxxxxxxx/code/autrace -s 
-done
-
-</code></pre>
-
-<p>Everytime we run autrace.sh like following:</p>
-
-<pre><code>/home/xxxxx/code/autrace.sh &amp;
-
-</code></pre>
-
-<p>thus autrace will automatically be restart if it crashes.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/18/cross-compile-the-kernel-for-utu2440/">Cross-compile the kernel for utu2440</a>
-      </h1>
-      <span class="post-date">Oct 18, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="cross-compiler-preparation">Cross-compiler Preparation</h3>
-
-<p>The official documentation said use gcc-3.4.1 for compiling the kernel.</p>
-
-<pre><code>$ cat ~/.zshrc | grep -i set341
-alias set341='export PATH=/opt/cross/arm-linux-gcc_3.4.1/bin:$PATH'
-$ set341
-$ pwd
-/media/y/embedded/utu2440/UTU2440-F-T1-20080328/YC2440CDROM_DM9000_080328/utuLinuxfor2440V1.5.8/utu-linux_for_s3c2440_dm9000_V1.5.8
-$ arm-linux-gcc -v
-Reading specs from /opt/cross/arm-linux-gcc_3.4.1/bin/../lib/gcc/arm-linux/3.4.1/specs
-Configured with: /work/crosstool-0.27/build/arm-linux/gcc-3.4.1-glibc-2.3.2/gcc-3.4.1/configure --target=arm-linux --host=i686-host_pc-linux-gnu --prefix=/usr/local/arm/3.4.1 --with-headers=/usr/local/arm/3.4.1/arm-linux/include --with-local-prefix=/usr/local/arm/3.4.1/arm-linux --disable-nls --enable-threads=posix --enable-symvers=gnu --enable-__cxa_atexit --enable-languages=c,c++ --enable-shared --enable-c99 --enable-long-long
-Thread model: posix
-gcc version 3.4.1
-
-</code></pre>
-
-<h3 id="kernel-compilation">Kernel Compilation</h3>
-
-<p>Compile the kernel via:</p>
-
-<pre><code>$ make menuconfig
-&quot;Load an Alternate Configuration File&quot;-&gt; config_480272_ts
-$ make uImage -j4
-
-</code></pre>
-
-<p>Trouble shooting: in ArchLinux, install uboot&rsquo;s mkimage tool via:</p>
-
-<pre><code>$ yaourt -S uboot-mkimage
-
-</code></pre>
-
-<p>After compilation finished, copy it to tftpd server and test:</p>
-
-<pre><code>$ cp arch/arm/boot/uImage /media/nfs/rootfs/
-$ ls -l uImage 
--rwxrwxrwx 1 root root 1483696 Oct 19  2014 uImage
-$ ls -l s3c_kernel/uImage_T5_480x272_ts 
--rw------- 1 nobody nobody 1483468 Oct 19  2014 s3c_kernel/uImage_T5_480x272_ts
-
-</code></pre>
-
-<p>We use the compiled kernel and let it runs into the system. Next step we will upgrade the Linux kernel, this may lead to some kernel driver related working.<br />
-Current kernel is:</p>
-
-<pre><code>[root@utu-linux /]# uname -a
-Linux utu-linux 2.6.13-utulinux2440 #380 Sat Oct 18 16:14:06 CST 2014 armv4tl unknown
-
-</code></pre>
 
       
     </div>
@@ -2025,8 +2195,17 @@ Linux utu-linux 2.6.13-utulinux2440 #380 Sat Oct 18 16:14:06 CST 2014 armv4tl un
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2035,7 +2214,7 @@ Linux utu-linux 2.6.13-utulinux2440 #380 Sat Oct 18 16:14:06 CST 2014 armv4tl un
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

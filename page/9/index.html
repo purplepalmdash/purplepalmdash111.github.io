@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,128 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/05/23/vagrant-libvirt-issue-on-archlinux/">vagrant-libvirt issue on ArchLinux</a>
+      </h1>
+      <span class="post-date">May 23, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>Previously install vagrant-libvirt is a tough task on ArchLinux, thus I do
+following steps to let my vagrant-libvirt running again on archlinux, steps
+are listed as following:</p>
+
+<p>Remove the installed vagrant and backup the configuration files.</p>
+
+<pre><code>$ sudo pacman -Rsn vagrant
+$ sudo mv ~/.vagrant.d ~/vagrant.d.back
+$ sudo rm -rf /opt/vagrant
+</code></pre>
+
+<p>Install the vagrant-libvirt in AUR repository:</p>
+
+<pre><code>$ yaourt vagrant-libvirt
+$ tsocks vagrant plugin install vagrant-libvirt
+$ vagrant plugin list
+vagrant-libvirt (0.0.40)
+</code></pre>
+
+<p>Please notice the plugin should also be installed after you have installed the
+vagrant-libvirt via yaourt.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/05/22/addseconddiskforvagrant/">AddSecondDiskForVagrant</a>
+      </h1>
+      <span class="post-date">May 22, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="purpose">Purpose</h3>
+
+<p>For adding second disk to vagrant machine, while vagrant machine is running
+under virtualbox hypervisor. Following are the steps for doing this.</p>
+
+<h3 id="steps">Steps</h3>
+
+<p><code>Vagrantfile</code> definition:</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure(&quot;2&quot;) do |config|
+
+  config.vm.provider &quot;virtualbox&quot; do |vb|
+    # Display the VirtualBox GUI when booting the machine
+    #vb.gui = true
+      unless File.exist?('./secondDisk.vdi')
+        vb.customize ['createhd', '--filename', './secondDisk.vdi', '--variant', 'Fixed', '--size', 10 * 1024]
+      end
+  
+    # Customize the amount of memory on the VM:
+    vb.memory = &quot;1024&quot;
+    vb.customize ['storageattach', :id,  '--storagectl', 'SATA', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', './secondDisk.vdi']
+
+  end
+end
+
+</code></pre>
+
+<p>The initial.sh should be run under the vagrant machine has been created:</p>
+
+<pre><code>cat initial.sh
+set -e
+set -x
+echo 'Acquire::http::Proxy &quot;http://192.168.0.121:3142&quot;;'&gt;/etc/apt/apt.conf.d/01proxy
+# Added the primary repository
+apt-get update
+apt-get -y install vim lvm2
+
+if [ -f /etc/disk_added_date ]
+then
+   echo &quot;disk already added so exiting.&quot;
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/sdb &lt;&lt;EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/sdb1
+vgextend vagrant-vg /dev/sdb1
+lvextend -l +100%FREE /dev/vagrant-vg/root
+resize2fs /dev/vagrant-vg/root
+
+date &gt; /etc/disk_added_date
+</code></pre>
+
+<h3 id="notice">!!!Notice!!!</h3>
+
+<p>You should especially notice the lvextend&rsquo;s configuration, for every vagrant box
+has the different naming mechanism.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -602,195 +724,6 @@ qemu-system-x86_64 -net nic,model=virtio,macaddr=52:54:00:12:34:56,vlan=1 -net t
 <p>When start Bombing the server, the captured image is listed as following:</p>
 
 <p><img src="/images/2017_05_03_17_19_58_324x455.jpg" alt="/images/2017_05_03_17_19_58_324x455.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/05/03/cs49onubuntu1404/">CS49OnUbuntu1404</a>
-      </h1>
-      <span class="post-date">May 3, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="mysql-configuration">MySql Configuration</h3>
-
-<p>Configuration for mysql:</p>
-
-<pre><code># cat &gt;&gt;/etc/mysql/conf.d/cloudstack.cnf &lt;&lt;EOM
-&gt; [mysqld]
-&gt; innodb_rollback_on_timeout=1
-&gt; innodb_lock_wait_timeout=600
-&gt; max_connections=350
-&gt; log-bin=mysql-bin
-&gt; binlog-format = 'ROW'
-&gt; EOM
-# service mysql restart
-</code></pre>
-
-<p>Configuration:</p>
-
-<pre><code># cloudstack-setup-databases cloud:engine123@localhost --deploy-as=root:engine123 -e file -m mymskey44 -k mydbkey00
-</code></pre>
-
-<h3 id="nfs-server">NFS Server</h3>
-
-<pre><code># mkdir -p /export/primary /export/secondary
-# apt-get install nfs-kernel-server
-# vim /etc/exports 
-/export  *(rw,async,no_root_squash,no_subtree_check)
-# service nfs-kernel-server start
-# exportfs -a
-# showmount -e 127.0.0.1
-Export list for 127.0.0.1:
-/export *
-</code></pre>
-
-<h3 id="cloudstack-agent">CloudStack-Agent</h3>
-
-<p>安装:</p>
-
-<pre><code># apt-get install cloudstack-agent
-</code></pre>
-
-<p>配置libvirt:</p>
-
-<pre><code># vim /etc/libvirt/libvirtd.conf
-listen_tls = 0
-listen_tcp=1
-tcp_port=&quot;16509&quot;
-auth_tcp=&quot;none&quot;
-</code></pre>
-
-<p>配置<code>libvirt-bin.conf</code>文件:</p>
-
-<pre><code># vim /etc/default/libvirt-bin
-libvirtd_opts=&quot;-d -l&quot;
-</code></pre>
-
-<p>配置<code>qemu.conf</code>文件，以侦听所有端口:</p>
-
-<pre><code># vim /etc/libvirt/qemu.conf
-vnc_listen = &quot;0.0.0.0&quot;
-</code></pre>
-
-<h3 id="systemvm">Systemvm</h3>
-
-<p>Install systemvm via:</p>
-
-<pre><code># /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /mnt -u http://192.168.1.69/systemvm64template-4.6.0-kvm.qcow2.bz2 -h kvm -F
-</code></pre>
-
-<h3 id="cloudstack-configuration">CloudStack Configuration</h3>
-
-<p>Zone Type:</p>
-
-<p><img src="/images/2017_05_03_11_40_48_764x641.jpg" alt="/images/2017_05_03_11_40_48_764x641.jpg" /></p>
-
-<p>Zone:</p>
-
-<p><img src="/images/2017_05_03_11_41_24_597x536.jpg" alt="/images/2017_05_03_11_41_24_597x536.jpg" /></p>
-
-<p><img src="/images/2017_05_03_11_42_07_575x365.jpg" alt="/images/2017_05_03_11_42_07_575x365.jpg" /></p>
-
-<p>Click Next:</p>
-
-<p><img src="/images/2017_05_03_11_42_20_576x450.jpg" alt="/images/2017_05_03_11_42_20_576x450.jpg" /></p>
-
-<p>Guest Traffic:</p>
-
-<p><img src="/images/2017_05_03_11_42_56_654x273.jpg" alt="/images/2017_05_03_11_42_56_654x273.jpg" /></p>
-
-<p>Pod:</p>
-
-<p><img src="/images/2017_05_03_11_43_28_492x449.jpg" alt="/images/2017_05_03_11_43_28_492x449.jpg" /></p>
-
-<p><img src="/images/2017_05_03_11_43_43_432x214.jpg" alt="/images/2017_05_03_11_43_43_432x214.jpg" /></p>
-
-<p>ClusterName:</p>
-
-<p><img src="/images/2017_05_03_11_43_58_504x242.jpg" alt="/images/2017_05_03_11_43_58_504x242.jpg" /></p>
-
-<p>Host:</p>
-
-<p><img src="/images/2017_05_03_11_44_20_485x391.jpg" alt="/images/2017_05_03_11_44_20_485x391.jpg" /></p>
-
-<p>Secondary Storage:</p>
-
-<p><img src="/images/2017_05_03_11_45_06_505x355.jpg" alt="/images/2017_05_03_11_45_06_505x355.jpg" /></p>
-
-<p>Launch zone:</p>
-
-<p><img src="/images/2017_05_03_11_45_29_641x410.jpg" alt="/images/2017_05_03_11_45_29_641x410.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/04/07/%E5%BF%AB%E9%80%9F%E6%90%AD%E5%BB%BAminikube%E5%BC%80%E5%8F%91%E7%8E%AF%E5%A2%83/">快速搭建MiniKube开发环境</a>
-      </h1>
-      <span class="post-date">Apr 7, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="版本">版本</h3>
-
-<p>minikube的版本是<code>v0.17.1</code>, 运行于ArchLinux.</p>
-
-<h3 id="镜像准备">镜像准备</h3>
-
-<p>感谢万能的防火墙，我们需要手动下载docker镜像到本地:</p>
-
-<pre><code>sudo docker pull  gcr.io/google-containers/kube-addon-manager:v6.3
-sudo docker pull gcr.io/google_containers/kubedns-amd64:1.9
-sudo docker pull gcr.io/google_containers/kube-dnsmasq-amd64:1.4
-sudo docker pull gcr.io/google_containers/exechealthz-amd64:1.2
-sudo docker pull  gcr.io/google_containers/kubernetes-dashboard-amd64:v1.5.1
-sudo docker pull gcr.io/google_containers/heapster:v1.2.0
-sudo docker pull kubernetes/heapster_influxdb:v0.6
-sudo docker pull gcr.io/google_containers/heapster_grafana:v2.6.0-2
-sudo docker pull gcr.io/google_containers/pause-amd64:3.0
-</code></pre>
-
-<p>存储docker镜像并打包的命令如下, 这样一个wget就可取下来所有的镜像:</p>
-
-<pre><code>sudo docker save  gcr.io/google-containers/kube-addon-manager:v6.3 | bzip2&gt;~/serve/addonmanagerv63.tar.bz2
-sudo docker save gcr.io/google_containers/kubedns-amd64:1.9|bzip2&gt;~/serve/dns19.tar.bz2
-sudo docker save gcr.io/google_containers/kube-dnsmasq-amd64:1.4 |bzip2&gt;~/serve/dnsmasq14.tar.bz2
-sudo docker save gcr.io/google_containers/exechealthz-amd64:1.2|bzip2&gt;~/serve/exechealthz12.tar.bz2
-sudo docker save  gcr.io/google_containers/kubernetes-dashboard-amd64:v1.5.1|bzip2&gt;~/serve/dashboard151.tar.bz2
-sudo docker save gcr.io/google_containers/heapster:v1.2.0|bzip2&gt;~/serve/heapster.tar.bz2
-sudo docker save kubernetes/heapster_influxdb:v0.6|bzip2&gt;~/serve/influx.tar.bz2
-sudo docker save gcr.io/google_containers/heapster_grafana:v2.6.0-2|bzip2&gt;~/serve/grafana.tar.bz2
-sudo docker save gcr.io/google_containers/pause-amd64:3.0|bzip2&gt;~/serve/pauseamd64.tar.bz2
-sudo tar czvf ~/serve/kube.tar.gz ~/serve/*.tar.bz2
-</code></pre>
-
-<p>下载到本地后，直接用<code>sudo docker load&lt;xxxx.tar.bz2</code>即可安装这些镜像。</p>
-
-<h3 id="minikube">minikube</h3>
-
-<p>安装minikube的命令为:</p>
-
-<pre><code>$ yaourt minikube
-</code></pre>
-
-<p>启动的命令为:</p>
-
-<pre><code># minikube stop &amp;&amp; minikube start
-</code></pre>
 
       
     </div>
@@ -2207,8 +2140,17 @@ sudo tar czvf ~/serve/kube.tar.gz ~/serve/*.tar.bz2
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2217,7 +2159,7 @@ sudo tar czvf ~/serve/kube.tar.gz ~/serve/*.tar.bz2
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

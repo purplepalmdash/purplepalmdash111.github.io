@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,228 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/11/30/rtc-on-stm32/">RTC on STM32</a>
+      </h1>
+      <span class="post-date">Nov 30, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+        
+      </span>
+      
+      <p>RTC(Real Time Clock) 在STM32中可以理解为内置的一个部件，和传说中的DS1302是有差别的。尽管官方发布的程序可以将RTC搞成一个万年历。<br />
+###配置RTC
+RTC需要顺带使用后备寄存器， 因为RTC是一个简单的秒中断定时器，关于年日月分秒的信息需要在掉电保存时依然放在某个地方，这个地方就是STM32的后备寄存器。配置好以后，尽管系统关电，依靠板子上的后备电池，依然可以保存32768的晶振和后备寄存器的数据。<br />
+配置RTC的方法：</p>
+
+<pre><code>	#include &quot;stm32f10x_bkp.h&quot;
+	#include &quot;stm32f10x_pwr.h&quot;
+	#include &quot;stm32f10x_rtc.h&quot;
+	//使能一些外设
+		RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
+		PWR_BackupAccessCmd(ENABLE);
+
+</code></pre>
+
+<p>###判断RTC是否被配置过
+下面的函数被用于判断RTC是否被配置过：</p>
+
+<pre><code>/**************************************************************
+** 函数名:TestRtc
+** 功能:测试RTC用
+** 注意事项:用于显示RTC是否已经设置过.
+***************************************************************/
+void TestRtc(void)
+{
+	if(RTC_Blank)
+	{
+		USART1_Puts(&quot;The Time is not set\r\n&quot;);
+	}
+	else
+	{
+		USART1_Puts(&quot;Time Setted.\r\n&quot;);
+	}
+}
+
+</code></pre>
+
+<p>这个函数判断RTC_Blank全局变量的值，而全局变量的值则在配置RTC的时候被设定。</p>
+
+<pre><code>void RTC_Configuration(void)
+{
+  //......
+	if(BKP_ReadBackupRegister(BKP_DR1) != 0xA5A5)
+		{
+	//......
+			RTC_Blank=1;	//这个标志代表RTC是没有预设的(或者说是没有上纽扣电池)
+	
+		}
+
+</code></pre>
+
+<p>如果RTC后备寄存器的值为设定为0xA5A5，则代表RTC已经被设置过。否则，我们认为它处于未被设置过的状态。<br />
+###使用RTC的秒中断
+在NVIC中，需要有下列的定义，以标识RTC的秒中断。</p>
+
+<pre><code>	/* RTC */
+	NVIC_InitStructure.NVIC_IRQChannel = RTC_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&amp;NVIC_InitStructure);
+
+</code></pre>
+
+<p>对应的中断响应例程则定义在stm32f10x_it.c中：</p>
+
+<pre><code>/*******************************************************************************
+* Function Name  : RTC_IRQHandler    RTC中断
+* Description    : 
+* Input          : None
+* Output         : None
+* Return         : None
+*******************************************************************************/
+extern volatile bool Sec;	//1S标志
+void RTC_IRQHandler(void)
+{
+	if(RTC_GetITStatus(RTC_IT_SEC) != RESET) //RTC发生了秒中断（也有可能是溢出或者闹钟中断)
+	{
+		RTC_ClearITPendingBit(RTC_IT_SEC);
+		Sec=TRUE;
+		
+		//以免RTC计数溢出,这里限制了RTC计数值的大小.0x0001517f实际就是一天的秒数
+		if(RTC_GetCounter() &gt;= 0x0001517f)	
+		{
+			RTC_SetCounter(0x0);
+		}
+	}
+}
+
+</code></pre>
+
+<p>而在main.c中，则根据Sec的值来闪烁LED1灯。</p>
+
+<pre><code>	for(;;)
+	{
+		if(Sec == 1)
+		{
+			Sec = 0;
+			GPIOA-&gt;ODR^=GPIO_Pin_8;
+		}
+	}
+
+</code></pre>
+
+<p>Test:</p>
+
+<pre><code>	for(;;)
+	{
+		if(Sec == 1)
+		{
+			Sec = 0;
+			GPIOA-&gt;ODR^=GPIO_Pin_8;
+		}
+	}
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/11/30/stm32zhong-de-systick/">STM32中的Systick</a>
+      </h1>
+      <span class="post-date">Nov 30, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+        
+      </span>
+      
+      <p>Cortx-M3特有的SysTick可以很方便的实现定时。系统始终的频率和开启系统时钟中断主要在RCC.c里进行设置：</p>
+
+<pre><code>	//SYSTICK分频--1ms的系统时钟中断
+	if (SysTick_Config(SystemCoreClock / 1000))
+  	{
+  	  	/* Capture error */
+    	while (1);
+  	}
+// The definition of the SysTick_Config:
+
+/**
+ * @brief  Initialize and start the SysTick counter and its interrupt.
+ *
+ * @param   ticks   number of ticks between two interrupts
+ * @return  1 = failed, 0 = successful
+ *
+ * Initialise the system tick timer and its interrupt and start the
+ * system tick timer / counter in free running mode to generate 
+ * periodical interrupts.
+ */
+
+/*
+  *      - SystemCoreClock variable: Contains the core clock (HCLK), it can be used
+  *                                  by the user application to setup the SysTick 
+  *                                  timer or configure other parameters.
+*/
+
+</code></pre>
+
+<p>　　系统时钟SYSCLK，它是供STM32中绝大部分部件工作的时钟源。系统时钟可选择为PLL输出、HSI或者HSE。系统时钟最大频率为72MHz，它通过AHB分频器分频后送给各模块使用，AHB分频器可选择1、2、4、8、16、64、128、256、512分频。其中AHB分频器输出的时钟送给5大模块使用：<br />
+　　①、送给AHB总线、内核、内存和DMA使用的HCLK时钟。<br />
+　　②、通过8分频后送给Cortex的系统定时器时钟。<br />
+　　③、直接送给Cortex的空闲运行时钟FCLK。<br />
+　　④、送给APB1分频器。APB1分频器可选择1、2、4、8、16分频，其输出一路供APB1外设使用(PCLK1，最大频率36MHz)，另一路送给定时器(Timer)2、3、4倍频器使用。该倍频器可选择1或者2倍频，时钟输出供定时器2、3、4使用。<br />
+　　⑤、送给APB2分频器。APB2分频器可选择1、2、4、8、16分频，其输出一路供APB2外设使用(PCLK2，最大频率72MHz)，另一路送给定时器(Timer)1倍频器使用。该倍频器可选择1或者2倍频，时钟输出供定时器1使用。另外，APB2分频器还有一路输出供分频器使用，分频后送给ADC模块使用。ADC分频器可选择为2、4、6、8分频。<br />
+Cortex-M3允许为SysTick提供2个时钟源以供选择，第一个是内核的“自由运行时钟”FCLK，“自由”表现在它不是来自系统时钟HCLK，因此在系统时钟停止时，FCLK也能继续运行。第2个是一个外部的参考时钟，但是使用外部时钟时，因为它在内部是通过FCLK来采样的，因此其周期必须至少是FCLK的两倍（采样定理）。</p>
+
+<pre><code>/*******************************************************************************
+* Function Name  : SysTickHandler
+* Description    :系统时钟，一般调教到1MS中断一次
+*******************************************************************************/
+
+void SysTick_Handler(void)
+{
+	if(Timer1)
+		Timer1--;
+}
+
+</code></pre>
+
+<p>Timer1 为全局变量,我们将设置这个全局变量，以决定其定时期限。</p>
+
+<pre><code>/********************************************
+**函数名:SysTickDelay
+**功能:使用系统时钟的硬延迟
+**注意事项:一般地,不要在中断中调用本函数,否则会存在重入问题.另外如果屏蔽了全局中断,则不要使用此函数
+********************************************/
+volatile u16 Timer1;
+void SysTickDelay(u16 dly_ms)
+{
+	Timer1=dly_ms;
+	while(Timer1);
+}
+
+</code></pre>
+
+<p>而设置这个全局变量则是在main.c的loop函数中设置的。</p>
+
+<pre><code>	for(;;)
+	{
+		SysTickDelay(500);
+		GPIOA-&gt;ODR^=GPIO_Pin_8;
+	}
+
+</code></pre>
+
+<p>如果把500改成其它的值，则很方便可以实现不同大小的定时器。</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -416,183 +638,6 @@ stm32中关于SPI传送字节的函数编写</p>
 		;
 		CSLCDS_H;
 	}
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-3/">关于STM32板上的12864液晶(3)</a>
-      </h1>
-      <span class="post-date">Nov 28, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
-        
-      </span>
-      
-      <p>###如何控制液晶屏幕
-ASCII码的可打印字符的范围在0x20 ~ 0x7f之间， 0x20 是空格字符，0x7f是delete字符。 最开始我们需要在内存中建立一张关于可打印字符的表。用于表示在液晶屏幕上如何显示出该字符，即该字符的点阵排列。<br />
-下图是可以打印的ASCII/Unicode 0-127的值：</p>
-
-<p><img src="/images/ascii.jpg" alt="ascii.jpg" /></p>
-
-<p>点阵数组：</p>
-
-<pre><code>	const u8 Asii8[] = {
-		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-		0x06,0x5F,0x06,0x00,0x00,0x07,0x03,0x00,
-		0x07,0x03,0x00,0x24,0x7E,0x24,0x7E,0x24,
-		0x00,0x24,0x2B,0x6A,0x12,0x00,0x00,0x63,
-		0x13,0x08,0x64,0x63,0x00,0x36,0x49,0x56,
-
-</code></pre>
-
-<p>来个例子：</p>
-
-<pre><code>	#: 0x00, 0x24, 0x7e, 0x24, 0x7e, 0x24
-	00000000
-	00100100
-	01111110
-	00100100
-	01111110
-	00100100
-
-</code></pre>
-
-<p>对应的1代表将该点的液晶点点上。<br />
-要注意，实际的显示应该是倒过来的，即： 把你的脖子顺时针转90度看上面的二进制表达式。</p>
-
-<p>在LCD上设置需要写入的坐标，</p>
-
-<pre><code>	/**************************************************************
-	**函数名 :LcdSetXP
-	**功能:设置坐标**
-	**注意事项:这里设置的坐标不是X,Y,而是X,PAGE.因为黑白屏一次写入的数据为8个点,而且为竖
-	**			式写入,故纵坐标是以页为单位,64个点共8页
-	***************************************************************/
-	void LcdSetXP(u8 x,u8 page)
-	{
-		LcdCmd((page&amp;0x07)+0xb0);	//设置页指针
-	    LcdCmd((x&gt;&gt;4)|0x10);
-	    LcdCmd(x&amp;0x0f);
-	}
-
-</code></pre>
-
-<p>128X64的屏幕一共有8192个点， 每一个字符用48个点来表示，即8X6。所以每一个字的X坐标长度应该是6, 而Y坐标应该是8. 一个page代表8个点。<br />
-考虑下面代码:</p>
-
-<pre><code>	LcdSetXP(0,1);
-	LcdChar8('T');
-	LcdChar8('E');
-	LcdChar8('S');
-	LcdChar8('T');
-	LcdChar8(' ');
-	LcdChar8('O');
-	LcdChar8('K');
-	LcdChar8('!');
-
-	LcdSetXP(0,2);
-	LcdChar8('T');
-	LcdSetXP(6,2);
-	LcdChar8('E');
-	LcdSetXP(24,2);
-	LcdChar8('S');
-	LcdChar8('T');
-	LcdChar8(' ');
-	LcdChar8('O');
-	LcdChar8('K');
-	LcdChar8('!');
-
-</code></pre>
-
-<p>得到的结果应该是：<br />
-TEST OK!<br />
-TE  ST OK!<br />
-对应上面的解释不难明白在屏幕上填写字符的原理。</p>
-
-<p>有关在屏幕上写字符的函数是：</p>
-
-<pre><code>/**************************************************************
-**函数名 :LcdChar8
-**功能:写一个宽6高8的ASCII
-**注意事项:这里忽略了坐标的设置,此函数作为子函数被其他函数调用,使用前需要设置坐标
-			使用内部的点阵表
-***************************************************************/
-void LcdChar8(char chr)
-{
-	u8 i;
-	u8* p_data;
-
-	/* 0x20 is the space character
-	 * 0x7f is the delete character
-	 * Seems all of the printable character are listed in the global array
-	 */
-	if((chr&lt;0x20)||(chr&gt;0x7f))
-	{
-		return;
-	}
-
-	/* Asii8 is the global variable(Glbal Array), So now we retrieve the
-	 * character's address via first address plus the (asii code number)*6
-	 * Because, each entry size if 6, all of the entry start from 0x20
-	 */
-	p_data = (u8*)Asii8 + (chr-0x20)*6;	//要写字符的首地址
-
-	for(i=0;i&lt;6;i++)
-	{
-		LcdDat(*p_data++);
-	}
-}
-
-</code></pre>
-
-<p>举例说明， !的字符表示为
-00000000<br />
-00000000<br />
-00000110<br />
-01011111<br />
-00000110<br />
-00000000<br />
-则看起来应该像：
-000100<br />
-001110<br />
-000100<br />
-000000<br />
-000100<br />
-000000<br />
-把1想象为点，就能对应想象出!在屏幕上的样子。</p>
-
-<p>原有的代码中关于GPIO初始化的时候，多初始化了一个PB14口，删除后一切正常。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/27/auto-convert-source-code-to-utf-8-compatiable/">Auto convert source code to UTF-8 compatiable</a>
-      </h1>
-      <span class="post-date">Nov 27, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>For those code files which contains gb2312 or gbk format, we can use following scripts for automatically convert them to UTF-8 conpatiable format files.</p>
-
-<pre><code>#!/bin/sh
-export LANG=&quot;zh_CN.utf8&quot;
-export LC_ALL=&quot;zh_CN.utf8&quot;
-#for file in `find . -name &quot;*.h&quot;`
-for file in `find . -name &quot;*.c&quot;`
-do
-	echo $file
-	enca -L zh_CN -x UTF-8 $file
-done
 
 </code></pre>
 
@@ -2011,8 +2056,17 @@ done
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2021,7 +2075,7 @@ done
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

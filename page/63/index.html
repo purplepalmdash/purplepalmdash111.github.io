@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,307 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/11/setup-pxe-server/">Setup PXE Server</a>
+      </h1>
+      <span class="post-date">May 11, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>This article record how to setup the pxe server and setup the CentOS quick installation repository, using it we could quickly setup the CentOS on new machine.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>To install following packages for preparing the environment:</p>
+
+<pre><code>$ sudo apt-get install dnsmasq tftpd-hpa apache2 system-config-kickstart
+
+</code></pre>
+
+<p>Configure the apache2&rsquo;s default configuration file:</p>
+
+<pre><code>$ sudo vim /etc/apache2/sites-enabled/000-default.conf
+        DocumentRoot /var/www/
+
+</code></pre>
+
+<p>Configure the dnsmasq via following command:</p>
+
+<pre><code>$ sudo vim /etc/dnsmasq.conf
+bogus-priv
+filterwin2k
+interface=eth0
+domain=nova.com
+dhcp-range=10.7.7.100,10.7.7.150,12h
+dhcp-option=3,10.7.7.1
+dhcp-option=6,114.114.114.114
+dhcp-option=121,10.7.7.0/24
+dhcp-boot=/var/tftproot/pxelinux.0
+enable-tftp
+tftp-root=/var/tftproot
+dhcp-authoritative
+
+</code></pre>
+
+<p>Copy the pxelinux.0 from an installed CentOS, and copy it to /var/tftproot/</p>
+
+<pre><code>[root:~]# scp /usr/share/syslinux/pxelinux.0 Trusty@10.7.7.2:/home/Trusty
+Trusty@WolfHunterPXE:~$ sudo cp /home/Trusty/pxelinux.0 /var/tftproot/
+
+</code></pre>
+
+<h3 id="prepare-the-repository">Prepare the Repository</h3>
+
+<p>We need to copy the installation media into the corresponding directory:</p>
+
+<pre><code>$ sudo mkdir -p /var/www/CentOS
+$ sudo mount CentOS-6.3-x86_64-bin-DVD1.iso /mnt
+$ sudo cp -rf /mnt/* /var/www/CentOS
+$ sudo mkdir -p /mnt1
+$ sudo mount CentOS-6.3-x86_64-bin-DVD2.iso /mnt1
+$ sudo cp -rf /mnt1/Packages/* /var/www/CentOS/Packages/
+
+</code></pre>
+
+<p>Copy the CentOS&rsquo;s kernel and kernel-startup file into the /var/tftproot/CentOS directory:</p>
+
+<pre><code>$ sudo mkdir -p /var/tftproot/CentOS
+$ sudo cp /mnt/images/pxeboot/initrd.img /var/tftproot/CentOS
+$ sudo cp /mnt/images/pxeboot/vmlinuz /var/tftproot/CentOS
+
+</code></pre>
+
+<p>Now your repository for installation is ready.</p>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>Edit the boot.msg file for user choosen:</p>
+
+<pre><code>$ sudo vim /var/tftproot/boot.msg
+### START INSTALLING ######
+Choose installation type(0/1/2),the DEFAULT is 100:
+0 CentOS-6.3-64-No-RAID-Basic
+1 CentOS-6.3-64-No-RAID-minidesktop-virtualization-for testing
+
+</code></pre>
+
+<p>When user choose the corresponding items, then /var/tftproot/pxelinux.cfg/default file will choose the correspoiding files.</p>
+
+<pre><code>Trusty@WolfHunterPXE:~$ sudo mkdir -p /var/tftproot/pxelinux.cfg
+Trusty@WolfHunterPXE:~$ sudo vim /var/tftproot/pxelinux.cfg/default
+default 100
+display boot.msg
+
+# Label 100 , boot from hddisk
+LABEL 100
+localboot 0x80
+
+### Label 0, minimal CentOS
+label 0
+kernel CentOS/vmlinuz
+append ks=http://10.7.7.2/cfg/Centos-minibasic.cfg vga=normal initrd=CentOS/initrd.img devfs=nomount ramdisk_size=9216 nofb
+
+### Label 1, minimal-Desktop CentOS 
+label 1
+kernel CentOS/vmlinuz
+append ks=http://10.7.7.2/cfg/Centos-minidesktop.cfg vga=normal initrd=CentOS/initrd.img devfs=nomount ramdisk_size=9216 nofb
+
+prompt 1 
+timeout 900
+
+</code></pre>
+
+<h3 id="get-kickstart-file">Get kickstart file</h3>
+
+<p>In a installed CentOS Server, install system-config-kickstart via:</p>
+
+<pre><code>$ sudo yum install system-config-kickstart
+
+</code></pre>
+
+<p>Run <code>sudo system-config-kickstart</code> for getting the graphical configuration window, like following:</p>
+
+<p><img src="/images/2015_05_11_14_50_05_931x572.jpg" alt="/images/2015_05_11_14_50_05_931x572.jpg" /><br />
+Customize the partition:</p>
+
+<p><img src="/images/2015_05_11_14_52_09_842x576.jpg" alt="/images/2015_05_11_14_52_09_842x576.jpg" /><br />
+Do other configurations, after everything is OK, save it.</p>
+
+<p>An example cfg file is listed as following:</p>
+
+<pre><code># cat minidesktop.cfg 
+#platform=x86, AMD64, or Intel EM64T
+#version=DEVEL
+# Firewall configuration
+firewall --disabled
+# Install OS instead of upgrade
+install
+# Use network installation
+url --url=&quot;http://10.7.7.2/CentOS&quot;
+# Root password
+rootpw --iscrypted $1$aRvLvJNH$ElcmZ2Msl4MbD.fHdnos9.
+# System authorization information
+auth  --useshadow  --passalgo=sha512
+# Use graphical install
+graphical
+firstboot --disable
+# System keyboard
+keyboard us
+# System language
+lang en_US
+# SELinux configuration
+selinux --disabled
+# Installation logging level
+logging --level=info
+
+# System timezone
+timezone  Asia/Hong_Kong
+# System bootloader configuration
+bootloader --location=mbr
+# Clear the Master Boot Record
+zerombr
+# Partition clearing information
+clearpart --all  
+# Disk partitioning information
+part swap --fstype=&quot;swap&quot; --size=1024
+part / --asprimary --fstype=&quot;ext4&quot; --grow --size=1
+
+%packages
+@basic-desktop
+@chinese-support
+@internet-browser
+@x11
+-ibus-table-cangjie
+-ibus-table-erbi
+-ibus-table-wubi
+
+%end
+
+</code></pre>
+
+<p>Copy it under the /var/www/cfg/CentOS-minidesktop.cfg.</p>
+
+<pre><code>Trusty@WolfHunterPXE:~$ sudo mkdir -p /var/www/cfg
+Trusty@WolfHunterPXE:~$ sudo cp minidesktop.cfg /var/www/cfg/CentOS-minidesktop.cfg
+
+</code></pre>
+
+<h3 id="testing">Testing</h3>
+
+<p>Now create a new machine , set its bootup to pxe-network.<br />
+Trouble Shooting, only need for CentOS:<br />
+<img src="/images/2015_05_11_16_18_47_609x332.jpg" alt="/images/2015_05_11_16_18_47_609x332.jpg" /></p>
+
+<pre><code>- Ctrl+B
+- dhcp net0
+- config
+
+- Ctrl+X
+- autoboot
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/11/tips-for-setting-up-centos-local-repository/">Tips For Setting Up CentOS Local Repository</a>
+      </h1>
+      <span class="post-date">May 11, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>The material is learned from:<br />
+<a href="http://paulcodr.co/blog/2015/yumrepo-server-local/">http://paulcodr.co/blog/2015/yumrepo-server-local/</a></p>
+
+<h3 id="steps">Steps</h3>
+
+<p>Local ISO Preparation:</p>
+
+<pre><code>[root@localhost ~]# mkdir isos bin
+[root@localhost ~]# ls isos
+CentOS-6.6-x86_64-bin-DVD1.iso  CentOS-6.6-x86_64-bin-DVD2.iso
+
+</code></pre>
+
+<p>Download the scripts:</p>
+
+<pre><code># cd bin
+# wget http://paulcodr.co/download/yum-scripts.zip
+# unzip yum-scripts.zip 
+Archive:  yum-scripts.zip
+   creating: yum-scripts/
+  inflating: yum-scripts/yum-create-server-centos6.6.sh  
+  inflating: yum-scripts/yum-rsync-minimal-centos6.6.sh  
+
+</code></pre>
+
+<p>Change the priviledges:</p>
+
+<pre><code>[root@localhost bin]# chown -R root:root /root/isos
+[root@localhost bin]# chmod 750 -R /root/bin
+
+</code></pre>
+
+<p>Execute the script:</p>
+
+<pre><code>[root@localhost bin]# mv yum-scripts/* ./
+[root@localhost bin]# ls
+yum-create-server-centos6.6.sh  yum-rsync-minimal-centos6.6.sh  yum-scripts  yum-scripts.zip
+[root@localhost bin]# ./yum-create-server-centos6.6.sh 2&gt;&amp;1 | tee createserver.log
+
+</code></pre>
+
+<p>Verify it via:</p>
+
+<pre><code>[root@localhost bin]#  du -hs /data/www/yumrpms/centos6.6/6.6/os/x86_64
+5.6G    /data/www/yumrpms/centos6.6/6.6/os/x86_64
+[root@localhost bin]#  ls -lh /data/www/yumrpms/centos6.6/
+total 4.0K
+lrwxrwxrwx 1 apache apache    3 May 11 12:49 6 -&gt; 6.6
+drwxr-xr-x 3 apache apache 4.0K May 11 12:47 6.6
+
+</code></pre>
+
+<p>Verify it on another PC:</p>
+
+<pre><code>[root:/home/juju/iso]# curl http://10.7.7.124/yumrpms/centos6.6/6/os/x86_64/
+.....
+&lt;/table&gt;
+&lt;address&gt;Apache/2.2.15 (CentOS) Server at 10.7.7.124 Port 80&lt;/address&gt;
+&lt;/body&gt;&lt;/html&gt;
+
+</code></pre>
+
+<p>Change the rsync repository in yum-rsync-minimal-cent6.6.sh:</p>
+
+<pre><code>rsync://mirrors.yun-idc.com/centos/
+
+</code></pre>
+
+<p>Then:</p>
+
+<pre><code>[root@localhost bin]# ./yum-rsync-minimal-centos6.6.sh 2&gt;&amp;1 | tee syncserver.log
+
+</code></pre>
+
+<p>Wait for rsync&hellip;&hellip;</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -933,182 +1234,6 @@ Know where is your swap file:</p>
 <pre><code>$ sudo mv S02dphys-swapfile K02dphys-swapfile
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/29/build-centos-image-for-maas/">Build CentOS Image For MAAS</a>
-      </h1>
-      <span class="post-date">Apr 29, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>MAAS could only deploy Ubuntu in its official support, this artcle will introduce how to Build CentOS based images.</p>
-
-<h3 id="preparation">Preparation</h3>
-
-<p>First you need a Ubuntu14.04 machine with kvm enabled.</p>
-
-<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade &amp;&amp; sudo apt-get -y dist-upgrade
-$ sudo apt-get install build-essential
-
-</code></pre>
-
-<h3 id="get-build-scripts">Get Build Scripts</h3>
-
-<p>Get the source code from the launchpad, and run following command for preparing the building environment.</p>
-
-<pre><code>$  bzr branch lp:maas-image-builder
-$ cd maas-images-builder
-$ make install-dependencies
-
-</code></pre>
-
-<p>For speed-up building, I use china mainland&rsquo;s repository,<br />
-Replace the <code>http://mirror.centos.org/centos/6/os/x86_64</code> like following:</p>
-
-<pre><code>$ vim ./src/mib/builders/centos.py
-      #&quot;http://mirror.centos.org/centos/6/os/i386&quot;)
-      &quot;http://mirrors.aliyun.com/centos/6/os/i386&quot;)
-      #&quot;http://mirror.centos.org/centos/6/os/x86_64&quot;)
-      &quot;http://mirrors.aliyun.com/centos/6/os/x86_64&quot;)
-  #&quot;http://mirror.centos.org/centos/7/os/x86_64&quot;)
-  &quot;http://mirrors.aliyun.com/centos/7/os/x86_64/&quot;)
-
-$ vim ./contrib/centos/centos6/centos6-amd64.ks
-repo --name=&quot;repo0&quot; --baseurl=http://mirrors.aliyun.com/centos/6/os/x86_64/
-repo --name=&quot;repo1&quot; --baseurl=http://mirrors.aliyun.com/centos/6/updates/x86_64/
-repo --name=&quot;repo2&quot; --baseurl=http://mirrors.aliyun.com/epel/6/x86_64/
-
-</code></pre>
-
-<h3 id="build-images">Build Images</h3>
-
-<p>Install python-dev and begin to make:</p>
-
-<pre><code># apt-get install python-dev
-# make
-
-</code></pre>
-
-<p>Now begin to generate the image:</p>
-
-<pre><code>#./bin/maas-image-builder -o centos6-amd64-root-tgz centos --edition 6
-
-</code></pre>
-
-<p>On-Building:<br />
-<img src="/images/2015_04_29_18_00_43_674x328.jpg" alt="/images/2015_04_29_18_00_43_674x328.jpg" /></p>
-
-<p>After building the image is listed as:</p>
-
-<pre><code># ls -l centos6-amd64-root-tgz 
--rw-r--r-- 1 root root 353086181 Apr 29 13:16 centos6-amd64-root-tgz
-
-</code></pre>
-
-<h3 id="import-images">Import Images</h3>
-
-<p>First login into your own profile with following command:</p>
-
-<pre><code>$ maas login my-maas http://10.17.17.202/MAAS/api/1.0 ntQBr8QTPgeTyfYuMq:xxxxxxxxxxxxxxxxxxxxxxxxx7HNspYLch4kc6RLs
-$ maas my-maas boot-sources read
-
-</code></pre>
-
-<p>Above command will readout the boot-sources, now we need to import our newly-built images, import it via:</p>
-
-<pre><code>$ maas my-maas boot-resources create name=centos/centos6 architecture=amd64/generic content@=/home/Trusty/centos6-amd64-root-tgz
-
-</code></pre>
-
-<h3 id="login">Login</h3>
-
-<p>Use following commands:</p>
-
-<pre><code>maas@MassTestOnUbuntu1404:~$ ssh cloud-user@10.17.17.172
-The authenticity of host '10.17.17.172 (10.17.17.172)' can't be established.
-ECDSA key fingerprint is a5:57:5b:d1:ac:c0:8f:67:32:43:d8:6f:17:67:65:cb.
-Are you sure you want to continue connecting (yes/no)? yes
-Warning: Permanently added '10.17.17.172' (ECDSA) to the list of known hosts.
-[cloud-user@CentOS ~]$ ls
-[cloud-user@CentOS ~]$ cat /etc/issue
-\S
-Kernel \r on an \m
-
-[cloud-user@CentOS ~]$ uname -a
-Linux CentOS 3.10.0-229.1.2.el7.x86_64 #1 SMP Fri Mar 27 03:04:26 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
-
-</code></pre>
-
-<p>From Now on,you could use CentOS 6 for deploying!!!!!!!!!!!!!!1</p>
-
-<p>ENJOY IT!!!!!!!</p>
-
-<h3 id="trouble-shooting">Trouble Shooting</h3>
-
-<p>The version could not be speicified via &ndash;edition, everytime we got CentOS 7 based image , so we need to manually change the file:</p>
-
-<pre><code> root@BuildMaasImage:~/Code/once# vim src/mib/builders/centos.py
-    def populate_parser(self, parser):
-        &quot;&quot;&quot;Add parser options.&quot;&quot;&quot;
-        parser.add_argument(
-            #'--edition', default='7',
-            #help=&quot;CentOS edition to generate. (Default: 7)&quot;)
-            '--edition', default='6',
-            help=&quot;CentOS edition to generate. (Default: 6)&quot;)
-
-
-
-</code></pre>
-
-<p>Now re-generate the image again, we got CentOS 6.5 based images.<br />
-To-Be-Done:<br />
-How to generate the CentOS 6.<sup>5</sup>&frasl;<sub>6</sub>.<sup>4</sup>&frasl;<sub>6</sub>.3 version? we always get the newest CentOS 6 images.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/28/trouble-shooting-on-jujus-local-deployment/">Trouble Shooting On Juju&#39;s Local Deployment</a>
-      </h1>
-      <span class="post-date">Apr 28, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      <p>When deploying juju, after <code>juju bootstrap</code>, use juju ssh for login, it will hint me:</p>
-
-<pre><code>$ juju ssh 1
-......
-Permission denied (publickey).
-
-</code></pre>
-
-<p>That could be solved by specify the id_rsa.pub key:</p>
-
-<pre><code>$ ssh-keygen -t rsa -b 2048
-$ juju bootstrap
-$ juju bootstrap
-$ juju deploy wordpress
-$ juju deploy mysql
-$ juju add-relation wordpress mysql
-$ juju status
-$ juju expose wordpress
-
-</code></pre>
-
-<p>By doing this you could make your juju deployment on local successfully.</p>
 
       
     </div>
@@ -2525,8 +2650,17 @@ $ juju expose wordpress
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2535,7 +2669,7 @@ $ juju expose wordpress
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

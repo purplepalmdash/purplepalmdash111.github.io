@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,143 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/05/archlinuxchu-bu-pei-zhi-wang-luo/">ArchLinux初步配置网络</a>
+      </h1>
+      <span class="post-date">Jul 5, 2013 
+      </span>
+      
+      <p>刚安装好的ArchLinux上只有基本的系统组件，启动以后连ifconfig都没有（其实ifconfig早在N年前就被干掉，以ip命令代替了)。在这种一穷二白的情况下，如何配置好网络参数？下面的步骤可以让人一劳永逸。</p>
+
+<p>1. 查看网络接口信息:</p>
+
+<pre><code>	$ ip link show
+	1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT 
+	    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+	2: enp0s3: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP mode DEFAULT qlen 1000
+	    link/ether 08:00:27:09:fd:b7 brd ff:ff:ff:ff:ff:ff
+可以看到enp0s3为有线端口，未启动，无地址无网关无路由。
+</code></pre>
+
+<p>2. 启动网口：</p>
+
+<pre><code>	$ ip link enp0s3 up
+</code></pre>
+
+<p>3. 配置网卡地址:</p>
+
+<pre><code>	$ ip addr add 192.168.1.133/24 broadcast 192.168.1.255 dev enp0s3
+</code></pre>
+
+<p>参数解释：IP地址: 192.168.1.133, 广播地址:192.168.1.255</p>
+
+<p>4. 配置默认路由为192.168.1.1:</p>
+
+<pre><code>	$ ip default-gateway 192.168.1.1
+</code></pre>
+
+<p>5. 查看接口信息:</p>
+
+<pre><code>	#路由信息
+	$ ip route show
+	#地址信息
+	$ ip addr show
+</code></pre>
+
+<p>6. 添加dns解析信息:</p>
+
+<pre><code>	$ vim /etc/resolv.conf
+</code></pre>
+
+<p>输入ISP提供的dns服务器信息，例如:</p>
+
+<pre><code>	nameserver 58.XXX.xx.xx
+	nameserver 221.x.x.xx
+</code></pre>
+
+<p>7. 安装net-tools，这里包含了ifconfig，终于可以不用忍受ip命令的折磨了。但是我记得看过一个高手的文章，他建议使用ip而不是使用陈旧的功能有限的ifconfig，高手开了个玩笑：“记住每次你敲ifconfig时，就会有一只无辜的小猫咪因为偷吃奶酪被击杀，可怜可怜小猫咪吧 :(”。虽然ifconfig很方便也是大多数教程里的常用配置，还是建议大家尽快适应繁琐的ip命令。</p>
+
+<pre><code>	$ pacman -S net-tools
+</code></pre>
+
+<p>8. 安装dhcpcd并加入到系统启动项中:</p>
+
+<pre><code>	$ pacman -S dhcpcd
+	# 临时启动dhcpcd
+	$ systemctl start dhcpcd@enp0s3
+	# 将dhcpcd加入到启动项中
+	$ systemctl enable dhcpcd@enp0s3
+</code></pre>
+
+<p>现在重启机器，就可以从dhcp服务器自动获取地址并配置dns服务器等信息了。</p>
+
+<p>9. 其他：</p>
+
+<p>删除当前已经绑定的IP地址：</p>
+
+<pre><code>	$ ip addr del 192.168.1.134/32 dev enp0s3
+</code></pre>
+
+<p>若机器处于有防火墙的机器中，则需要配置好proxy信息才能正常使用网络，在命令行下，输入一下命令：</p>
+
+<pre><code>	$ export http_proxy=http://ip_address:ip_port
+	$ export https_proxy=http://ip_address:ip_port
+	$ export ftp_proxy=http://ip_address:ip_port
+	$ export ftps_proxy=http://ip_address:ip_port
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/05/linuxwang-ji-mi-ma-hou-shi-yong-grubzhong-zhi-mi-ma/">Linux忘记密码后使用grub重置密码</a>
+      </h1>
+      <span class="post-date">Jul 5, 2013 
+      </span>
+      
+      <p>Linux忘记密码后，可以通过修改Grub启动参数来进行修复, 举Ubuntu13.04为例：</p>
+
+<p>出现Grub菜单时，按&rdquo;e&rdquo;键或是其他键进入Grub的编辑方式。</p>
+
+<pre><code>menuentry 'Ubuntu' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-baec278e-2b9f-4513-a6f1-e148ac6295d7' {
+recordfail
+	load_video
+	gfxmode $linux_gfx_mode
+	insmod gzio
+	insmod part_msdos
+	insmod ext2
+	set root='hd0,msdos2'
+	if [ x$feature_platform_search_hint = xy ]; then
+	  search --no-floppy --fs-uuid --set=root --hint-bios=hd0,msdos2 --hint-efi=hd0,msdos2 --hint-baremetal=ahci0,msdos2  baec278e-2b9f-4513-a6f1-e148ac6295d7
+	else
+	  search --no-floppy --fs-uuid --set=root baec278e-2b9f-4513-a6f1-e148ac6295d7
+	fi
+	linux	/boot/vmlinuz-3.8.0-19-generic root=UUID=baec278e-2b9f-4513-a6f1-e148ac6295d7 ro   
+	initrd	/boot/initrd.img-3.8.0-19-generic
+}
+</code></pre>
+
+<p>改动下面这行</p>
+
+<pre><code>linux	/boot/vmlinuz-3.8.0-19-generic root=UUID=baec278e-2b9f-4513-a6f1-e148ac6295d7 ro   
+</code></pre>
+
+<p>为</p>
+
+<pre><code>linux	/boot/vmlinuz-3.8.0-19-generic root=UUID=baec278e-2b9f-4513-a6f1-e148ac6295d7 rw init=/bin/bash  
+</code></pre>
+
+<p>init=/bin/bash将把系统启动到一个没有root密码的shell, rw则允许修改密码，否则ro的情况下无法更新密码。</p>
+
+<p>使用改动后的grub启动系统。在Grub2中一般是按F10, Grub中则是回车后按&rdquo;b&rdquo;键，具体需参考grub的帮助。</p>
+
+<p>系统启动到shell后, 输入passwd username重设自己的密码后，reboot系统即可。</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -317,59 +454,6 @@ end
     vim ~/.rvm/gems/ruby-1.9.3-p448/gems/pygments.rb-0.3.4/lib/pygments/mentos.py
     第一行
     /usr/bin/env python &ndash;&gt; /usr/bin/env python2</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/03/yong-githubguan-li-octopressyuan-ma/">用github管理octopress源码</a>
-      </h1>
-      <span class="post-date">Jul 3, 2013 
-      </span>
-      
-      <p>1. 新建或改变某个已存在的源码仓库名为&rdquo;debian_octopress&rdquo;，以后可以用<a href="https://github.com/kkkttt/debian_octopress.git">&ldquo;https://github.com/kkkttt/debian_octopress.git&rdquo;</a>来访问此仓库。</p>
-
-<p>2. 配置Git:</p>
-
-<pre><code>$ git init
-$ git add README.md	# 这个文件中可以添些项目的描述文字
-$ git commit -m &quot;First Commit&quot;
-# 配置git的本地用户名和email
-$ git config --global user.email &quot;kkkttt@gmail.com&quot;
-$ git config --global user.name &quot;Trusty&quot;
-# 将文件夹里所有内容加入到git中并提交
-$ git add .
-$ git commit -m &quot;First Sourcecode Commit&quot;
-# 同步到github
-$ git remote add origin https://github.com/kkkttt/debian_octopress.git
-$ git push -u origin master --force
-</code></pre>
-
-<p>3. 删除本地文件夹并同步到Github的方法:</p>
-
-<pre><code>$ git rm -rf public.back
-$ git commit -m &quot;remove backup directory&quot;
-$ git push origin master
-</code></pre>
-
-<p>4. 将本地修改同步到Github:</p>
-
-<pre><code>$ git commit -m &quot;do some changes&quot;
-
-</code></pre>
-
-<p>这时候会列出本地修改过的内容，运行:</p>
-
-<pre><code>$ git commit -a
-
-</code></pre>
-
-<p>修改需要提交的修改后运行下列命令后同步到Github:</p>
-
-<pre><code>$ git push origin master
-
-</code></pre>
 
       
     </div>
@@ -1782,13 +1866,25 @@ $ git push origin master
     class="active"><a href="/page/153/">153</a></li>
     
     
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    class="disabled">
-    <a href="" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
+    ><a href="/page/154/">154</a></li>
+    
+    
+    <li
+    >
+    <a href="/page/154/" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

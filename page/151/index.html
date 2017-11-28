@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,457 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-2/">用Qemu和GNU编译链研究ARM汇编(2)</a>
+      </h1>
+      <span class="post-date">Jul 10, 2013 
+      </span>
+      
+      <p>研究两个汇编程序, 通过研究这两个程序，初步了解ARM汇编的知识：</p>
+
+<ul>
+<li>用于求数组和的程序</li>
+<li>用于计算字符串长度的程序</li>
+</ul>
+
+<p>1. 数组求和</p>
+
+<pre><code>        .text
+entry:  b start                 @ Skip over the data
+arr:    .byte 10, 20, 25        @ Read-only array of bytes
+eoa:                            @ Address of end of array + 1
+
+        .align
+start:
+        ldr   r0, =eoa          @ r0 = &amp;eoa
+        ldr   r1, =arr          @ r1 = &amp;arr
+        mov   r3, #0            @ r3 = 0
+loop:   ldrb  r2, [r1], #1      @ r2 = *r1++
+        add   r3, r2, r3        @ r3 += r2
+        cmp   r1, r0            @ if (r1 != r2)
+        bne   loop              @    goto loop
+stop:   b stop
+</code></pre>
+
+<p>.byte声明：</p>
+
+<p>.byte声明的变量在内存中以连续的比特存在，.2byte和.4byte与之类似，分别用于存储16位值和32位值。联想到C语言中的内建数据结构定义，不难想象char/int/long int 预编译完是哪一种类型。</p>
+
+<p>通用语法结构如下：</p>
+
+<pre><code>	.byte   exp1, exp2, ...
+	.2byte  exp1, exp2, ...
+	.4byte  exp1, exp2, ...
+</code></pre>
+
+<p>你可以指定数据的格式，二进制用前缀0b/0B修饰，八进制以前缀0修饰，十进制/十六进制以0x/0X开头。整数也可以用字符常量来表示，加上单引号即可，在这种情况下ASCII码会被用到。</p>
+
+<p>也可以用C表达式，包含文字和其他符号的组合，如下例：</p>
+
+<pre><code>	pattern:  .byte 0b01010101, 0b00110011, 0b00001111
+	npattern: .byte npattern - pattern
+	halpha:   .byte 'A', 'B', 'C', 'D', 'E', 'F'
+	dummy:    .4byte 0xDEADBEEF
+	nalpha:   .byte 'Z' - 'A' + 1
+</code></pre>
+
+<p>.align声明：</p>
+
+<p>ARM指令需要32位对齐，指令的起始内存地址需要是4的倍数，所以用.align指令来插入无用的byte，来确保下一条指令的起始地址是4的倍数。在代码中存在byte或是半字(half words)的时候，需要用到这条指令。</p>
+
+<p>编译&amp;运行：</p>
+
+<pre><code>	# assemble
+	$ arm-none-eabi-as -o sum.o sum.s 
+	# link to elf file
+	$ arm-none-eabi-ld -Ttext=0x0 -o sum.elf sum.o
+	# form bin file
+	$ arm-none-eabi-objcopy -O binary sum.elf sum.bin
+	# form flash image
+	$ dd if=/dev/zero of=flash.bin bs=4k count=4k
+	$ dd if=sum.bin of=flash.bin bs=4K conv=notrunc
+	# emulate with flash image
+	$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
+	# examine the result
+	R00=00000007 R01=00000007 R02=00000019 R03=00000037
+	R04=00000000 R05=00000000 R06=00000000 R07=00000000
+	R08=00000000 R09=00000000 R10=00000000 R11=00000000
+	R12=00000000 R13=00000000 R14=00000000 R15=00000024
+	PSR=600001d3 -ZC- A svc32
+	FPSCR: 00000000
+</code></pre>
+
+<p>R03的值正是我们求和的结果:  0x37==55==10+20+25, 可以用一张流程图来表示程序的运行过程</p>
+
+<p>2. 字符串长度</p>
+
+<pre><code>        .text
+        b start
+
+str:    .asciz &quot;Hello World&quot;
+
+        .equ   nul, 0
+
+        .align
+start:  ldr   r0, =str          @ r0 = &amp;str
+        mov   r1, #0
+
+loop:   ldrb  r2, [r0], #1      @ r2 = *(r0++)
+        add   r1, r1, #1        @ r1 += 1
+        cmp   r2, #nul          @ if (r1 != nul)
+        bne   loop              @    goto loop
+
+        sub   r1, r1, #1        @ r1 -= 1
+stop:   b stop
+</code></pre>
+
+<p>运行结果：</p>
+
+<pre><code>	(qemu) info registers
+	R00=00000010 R01=0000000b R02=00000000 R03=00000000
+	R04=00000000 R05=00000000 R06=00000000 R07=00000000
+	R08=00000000 R09=00000000 R10=00000000 R11=00000000
+	R12=00000000 R13=00000000 R14=00000000 R15=0000002c
+	PSR=600001d3 -ZC- A svc32
+	FPSCR: 00000000
+</code></pre>
+
+<p>r1是用来存储字符串长度的，计算结果为11。</p>
+
+<p>.asciz声明:
+ .asciz声明接受一个字符串作为参数，字符串以双引号修饰的字符表示。汇编器自动在字符串后面加nul字符（即\0字符）</p>
+
+<p>.equ声明
+汇编器维持一张符号表，符号表维持键-&gt;值的格式。当汇编器遇到一个标号时，汇编器将在符号表中自动建立一个条目。以后当汇编器遇到一个关于label的引用时，将自动替换为符号表中储存的label的地址。</p>
+
+<p>使用汇编器指令.equ，我们可以手动在符号表中插入条目。</p>
+
+<p>.equ通常这样定义:
+    .equ name, expression</p>
+
+<p>.equ不会分配任何内存，它们只是在符号表中插入条目罢了。</p>
+
+<p>bne的意思是(!=) , b means bit. bit not equal. ble (&lt;=), beq (==), bge (&gt;=), bgt (&gt;), and bne (!=).</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-3/">用Qemu和GNU编译链研究ARM汇编(3)</a>
+      </h1>
+      <span class="post-date">Jul 10, 2013 
+      </span>
+      
+      <p>在多个文件构成的程序中，源文件首先被编译成多个对象(object)文件(.o文件),
+然后交由链接器生成最终的可执行文件，如下图所示：</p>
+
+<p>{% img img /images/linker.png %}</p>
+
+<p>在组建可执行文件时，链接器主要完成下列操作:</p>
+
+<ul>
+<li>解析符号</li>
+<li>重定位</li>
+</ul>
+
+<p>1. 符号解析</p>
+
+<p>在编译单个文件组成的程序时，所有标号的解析都可以由汇编器替代为对应的地址。而在多文件组成的程序中，如果有储存在其他文件中的符号引用，汇编器会将其标识为&rdquo;unresolved&rdquo;(未解析).当对象文件被传递给链接器时，链接器从这些文件中决定对应的值，并把code中的unresolved的值替代为正确的值。</p>
+
+<p>我们用上一节的求和函数来演示链接器是如何进行符号解析的。
+这两个文件汇编后，会在链接时被检查未被解析的引用。</p>
+
+<pre><code>main.s
+        .text
+        b start                 @ Skip over the data
+arr:    .byte 10, 20, 25        @ Read-only array of bytes
+eoa:                            @ Address of end of array + 1
+
+        .align
+start:
+        ldr   r0, =arr          @ r0 = &amp;arr
+        ldr   r1, =eoa          @ r1 = &amp;eoa
+
+        bl    sum               @ Invoke the sum subroutine
+
+stop:   b stop
+</code></pre>
+
+<pre><code>sum-sub.s
+        @ Args
+        @ r0: Start address of array
+        @ r1: End address of array
+        @
+        @ Result
+        @ r3: Sum of Array
+
+        .global sum
+
+sum:    mov   r3, #0            @ r3 = 0
+loop:   ldrb  r2, [r0], #1      @ r2 = *r0++    ; Get array element
+        add   r3, r2, r3        @ r3 += r2      ; Calculate sum
+        cmp   r0, r1            @ if (r0 != r1) ; Check if hit end-of-array
+        bne   loop              @    goto loop  ; Loop
+        mov   pc, lr            @ pc = lr       ; Return when done
+</code></pre>
+
+<p>查看.o文件符号信息：</p>
+
+<pre><code>	$ arm-none-eabi-nm main.o
+	00000004 t arr
+	00000007 t eoa
+	00000008 t start
+	00000014 t stop
+	         U sum
+	$ arm-none-eabi-nm sum-sub.o 
+	00000004 t loop
+	00000000 T sum
+</code></pre>
+
+<p>t代表符号已经被定义了， 而u则代表符号未被定义。大写字母表示该符号是全局变量。</p>
+
+<p>从上面的输出结果看，sum是被定义在sum-sub.o的全局变量，而该变量在main.o中未被解析到。当linker被调用时，符号引用将被解析到，对应的可执行文件将被生成。</p>
+
+<p>总结： as程序负责把.s文件编译成object文件，而生成最终的可执行文件时，ld负责把未被定位的符号定位到实际的库函数所在的位置。</p>
+
+<p>2. 重定位.</p>
+
+<p>重定位用于改变已经分配给标号的地址。它包括将所有符号引用映射到新分配的内存地址。</p>
+
+<p>合并段后的符号列表情况，可以对比于上面的main.o和sum-sub.o来看：</p>
+
+<pre><code>	$ arm-none-eabi-ld -Ttext=0x0 -o sum.elf main.o sum-sub.o
+	arm-none-eabi-ld: warning: cannot find entry symbol _start; defaulting to 00000000
+	$ arm-none-eabi-nm sum.elf
+	00000004 t arr
+	00008038 T __bss_end__
+	00008038 T _bss_end__
+	00008038 T __bss_start
+	00008038 T __bss_start__
+	00008038 T __data_start
+	00008038 T _edata
+	00008038 T _end
+	00008038 T __end__
+	00000007 t eoa
+	00000024 t loop
+	00080000 T _stack
+	00000008 t start
+	         U _start
+	00000014 t stop
+	00000020 T sum
+</code></pre>
+
+<p>可以看到stop后面的sum已经被定位好了(之前是main.o中的U标记)，而loop则相应延后，被定位到了再往后的00000024。</p>
+
+<p>地址的变更： loop原本地址为00000004, 现在是00000024, 而sum原本为0x00000000，现在为00000020, 这是因为sum-sub.o中的.text和main.o中的.text部分一起组成了sum.elf中的.text部分。</p>
+
+<p>整体移动某个段到指定内存位置, 注意在-Ttext中我们增加的0x100的偏移量，使得地址对比于上面的结果整体上移了0x100:</p>
+
+<pre><code>	$ arm-none-eabi-ld -Ttext=0x100 -o sum100.elf main.o sum-sub.o
+	arm-none-eabi-ld: warning: cannot find entry symbol _start; defaulting to 00000100
+	$ arm-none-eabi-nm sum100.elf 
+	00000104 t arr
+	00008138 T __bss_end__
+	00008138 T _bss_end__
+	00008138 T __bss_start
+	00008138 T __bss_start__
+	00008138 T __data_start
+	00008138 T _edata
+	00008138 T _end
+	00008138 T __end__
+	00000107 t eoa
+	00000124 t loop
+	00080000 T _stack
+	00000108 t start
+	         U _start
+	00000114 t stop
+	00000120 T sum
+</code></pre>
+
+<p>3. 重定位.data到RAM中。</p>
+
+<p>我们可以通过撰写链接脚本，将程序的.data段放置在RAM中。这也是通常嵌入式系统所谓bootloader干的活儿，从Flash中加载启动代码到RAM中而后执行。</p>
+
+<p>例程从RAM中加载两个数值，将两者相加而后将结果写回RAM，两个值和结果都放置在.data部分。</p>
+
+<p>代码：</p>
+
+<pre><code>        .data
+val1:   .4byte 10               @ First number
+val2:   .4byte 30               @ Second number
+result: .4byte 0                @ 4 byte space for result
+
+        .text
+        .align
+start:
+        ldr   r0, =val1         @ r0 = &amp;val1
+        ldr   r1, =val2         @ r1 = &amp;val2
+
+        ldr   r2, [r0]          @ r2 = *r0
+        ldr   r3, [r1]          @ r3 = *r1
+
+        add   r4, r2, r3        @ r4 = r2 + r3
+
+        ldr   r0, =result       @ r0 = &amp;result
+        str   r4, [r0]          @ *r0 = r4
+
+stop:   b stop
+</code></pre>
+
+<p>链接脚本：</p>
+
+<pre><code>SECTIONS {
+        . = 0x00000000;
+        .text : { * (.text); }
+
+        . = 0xA0000000;
+        .data : { * (.data); }
+}
+</code></pre>
+
+<p>从connex的内存布局来看，内存地址为0xa000_0000到0xa400_0000，因而A0000000刚好在内存中。</p>
+
+<p>查看链接后的内存符号地址:</p>
+
+<pre><code>	$ arm-none-eabi-as -o sum.o sum.s
+	$ arm-none-eabi-ld -T sum_link.ld -o sum.elf sum.o 
+	$ arm-none-eabi-nm -n sum.elf 
+	00000000 t start
+	0000001c t stop
+	a0000000 d val1
+	a0000004 d val2
+	a0000008 d result
+</code></pre>
+
+<p>这样就完了？NO！！！！！！！！因为：RAM is Volatile! 内存是易变的！</p>
+
+<p>RAM是易失性介质，怎可保证每次加电时就有代码洗干净PP在等着被运行？嵌入式系统里必然有非易失性存储，所有的代码和数据在加电前都需要放在这些非易失性存储介质中，例如在FLASH中。这样在加电后我们就可以利用一段启动代码把代码从FLASH搬到RAM中。</p>
+
+<p>从这个设计思路出发，我们需要程序的.data有两个地址，一个是加载地址，另一个是运行地址。
+这就是常说的：LMA(Load Memory Address)  VS    VMA(Virtual Memory Address)。</p>
+
+<p>上面的代码需要做两个修改:</p>
+
+<ol>
+<li>需要在.data中指定load地址和运行地址</li>
+<li>需要写一段代码用于将数据从FLASH读取到RAM中, 从存储地址到运行地址。</li>
+</ol>
+
+<pre><code>SECTIONS {
+        . = 0x00000000;
+        .text : { * (.text); }
+        etext = .;
+
+        . = 0xA0000000;
+        .data : AT (etext) { * (.data); }
+}
+</code></pre>
+
+<p>etext包含了FLASH中放置完地址后的空白地址，记住这个地址以便在接下来将这个数值传送给.data部分，以便程序将.data部分从FLASH拷贝到RAM中。etext只是符号表中的一个，本身并不占据任何内存(可以回去翻上一篇日志)。</p>
+
+<p>关于AT关键字:  它指定了.data部分的加载地址，一个地址或符号被传递给AT关键字，以便它从该地址拷贝数据。 在这里，我们传递etext符号给AT。</p>
+
+<p>要把代码从FLASH拷贝到RAM中，下列信息需要被提供：</p>
+
+<ol>
+<li>Flash中数据地址(flash_sdata)</li>
+<li>RAM中数据地址(ram_sdata)</li>
+<li>.data部分大小(data_size)</li>
+</ol>
+
+<p>拷贝代码：</p>
+
+<pre><code>        ldr   r0, =flash_sdata
+        ldr   r1, =ram_sdata
+        ldr   r2, =data_size
+
+copy:
+        ldrb  r4, [r0], #1
+        strb  r4, [r1], #1
+        subs  r2, r2, #1
+        bne   copy
+</code></pre>
+
+<p>由此，我们需要在链接脚本中生成这三个数值：</p>
+
+<pre><code>SECTIONS {
+        . = 0x00000000;
+        .text : {
+              * (.text);
+        }
+        flash_sdata = .;
+
+        . = 0xA0000000;
+        ram_sdata = .;
+        .data : AT (flash_sdata) {* (.data); }
+        ram_edata = .;
+        data_size = ram_edata - ram_sdata;
+}
+</code></pre>
+
+<p>ram_sdata为ram中数据开始地址，而ram_edata为结束地址，两者相减则为数据块大小。</p>
+
+<p>改变后的带有copy数据的代码：</p>
+
+<pre><code>        .data
+val1:   .4byte 10               @ First number
+val2:   .4byte 30               @ Second number
+result: .space 4                @ 1 byte space for result
+
+        .text
+
+        ;; Copy data to RAM.
+start:
+        ldr   r0, =flash_sdata
+        ldr   r1, =ram_sdata
+        ldr   r2, =data_size
+
+copy:
+        ldrb  r4, [r0], #1
+        strb  r4, [r1], #1
+        subs  r2, r2, #1
+        bne   copy
+
+        ;; Add and store result.
+        ldr   r0, =val1         @ r0 = &amp;val1
+        ldr   r1, =val2         @ r1 = &amp;val2
+
+        ldr   r2, [r0]          @ r2 = *r0
+        ldr   r3, [r1]          @ r3 = *r1
+
+        add   r4, r2, r3        @ r4 = r2 + r3
+
+        ldr   r0, =result       @ r0 = &amp;result
+        str   r4, [r0]          @ *r0 = r4
+
+stop:   b stop
+</code></pre>
+
+<p>使用修改过的final_sum_ram.s和link脚本编译，并生成flash.bin后，就可以在qemu-system-arm中验证结果了。</p>
+
+<pre><code>$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
+QEMU 1.4.2 monitor - type 'help' for more information
+(qemu) info registers
+R00=a0000008 R01=a0000004 R02=0000000a R03=0000001e
+R04=00000028 R05=00000000 R06=00000000 R07=00000000
+R08=00000000 R09=00000000 R10=00000000 R11=00000000
+R12=00000000 R13=00000000 R14=00000000 R15=00000038
+PSR=600001d3 -ZC- A svc32
+FPSCR: 00000000
+
+(qemu) xp /4dw 0xA0000000
+00000000a0000000:         10         30         40          0
+</code></pre>
+
+<p>R04包含了我们相加后的结果, 为0x28=40, R02/R03则分别为操作数10/30. 而通过显示0xA0000000也显示了内存中的值分别为val1/val2/result的值。</p>
+
+<p>接下来的章节中，我们将讲到C代码入口。</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -491,311 +942,6 @@ void main() {
 <p>这时候可以看到，kernel运行并在Qemu自带的终端里打印出&rdquo;Hello World!&ldquo;。</p>
 
 <p>如果我们改变console变量为ttyAMA0, 将在启动qemu-system-arm的本终端上打印出qemu的输出。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/08/yong-qemumo-ni-arm-2/">用Qemu模拟ARM(2)</a>
-      </h1>
-      <span class="post-date">Jul 8, 2013 
-      </span>
-      
-      <p>1. 关于Bootloader:</p>
-
-<p>(引导程序)位于电脑或其他计算机应用上，是指引导操作系统启动的程序。引导程序启动方式和程序视应用机型种类而不同。例如在普通的个人电脑上，引导程序通常分为两部分：第一阶段引导程序位于主引导记录（MBR），用以引导位于某个分区上的第二阶段引导程序，如NTLDR、GNU
-GRUB等。</p>
-
-<p>嵌入式系统中常见的Bootloader主要有以下几种:</p>
-
-<ul>
-<li>Das U-Boot
-是一个主要用于嵌入式系统的开机载入程序，可以支持多种不同的计算机系统结构，包括PPC、ARM、AVR32、MIPS、x86、68k、Nios与MicroBlaze。</li>
-<li>vivi是由mizi公司设计为ARM处理器系列设计的一个bootloader.</li>
-<li>Redboot (Red Hat Embedded Debug and Bootstrap)是Red
-Hat公司开发的一个独立运行在嵌入式系统上的BootLoader程序，是目前比较流行的一个功能、可移植性好的BootLoader。</li>
-</ul>
-
-<p>2. 关于“裸机编程(Bare-Metal)”:</p>
-
-<p>微控制器开发人员很熟悉这个概念，
-Bare-Metal是指的你的程序和处理器之间没有任何东西&mdash;-你写的程序将直接运行在处理器上,
-换言之，开发人员是在直接操控硬件。在裸机编程的场景中，需要由开发人员检查并排除任何一个可以导致系统崩溃的风险。</p>
-
-<p>&ldquo;Bare-Metal&rdquo;要求开发人员了解关于硬件的细节，所以接下来我们将对编译链和qemu本身进行分析。</p>
-
-<p>3. 下载qemu源码包并查询相关硬件信息：</p>
-
-<p>ArchLinux采用ABS(Arch Build
-System)来管理源码包，下面的步骤将qemu源码包下载到本地，更详细的关于ABS的操作可以在ArchLinux的Wiki中找到</p>
-
-<pre><code>	$ pacman -S abs
-	$ pacman -Ss qemu
-	extra/qemu 1.4.2-2 [installed]
-	$ abs extra/qemu 
-	$ cp -r /var/abs/extra/qemu/ ~/abs 
-	$ cd ~/abs &amp;&amp; makepkg -s --asroot -o
-</code></pre>
-
-<p>得到versatilepb开发板的CPU型号, 可以看到&rdquo;arm926&rdquo;是我们要的结果。</p>
-
-<pre><code>	$ grep &quot;arm&quot; src/qemu-1.4.2/hw/versatilepb.c 
-	#include &quot;arm-misc.h&quot;
-	static struct arm_boot_info versatile_binfo;
-	        args-&gt;cpu_model = &quot;arm926&quot;;
-	    cpu = cpu_arm_init(args-&gt;cpu_model);
-	    cpu_pic = arm_pic_init_cpu(cpu);
-	    arm_load_kernel(cpu, &amp;versatile_binfo);
-</code></pre>
-
-<p>得到versatilepb开发板的串口寄存器硬件信息：</p>
-
-<pre><code>	$ grep &quot;UART*&quot; src/qemu-1.4.2/hw/versatilepb.c 
-	    /*  0x10009000 UART3.  */
-	    /*  0x101f1000 UART0.  */
-	    /*  0x101f2000 UART1.  */
-	    /*  0x101f3000 UART2.  */
-</code></pre>
-
-<p>所以说开源是王道嘛，很快就查到了每一个需要了解的细节。UART0在内存中map到的地址是0x101f1000,
-我们直接往这个地址写数据，就可以在终端上看到数据输出了。</p>
-
-<p>4. 查看编译链支持的平台：</p>
-
-<pre><code>	$ cat ~/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_EABI/share/doc/arm-arm-none-eabi/info/gcc.info | grep arm926
-	     `arm926ej-s', `arm940t', `arm9tdmi', `arm10tdmi', `arm1020t',
-</code></pre>
-
-<p>arm926ej-s是被支持的，因此我们可以用这套编译链来生成需要的裸机调试代码。</p>
-
-<p>5. 启动应用程序init.c的编写:</p>
-
-<p>首先创建应用程序init.c：</p>
-
-<pre><code>volatile unsigned char * const UART0_PTR = (unsigned char *)0x0101f1000;
-void display(const char *string){
-    while(*string != '\0'){
-        *UART0_PTR = *string;
-        string++;
-    }
-}
- 
-int my_init(){
-    display(&quot;Hello Open World\n&quot;);
-}
-</code></pre>
-
-<p>init.c中，我们首先声明一个volatile变UART0_PTR,volatile关键字用于告知编译器此变量是用于直接访问内存映像设备的，即串口0内存地址</p>
-
-<p>display()函数则是用于将字符串中的字符按顺序输出到串口0, 直到遇到字符串结尾。</p>
-
-<p>my_init()调用了display(), 接下来我们将把它作为C入口函数.</p>
-
-<p>预编译init.c:</p>
-
-<pre><code>	$ arm-none-eabi-gcc -c -mcpu=arm926ej-s init.c -o init.o
-</code></pre>
-
-<p>6. 启动代码start.s编写：</p>
-
-<pre><code>.global _Start
-_Start:
-LDR sp, = sp_top
-BL my_init
-B .
-</code></pre>
-
-<p>处理器加电后，将跳转到指定的内存地址,从此地址开始读入并执行代码。</p>
-
-<p>_Start被声明为全局函数，_Start的实现中，首先将栈地址指向sp_top, LDR(load),
-sp是栈地址寄存器(stack pointer),</p>
-
-<p>BL则是跳转指令，跳转到my_init函数，事实上你可以跳转到任何一个你想跳转的函数，临时写一个their_init()跳转过去也行。Debug时常更改这里以调试不同的子系统功能。</p>
-
-<p>&ldquo;B.&ldquo;可以理解为汇编里的while(1)或for(;;)循环，处理器空转，什么也不做。如果不调用它，系统就会崩溃。所谓嵌入式编程的一个基本理念就是，代码无限循环。</p>
-
-<p>预编译汇编文件start.s:
-    $ arm-none-eabi-as -mcpu=arm926ej-s startup.s -o startup.o</p>
-
-<p>7. 接下来我们需要用一个可以被编译器识别的链接脚本链接两文件, linker.ld:</p>
-
-<pre><code>	ENTRY(_Start)
-	SECTIONS
-	{
-	. = 0x10000;
-	startup : { startup.o(.text)}
-	.data : {*(.data)}
-	.bss : {*(.bss)}
-	. = . + 0x500;
-	sp_top = .;
-	}
-</code></pre>
-
-<p>ENTRY(_Start)用于告知链接器程序的入口点(entry point)是_Start(start.s中定义).
-Qemu模拟器如果加上-kernel选项时，将自动从0x10000开始执行，所以我们必须将代码放到这个地址。所以第四行我们指定&rdquo;.
-= 0x10000&rdquo;. SECTIONS就是用于定义程序的不同部分的。</p>
-
-<p>startup.o组成了代码的text部分，然后是data部分和bss部分，最后一步则定义了栈指针(sp,
-stack pointer)地址. 栈通常是向下增长的，所以最好给它一个比较安全的地址， . =
-.+0x500就是用于避免栈被改写的。sp_top用于存储栈顶地址。</p>
-
-<p>有关程序结构：</p>
-
-<ul>
-<li>BSS段:  在采用段式内存管理的架构中，BSS段（bss segment）通常是指用来存放程序中未初始化的全局变量的一块内存区域。BSS是英文Block Started by Symbol的简称。BSS段属于静态内存分配。.bss section的空间结构类似于stack, 主要用于存储静态变量、未显式初始化、在变量使用前由运行时初始化为零。</li>
-<li>数据段(data segment): 通常是指用来存放程序中已初始化且不为0的全局变量的一块内存区域。数据段属于静态内存分配。</li>
-<li>代码段(code segment/text segment): 通常是指用来存放程序执行代码的一块内存区域。这部分区域的大小在程序运行前就已经确定，并且内存区域通常属于只读,某些架构也允许代码段为可写，即允许程序自修改。在代码段中，也有可能包含一些只读的常数变量，例如字符串常量等。</li>
-</ul>
-
-<p>编译:</p>
-
-<pre><code>	$ arm-none-eabi-ld -T linker.ld init.o startup.o -o output.elf
-	$ file output.elf 
-	output.elf: ELF 32-bit LSB  executable, ARM, EABI5 version 1 (SYSV),statically linked, not stripped
-	$  arm-none-eabi-objcopy -O binary output.elf output.bin
-	$ file output.bin 
-	output.bin: data
-</code></pre>
-
-<p>8. 使用qemu-system-arm运行output.bin:</p>
-
-<pre><code>	$ qemu-system-arm --help | grep nographic 
-	-nographic      disable graphical output and redirect serial I/Os to console.
-	$ qemu-system-arm -M versatilepb -nographic -kernel output.bin
-	Hello Open World
-</code></pre>
-
-<p>9. Play more tricks:
-改动init.c里的串口输出地址为串口1：</p>
-
-<pre><code>	volatile unsigned char * const UART0_PTR = (unsigned char *)0x0101f2000;
-		// 0x101f1000  --&gt; 0x101f2000
-</code></pre>
-
-<p>按照步骤3～7里重新编译，并运行以查看结果:</p>
-
-<pre><code>	# 没有反应！
-	$ qemu-system-arm -M versatilepb -nographic -kernel output.bin
-	# 终端有输出字符。
-	$ qemu-system-arm -M versatilepb -kernel output.bin -serial vc:800x600 -serial stdio
-	Hello Open World
-</code></pre>
-
-<p>同样你也可以把字符输出到第三个串口，只不过前两个-serial的重定向需要指定到别的设备而已。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/08/yong-qemumo-ni-arm-3/">用Qemu模拟ARM(3)</a>
-      </h1>
-      <span class="post-date">Jul 8, 2013 
-      </span>
-      
-      <p>1. 下载并交叉编译u-boot。</p>
-
-<p>新版本的u-boot我加载后总有问题，2009.11版则可以顺利通过编译和测试。</p>
-
-<pre><code>	$ wget ftp://ftp.denx.de/pub/u-boot/u-boot-2009.11.tar.bz2
-	$ tar xjvf u-boot-2009.11.tar.bz2 
-	$ cd u-boot-2009.11
-	$ make versatilepb_config arch=ARM CROSS_COMPILE=arm-none-eabi-
-	$ make all arch=ARM CROSS_COMPILE=arm-none-eabi- 
-</code></pre>
-
-<p>编译完成后会在目录下生成u-boot.bin和u-boot文件。</p>
-
-<p>2. 运行u-boot.bin:</p>
-
-<pre><code>	$ qemu-system-arm -M versatilepb -kernel u-boot.bin -nographic
-</code></pre>
-
-<p>如果采用-nographic来运行qemu-system-arm，终端将无法再响应任何系统输入譬如Ctrl+c/ctrl+d_，要终止qemu-system-arm就只能查到进程号再kill。所以我一般不带-nographic选项，启动后ctrl+alt+2去看serial0输出,保留在终端窗口直接ctrl+c杀死qemu-sytem-arm进程的权力。</p>
-
-<p>3. 用u-boot引导镜像文件:</p>
-
-<p>改动上一篇文章里用于构建启动镜像的linker.ld文件，因为u-boot.bin文件大小的缘故，我们需要把启动镜像的起始地址整体上移.</p>
-
-<pre><code>	$ ls -l -h u-boot.bin 
-	-rwxr-xr-x 1 Trusty root 85K Jul  8 15:57 u-boot.bin
-</code></pre>
-
-<p>linker.ld文件里， 0x100000，这个大小相比于85K显然已经足够。</p>
-
-<pre><code>	ENTRY(_Start)
-	SECTIONS
-	{
-	. = 0x100000;
-	startup : { startup.o(.text)}
-	.data : {*(.data)}
-	.bss : {*(.bss)}
-	. = . + 0x500;
-	sp_top = .;
-	}
-</code></pre>
-
-<p>按上一章的编译方法生成output.bin，不再重述。</p>
-
-<p>使用mkimage工具创建u-boot可识别的image文件：</p>
-
-<pre><code>	$ mkimage -A arm -C none -O linux -T kernel -d output.bin -a 0x00100000 -e 0x00100000 output.uimg
-	Image Name:   
-	Created:      Mon Jul  8 16:04:11 2013
-	Image Type:   ARM Linux Kernel Image (uncompressed)
-	Data Size:    152 Bytes = 0.15 kB = 0.00 MB
-	Load Address: 00100000
-	Entry Point:  00100000
-	
-	$ file *.uimg
-	output.uimg: u-boot legacy uImage, , Linux/ARM, OS Kernel Image (Not \
-	compressed), 152 bytes, Mon Jul  8 16:04:11 2013, Load Address: 0x00100000,\
-	Entry Point: 0x00100000, Header CRC: 0x3C62F575, Data CRC: 0x69CE9647
-</code></pre>
-
-<p>将u-boot.bin和output.uimg打包为一个文件：</p>
-
-<pre><code>	$ cat u-boot.bin output.uimg &gt;flash.bin
-</code></pre>
-
-<p>下面这条命令用于计算output.img在使用u-boot加载完flash.bin后在内存中的地址，-kernel选项告诉qemu从0x100000开始加载镜像，即65536。
-65536+u-boot.bin后的大小，即output.img在内存中的地址。printf则是用16进制的格式打印出来，以便加载.</p>
-
-<pre><code>	$ printf &quot;0x%X&quot; $(expr $(stat -c%s u-boot.bin) + 65536)
-	0x2525C
-</code></pre>
-
-<p>启动qemu-system-arm并运行自定义镜像:</p>
-
-<pre><code>	$ qemu-system-arm -M versatilepb -nographic -kernel flash.bin
-	# iminfo 0x2525c
-	
-	## Checking Image at 0002525c ...
-	   Legacy image found
-	   Image Name:   
-	   Image Type:   ARM Linux Kernel Image (uncompressed)
-	   Data Size:    152 Bytes =  0.1 kB
-	   Load Address: 00100000
-	   Entry Point:  00100000
-	   Verifying Checksum ... OK
-
-	VersatilePB # bootm 0x2525c
-	## Booting kernel from Legacy Image at 0002525c ...
-	   Image Name:   
-	   Image Type:   ARM Linux Kernel Image (uncompressed)
-	   Data Size:    152 Bytes =  0.1 kB
-	   Load Address: 00100000
-	   Entry Point:  00100000
-	   Loading Kernel Image ... OK
-	OK
-	
-	Starting kernel ...
-	
-	Hello Open World
-</code></pre>
-
-<p>u-boot可以支持的选项还有很多，包括使用NFS/TFTP启动等等，留待以后慢慢研究。</p>
 
       
     </div>
@@ -2210,8 +2356,19 @@ stack pointer)地址. 栈通常是向下增长的，所以最好给它一个比�
         
     
     
+    <li class="disabled"><span aria-hidden="true">&hellip;</span></li>
+    
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2220,7 +2377,7 @@ stack pointer)地址. 栈通常是向下增长的，所以最好给它一个比�
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

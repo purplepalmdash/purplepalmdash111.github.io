@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,186 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/">Enable DHCP/DNS Server For SpaceWalker Server</a>
+      </h1>
+      <span class="post-date">Aug 5, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="dhcp-server">DHCP Server</h3>
+
+<p>Install the dhcp server via:</p>
+
+<pre><code># yum install -y dhcp
+</code></pre>
+
+<p>Then edit the configuration of <code>/etc/dhcp/dhcpd.conf</code>, like following:</p>
+
+<pre><code>#
+# DHCP Server Configuration file.
+#   see /usr/share/doc/dhcp*/dhcpd.conf.example
+#   see dhcpd.conf(5) man page
+#
+# specify name server's hostname or IP address
+option domain-name-servers 10.9.10.13;
+# default lease time
+default-lease-time 600;
+# max lease time
+max-lease-time 7200;
+# this DHCP server to be declared valid
+authoritative;
+# specify network address and subnet mask
+subnet 10.9.10.0 netmask 255.255.255.0 {
+    # specify the range of lease IP address
+    range dynamic-bootp 10.9.10.200 10.9.10.254;
+    # specify broadcast address
+    option broadcast-address 10.9.10.255;
+    # specify default gateway
+    option routers 10.9.10.1;
+    # Specify default dns server
+    option domain-name-servers 10.9.10.13;
+}
+</code></pre>
+
+<p>Start the dhcpd server via:</p>
+
+<pre><code># service dhcpd start
+</code></pre>
+
+<h3 id="dns-server-bind9">DNS Server(Bind9)</h3>
+
+<p>Just serve the private network. Install the bind9 via:</p>
+
+<pre><code># yum install -y bind bind-utils
+</code></pre>
+
+<p>Our server&rsquo;s name is <code>spacewalker</code>, need to map to <code>10.9.10.13</code>, following is the
+configuration steps:<br />
+Edit the file of <code>/etc/named.conf</code>.</p>
+
+<p>Change the listen address of port 53:</p>
+
+<pre><code>options {
+        listen-on port 53 { 127.0.0.1; 10.9.10.13; };
+#        listen-on-v6 port 53 { ::1; };
+...
+</code></pre>
+
+<p>Also add the allow-query items, to let the local network nodes for querying its dns:</p>
+
+<pre><code> allow-query     { localhost; 10.9.10.0/24;};
+</code></pre>
+
+<p>Add a new zone named <code>spacewalker</code>:</p>
+
+<pre><code>zone &quot;spacewalker&quot; {
+        type master;
+        file &quot;/etc/named/zones/db.spacewalker&quot;;
+};
+</code></pre>
+
+<p>Now add the zone definition file:</p>
+
+<pre><code># vim /etc/named/zones/db.spacewalker
+$TTL 604800
+@       IN      SOA     spacewalker. root.spacewalker. (
+                                3               ;Serial
+                                604800          ;Refresh
+                                86400           ;Retry
+                                2419200         ;Expire
+                                604800 )        ;Negative Cache TTL
+;
+; name servers - NS records
+      IN      NS      spacewalker.
+
+; name servers  - A records
+spacewalker.         IN      A       10.9.10.13
+</code></pre>
+
+<p>Check the configuration file format:</p>
+
+<pre><code># sudo named-checkconf
+# sudo named-checkzone spacewalker /etc/named/zones/db.spacewalker 
+zone spacewalker/IN: loaded serial 3
+OK
+</code></pre>
+
+<p>Start bind9 service via:</p>
+
+<pre><code># systemctl start named
+</code></pre>
+
+<p>If in CentOS6, then the steps may like following:</p>
+
+<pre><code>[root@spacewalk named]# service named start
+Generating /etc/rndc.key:                                  [  OK  ]
+Starting named:                                            [  OK  ]
+[root@spacewalk named]# chkconfig --level 345 named on
+[root@spacewalk named]# chkconfig --list named
+named           0:off   1:off   2:off   3:on    4:on    5:on    6:off
+</code></pre>
+
+<p>You could verify the correctness by startup a live-cd and view its ping result of <code>ping
+spacewalker</code>.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/04/tips-on-using-spacewalker-for-deploying-centos7/">Tips On Using SpaceWalker For Deploying CentOS7</a>
+      </h1>
+      <span class="post-date">Aug 4, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="configuration">Configuration</h3>
+
+<p>After SpaceWalker has been setup, the configuration we need to done is listed as
+following:</p>
+
+<pre><code>In /etc/rhn/rhn.conf change the value of the parameter cobbler.host to the ip address of the spacewalk server.
+In /etc/cobbler/settings change the value of the parameters server and redhat_management_server to the ip-address of the spacewalk server.
+</code></pre>
+
+<p>Install cobbler bootloaders via:</p>
+
+<pre><code># yum install -y cobbler-loaders
+</code></pre>
+
+<h3 id="build-customized-iso">Build Customized ISO</h3>
+
+<p>via <code>cobbler buildiso</code>, and in the same folder you will get generated.iso.</p>
+
+<h3 id="add-customized-channel">Add Customized Channel</h3>
+
+<p>Under the Channel-&gt; Management Software Channel-&gt; Create New Channel.</p>
+
+<p><img src="/images/2015_08_05_16_50_50_649x442.jpg" alt="/images/2015_08_05_16_50_50_649x442.jpg" /></p>
+
+<p>Repo sync via:</p>
+
+<pre><code># spacewalk-repo-sync -c spacewalker_rhel7_23 -u \ 
+http://yum.spacewalkproject.org/2.3/RHEL/7/x86_64/
+</code></pre>
+
+<h3 id="add-ubuntu-deployment">Add Ubuntu Deployment</h3>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -614,456 +794,6 @@ exclude=cobbler*
 
 <p>Cause the spacewalk has its own cobbler packages in repository, by addeding epel&rsquo;s
 cobbler into blacklist we could continue the setup.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/07/28/worktips-on-landscape/">WorkTips On LandScape</a>
-      </h1>
-      <span class="post-date">Jul 28, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Landscape is now in PPA repository, add it via:</p>
-
-<pre><code>$ sudo apt-get install software-properties-common
-$ sudo add-apt-repository ppa:landscape/15.01
-$ sudo apt-get update
-$ sudo apt-get install landscape-server-quickstart 
-</code></pre>
-
-<p>During the installation will ask you the configuration of postfix, specify local.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>First time you login into the LandScape Root machine, you have to setup your email
-address and your password.<br />
-Then you could visit <code>https://YourIPAddress</code> for the configuration page.</p>
-
-<p>Add the node into the Landscape Root Node.</p>
-
-<p>In to-be-added node, copy the root node&rsquo;s <code>/etc/ssl/certs/landscape_server_ca.crt</code> to
-<code>/etc/landscape</code>, and modify the following configuration:</p>
-
-<pre><code># vim /etc/landscape/client.conf
-ssl_public_key = /etc/landscape/landscape_server_ca.crt
-</code></pre>
-
-<p>Now register the node into the Root Node.</p>
-
-<pre><code>$ sudo apt-get install landscape-client
-$ sudo landscape-config --computer-title &quot;LSNode0&quot; --account-name standalone \
---url https://packer-ubuntu-1404-server/message-system --ping-url \
-http://packer-ubuntu-1404-server/ping
-</code></pre>
-
-<p><img src="/images/2015_07_29_11_27_27_582x380.jpg" alt="/images/2015_07_29_11_27_27_582x380.jpg" /></p>
-
-<p>The following steps is to use or configurating the landscape based cluster
-administration.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/07/27/tips-on-packer/">Tips On Packer</a>
-      </h1>
-      <span class="post-date">Jul 27, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Install Packer via:</p>
-
-<pre><code>$ wget https://dl.bintray.com/mitchellh/packer/packer_0.8.2_linux_amd64.zip
-$ unzip packer_0.8.2_linux_amd64.zip
-$ mv packer* ~/bin
-$ export PATH=~/bin:$PATH
-</code></pre>
-
-<h3 id="kvm-based-image-build">KVM Based Image Build</h3>
-
-<p>Fetch the kickstart configuration file.</p>
-
-<pre><code>$ mkdir ~/Code/packer
-$ wget https://gist.githubusercontent.com/mitchellh/7328271/raw/9035b8e26d001f14a2a960d3cec65eceb0e716ea/centos6-ks.cfg
-# vim centos6-ks.cfg
-	### Replace your own repository URL
-</code></pre>
-
-<p>Create the json definition file for the packer build:</p>
-
-<pre><code>$  packer validate first.json
-Template validated successfully.
-$ cat first.json
-{
-  &quot;builders&quot;:
-  [
-    {
-      &quot;type&quot;: &quot;qemu&quot;,
-      &quot;iso_url&quot;: &quot;/media/opensuse/dash/iso/CentOS-6.6-x86_64-bin-DVD1.iso&quot;,
-      &quot;iso_checksum&quot;: &quot;7b1fb1a11499b31271ded79da6af8584&quot;,
-      &quot;iso_checksum_type&quot;: &quot;md5&quot;,
-      &quot;output_directory&quot;: &quot;output_centos_tdhtest&quot;,
-      &quot;ssh_wait_timeout&quot;: &quot;30s&quot;,
-      &quot;shutdown_command&quot;: &quot;shutdown -P now&quot;,
-      &quot;disk_size&quot;: 5000,
-      &quot;format&quot;: &quot;qcow2&quot;,
-      &quot;headless&quot;: false,
-      &quot;accelerator&quot;: &quot;kvm&quot;,
-      &quot;http_directory&quot;: &quot;httpdir&quot;,
-      &quot;http_port_min&quot;: 10082,
-      &quot;http_port_max&quot;: 10089,
-      &quot;ssh_host_port_min&quot;: 2222,
-      &quot;ssh_host_port_max&quot;: 2229,
-      &quot;ssh_username&quot;: &quot;root&quot;,
-      &quot;ssh_password&quot;: &quot;YourPassword&quot;,
-      &quot;ssh_port&quot;: 22,
-      &quot;ssh_wait_timeout&quot;: &quot;90m&quot;,
-      &quot;vm_name&quot;: &quot;tdhtest&quot;,
-      &quot;net_device&quot;: &quot;virtio-net&quot;,
-      &quot;disk_interface&quot;: &quot;virtio&quot;,
-      &quot;boot_wait&quot;: &quot;5s&quot;,
-      &quot;boot_command&quot;:
-      [
-        &quot;&lt;tab&gt; text ks=http://192.168.1.79/centos6-cdrom.cfg&lt;enter&gt;&lt;wait&gt;&quot;
-      ]
-    }
-  ]
-}
-$  packer validate first.json
-Template validated successfully.
-</code></pre>
-
-<p>Now start build via:</p>
-
-<pre><code>packer build first.json
-</code></pre>
-
-<h3 id="kickstart-file">KickStart File</h3>
-
-<p>An Template:</p>
-
-<pre><code>[root:/var/www/html]# cat centos6-cdrom.cfg
-#platform=x86, AMD64, or Intel EM64T
-#version=DEVEL
-# Firewall configuration
-firewall --enabled --ssh --service=ssh
-# Install OS instead of upgrade
-install
-# Use CDROM installation media
-cdrom
-
-rootpw  YourPassword
-authconfig --enableshadow --passalgo=sha512
-
-# System keyboard
-keyboard uk
-# System language
-lang en_GB
-# SELinux configuration
-selinux --enforcing
-# Do not configure the X Window System
-skipx
-# Installation logging level
-logging --level=info
-
-# Reboot after installation
-reboot
-
-# System timezone
-timezone --isUtc Asia/Shanghai
-# Network information
-network  --bootproto=dhcp --device=eth0 --onboot=on
-# System bootloader configuration
-bootloader --append=&quot;crashkernel=auto rhgb quiet&quot; --location=mbr --driveorder=&quot;vda&quot;
-
-# Partition clearing information
-zerombr
-clearpart --all  --drives=vda
-
-# Disk partitioning information
-part /boot --fstype=&quot;ext4&quot; --size=500
-part pv.008002 --grow --size=1
-volgroup vg_centos --pesize=4096 pv.008002
-logvol / --fstype=ext4 --name=lv_root --vgname=vg_centos --grow --size=1024
---maxsize=51200
-logvol swap --name=lv_swap --vgname=vg_centos --grow --size=1024 --maxsize=1024
-
-%packages --nobase
-@core
-at
-acpid
-cronie-noanacron
-crontabs
-logrotate
-mailx
-mlocate
-openssh-clients
-openssh-server
-rsync
-sendmail
-tmpwatch
-vixie-cron
-which
-wget
-yum
--biosdevname
--postfix
--prelink
-%end
-</code></pre>
-
-<h3 id="build-and-output">Build And Output</h3>
-
-<pre><code>$ packer  build second.json
-qemu output will be in this color.
-
-==&gt; qemu: Downloading or copying ISO
-    qemu: Downloading or copying:
-file:///media/opensuse/dash/iso/CentOS-6.6-x86_64-bin-DVD1.iso
-==&gt; qemu: Creating hard drive...
-==&gt; qemu: Starting HTTP server on port 10088
-==&gt; qemu: Found port for SSH: 2224.
-==&gt; qemu: Looking for available port between 5900 and 6000
-==&gt; qemu: Found available VNC port: 5947
-==&gt; qemu: Starting VM, booting from CD-ROM
-==&gt; qemu: Waiting 5s for boot...
-==&gt; qemu: Connecting to VM via VNC
-==&gt; qemu: Typing the boot command over VNC...
-==&gt; qemu: Waiting for SSH to become available...
-==&gt; qemu: Connected to SSH!
-==&gt; qemu: Gracefully halting virtual machine...
-Build 'qemu' finished.
-
-==&gt; Builds finished. The artifacts of successful builds are:
---&gt; qemu: VM files in directory: output_centos_tdhtest
-$ ls
-output_centos_tdhtest  packer_cache  second.json
-$ ls -l output_centos_tdhtest 
-total 1411208
--rw-r--r-- 1 dash dash 1445134336 Jul 27 16:11 tdhtest
-</code></pre>
-
-<p>Next time we will investigate ubuntu installation.</p>
-
-<h3 id="ubuntu">Ubuntu</h3>
-
-<p>Ubuntu64.json:</p>
-
-<pre><code>{
-    &quot;variables&quot;: {
-        &quot;ssh_name&quot;: &quot;kappataumu&quot;,
-        &quot;ssh_pass&quot;: &quot;kappataumu&quot;,
-        &quot;hostname&quot;: &quot;packer-test&quot;
-    },
-
-    &quot;builders&quot;: [{
-        &quot;type&quot;: &quot;virtualbox-iso&quot;,
-        &quot;guest_os_type&quot;: &quot;Ubuntu_64&quot;,
-
-        &quot;vboxmanage&quot;: [
-            [&quot;modifyvm&quot;, &quot;{{.Name}}&quot;, &quot;--vram&quot;, &quot;32&quot;]
-        ],
-
-        &quot;disk_size&quot; : 10000,
-
-        &quot;iso_url&quot;: &quot;http://192.168.0.79/ubuntu-12.04.3-server-amd64.iso&quot;,
-        &quot;iso_checksum&quot;: &quot;2cbe868812a871242cdcdd8f2fd6feb9&quot;,
-        &quot;iso_checksum_type&quot;: &quot;md5&quot;,
-
-        &quot;http_directory&quot; : &quot;ubuntu_64&quot;,
-        &quot;http_port_min&quot; : 9001,
-        &quot;http_port_max&quot; : 9001,
-
-        &quot;ssh_username&quot;: &quot;{{user `ssh_name`}}&quot;,
-        &quot;ssh_password&quot;: &quot;{{user `ssh_pass`}}&quot;,
-        &quot;ssh_wait_timeout&quot;: &quot;20m&quot;,
-
-        &quot;shutdown_command&quot;: &quot;echo {{user `ssh_pass`}} | sudo -S shutdown -P now&quot;,
-
-        &quot;boot_command&quot; : [
-            &quot;&lt;esc&gt;&lt;esc&gt;&lt;enter&gt;&lt;wait&gt;&quot;,
-            &quot;/install/vmlinuz noapic &quot;,
-            &quot;preseed/url=http://192.168.0.79/ubuntu1204preseed.cfg &quot;,
-            &quot;debian-installer=en_US auto locale=en_US kbd-chooser/method=us &quot;,
-            &quot;hostname={{user `hostname`}} &quot;,
-            &quot;fb=false debconf/frontend=noninteractive &quot;,
-            &quot;keyboard-configuration/modelcode=SKIP keyboard-configuration/layout=USA &quot;,
-            &quot;keyboard-configuration/variant=USA console-setup/ask_detect=false &quot;,
-            &quot;initrd=/install/initrd.gz -- &lt;enter&gt;&quot;
-        ]
-    }]
-}
-
-</code></pre>
-
-<p>KVM Based:</p>
-
-<pre><code>{
-    &quot;variables&quot;: {
-        &quot;user&quot;: &quot;adminubuntu&quot;,
-        &quot;password&quot;: &quot;adminubuntu&quot;
-    },
-
-    &quot;builders&quot;:
-    [
-        {
-            &quot;name&quot;: &quot;ubuntu-1404-server&quot;,
-
-            &quot;type&quot;: &quot;qemu&quot;,
-            &quot;format&quot;: &quot;qcow2&quot;,
-            &quot;accelerator&quot;: &quot;kvm&quot;,
-            &quot;disk_size&quot;: 100000,
-
-            &quot;iso_url&quot;: &quot;http://192.168.0.79/ubuntu-14.04-server-amd64.iso&quot;,
-            &quot;iso_checksum&quot;: &quot;01545fa976c8367b4f0d59169ac4866c&quot;,
-            &quot;iso_checksum_type&quot;: &quot;md5&quot;,
-
-            &quot;http_directory&quot;: &quot;http&quot;,
-
-            &quot;ssh_username&quot;: &quot;{{user `user`}}&quot;,
-            &quot;ssh_password&quot;: &quot;{{user `password`}}&quot;,
-        &quot;ssh_wait_timeout&quot;: &quot;90m&quot;,
-            &quot;shutdown_command&quot;: &quot;echo '{{user `password`}}'|sudo -S shutdown -P now&quot;,
-
-            &quot;boot_wait&quot;: &quot;2s&quot;,
-            &quot;boot_command&quot;: [
-                &quot;&lt;esc&gt;&lt;esc&gt;&lt;enter&gt;&lt;wait&gt;&quot;,
-                &quot;/install/vmlinuz url=http://192.168.0.79/TrustyPreseed.cfg &quot;,
-                &quot;debian-installer=en_US auto locale=en_US kbd-chooser/method=us &quot;,
-                &quot;hostname={{ .Name }} &quot;,
-
-                &quot;keyboard-configuration/modelcode=SKIP &quot;,
-                &quot;keyboard-configuration/layout=USA &quot;,
-                &quot;keyboard-configuration/variant=USA &quot;,
-
-                &quot;passwd/user-fullname={{user `user`}} &quot;,
-                &quot;passwd/user-password-again={{user `password`}} &quot;,
-                &quot;passwd/user-password={{user `password`}} &quot;,
-                &quot;passwd/username={{user `user`}} &quot;,
-
-                &quot;initrd=/install/initrd.gz -- &lt;enter&gt;&quot;
-            ]
-        }
-    ]
-}
-</code></pre>
-
-<p>The Preseed File:</p>
-
-<pre><code># Some inspiration:
-# *
-https://github.com/chrisroberts/vagrant-boxes/blob/master/definitions/precise-64/preseed.cfg
-# * https://github.com/cal/vagrant-ubuntu-precise-64/blob/master/preseed.cfg
-
-# English plx
-d-i debian-installer/language string en
-d-i debian-installer/locale string en_US.UTF-8
-d-i localechooser/preferred-locale string en_US.UTF-8
-d-i localechooser/supported-locales en_US.UTF-8
-
-# Including keyboards
-d-i console-setup/ask_detect boolean false
-d-i keyboard-configuration/layout select USA
-d-i keyboard-configuration/variant select USA
-d-i keyboard-configuration/modelcode string pc105
-
-
-# Just roll with it
-d-i netcfg/get_hostname string this-host
-d-i netcfg/get_domain string this-host
-
-d-i time/zone string UTC
-d-i clock-setup/utc-auto boolean true
-d-i clock-setup/utc boolean true
-
-
-# Choices: Dialog, Readline, Gnome, Kde, Editor, Noninteractive
-d-i debconf debconf/frontend select Noninteractive
-
-d-i pkgsel/install-language-support boolean false
-tasksel tasksel/first multiselect standard, ubuntu-server
-
-
-# Stuck between a rock and a HDD place
-d-i partman-auto/method string lvm
-d-i partman-lvm/confirm boolean true
-d-i partman-lvm/device_remove_lvm boolean true
-d-i partman-auto/choose_recipe select atomic
-
-d-i partman/confirm_write_new_label boolean true
-d-i partman/confirm_nooverwrite boolean true
-d-i partman/choose_partition select finish
-d-i partman/confirm boolean true
-
-# Write the changes to disks and configure LVM?
-d-i partman-lvm/confirm boolean true
-d-i partman-lvm/confirm_nooverwrite boolean true
-d-i partman-auto-lvm/guided_size string max
-
-# No proxy, plx
-d-i mirror/http/proxy string
-
-# Default user, change
-d-i passwd/user-fullname string adminubuntu
-d-i passwd/username string adminubuntu
-d-i passwd/user-password password adminubuntu
-d-i passwd/user-password-again password adminubuntu
-d-i user-setup/encrypt-home boolean false
-d-i user-setup/allow-password-weak boolean true
-
-# No language support packages.
-d-i pkgsel/install-language-support boolean false
-
-# Individual additional packages to install
-d-i pkgsel/include string build-essential ssh
-
-#For the update
-d-i pkgsel/update-policy select none
-
-# Whether to upgrade packages after debootstrap.
-# Allowed values: none, safe-upgrade, full-upgrade
-d-i pkgsel/upgrade select safe-upgrade
-
-# Go grub, go!
-d-i grub-installer/only_debian boolean true
-
-d-i finish-install/reboot_in_progress note
-</code></pre>
-
-<h3 id="use-local-repository">Use Local Repository</h3>
-
-<p>Add following in the kickstart file:</p>
-
-<pre><code># Setup the installation source
-d-i mirror/country string manual
-d-i mirror/http/hostname string 192.168.0.79
-#d-i mirror/http/directory string $install_source_directory
-# /var/www/cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
-d-i mirror/http/directory string /ks_mirror/Ubuntu-14.04-x86_64/ubuntu
-d-i mirror/http/proxy string 
-d-i apt-setup/security_host string 192.168.0.79
-d-i apt-setup/security_path string /ks_mirror/Ubuntu-14.04-x86_64/ubuntu
-d-i apt-setup/services-select multiselect none
-
-</code></pre>
 
       
     </div>
@@ -2480,8 +2210,17 @@ d-i apt-setup/services-select multiselect none
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2490,7 +2229,7 @@ d-i apt-setup/services-select multiselect none
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

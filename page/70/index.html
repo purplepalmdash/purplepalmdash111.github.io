@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,300 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-7/">Deploy MAAS(7)</a>
+      </h1>
+      <span class="post-date">Mar 17, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>This will record the complete steps for deploying MAAS in a newly installed machine.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>The start point should be at Ubuntu14.04.</p>
+
+<pre><code>$ sudo add-apt-repository  ppa:maas-maintainers/maas-test
+$ sudo vim /etc/apt/sources.list
+# Add maas repository
+deb http://ppa.launchpad.net/maas-maintainers/testing/ubuntu trusty main
+deb-src http://ppa.launchpad.net/maas-maintainers/testing/ubuntu trusty main
+$ sudo add-apt-repository ppa:juju/stable
+$ sudo vim /etc/apt/sources.list
+# Add juju repository
+deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+$ sudo apt-get update &amp;&amp; sudo apt-get upgrade
+$ sudo apt-get install maas-test maas-dhcp maas-dns juju juju-core juju-local juju-quickstart firefox git
+
+</code></pre>
+
+<p>Tips: for enable the vncserver on Ubuntu, do following:</p>
+
+<pre><code>$ sudo apt-get install tightvncserver lxde
+$ vncserver
+$ vim ~/.vnc/xstartup
+#!/bin/sh
+
+xrdb $HOME/.Xresources
+xsetroot -solid grey
+#x-terminal-emulator -geometry 80x24+10+10 -ls -title &quot;$VNCDESKTOP Desktop&quot; &amp;
+#x-window-manager &amp;
+# Fix to make GNOME work
+export XKL_XMODMAP_DISABLE=1
+# /etc/X11/Xsession
+startlxde &amp;
+$ vncserver -kill :1 &amp;&amp; vncserver
+
+</code></pre>
+
+<p>The MAAS Controller relies on a google&rsquo;s theme which is blocked by GFW, so we have to use proxychains for acrossing it, please notice these operation could be done on host machine, or Maas Controller itself..</p>
+
+<pre><code>$ git clone https://github.com/rofl0r/proxychains-ng.git 
+$ ./configure --prefix=/usr &amp;&amp; make &amp;&amp; make install
+$ sudo cp src/proxychain4.conf /etc
+$ sudo vim /etc/proxychains4.conf
+$ sudo apt-get install midori
+$ proxychains4 midori 10.17.17.202/MAAS
+
+</code></pre>
+
+<p>Configure the MAAS Controller via:</p>
+
+<pre><code>$ sudo maas-region-admin createadmin
+[sudo] password for Trusty: 
+Username: root
+Password: 
+Again: 
+Email: root@localhost
+
+</code></pre>
+
+<p>This enabled the admin username/password, refresh the <code>10.17.17.202/MAAS</code> you could login to the MAAS Controller.</p>
+
+<h3 id="configuration">Configuration</h3>
+
+<h4 id="image-configuration">Image Configuration</h4>
+
+<p>First download the images fromt the official repository via(On MaasController):</p>
+
+<pre><code>$ sudo apt-get install simplestreams ubuntu-cloudimage-keyring apache2
+$ sudo bash
+# proxychains4 sstream-mirror --keyring=/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg http://maas.ubuntu.com/images/ephemeral-v2/daily/ /var/www/html/maas/images/ephemeral-v2/daily 'arch=amd64' 'subarch~(generic|hwe-t)' 'release~(trusty|precise)' --max=1
+^C
+$ pwd
+/var/www/html/maas/images
+$ sudo mv ephemeral-v2/ ephemeral-v2.back
+[sudo] password for Trusty: 
+$ sudo tar xjf /home/Trusty/ephemeral-v2.tar.bz2 -C ./
+
+</code></pre>
+
+<p>Then Change the configuration in browser of opened <code>http://10.17.17.202/MAAS</code>:</p>
+
+<pre><code>Click Configuration Button, and update the Ubuntu -&gt; Main archive (required) from: 
+http://archive.ubuntu.com/ubuntu 
+to: 
+http://mirrors.aliyun.com/ubuntu/ 
+This repository enable the installed system for retrieving the install packages, use aliyun we could get much more faster speed.
+
+Change the Boot Images -&gt; Sync URL (required) from: 
+http://maas.ubuntu.com/images/ephemeral-v2/releases/ 
+to 
+http://10.17.17.202/maas/images/ephemeral-v2/daily/ 
+This will enable the Boot Images Sync URLs, use local repository will greatly improve the bootup speed.
+
+</code></pre>
+
+<h4 id="network-configuration">Network Configuration</h4>
+
+<p>Since the midori&rsquo;s effect is not good, install qupzilla:</p>
+
+<pre><code>$ sudo apt-get install qupzilla
+$ proxychains4 quazilla http://10.17.17.202/MAAS
+
+</code></pre>
+
+<p>Under <code>Cluster-&gt;Interfaces-&gt;eth0-&gt;Edit</code>, change it to <code>Management(DNS and DHCP)</code>, and then modify following items:<br />
+<img src="/images/2015_03_17_11_17_28_411x358.jpg" alt="/images/2015_03_17_11_17_28_411x358.jpg" /></p>
+
+<p>MAAS ssh key should be generated via following steps:</p>
+
+<pre><code>Trusty@MassController:~$ sudo mkdir /home/maas
+[sudo] password for Trusty: 
+Trusty@MassController:~$ sudo chown maas:maas /home/maas/
+Trusty@MassController:~$ sudo chsh maas
+Changing the login shell for maas
+Enter the new value, or press ENTER for the default
+        Login Shell [/bin/false]: /bin/bash
+Trusty@MassController:~$ sudo su - maas
+maas@MassController:~$ ssh-keygen 
+Generating public/private rsa key pair.
+
+</code></pre>
+
+<p>Copy the generated key to <a href="http://10.17.17.202/MAAS/account/prefs/sshkey/add/">http://10.17.17.202/MAAS/account/prefs/sshkey/add/</a>    And remember the api-key, for later we will use it for generating nodes information.<br />
+Enable the remote control of your host&rsquo;s libvirt:</p>
+
+<pre><code>$ sudo apt-get install libvirt-bin
+maas@MassController:~$ ssh-copy-id root@10.17.17.1
+maas@MassController:~$ virsh -c qemu+ssh://root@10.17.17.1/system list  --all
+ Id    Name                           State
+----------------------------------------------------
+ 2     MaasController                 running
+ -     Ubuntu1404Maas                 shut off
+ -     Ubuntu203                      shut off
+
+</code></pre>
+
+<p>Also we have to configure the network under <a href="http://10.17.17.202/MAAS/networks/maas-eth0/edit/">http://10.17.17.202/MAAS/networks/maas-eth0/edit/</a>:<br />
+<img src="/images/2015_03_17_11_34_31_478x283.jpg" alt="/images/2015_03_17_11_34_31_478x283.jpg" /></p>
+
+<p>Also we should manually edit the MaasController&rsquo;s network configuration via:</p>
+
+<pre><code>$ cat /etc/network/interfaces
+auto lo
+iface lo inet loopback
+# The primary network interface
+auto eth0
+# iface eth0 inet dhcp
+iface eth0 inet static                                                                                                                        
+        address 10.17.17.202                                                                                                                  
+        netmask 255.255.255.0                                                                                                                 
+        network 10.17.17.0                                                                                                                    
+        broadcast 10.17.17.255                                                                                                                
+        gateway 10.17.17.1                                                                                                                    
+        # dns-* options are implemented by the resolvconf package, if installed                                                               
+        dns-nameservers 114.114.114.114 127.0.0.1 10.17.17.202
+
+</code></pre>
+
+<p>Restart and the network configuration is OK, notice only we set 127.0.0.1 as the dns server, we could enable the local FQDN.</p>
+
+<h3 id="add-nodes">Add Nodes</h3>
+
+<p>Create the vm in virt-manager, its start-up is via PXE, and with 3G Mem, 60G space, 2-Core which copies the Host CPU.<br />
+Then in browser edit like following:<br />
+<img src="/images/2015_03_17_11_47_59_511x576.jpg" alt="/images/2015_03_17_11_47_59_511x576.jpg" /><br />
+Then in the <code>Nodes</code>, select the node, and commision selected node.After commission, the status will be changed to ready.<br />
+<img src="/images/2015_03_17_11_54_29_589x157.jpg" alt="/images/2015_03_17_11_54_29_589x157.jpg" /></p>
+
+<h3 id="juju-configuration">Juju Configuration</h3>
+
+<p>Use following command for quickstart juju:</p>
+
+<pre><code>$ juju-quickstart -i
+
+</code></pre>
+
+<p>The configuration image is listed as:<br />
+<img src="/images/2015_03_17_11_57_47_559x457.jpg" alt="/images/2015_03_17_11_57_47_559x457.jpg" /></p>
+
+<p>Generate the local tools:</p>
+
+<pre><code>$ mkdir .juju/metadata
+Trusty@MassController:~$ juju metadata generate-tools -d ~/.juju/metadata
+
+</code></pre>
+
+<p>Then start the node via:</p>
+
+<pre><code>$ juju bootstrap --metadata-source ~/.juju/metadata --upload-tools -v --show-log --constraints=&quot;mem=3G&quot;
+
+</code></pre>
+
+<p>After it success, the juju and MAAS environment is ready for use.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-8/">Deploy MAAS(8)</a>
+      </h1>
+      <span class="post-date">Mar 17, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>This part is for deploying OpenStack using Juju and let it run in single node.</p>
+
+<h3 id="environment-preparation">Environment Preparation</h3>
+
+<p>2 virtual machines created using virt-manager, each of them has 2 core, 3Gigabyte Memory, around 60G Disk space.</p>
+
+<h3 id="deploy">Deploy</h3>
+
+<p>The most of the nodes are deployed in container.</p>
+
+<pre><code>$ juju deploy --to 0 juju-gui
+$ juju deploy --to lxc:0 mysql
+$ juju deploy --to lxc:0 keystone
+$ juju deploy --to lxc:0 nova-cloud-controller
+$ juju deploy --to lxc:0 glance
+$ juju deploy --to lxc:0 rabbitmq-server
+$ juju deploy --to lxc:0 openstack-Trustyboard
+$ juju deploy --to lxc:0 cinder 
+
+</code></pre>
+
+<p>The compute node is deployed in a machine which enable the nested virtualization.</p>
+
+<pre><code>$ juju deploy nova-compute
+
+</code></pre>
+
+<p>Add each other&rsquo;s relationship:</p>
+
+<pre><code>$ juju add-relation mysql keystone
+$ juju add-relation nova-cloud-controller mysql
+$ juju add-relation nova-cloud-controller rabbitmq-server
+$ juju add-relation nova-cloud-controller glance
+$ juju add-relation nova-cloud-controller keystone
+$ juju add-relation nova-compute nova-cloud-controller
+$ juju add-relation nova-compute mysql
+$ juju add-relation nova-compute rabbitmq-server:amqp
+$ juju add-relation nova-compute glance
+$ juju add-relation glance mysql
+$ juju add-relation glance keystone
+$ juju add-relation glance cinder
+$ juju add-relation mysql cinder
+$ juju add-relation cinder rabbitmq-server
+$ juju add-relation cinder nova-cloud-controller
+$ juju add-relation cinder keystone
+$ juju add-relation openstack-Trustyboard keystone
+
+</code></pre>
+
+<p>Then change the password of keystone via:</p>
+
+<pre><code>$ juju set keystone admin-password=&quot;helloworld&quot;
+
+</code></pre>
+
+<p>Detect the ipaddress of the openstack-Trustyboards via:</p>
+
+<pre><code>$ juju status openstack-Trustyboard
+$ http://ip_address_of_Trustyboard/horizon
+
+</code></pre>
+
+<p>The final result is listed like:<br />
+<img src="/images/2015_03_17_14_35_25_1037x646.jpg" alt="/images/2015_03_17_14_35_25_1037x646.jpg" /></p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -295,167 +589,6 @@ $ sudo apt-get install maas-dhcp maas-dns
 </code></pre>
 
 <p>Now you could install more newer version of the maas and etc.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/12/maas-deploy-2/">MAAS Deploy(2)</a>
-      </h1>
-      <span class="post-date">Mar 12, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>We just continue to use MAAS for deploying cluster.</p>
-
-<h3 id="images">Images</h3>
-
-<p>Install following packages for enable local installation repository:</p>
-
-<pre><code>$ sudo apt-get install simplestreams ubuntu-cloudimage-keyring apache2
-$ sudo apt-get install iptraf nethogs
-
-</code></pre>
-
-<p>Run following commands for importing the images of mass from official repository to local webserver.</p>
-
-<pre><code>root@MassTestOnUbuntu1404:~# sstream-mirror --keyring=/usr/share/keyrings/ubuntu-cloudimage-keyring.gpg http://maas.ubuntu.com/images/ephemeral-v2/daily/ /var/www/html/maas/images/ephemeral-v2/daily 'arch=amd64' 'subarch~(generic|hwe-t)' 'release~(trusty|precise)' --max=1
-
-</code></pre>
-
-<p>If you have the pre-downloaded packages, simply de-compress it to the corresponding directory.</p>
-
-<pre><code>root@MassTestOnUbuntu1404:/var/www/html/maas/images# mv ephemeral-v2/ ephemeral-v2.back
-root@MassTestOnUbuntu1404:/var/www/html/maas/images# tar xjvf /home/Trusty/ephemeral-v2.tar.bz2  -C ./
-
-</code></pre>
-
-<p>After de-compression, your local image service could be detected via visit following webpage:<br />
-<a href="http://10.17.17.202/maas/images/ephemeral-v2/daily/streams/v1/index.sjson">http://10.17.17.202/maas/images/ephemeral-v2/daily/streams/v1/index.sjson</a></p>
-
-<p>Visit following webpage, then edit the default gateway and the DNS server:<br />
-<a href="http://10.17.17.202/MAAS/networks/maas-eth0/edit/">http://10.17.17.202/MAAS/networks/maas-eth0/edit/</a><br />
-Default GateWay:   10.17.17.1<br />
-DNS Servers: 114.114.114.114<br />
-Then <code>Save Network</code> can let you save your network configuration.</p>
-
-<p>Click Configuration Button, and update the <code>Ubuntu -&gt; Main archive (required)</code> from:<br />
-<a href="http://archive.ubuntu.com/ubuntu">http://archive.ubuntu.com/ubuntu</a><br />
-to:<br />
-<a href="http://mirrors.aliyun.com/ubuntu/">http://mirrors.aliyun.com/ubuntu/</a><br />
-This repository enable the installed system for retrieving the install packages, use aliyun we could get much more faster speed.</p>
-
-<p>Change the <code>Boot Images -&gt; Sync URL (required)</code> from:<br />
-<a href="http://maas.ubuntu.com/images/ephemeral-v2/releases/">http://maas.ubuntu.com/images/ephemeral-v2/releases/</a><br />
-to<br />
-<a href="http://10.17.17.202/maas/images/ephemeral-v2/daily/">http://10.17.17.202/maas/images/ephemeral-v2/daily/</a><br />
-This will enable the Boot Images Sync URLs, use local repository will greatly improve the bootup speed.</p>
-
-<p>Now build the Images like following images:<br />
-<img src="/images/2015_03_12_19_23_06_942x396.jpg" alt="/images/2015_03_12_19_23_06_942x396.jpg" /></p>
-
-<p>After a while, your Boot Image will be ready.</p>
-
-<h3 id="add-maas-ssh-key">Add Maas Ssh Key</h3>
-
-<p>Do following steps for generate the ssh key pairs for user maas:</p>
-
-<pre><code>$ sudo mkdir /home/maas
-$ sudo chown maas:maas /home/maas/
-$ sudo chsh maas
-Changing the login shell for maas
-Enter the new value, or press ENTER for the default
-        Login Shell [/bin/false]: /bin/bash
-Trusty@MassTestOnUbuntu1404:~$ sudo su - maas
-maas@MassTestOnUbuntu1404:~$ ssh-keygen 
-Generating public/private rsa key pair.
-
-</code></pre>
-
-<p>After these steps, copy the /home/maas/.ssh/id_rsa.pub to your clipboard, then copy it under:<br />
-<a href="http://10.17.17.202/MAAS/account/prefs/sshkey/add/">http://10.17.17.202/MAAS/account/prefs/sshkey/add/</a><br />
-Now the ssh-key has been added into your MAAS system.</p>
-
-<p>You could also copy the api key of your maas, later we will use it.<br />
-Mine is:   <code>ntQBr8QTPgeTyfYuMq:HGKFChwM65QXtABNS4:SK7bnuGNDN7fLB9k7HNspYLch4kc6RLs</code></p>
-
-<p>Now the maas controller is ready, next step is create the virtual machine and let it be managed by controller.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/12/maas-deploy-3/">MAAS Deploy(3)</a>
-      </h1>
-      <span class="post-date">Mar 12, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Following is the steps for creating virtual nodes and let it be administrated by MAAS Cluster.</p>
-
-<h3 id="node-creation">Node Creation</h3>
-
-<p>First create a null iso via <code>touch none.iso</code>, later we will use this iso for booting the node.<br />
-Create a new virtual machine -&gt; select &ldquo;Local installation media(ISO images or CDROM) -&gt; Use Local Iso image(/home/Trusty/none.iso) -&gt; Memory 512MB, CPU 1 Core -&gt; Disk 20 GB -&gt;  name: MASSTestNode0 -&gt; Customize configuration before install -&gt; Finish.</p>
-
-<p>Customization:<br />
-Boot Option, select NIC and Disk1.<br />
-Disk1 Option, select advanced -&gt; virtio.<br />
-NIC Option, select &ldquo;virtualization network maasisotest NAT&rdquo;, virtio.<br />
-Click &ldquo;Begin Installation&rdquo;, start installation, and quickly shut it off.</p>
-
-<p>Clone it to 3 nodes. Then click start and let it startup via ipxe. After a while they will be powered off.</p>
-
-<h3 id="maas-network-configuration">MAAS Network Configuration</h3>
-
-<p>We want to make MAAS controller be the pxe server in this isolated network, so we visit following webpage and do configuration:<br />
-&ldquo;Edit Cluster Controller&rdquo; -&gt; Edit Interface eth0 -&gt; Mangement(DNS and DHCP)<br />
-Router IP: 10.17.17.1<br />
-DHCP dynamic IP range low value: 10.17.17.101<br />
-DHCP dynamic IP range high value: 10.17.17.199<br />
-Then &ldquo;Save Interface&rdquo; and let this MASS controller serves all of the created nodes.</p>
-
-<h3 id="maas-node-configuration">MAAS Node Configuration</h3>
-
-<p>Now after bootup the newly created nodes, your nodes page will be looks like following:<br />
-<img src="/images/2015_03_12_20_22_33_974x371.jpg" alt="/images/2015_03_12_20_22_33_974x371.jpg" /><br />
-Click them and edit like following steps:<br />
-First in your host machine run <code>sudo virsh list --all</code> to get the corresponding virtual machines.<br />
-Then use <code>sudo virsh dumpxml xxxx | grep mac</code> to get the corresponding mac address, then fill the contents.<br />
-For example:</p>
-
-<pre><code>$ sudo virsh dumpxml MASSTestNode0 | grep mac
-    &lt;type arch='x86_64' machine='pc-i440fx-2.2'&gt;hvm&lt;/type&gt;
-      &lt;mac address='52:54:00:2f:68:e3'/&gt;
-
-</code></pre>
-
-<p>Then the configuration images is like following:<br />
-<img src="/images/2015_03_12_20_33_05_479x466.jpg" alt="/images/2015_03_12_20_33_05_479x466.jpg" /><br />
-Also you should login as user maas and do following command to let you access remote&rsquo;s qemu:</p>
-
-<pre><code>$ sudo apt-get install libvirt-bin
-$ ssh-copy-id Trusty@10.17.17.1
-$ virsh -c qemu+ssh://Trusty@10.17.17.1/system list --all
-
-</code></pre>
-
-<p>Then save node, and select it, in bulk actions, select &ldquo;Commision Selected Nodes&rdquo;, it will start commision, and after its successful, it will be looked like &ldquo;ready&rdquo; state. Remember its previous state is &ldquo;New&rdquo;.<br />
-Also comission the other 2 nodes.</p>
-
-<p>The next step we will let Juju runs on MAAS, and build more fantanstic applications.</p>
 
       
     </div>
@@ -1872,8 +2005,17 @@ Also comission the other 2 nodes.</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1882,7 +2024,7 @@ Also comission the other 2 nodes.</p>
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

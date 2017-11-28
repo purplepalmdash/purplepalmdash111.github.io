@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,325 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/21/trycoreos2/">TryCoreOS(2)</a>
+      </h1>
+      <span class="post-date">Dec 21, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="local-discovery-service">Local Discovery Service</h3>
+
+<p>Take a look at the yaml configuration file:</p>
+
+<pre><code>  etcd2:
+    # generate a new token for each unique cluster from
+https://discovery.etcd.io/new?size=3
+    # specify the initial size of your cluster with ?size=X
+    discovery: https://discovery.etcd.io/4add2186302763c8876afd1684ca06fe
+</code></pre>
+
+<p>This means all of you coreos nodes should reach the internet, what if we
+deploy a coreos cluster offline? We need to deploy a local discovery service.</p>
+
+<h4 id="archlinux-etcd2-example">ArchLinux etcd2 Example</h4>
+
+<p>Download the etcd v2.3.7 and extract it to specified directory via :</p>
+
+<pre><code>$ curl -L \
+https://github.com/coreos/etcd/releases/download/v2.3.7/etcd-v2.3.7-linux-amd64.tar.gz \
+-o etcd-v2.3.7-linux-amd64.tar.gz
+$ tar xzvf etcd-v2.3.7-linux-amd64.tar.gz
+</code></pre>
+
+<p>Create a customized systemd item like following, you should change the etcd
+executable file to your own positioni, also specify your own <code>data-dir</code>:</p>
+
+<pre><code>$ sudo mkdir -p /var1/Nov14/etcd/etcd-v2.3.7-linux-amd64/data
+$ sudo vim /usr/lib/systemd/system/myetcd.service 
+[Unit]
+Description=myownetcd
+After=multi-user.service
+
+[Service]
+ExecStart=/var1/Nov14/etcd/etcd-v2.3.7-linux-amd64/etcd
+--data-dir=/var1/Nov14/etcd/etcd-v2.3.7-linux-amd64/data
+--name=single-etcd-service  --listen-client-urls
+'http://0.0.0.0:2379,http://0.0.0.0:4001' --advertise-client-urls
+'http://0.0.0.0:2379,http://0.0.0.0:4001'
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=myownetcd
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<p>Start and enable the service:</p>
+
+<pre><code>$ sudo systemctl enable myetcd.service
+$ sudo systemctl start myetcd.service
+</code></pre>
+
+<h4 id="test-etcd">Test etcd</h4>
+
+<p>Very simple test:</p>
+
+<pre><code>$ ./etcdctl set mykey &quot;this is awesome&quot;
+$ ./etcdctl get mykey
+this is awesome
+</code></pre>
+
+<h4 id="create-own-discovery">Create own discovery</h4>
+
+<p>Use <code>uuidgen</code> for generating a new uuid:</p>
+
+<pre><code>$ uuidgen 
+557a2133-88f3-41d2-9b27-9fd4081f7b41
+</code></pre>
+
+<p>Use this new generated uuid for generating a 3-node cluster:</p>
+
+<pre><code>$ curl -X PUT \
+http://172.17.8.1:4001/v2/keys/557a2133-88f3-41d2-9b27-9fd4081f7b41/_config/size \
+-d value=3
+</code></pre>
+
+<p>Now you could examine the generated etcd items:</p>
+
+<pre><code>$ /var1/Nov14/etcd/etcd-v2.3.7-linux-amd64/etcdctl ls --recursive /
+/mykey
+/557a2133-88f3-41d2-9b27-9fd4081f7b41
+</code></pre>
+
+<h4 id="use-your-own-discovery">Use your own discovery</h4>
+
+<p>Change the definition in yaml file:</p>
+
+<pre><code>    #discovery: https://discovery.etcd.io/4add2186302763c8876afd1684ca06fe
+    discovery: http://172.17.8.1:4001/v2/keys/557a2133-88f3-41d2-9b27-9fd4081f7b41
+</code></pre>
+
+<p>Now re-create the coreOS cluster, you will see the coreOS cluster could
+work properly again.</p>
+
+<h3 id="start-first-docker">Start First Docker</h3>
+
+<p>Enable registry-mirror in coreOS:</p>
+
+<pre><code># echo 'DOCKER_OPTS=&quot;--registry-mirror=http://1a653205.m.daocloud.io&quot;' &gt;&gt; /run/flannel_docker_opts.env
+# systemctl restart docker
+# docker pull busybox
+</code></pre>
+
+<p>Now write the hello.service definition:</p>
+
+<pre><code># vim /etc/systemd/system/hello.service
+[Unit] 
+Description=Hello World 
+After=docker.service 
+Requires=docker.service 
+
+[Service] 
+TimeoutStartSec=0 
+ExecStartPre=-/bin/docker kill busybox1 
+ExecStartPre=-/bin/docker rm busybox1 
+ExecStart=/bin/docker run --name busybox1 busybox /bin/sh -c &quot;while true; do echo Hello World; sleep 1; done&quot; 
+ExecStop=&quot;/bin/docker kill busybox1&quot;
+ExecStopPost=&quot;/bin/docker rm busybox1&quot;
+ 
+[Install] 
+WantedBy=multi-user.target
+</code></pre>
+
+<p>Start and enable the service via:</p>
+
+<pre><code># systemctl start hello.service
+# systemctl enable hello.service
+</code></pre>
+
+<h3 id="trouble-shooting">Trouble-Shooting</h3>
+
+<p>Reset your etcd2 database:</p>
+
+<pre><code>$ sudo systemctl stop fleetd
+$ sudo systemctl stop etcd2
+$ sudo rm -rf /var/lib/etcd2/*
+$ sudo rm -rf /etc/systemd/system/etcd* 
+$ sudo reboot 
+</code></pre>
+
+<p>Then your etcd2 will be re-initialized.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/20/trycoreos/">TryCoreOS</a>
+      </h1>
+      <span class="post-date">Dec 20, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="preparation">Preparation</h3>
+
+<p>Create image file via:</p>
+
+<pre><code>$ sudo mkdir corecluster
+$ cd corecluster
+$ qemu-img create -f qcow2 coreos1.qcow2 30G
+$ qemu-img create -f qcow2 coreos2.qcow2 30G
+$ qemu-img create -f qcow2 coreos3.qcow2 30G
+</code></pre>
+
+<p>Create a network named <code>172.17.8.1/24</code>, dhcp disabled.</p>
+
+<p>Since the vnet interface is occupied via virtualbox, switches to virtualbox
+installation.</p>
+
+<p>Two Ethernet cards:</p>
+
+<p><img src="/images/2016_12_20_17_36_44_697x413.jpg" alt="/images/2016_12_20_17_36_44_697x413.jpg" /></p>
+
+<p>Start from CD:</p>
+
+<p><img src="/images/2016_12_20_17_37_26_678x304.jpg" alt="/images/2016_12_20_17_37_26_678x304.jpg" /></p>
+
+<h3 id="installation-file-preparation">Installation File Preparation</h3>
+
+<p>For saving time, we use local installation repository, download the
+installation images via:</p>
+
+<pre><code>$ $ git clone https://github.com/coreos/coreos-baremetal
+# Make a copy of example files
+$ cp -R coreos-baremetal/examples .
+# Download the CoreOS image assets referenced in the target profile.
+$ ./coreos-baremetal/scripts/get-coreos stable 1185.5.0 ./examples/assets
+</code></pre>
+
+<p>Then Copy installation image and sig file into the webserver:</p>
+
+<pre><code>$ cd /YourWebServerDirectory/1185.5.0 
+$ ls
+coreos_production_image.bin.bz2  coreos_production_image.bin.bz2.sig
+</code></pre>
+
+<h3 id="yaml-definition">YAML Definition</h3>
+
+<p>Refers to <code>coreos-vagrant</code> project:</p>
+
+<pre><code>$ git clone https://github.com/coreos/coreos-vagrant.git`
+$ cat user-data
+</code></pre>
+
+<p>The configuration of the yaml is listed as following:</p>
+
+<p>First get the token via:</p>
+
+<pre><code>$ curl https://discovery.etcd.io/new?size=3
+https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxxxxxxxx
+</code></pre>
+
+<pre><code>#cloud-config
+hostname: coreos1 
+coreos:
+  etcd2:
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
+    # specify the initial size of your cluster with ?size=X
+    discovery: https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxx
+    advertise-client-urls: http://172.17.8.201:2379,http://172.17.8.201:4001
+    initial-advertise-peer-urls: http://172.17.8.201:2380
+    # listen on both the official ports and the legacy ports
+    # legacy ports can be omitted if your application doesn't depend on them
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    listen-peer-urls: http://172.17.8.201:2380,http://172.17.8.201:7001
+  fleet:
+    public-ip: &quot;172.17.8.201&quot;
+  flannel:
+    interface: &quot;172.17.8.201&quot;
+  units:
+    - name: etcd2.service
+      command: start
+    - name: fleet.service
+      command: start
+    - name: flanneld.service
+      drop-ins:
+      - name: 50-network-config.conf
+        content: |
+          [Service]
+          ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{ &quot;Network&quot;: &quot;10.1.0.0/16&quot; }'
+      command: start
+    - name: static.network
+      content: |
+        [Match]
+        Name=enp0s8
+        [Network]
+        Address=172.17.8.201/24
+        Gateway=172.17.8.1
+        DNS=172.17.8.1
+    - name: docker-tcp.socket
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+  
+        [Socket]
+        ListenStream=2375
+        Service=docker.service
+        BindIPv6Only=both
+  
+        [Install]
+        WantedBy=sockets.target
+users:  
+  - name: core
+    ssh-authorized-keys: 
+      - ssh-rsa &quot;ADD ME&quot;
+  - groups:
+      - sudo
+      - docker
+</code></pre>
+
+<p>For coreos2 node, simply replace the ip address from <code>172.17.8.201</code> to <code>172.17.8.202</code>, etc.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>Install it via:</p>
+
+<pre><code># coreos-install -d /dev/sda -b http://YourWebServer -c ./YourYamlFile.yaml -v
+</code></pre>
+
+<p>After a while, the installation will finish.</p>
+
+<p>Repeat this step in 3 nodes.</p>
+
+<h3 id="verification">Verification</h3>
+
+<p>Login into any of the core machine in cluster:</p>
+
+<pre><code>core@coreos1 ~ $ etcdctl cluster-health
+member f934a5ba1eca1ea is healthy: got healthy result from http://172.17.8.201:2379
+member 23798f79754d53b7 is healthy: got healthy result from http://172.17.8.203:2379
+member 5acdd34e67ade1d7 is healthy: got healthy result from http://172.17.8.202:2379
+cluster is healthy
+</code></pre>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -488,234 +807,6 @@ $ sudo apt-get install -y virtualbox-5.1
 <p>Download the newest version from:</p>
 
 <p><a href="https://www.vagrantup.com/downloads.html">https://www.vagrantup.com/downloads.html</a></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/07/vagrantpluginissue/">vagrantpluginissue</a>
-      </h1>
-      <span class="post-date">Dec 7, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>After updating vagrant, my vagrant could use, the error msg are listed as
-following:</p>
-
-<pre><code>$ vagrant box list
-Vagrant failed to initialize at a very early stage:
-
-The plugins failed to initialize correctly. This may be due to manual
-modifications made within the Vagrant home directory. Vagrant can
-attempt to automatically correct this issue by running:
-
-  vagrant plugin repair
-
-If Vagrant was recently updated, this error may be due to incompatible
-versions of dependencies. To fix this problem please remove and re-install
-all plugins. Vagrant can attempt to do this automatically by running:
-
-  vagrant plugin expunge --reinstall
-
-</code></pre>
-
-<p>I tried <code>vagrant plugin repair</code> and <code>vagrant plugin expunge --reinstall</code> but
-both failed.</p>
-
-<p>So , manually reinstall the vagrant-libvirt plugin:</p>
-
-<pre><code>$  CONFIGURE_ARGS='with-ldflags=-L/opt/vagrant/embedded/lib \
-with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib' \
-  GEM_HOME=~/.vagrant.d/gems GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems  \
-PATH=/opt/vagrant/embedded/bin:$PATH \
-  vagrant plugin install vagrant-libvirt
-
-Installing the 'vagrant-libvirt' plugin. This can take a few minutes...
-/opt/vagrant/embedded/lib/ruby/2.2.0/rubygems/dependency.rb:315:in `to_specs':
-Could not find 'fog-core' (&gt;= 0) among 44 total gem(s) (Gem::LoadError)
-Checked in 'GEM_PATH=/opt/vagrant/embedded/gems', execute `gem env` for more
-information
-</code></pre>
-
-<p>Seems we need to reinstall fog-core to vagrant&rsquo;s <code>GEM_PATH</code>, use following
-commands:</p>
-
-<pre><code>$ sudo pacman -S ruby
-$ gem source -r https://rubygems.org
-$ gem source -a http://rubygems.org
-$ GEM_HOME=~/.vagrant.d/gems GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems \
-PATH=/opt/vagrant/embedded/bin:$PATH
-$ sudo chmod 777 -R /opt/vagrant/embedded/gems
-$ vim ~/.gemrc
-gem: &quot;--user-install&quot;
-+ install: --no-user-install
-$ proxychains4 gem install --install-dir /opt/vagrant/embedded/gems/ fog-core
-$  CONFIGURE_ARGS='with-ldflags=-L/opt/vagrant/embedded/lib \
-with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib' \
-  GEM_HOME=~/.vagrant.d/gems GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems  \
-PATH=/opt/vagrant/embedded/bin:$PATH \
-  vagrant plugin install vagrant-libvirt
-$ vim ~/.gemrc
-gem: &quot;--user-install&quot;
-- install: --no-user-install
-</code></pre>
-
-<p>Now vagrant will work ok, verify it via:</p>
-
-<pre><code>$ vagrant box list
-CentOS72ForKubernetes                 (virtualbox, 0)
-CentOS72KVM                           (libvirt, 0)
-CentOS72Kubernetes                    (virtualbox, 0)
-</code></pre>
-
-<h3 id="fog-libvirt-issue">fog-libvirt issue</h3>
-
-<p>When build fog-libvirt, we met:</p>
-
-<pre><code>domain.c:5696:29: error: ‘VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK’ undeclared (first use in this function)
-                     INT2NUM(VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK));
-                             ^
-/opt/vagrant/embedded/include/ruby-2.2.0/ruby/ruby.h:241:30: note: in definition of macro ‘INT2FIX’
- #define INT2FIX(i) (((VALUE)(i))&lt;&lt;1 | FIXNUM_FLAG)
-</code></pre>
-
-<p>Then the solution would be change the ld from :</p>
-
-<pre><code># ln -fs /usr/bin/ld.gold /usr/bin/ld
-# vagrant plugin install --plugin-version 0.0.3 fog-libvirt
-# rm -f /usr/bin/ld
-# ln -fs /usr/bin/ld.bfd /usr/bin/ld
-</code></pre>
-
-<p>Now you got the vagrant-libvirt working again.</p>
-
-<p><strong>Notice</strong>: This would be happend in vagrant-1.9.1</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/07/downloadxenserver62patches/">DownloadXenServer62Patches</a>
-      </h1>
-      <span class="post-date">Dec 7, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>The script is listed as following, use python2 for running it:</p>
-
-<pre><code>from bs4 import BeautifulSoup
-import urllib2
-import re
-
-## Pages contains the download page url
-url_list = [
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=10&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=20&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=30&quot;,
-]
-
-for url in url_list:
-  #response = urllib2.urlopen('https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0')
-  response = urllib2.urlopen(url)
-  
-  ### Fetch the urllib2 result.
-  html = response.read()
-  # print len(html)
-  
-  ### Make soup of the html.
-  soup = BeautifulSoup(html, 'html.parser')
-  # print soup.prettify()
-  
-  ### Get all of the download page link:
-  for i in soup.findAll('h4'):
-    for a in i.findAll('a'):
-      #print a['href']
-      page_response = urllib2.urlopen(a['href'])
-      page_html = page_response.read()
-      page_soup = BeautifulSoup(page_html, 'html.parser')
-      for elem in page_soup(text=re.compile(r&quot;window.location.href&quot;)):
-        prefix = elem.string.find(&quot;supportkc&quot;)
-        #print prefix
-        url_begin_pos = elem.string.find(&quot;window.location.href&quot;) + 24
-        url_end_pos = elem.string.find(&quot;zip&quot;) + 3
-        if prefix &gt; 0:
-          print &quot;https://support.citrix.com&quot;+elem.string[url_begin_pos:url_end_pos]
-        else:
-          print elem.string[url_begin_pos:url_end_pos]
-</code></pre>
-
-<p>The total patches are around 2G size.</p>
-
-<p>The correct version:</p>
-
-<pre><code>from bs4 import BeautifulSoup
-import urllib2
-import re
-
-## Pages contains the download page url
-url_list = [
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=10&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=20&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=30&quot;,
-]
-
-for url in url_list:
-  response = urllib2.urlopen(url)
-  
-  ### Fetch the urllib2 result.
-  html = response.read()
-  # print len(html)
-  
-  ### Make soup of the html.
-  soup = BeautifulSoup(html, 'html.parser')
-  # print soup.prettify()
-  
-  ### Get all of the download page link:
-  for i in soup.findAll('h4'):
-    for a in i.findAll('a'):
-      print a['href']
-      print a.text
-      page_response = urllib2.urlopen(a['href'])
-      page_html = page_response.read()
-      page_soup = BeautifulSoup(page_html, 'html.parser')
-      try:
-        print page_soup.findAll('blockquote')[1].text
-      except:
-        pass
-      else:
-        pass
-      try:
-        print page_soup.find_all('span',attrs={'class':'block-quote'})[1].text
-      except:
-        pass
-      else:
-        pass
-      for elem in page_soup(text=re.compile(r&quot;window.location.href&quot;)):
-        prefix = elem.string.find(&quot;supportkc&quot;)
-        #print prefix
-        url_begin_pos = elem.string.find(&quot;window.location.href&quot;) + 24
-        url_end_pos = elem.string.find(&quot;zip&quot;) + 3
-        if prefix &gt; 0:
-          print &quot;https://support.citrix.com&quot;+elem.string[url_begin_pos:url_end_pos]
-        else:
-          print elem.string[url_begin_pos:url_end_pos]
-</code></pre>
-
-<p>Manually get the result, and this time we get the uuid.</p>
-
-<p>a tip for reverse the output is using <code>tac</code> rather than <code>cat</code>.</p>
 
       
     </div>
@@ -2132,8 +2223,17 @@ for url in url_list:
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2142,7 +2242,7 @@ for url in url_list:
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

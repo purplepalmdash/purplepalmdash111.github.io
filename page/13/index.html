@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,228 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/02/20/%E5%88%9B%E5%BB%BAvagrant-box/">创建Vagrant Box</a>
+      </h1>
+      <span class="post-date">Feb 20, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="aims">Aims</h3>
+
+<p>Recently I am frequently using vagrant for verification, so quickly creating
+the vagrant box becomes the essential tasks. Previsouly I am suing packer for
+building vagrant box, but it requires you for writing the complex
+configuration files. How to quickly generate the vagrant box using virtualbox,
+following lists the steps</p>
+
+<h3 id="virtual-machine">Virtual Machine</h3>
+
+<p>Create a new virtual machine in virtualbox, make sure you locate your disk
+file in <code>/tmp</code> folder!!! In ArchLinux, the <code>/tmp</code> directly is actually the
+ramfs, so the read/write speed would be pretty quick! Thus you could greatly
+save your time for installing the system.</p>
+
+<p>The partition size depends on your own requirement, I have a 8G memory
+machine, So I choose 3G for partition disk, later we will see the partition
+will be seperated into 2 part(Swap/Root), the swap is equal to your virtual
+machine memory size, all of the remain spaces will be allocated into root
+directory.</p>
+
+<p>In partition, you should select <code>Use all spaces and setup LVM</code>, the
+installation process will automatically create the layout for you.</p>
+
+<p>Create the username/password for <code>vagrant/vagrant</code>, also your hostname would
+also be <code>vagrant</code>.</p>
+
+<p>Enable the sshd.</p>
+
+<p>Finish installation and reboot your machine.</p>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>Update and upgrade your system via:</p>
+
+<pre><code>$ sudo apt-get update -y
+$ sudo apt-get upgrade -y
+# Restart the machine
+$ sudo shutdown -r now
+</code></pre>
+
+<p>Add vagrant user to sudoer&rsquo;s list:</p>
+
+<pre><code>$ sudo su -
+$ visudo
+# Add the following line to the end of the file.
+vagrant ALL=(ALL) NOPASSWD:ALL
+</code></pre>
+
+<p>Install the vagrant publicfile:</p>
+
+<pre><code>$ mkdir -p /home/vagrant/.ssh
+$ wget --no-check-certificate https://raw.github.com/mitchellh/vagrant/master/keys/vagrant.pub -O /home/vagrant/.ssh/authorized_keys
+# Ensure we have the correct permissions set
+$ chmod 0700 /home/vagrant/.ssh
+$ chmod 0600 /home/vagrant/.ssh/authorized_keys
+$ chown -R vagrant /home/vagrant/.ssh
+</code></pre>
+
+<p>Install the guest tools:</p>
+
+<pre><code>$ sudo apt-get install -y gcc build-essential linux-headers-server
+</code></pre>
+
+<p>Mount the guest tools, and do following commands for compiling the
+guest-tools:</p>
+
+<pre><code>$ sudo mount /dev/sr0 /mnt
+$ cd /mnt
+$ sudo ./VBoxLinuxAdditions.run
+</code></pre>
+
+<p>Before your packaging the box, remove the un-continous spaces in disk via
+following command:</p>
+
+<pre><code>$ sudo dd if=/dev/zero of=/EMPTY bs=1M
+$ sudo rm -f /EMPTY
+# Shutdown the machine
+$ sudo shutdown -h now
+</code></pre>
+
+<h3 id="packaging-the-box">Packaging the Box</h3>
+
+<p>Packaging is so simple via:</p>
+
+<pre><code>$ vagrant package --base &lt;VitualBox VM Name&gt;
+</code></pre>
+
+<p>You could install it via:</p>
+
+<pre><code>$ vagraant box add package.box --name &quot;YourName&quot;
+</code></pre>
+
+<h3 id="exapand-your-disks">Exapand your disks</h3>
+
+<p>An example of Vagrantfile is listed as following:</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure(&quot;2&quot;) do |config|
+  config.vm.box = &quot;UbuntuTrusty3G&quot;
+  config.vm.provision :shell, path: &quot;initial.sh&quot;
+
+  config.vm.provider &quot;virtualbox&quot; do |vb|
+      unless File.exist?('./secondDisk.vdi')
+        vb.customize ['createhd', '--filename', './secondDisk.vdi', '--variant', 'Fixed', '--size', 10 * 1024]
+      end
+  
+    vb.memory = &quot;1024&quot;
+    vb.customize ['storageattach', :id,  '--storagectl', 'SATA', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', './secondDisk.vdi']
+  end
+end
+</code></pre>
+
+<p>The <code>initial.sh</code> called in  Vagrantfile is like following:</p>
+
+<pre><code>set -e
+set -x
+#echo 'Acquire::http::Proxy &quot;http://192.168.0.121:3142&quot;;'&gt;/etc/apt/apt.conf.d/01proxy
+# Added the primary repository
+apt-get update
+apt-get -y install vim lvm2
+
+if [ -f /etc/disk_added_date ]
+then
+   echo &quot;disk already added so exiting.&quot;
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/sdb &lt;&lt;EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/sdb1
+vgextend vagrant-vg /dev/sdb1
+lvextend -l +100%FREE /dev/vagrant-vg/root
+resize2fs /dev/vagrant-vg/root
+
+date &gt; /etc/disk_added_date
+</code></pre>
+
+<p>This script will automatically expand your root disk from the original 2.5G to 12.5G, you could adjust the size in Vagrantfile.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/02/17/configuraiton-for-vagrant/">Configuraiton For Vagrant</a>
+      </h1>
+      <span class="post-date">Feb 17, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="vagrantfile">Vagrantfile</h3>
+
+<p>Configuration for setting Ubuntu14.04, bridged networking, and setting its
+routing to specified node.</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure(&quot;2&quot;) do |config|
+  config.vm.box = &quot;minimum/ubuntu-trusty64-docker&quot;
+
+  # Networking
+  config.vm.network &quot;public_network&quot;, ip:&quot;192.168.10.217&quot;, netmask: &quot;16&quot;,bridge:&quot;xenbr0&quot;
+  # default router
+  config.vm.provision &quot;shell&quot;,
+    run: &quot;always&quot;,
+    inline: &quot;route add default gw 192.168.0.176&quot;
+
+  # delete default gw on eth0
+  config.vm.provision &quot;shell&quot;,
+    run: &quot;always&quot;,
+    inline: &quot;eval `route -n | awk '{ if ($8 ==\&quot;eth0\&quot; &amp;&amp; $2 != \&quot;0.0.0.0\&quot;) print \&quot;route del default gw \&quot; $2; }'`&quot;
+  
+  # Hostname
+  config.vm.hostname = &quot;CSMgmt&quot;
+
+  # Memory and CPU Configuration
+  config.vm.provider &quot;virtualbox&quot; do |vb|
+    # Display the VirtualBox GUI when booting the machine
+    # vb.gui = true
+  
+    # Customize the amount of memory on the VM:
+    vb.memory = &quot;4096&quot;
+    vb.cpus = 2
+  end
+
+end
+</code></pre>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -291,136 +513,6 @@ add_dracutmodules+=&quot;crypt&quot;
 </code></pre>
 
 <p>执行<code>dracut -f</code>生成新的initramfs，重新启动，机器将自动进入系统.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/02/08/ubuntu%E7%A3%81%E7%9B%98%E5%8A%A0%E5%AF%86%E6%B5%8B%E8%AF%95/">Ubuntu磁盘加密测试</a>
-      </h1>
-      <span class="post-date">Feb 8, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="准备">准备</h3>
-
-<p>三台虚拟机，Ubuntu16.04 安装盘，virt-manager.</p>
-
-<h3 id="角色配置">角色配置</h3>
-
-<p>虚拟机A：未加密，Ubuntu16.04安装。<br />
-虚拟机B: encrypted LVM, 安装Ubuntu16.04.<br />
-虚拟机C：Test Machine.</p>
-
-<h3 id="加密配置">加密配置</h3>
-
-<p>每次启动时避免输入密码的配置， 在虚拟机B上作如下配置:</p>
-
-<p>首先备份initrd.img:</p>
-
-<pre><code># cp /boot/initrd.img-4.4.0-31-generic /boot/initrd.img-4.4.0-31-generic.safe
-</code></pre>
-
-<p>在未经加密的<code>/boot</code>分区生成加密的key文件:</p>
-
-<pre><code># dd if=/dev/urandom of=/boot/keyfile bs=1024 count=4
-</code></pre>
-
-<p>查看加密分区情况:</p>
-
-<pre><code>$ sudo blkid | grep -i crypto
-/dev/vda5: UUID=&quot;a255260b-30eb-4630-b9c9-a6b7f75b236e&quot; TYPE=&quot;crypto_LUKS&quot; PARTUUID=&quot;2a203ff6-05&quot;
-</code></pre>
-
-<p>从上面可以看出vda5是我们的加密风趣，现在将新创建的keyfile作为加密卷的解锁文件:</p>
-
-<pre><code># cryptsetup -v luksAddKey /dev/vda5 /boot/keyfile 
-Enter any passphrase:
-</code></pre>
-
-<p>输入你以前创建的密码，看到以下输出时代表解锁文件添加成功:</p>
-
-<pre><code>Key slot 0 unlocked.
-Command successful.
-</code></pre>
-
-<p>现在更改<code>/etc/crypttab</code>文件:</p>
-
-<pre><code># cp /etc/crypttab /root/
-# vim /etc/crypttab
-vda5_crypt UUID=a255260b-30eb-4630-b9c9-a6b7f75b236e /dev/disk/by-uuid/36747581-1841-47de-9ce2-b1262e1eb167:/keyfile luks,keyscript=/lib/cryptsetup/scripts/passdev
-</code></pre>
-
-<p>其中<code>/ev/disk/by-uuid</code>的字段可以通过<code>blkid</code>来获得，即<code>/boot</code>的uuid值。<br />
-如果无法修改该文件，记得改变其权限，修改完毕后，更改回以下权限:</p>
-
-<pre><code># chmod 0440 /etc/crypttab
-</code></pre>
-
-<p>重新生成内核并启动:</p>
-
-<pre><code># mkinitramfs -o /boot/initrd.img-4.4.0-31-generic 4.4.0-31-generic
-</code></pre>
-
-<h3 id="系统更新">系统更新</h3>
-
-<p>测试一下系统更新对加密磁盘的影响, 无。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/02/04/enableusbcameraonarchlinux/">EnableUSBCameraOnArchLinux</a>
-      </h1>
-      <span class="post-date">Feb 4, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="webcam-detection">WebCam Detection</h3>
-
-<p>Detect the USB equipment via:</p>
-
-<pre><code># lsusb
-Bus 002 Device 002: ID 0b95:772b ASIX Electronics Corp. AX88772B
-Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
-Bus 008 Device 002: ID 0c45:0011 Microdia EBUDDY
-Bus 008 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
-Bus 007 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
-Bus 006 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
-Bus 001 Device 002: ID 046d:0829 Logitech, Inc. 
-.....
-</code></pre>
-
-<p>Then we got more informations from our detected webCAM equipment:</p>
-
-<pre><code># lsusb -s 001:002 -v | egrep &quot;Width|Height&quot;
-        wWidth                            640
-        wHeight                           480
-        wWidth                            352
-        wHeight                           288
-.....
-</code></pre>
-
-<h3 id="software">Software</h3>
-
-<p>Install guvcview for detection the cameral and take pictures:</p>
-
-<pre><code># pacman -S guvcview
-</code></pre>
-
-<p>Now using <code>guvcview</code> you could get the pictures.</p>
 
       
     </div>
@@ -1837,8 +1929,17 @@ Bus 001 Device 002: ID 046d:0829 Logitech, Inc.
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1847,7 +1948,7 @@ Bus 001 Device 002: ID 046d:0829 Logitech, Inc.
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

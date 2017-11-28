@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,183 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/04/01/nodemcu-and-1602i2c-1/">NodeMCU and 1602I2C(1)</a>
+      </h1>
+      <span class="post-date">Apr 1, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      <p>今天更新了一下代码，实现了两行显示，第一行显示CPU Load，第二行显示剩余内存数。</p>
+
+<p>只是部分替代数据显示部分，这个代码还是有BUG的，譬如说最后一位在下一次显示时不会被清零。</p>
+
+<pre><code>import psutil
+import serial
+import time
+
+
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = '/dev/ttyUSB0'
+ser.open()
+## Todo, to check if the port is opened.
+
+# Really talks to the i2c LCD.
+
+# Setup the wiring
+ser.write(b'i2c.setup(0, 4, 3, i2c.SLOW)\r\n')
+
+# dofile, load the lcd library
+ser.write(b'lcd = dofile(&quot;lcd1602.lua&quot;)()\r\n')
+
+# Now Refresh the LCD. 
+ser.write(b'lcd.clear()\r\n')
+#ser.write(b'lcd.put(lcd.light(on))\r\n')
+ser.write(b'lcd.put(lcd.locate(0, 0), &quot;CPU Load: &quot;)\r\n')
+ser.write(b'lcd.put(lcd.locate(1, 0), &quot;Mem Free: &quot;)\r\n')
+ser.write(b'lcd.put(lcd.locate(0, 14), &quot;%&quot;)\r\n')
+ser.write(b'lcd.put(lcd.locate(1, 14), &quot;MB&quot;)\r\n')
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    #ser.write(b'lcd.clear()\r\n')
+    currentPer = str(psutil.cpu_percent()).encode('ascii')
+    memFree = str(int(psutil.virtual_memory().free/1024/1024)).encode('ascii')
+    oneLine = b'lcd.put(lcd.locate(0, 9), &quot;' + currentPer + b'&quot;)\r\n'
+    SecondLine = b'lcd.put(lcd.locate(1, 9), &quot;' + memFree + b'&quot;)\r\n'
+    # Format oneLine
+    #ser.write(b'lcd.put(lcd.locate(0, 0), &quot;CPU Load: &quot;)\r\n')
+    #ser.write(b'lcd.put(lcd.locate(1, 0), &quot;Mem Free: &quot;)\r\n')
+    #ser.write(b'lcd.put(lcd.locate(0, 14), &quot;%&quot;)\r\n')
+    #ser.write(b'lcd.put(lcd.locate(1, 14), &quot;MB&quot;)\r\n')
+    #time.sleep(0.2)
+    ser.write(oneLine)
+    time.sleep(0.2)
+    ser.write(SecondLine)
+    time.sleep(1)
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/31/nodemcu-and-1602i2c/">NodeMCU And 1602I2C</a>
+      </h1>
+      <span class="post-date">Mar 31, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<p>最初入手的1602是N个口的, 激活它需要耗掉开发板上N个GPIO口,为此做完Arduino上的实
+验就收了起来. 这次采购中看到店家有卖1602 I2C的转接卡,3块钱,顺手就买了回来.打算
+用来做一个WIFI显示屏.</p>
+
+<p>今天做了一个NodeMCU和1602连接实时显示CPU使用率的方案, 如下图所示,这里简单记录
+一下制作过程.</p>
+
+<p><img src="/images/1009950725.jpg" alt="/images/1009950725.jpg" /></p>
+
+<p><img src="/images/1162591797.jpg" alt="/images/1162591797.jpg" /></p>
+
+<h3 id="连线图">连线图</h3>
+
+<p>1602 I2C上有四个口,分别是GND/VCC/SDA/SCL.<br />
+GND自然不用多说,连接NodeMCU上的GND即可.<br />
+VCC我们使用5V输入,在NodeMCU上则是VIN口. 在下图里我用红色做了标注.<br />
+SDA接GPIO0, SDC接GPIO2,在图中我用橙色做了标识.</p>
+
+<p><img src="/images/2016_03_31_21_46_54_644x477.jpg" alt="/images/2016_03_31_21_46_54_644x477.jpg" /></p>
+
+<h3 id="软件准备">软件准备</h3>
+
+<p>我这里参考了
+<a href="http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/">http://domoticx.com/esp8266-wifi-lcd-1602-2004-via-i2c-nodemcu/</a>
+上的实例, 所以用ESPlorer来写入1602的库文件. ESPlorer的下载地址在:</p>
+
+<p><a href="http://esp8266.ru/esplorer/#download">http://esp8266.ru/esplorer/#download</a></p>
+
+<p>如果你使用的是ArchLinux的话,一行命令就够了:</p>
+
+<pre><code>$ yaourt esplorer
+</code></pre>
+
+<p>如果你运行上述网址上的示例, 故事的结尾你会获得一个Hallo的显示,以及跑马灯式的显
+示效果.</p>
+
+<h3 id="cpu-load-program">CPU Load Program</h3>
+
+<p>先上代码, 用Python写的, 如果你看过上面的示例程序就会明白, 往串口写入1602的lua
+脚本,就能获得对应的显示效果,那么以下的Python代码就是每分钟读取CPU的负载值, 将
+它封装在一个字符串中发送到NodeMCU连接的串口.</p>
+
+<pre><code>import psutil
+import serial
+import time
+
+
+# Setup the Serial Port and open it. 
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = '/dev/ttyUSB0'
+ser.open()
+## Todo, to check if the port is opened.
+
+# Really talks to the i2c LCD.
+
+# Setup the wiring
+ser.write(b'i2c.setup(0, 4, 3, i2c.SLOW)\r\n')
+
+# dofile, load the lcd library
+ser.write(b'lcd = dofile(&quot;lcd1602.lua&quot;)()\r\n')
+
+# Now Refresh the LCD. 
+ser.write(b'lcd.clear()\r\n')
+
+# Fetching the percentage per 1 second
+# Todo, change the while true into CTRL+C stopped. 
+while True:
+    # Get current percentage
+    ser.write(b'lcd.clear()\r\n')
+    currentPer = str(psutil.cpu_percent()).encode('ascii')
+    # Format oneLine
+    ser.write(b'lcd.put(lcd.locate(0, 5), &quot;CPU Load&quot;)\r\n')
+    oneLine = b'lcd.put(lcd.locate(1, 6), &quot;' + currentPer + b'&quot;)\r\n'
+    # Write oneLine
+    ser.write(oneLine)
+    time.sleep(1)
+</code></pre>
+
+<p>代码运行的前提条件是,在ArchLinux上,安装pyserial库和psutil库,
+而后运行<code>sudo python WriteLoadToLCD.py</code>.</p>
+
+<pre><code>$ sudo pacman -S python-psutil
+$ sudo pacman -S python-pyserial
+</code></pre>
+
+<p>可以看到你的系统CPU使用率已经显示在1602 LCD上了,每分钟更新一次.<br />
+当然你也可以将显示
+值从CPU使用率换成内存占用率,或是CPU温度,或是PM2.5的值等等. 你要做的就是构建自
+己的数据<code>CurrentPer</code>和写入的格式<code>oneLine</code>.</p>
+
+<p>通过串口发送数据, 通过NodeMCU驱动1602, 这功能对NodeMCU而言太小儿科了,所以接下
+来我会继续做一个WIFI驱动的LCD.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -577,147 +754,6 @@ void loop() {
 </code></pre>
 
 <p>直接在Arduino IDE中编译验证即可.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/24/cloudstackqie-huan-guan-li-duan-kou/">XenServer6.2切换管理端口</a>
-      </h1>
-      <span class="post-date">Mar 24, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      <p>默认安装完的XenServer，不能找到eth1, 用以下命令找到eth1:</p>
-
-<pre><code>[root@csagentv1 ~]# xe pif-list
-uuid ( RO)                  : cd4409d4-b2b8-543c-ea9c-35170673e924
-                device ( RO): eth0
-    currently-attached ( RO): true
-                  VLAN ( RO): -1
-          network-uuid ( RO): 597114f0-e71a-34fe-d6a2-230cc75e085a
-
-
-[root@csagentv1 ~]#  xe host-list
-uuid ( RO)                : 367ebe92-0634-41a8-825a-cd23184824ea
-          name-label ( RW): csagentv1
-    name-description ( RW): Default install of XenServer
-
-
-[root@csagentv1 ~]# xe pif-scan host-uuid=367ebe92-0634-41a8-825a-cd23184824ea
-[root@csagentv1 ~]# xe pif-list
-uuid ( RO)                  : 3f6e551b-993e-0a3d-96b6-0f0d172f867f
-                device ( RO): eth1
-    currently-attached ( RO): false
-                  VLAN ( RO): -1
-          network-uuid ( RO): 1ff03ece-8b93-b231-ac2d-679d035422da
-
-
-uuid ( RO)                  : cd4409d4-b2b8-543c-ea9c-35170673e924
-                device ( RO): eth0
-    currently-attached ( RO): true
-                  VLAN ( RO): -1
-          network-uuid ( RO): 597114f0-e71a-34fe-d6a2-230cc75e085a
-</code></pre>
-
-<p>在Console上可以看到管理端口:</p>
-
-<p><img src="/images/2016_03_24_17_33_06_659x355.jpg" alt="/images/2016_03_24_17_33_06_659x355.jpg" /></p>
-
-<p>命令:</p>
-
-<pre><code>[root@csagentv1 ~]# xe host-management-disable
-[root@csagentv1 ~]# xe pif-reconfigure-ip uuid=3f6e551b-993e-0a3d-96b6-0f0d172f867f mode=static IP=192.168.56.3 netmask=255.255.255.0 gateway=192.168.56.1 DNS=180.76.76.76
-[root@csagentv1 ~]# xe pif-list params=uuid,device,MAC
-uuid ( RO)      : 3f6e551b-993e-0a3d-96b6-0f0d172f867f
-    device ( RO): eth1
-       MAC ( RO): 08:00:27:b2:9d:5c
-
-
-uuid ( RO)      : cd4409d4-b2b8-543c-ea9c-35170673e924
-    device ( RO): eth0
-       MAC ( RO): 08:00:27:f7:38:0b
-[root@csagentv1 ~]# xe host-management-reconfigure pif-uuid=3f6e551b-993e-0a3d-96b6-0f0d172f867f
-</code></pre>
-
-<p>更改成功后，可以看到现在管理端口已经配置为eth1了:<br />
-<img src="/images/2016_03_24_17_39_08_653x397.jpg" alt="/images/2016_03_24_17_39_08_653x397.jpg" /></p>
-
-<p>Tips:</p>
-
-<p>View eth1 pif:</p>
-
-<pre><code>$ xe pif-list device=eth1 params=uuid --minimal
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/23/setup-vagrant-libvirt-env-on-ubuntu15-dot-04/">Setup Vagrant-libvirt Env On Ubuntu15.04</a>
-      </h1>
-      <span class="post-date">Mar 23, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>For continue working at home, I have to install vagrant-libvirt on
-Ubuntu15.04, following are steps:</p>
-
-<h3 id="vagrant-installation">Vagrant Installation</h3>
-
-<p>The vagrant version in repository is too old, examine it via:</p>
-
-<pre><code>$ apt-cache policy vagrant
-vagrant:
-  Installed: (none)
-  Candidate: 1.6.5+dfsg1-2
-  Version table:
-     1.6.5+dfsg1-2 0
-        500 http://mirrors.aliyun.com/ubuntu/ vivid/universe amd64 Packages
-</code></pre>
-
-<p>Download the installation file in:<br />
-<a href="https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb">https://releases.hashicorp.com/vagrant/1.8.1/vagrant_1.8.1_x86_64.deb</a></p>
-
-<p>Install it via:</p>
-
-<pre><code>$ sudo dpkg -i vagrant_1.8.1_x86_64.deb
-$ which vagrant
-/usr/bin/vagrant
-</code></pre>
-
-<h3 id="vagrant-libvirt">Vagrant-libvirt</h3>
-
-<p>For building vagrant-libvirt, we have to install following packages:</p>
-
-<pre><code>$ sudo apt-get install libvirt-bin libvirt-dev qemu-kvm ruby-dev
-$ sudo adduser YourName libvirtd
-
-</code></pre>
-
-<p>Installing vagrant plugins:</p>
-
-<pre><code>$ sudo mkdir /var/lib/gems
-$ sudo chmod 777 -R /var/lib/gems/
-$ gem source -r https://rubygems.org/
-$ gem source -a http://mirrors.aliyun.com/rubygems/
-$ gem source
-$ gem install json -v '1.8.3'
-$ gem install ruby-libvirt -v '0.6.0'
-$ vagrant plugin install vagrant-libvirt
-$ vagrant plugin install vagrant-mutate
-$ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
-</code></pre>
 
       
     </div>
@@ -2134,8 +2170,17 @@ $ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2144,7 +2189,7 @@ $ vagrant plugin install --plugin-version 0.0.3 fog-libvirt
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

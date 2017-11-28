@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,317 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/01/29/play-docker-4/">Play Docker(4)</a>
+      </h1>
+      <span class="post-date">Jan 29, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="fig-continue">Fig(Continue)</h3>
+
+<p>Met some problems in last article, so this part will continue to work on Fig, the correct configuration files are listed as following:</p>
+
+<pre><code>$ ls
+app.py  Dockerfile  fig.yml  requirements.txt
+$ cat Dockerfile 
+FROM python:2.7
+ADD . /code
+WORKDIR /code
+RUN pip install -r requirements.txt
+$ cat fig.yml 
+web:
+  build: .
+  command: python app.py
+  ports:
+   - &quot;5000:5000&quot;
+  volumes:
+   - .:/code
+  links:
+   - redis
+redis:
+  image: redis
+$ cat requirements.txt 
+flask
+redis
+$ cat app.py 
+from flask import Flask
+from redis import Redis
+import os
+app = Flask(__name__)
+redis = Redis(host='redis', port=6379)
+
+@app.route('/')
+def hello():
+    redis.incr('hits')
+    return 'Hello World! I have been seen %s times.' % redis.get('hits')
+
+if __name__ == &quot;__main__&quot;:
+    app.run(host=&quot;0.0.0.0&quot;, debug=True)
+
+</code></pre>
+
+<p>via <code>fig up</code> you could quickly build this app and let it run.<br />
+When it running, you could use <code>fig ps</code> for viewing the running instance:</p>
+
+<pre><code>$ sudo fig ps
+      Name             Command             State              Ports       
+-------------------------------------------------------------------------
+figtest_redis_1    /entrypoint.sh     Up                 6379/tcp         
+                   redis-server                                           
+figtest_web_1      python app.py      Up                 0.0.0.0:5000-&gt;50 
+                                                         00/tcp    
+
+</code></pre>
+
+<p>Use <code>sudo fig run web env</code> you could view all of the variables of the running instance web, or change web into redis then displaying the variables of redis.<br />
+Use <code>sudo fig stop</code> to stop all of the running instance.</p>
+
+<pre><code>$ sudo fig stop
+Stopping figtest_web_1...
+Stopping figtest_redis_1...
+
+</code></pre>
+
+<p>Use <code>sudo fig run web env</code> for displaying all of the variables of running <code>web</code>.</p>
+
+<h3 id="create-django">Create Django</h3>
+
+<p>Configuration files:</p>
+
+<pre><code>$ cat Dockerfile 
+FROM python:2.7
+ENV PYTHONUNBUFFERED 1
+RUN mkdir /code
+WORKDIR /code
+ADD requirements.txt /code/
+RUN pip install -r requirements.txt
+ADD . /code/
+
+$ cat fig.yml 
+db:
+  image: postgres
+web:
+  build: .
+  command: python manage.py runserver 0.0.0.0:8000
+  volumes:
+    - .:/code
+  ports:
+    - &quot;8000:8000&quot;
+  links:
+    - db
+
+$ cat requirements.txt 
+Django
+psycopg2
+
+
+</code></pre>
+
+<p>Via <code>sudo  fig run web django-admin.py startproject figexample .</code><br />
+This means, first fig will create the image, then use this image for running <code>django-admin.py startproject figexample</code>,
+Examine via different methods:</p>
+
+<pre><code>$ sudo docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
+1abcafc5bd59        postgres:9          &quot;/docker-entrypoint.   4 minutes ago       Up 3 minutes        5432/tcp            django_db_1         
+741b0e375c73        postgres:9          &quot;/docker-entrypoint.   4 minutes ago       Up 4 minutes        5432/tcp            Django_db_1         
+[Trusty@DashCentOS django]$ sudo fig ps
+   Name                  Command               State    Ports   
+---------------------------------------------------------------
+django_db_1   /docker-entrypoint.sh postgres   Up      5432/tcp 
+
+</code></pre>
+
+<p>Change the configuration file of the django project:</p>
+
+<pre><code>$ sudo vim figexample/settings.py
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'HOST': 'db',
+        'PORT': 5432,
+    }
+}
+
+</code></pre>
+
+<p>Save the file and run <code>sudo fig up</code>, this time your django project connects to the right postgresql server.<br />
+Examine the running containers:</p>
+
+<pre><code>$ sudo fig ps
+      Name             Command             State              Ports       
+-------------------------------------------------------------------------
+django_db_1        /docker-           Up                 5432/tcp         
+                   entrypoint.sh                                          
+                   postgres                                               
+django_web_1       python manage.py   Up                 0.0.0.0:8000-&gt;80 
+                   runserver ...                         00/tcp           
+$ sudo docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                    NAMES
+d3c3c8bb6d0e        django_web:latest   &quot;python manage.py ru   4 minutes ago       Up 4 minutes        0.0.0.0:8000-&gt;8000/tcp   django_web_1        
+3f7b61fdd09e        postgres:9          &quot;/docker-entrypoint.   4 minutes ago       Up 4 minutes        5432/tcp                 django_db_1        
+
+</code></pre>
+
+<h3 id="run-asp">Run ASP</h3>
+
+<p>Refers to:<br />
+<a href="http://dockerone.com/article/164">http://dockerone.com/article/164</a><br />
+The steps are listed as:</p>
+
+<pre><code>$ git clone https://github.com/aspnet/Home.git
+$ cd Home/
+$ cd samples/HelloWeb/
+$ vim Dockerfile
+FROM microsoft/aspnet
+
+COPY . /app
+WORKDIR /app
+RUN [&quot;kpm&quot;, &quot;restore&quot;]
+
+EXPOSE 5004
+ENTRYPOINT [&quot;k&quot;, &quot;kestrel&quot;]
+$ sudo docker build -t myapp .
+$ sudo docker images
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+myapp               latest              6c0d622049ea        2 hours ago         492 MB
+microsoft/aspnet    latest              1e67fe2f5a59        13 days ago         465.3 MB
+$ sudo docker run -t -d -p 80:5004 myapp
+
+</code></pre>
+
+<p>Open your browser and visit <code>http://xxx.xx.xx.xxx:80</code> and you could found the asp based app runs.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/01/28/play-docker-3/">Play Docker(3)</a>
+      </h1>
+      <span class="post-date">Jan 28, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="dockerfile">Dockerfile</h3>
+
+<p>Dockerfile is like Vagrantfile, for define the configuration of the docker container.<br />
+The steps for creating the Dockerfile is listed as following:</p>
+
+<pre><code>$ mkdir -p ~/Code
+$ cd ~/Code &amp;&amp; vim Dockerfile 
+FROM ubuntu:13.04
+MAINTAINER examples@docker.com
+RUN echo &quot;deb http://archive.ubuntu.com/ubuntu precise main universe&quot; &gt; /etc/apt/sources.list
+RUN apt-get update
+RUN apt-get upgrade -y
+RUN apt-get install -y openssh-server nginx  supervisor
+RUN mkdir -p /var/run/sshd
+RUN mkdir -p /var/log/supervisor
+RUN echo &quot;daemon off;&quot;&gt;&gt;/etc/nginx/nginx.conf
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+EXPOSE 22 80
+CMD [&quot;/usr/bin/supervisord&quot;]
+$ vim supervisord.conf 
+[supervisord]
+nodaemon=true
+[program:sshd]
+command=/usr/sbin/sshd -D
+
+[program:nginx]
+command=/usr/sbin/nginx
+user=root
+autostart=true
+
+</code></pre>
+
+<p>Now build the target image with following command:</p>
+
+<pre><code>$ sudo docker build -t test/supervisord .
+
+</code></pre>
+
+<p>After build, we could use <code>sudo docker images</code> for examing the generated images. And use following command for start the sshd and nginx service:</p>
+
+<pre><code>$ sudo docker run -p 2222:22 -p 8080:80 -t -i test/supervisord
+
+</code></pre>
+
+<p>Now change the root password and you could directly <code>ssh root@127.0.0.1 -p 2222</code> or you could directly access <a href="http://1xx.xx.xx.xxx:8080">http://1xx.xx.xx.xxx:8080</a> for nginx webpages.</p>
+
+<h3 id="fig">Fig</h3>
+
+<p>Fig is used for swiftly build up a container. You only need to add a fig.yml and specify some simple content, then it could easily assit you building up a container.<br />
+Install fig via following command:</p>
+
+<pre><code>$ wget https://github.com/docker/fig/releases/download/1.0.1/fig-`uname -s`-`uname -m`
+$ sudo mv fig-xxx-xxx /usr/bin/fig
+$ sudo chmod 777 /usr/bin/fig
+
+</code></pre>
+
+<p>Touch the definition files under a specified directory and then use fig for building the whole container:</p>
+
+<pre><code>$ mkdir ~/fig
+$ ls
+app.py  Dockerfile  fig.yml  requirements.txt
+$ cat Dockerfile 
+FROM python:2.7
+ADD . /code
+WORKDIR /code
+RUN pip install -r requirements.txt
+$ cat fig.yml 
+web:
+  build: .
+  command: python app.py
+  links:
+   - db
+  ports:
+   - &quot;8000:8000&quot;
+db:
+  image: redis
+$ cat requirements.txt 
+flask
+redis
+$ cat app.py 
+from flask import Flask
+from redis import Redis
+import os
+app = Flask(__name__)
+redis = Redis(host='redis', port=6379)
+
+@app.route('/')
+def hello():
+    redis.incr('hits')
+    return 'Hello World! I have been seen %s times.' % redis.get('hits')
+
+if __name__ == &quot;__main__&quot;:
+    app.run(host=&quot;0.0.0.0&quot;, debug=True)
+
+</code></pre>
+
+<p>Now use <code>sudo fig up</code> then you could let this web service run.</p>
+
+<p>Met some problems, will be do this at home.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -776,208 +1087,6 @@ DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:5000 to:17
 </code></pre>
 
 <p>The last one is added via our run command.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/26/trying-docker-in-company/">Trying Docker In Company</a>
-      </h1>
-      <span class="post-date">Jan 26, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Install docker via:</p>
-
-<pre><code>$ sh -c &quot;wget -qO- https://get.docker.io/gpg | apt-key add -&quot;
-$ sh -c &quot;echo deb http://get.docker.io/ubuntu docker main\
-&gt; /etc/apt/sources.list.d/docker.list&quot;
-$ apt-get update
-$ apt-get install lxc-docker
-$ which docker
-/usr/bin/docker
-
-</code></pre>
-
-<h3 id="very-beginning">Very Beginning</h3>
-
-<p>Docker pull the docker.cn packages back, the speed is around 500K/</p>
-
-<pre><code>$ docker pull docker.cn/docker/ubuntu
-
-</code></pre>
-
-<p>Run into an instance:</p>
-
-<pre><code># docker run -i -t docker.cn/docker/ubuntu /bin/bash
-root@3ad7689e600a:/# ps -ef
-UID        PID  PPID  C STIME TTY          TIME CMD
-root         1     0  0 06:27 ?        00:00:00 /bin/bash
-root        16     1  0 06:27 ?        00:00:00 ps -ef
-
-</code></pre>
-
-<p>In another terminal, show the running container:</p>
-
-<pre><code># docker ps
-CONTAINER ID        IMAGE                           COMMAND             CREATED             STATUS              PORTS               NAMES
-3ad7689e600a        docker.cn/docker/ubuntu:14.04   &quot;/bin/bash&quot;         11 seconds ago      Up 10 seconds                           sick_hodgkin 
-
-</code></pre>
-
-<h3 id="make-changes-and-submit">Make Changes And Submit</h3>
-
-<p>First made some modification to our container:</p>
-
-<pre><code>sudo apt-get install vim
-
-</code></pre>
-
-<p>The above command will install vim.<br />
-Now commit the changes:</p>
-
-<pre><code># docker commit c7ddc390f0c8 installed_vim_container
-ed347fc03634e6c66ee45d213cf4d2839e55376f3e34d18c6e58bada1f701425
-
-</code></pre>
-
-<p>List all of the images:</p>
-
-<pre><code># docker images
-REPOSITORY                TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-installed_vim_container   latest              ed347fc03634        47 seconds ago      235.8 MB
-docker.cn/docker/ubuntu   14.04               b39b81afc8ca        9 days ago          192.7 MB
-docker.cn/docker/ubuntu   14.04.1             b39b81afc8ca        9 days ago          192.7 MB
-docker.cn/docker/ubuntu   latest              b39b81afc8ca        9 days ago          192.7 MB
-docker.cn/docker/ubuntu   trusty              b39b81afc8ca        9 days ago          192.7 MB
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/26/using-do-for-building-opencontrail/">Using DO For Building OpenContrail</a>
-      </h1>
-      <span class="post-date">Jan 26, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Since the network environment is not good(In fact, very bad), because of the GFW, so I have to build the opencontrail packages in digitalOcean. Following is the tips and how-to.</p>
-
-<h3 id="preparation">Preparation</h3>
-
-<p>First we have to get the Latest Ubuntu images, and let it OK for building the OpenContrail:</p>
-
-<pre><code>$ docker search ubuntu
-.....
-$ docker pull ubuntu
-$ docker run -i -t ubuntu /bin/bash
-root@4c74f2890dbe:/# apt-get update
-
-</code></pre>
-
-<p>Now we run into the ubuntu build environment. This is where we want to build the whole opencontrail deb file.<br />
-Install curl and then install repo:</p>
-
-<pre><code># apt-get install curl
-# mkdir -p ~/bin
-# curl https://storage.googleapis.com/git-repo-downloads/repo &gt; ~/bin/repo
-# chmod 777 /root/bin/repo
-# apt-get install vim
-# vim ~/.bashrc
-export PATH=/root/bin:$PATH
-# source ~/.bashrc
-# which repo
-/root/bin/repo
-
-</code></pre>
-
-<p>Now repo became usable in our system.<br />
-Install following packages(So many packages!!!) for preparing the building of the opencontrail:</p>
-
-<pre><code># apt-get install -y scons git python-lxml wget gcc patch make unzip flex bison g++ libssl-dev autoconf automake libtool pkg-config vim python-dev python-setuptools libprotobuf-dev protobuf-compiler libsnmp-python libboost-dev libboost-chrono-dev libboost-date-time-dev libboost-filesystem-dev libboost-program-options-dev libboost-python-dev libboost-regex-dev libboost-system-dev libcurl4-openssl-dev google-mock libgoogle-perftools-dev liblog4cplus-dev libtbb-dev libhttp-parser-dev libxml2-dev libicu-dev
-
-</code></pre>
-
-<p>Use tmux for holding the building context:</p>
-
-<pre><code># apt-get install tmux
-# tmux new -s &quot;BuildContrail&quot;
-
-</code></pre>
-
-<h3 id="clone-the-code">Clone The Code</h3>
-
-<p>Create the directories and then configure the git&rsquo;s username and Email.</p>
-
-<pre><code># mkdir Code
-# cd Code/
-#  git config --global user.email kkkttt@gmail.com
-# git config --global user.name kkkttt
-# ssh-keygen
-
-</code></pre>
-
-<p>Upload the generate <code>id_rsa.pub</code> to the github.com, then let your machine verified by github.</p>
-
-<pre><code># ssh -T git@github.com
-Hi kkkttt! You've successfully authenticated, but GitHub does not provide shell access.
-
-</code></pre>
-
-<p>Now you could use repo for syncing back the code:</p>
-
-<pre><code># mkdir -p ~/Code
-# cd ~/Code
-# repo init -u git@github.com:Juniper/contrail-vnc
-# repo sync 
-
-</code></pre>
-
-<h3 id="third-party">Third-Party</h3>
-
-<p>There is little trick in syncing the 3rd party source code back, you have to manually create the folder and let it writable, then modify the source code of the python file:</p>
-
-<pre><code># mkdir -p /tmp/cache/root/
-# chmod -R /tmp/cache/root/
-# vim third_party/*.py
-_PACKAGE_CACHE='/tmp/cache/' + os.environ['USER'] + '/third_party'
-_PACKAGE_CACHE='/tmp/cache/root/' + '/third_party'
-
-</code></pre>
-
-<p>Now use following command for syncing the 3rd party packages back:</p>
-
-<pre><code># python third_party/fetch_packages.py
-
-</code></pre>
-
-<h3 id="build">Build</h3>
-
-<p>Building is pretty easy, simply type <code>scons</code> then everything is automatically on-going.<br />
-Troubles, if you don&rsquo;t specify USER, then the error will be raised, complains the os.environ[&lsquo;USER&rsquo;] got nothing, then scons will be halt.<br />
-Solution:</p>
-
-<pre><code># declare -x USER=&quot;root&quot;
-
-</code></pre>
-
-<p>Then the build begin, and it will last for a long time.</p>
 
       
     </div>
@@ -2394,8 +2503,17 @@ Solution:</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2404,7 +2522,7 @@ Solution:</p>
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

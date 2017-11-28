@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,205 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/16/xenserver-tips/">XenServer Tips</a>
+      </h1>
+      <span class="post-date">Jun 16, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Recently I want to research desktop virtualization on Xen, so this blog records all of the tips for Xen Hypervisor related info.</p>
+
+<h3 id="nested-virtualization">Nested Virtualization</h3>
+
+<p>I place 4 core(Copy Host Configuration on CPU parameter), but the XenServer refuse to start, by using a none-hosted-configuration CPU configuration, it will fail on starting the machine, So I choose to install xen hypervisor on Ubuntu14.04.</p>
+
+<h3 id="ubuntu-and-xen">Ubuntu and Xen</h3>
+
+<p>Install via:</p>
+
+<pre><code>$ sudo apt-get install xen-hypervisor-amd64
+$ sudo reboot
+</code></pre>
+
+<p>The Ubuntu will automatically choose xen for startup, so verify it via:</p>
+
+<pre><code>$ sudo xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0  7832     4     r-----      72.8
+</code></pre>
+
+<h3 id="networking">Networking</h3>
+
+<p>Since the network is pretty complicated on my own machine, I decide to use openVSwitch for managing my own networking.</p>
+
+<pre><code>$ sudo apt-get install -y openvswitch-switch
+</code></pre>
+
+<p>Configuration of the networking:</p>
+
+<pre><code>$ cat /etc/network/interfaces
+###########################################
+## By using openVswitch, we enabled the following
+###########################################
+allow-hotplug ovsbr0
+iface ovsbr0 inet static
+address 192.168.0.119
+netmask 255.255.0.0
+gateway 192.168.0.176
+dns-nameservers 114.114.114.114
+dns-nameservers 180.76.76.76
+
+$ sudo ovs-vsctl add-br ovsbr0
+$ sudo ovs-vsctl set Bridge ovsbr0 stp_enable=false other_config:stp-max-age=6 other_config:stp-forward-delay=4
+$ sudo ovs-vsctl list Bridge
+$ sudo ovs-vsctl add-port ovsbr0 eth0
+</code></pre>
+
+<p>Disable the netfilter on all bridges:</p>
+
+<pre><code>$ sudo vi /etc/sysctl.conf
+
+net.bridge.bridge-nf-call-ip6tables = 0
+net.bridge.bridge-nf-call-iptables = 0
+net.bridge.bridge-nf-call-arptables = 0
+
+$ sudo sysctl -p /etc/sysctl.conf
+# Note: These settings are created in /proc/sys/net. The bridge folder only appears to be created after first creating a bridge with the ''brctl' command.
+</code></pre>
+
+<h3 id="administrator-tools">Administrator Tools</h3>
+
+<pre><code>$ sudo apt-get install virt-manager
+$ sudo apt-get install xen-tools
+</code></pre>
+
+<h3 id="connect-with-virt-manager">Connect with virt-manager</h3>
+
+<p>Change following parameters and re-connect again.</p>
+
+<pre><code># vim /etc/xen/xend-config.sxp 
+     xend-unix-server yes
+     xend-unix-path /var/lib/xend/xend-socket
+# service libvirt-bin restart
+libvirt-bin stop/waiting
+libvirt-bin start/running, process 5345
+# service xen restart
+ * Restarting Xen daemons                                                                                                             ^[[A                                                                                                                           [ OK ]
+# service xendomains restart
+
+</code></pre>
+
+<pre><code>$ sudo virt-install --connect=xen:/// --name u14.04 --ram 1024 --disk u14.04.img,size=4 --location http://ftp.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/
+
+
+# http://ftp.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/">Use 8188eu and Hostapd For Setting Soft-AP Router</a>
+      </h1>
+      <span class="post-date">Jun 11, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="hostapd">HostAPD</h3>
+
+<p>Install HostAPD via following commands:</p>
+
+<pre><code>$ sudo apt-get autoremove hostapd
+$ wget https://github.com/jenssegers/RTL8188-hostapd/archive/v2.0.tar.gz
+$ tar -zxvf v2.0.tar.gz
+$ cd RTL8188-hostapd-2.0/hostapd
+$ sudo make
+$ sudo make install
+$ sudo service hostapd restart
+[ ok ] Stopping advanced IEEE 802.11 management: hostapd.
+[ ok ] Starting advanced IEEE 802.11 management: hostapd.
+
+</code></pre>
+
+<h3 id="dhcpd">dhcpd</h3>
+
+<p>We need a dhcp server for assigning a new IP address to the clients who joins the ap:<br />
+An example file is listed as following:</p>
+
+<pre><code>ddns-update-style none;
+ignore client-updates;
+authoritative;
+option local-wpad code 252 = text;
+ 
+subnet
+10.0.0.0 netmask 255.255.255.0 {
+# --- default gateway
+option routers
+10.0.0.1;
+# --- Netmask
+option subnet-mask
+255.255.255.0;
+# --- Broadcast Address
+option broadcast-address
+10.0.0.255;
+# --- Domain name servers, tells the clients which DNS servers to use.
+option domain-name-servers
+10.0.0.1, 8.8.8.8, 8.8.4.4;
+option time-offset
+0;
+range 10.0.0.3 10.0.0.13;
+default-lease-time 1209600;
+max-lease-time 1814400;
+}
+</code></pre>
+
+<h3 id="wlan0-network">WLAN0 Network</h3>
+
+<p>The WLAN0 equipment network should be configured as following:</p>
+
+<pre><code>$ cat /etc/network/interface
+# wireless wlan0
+allow-hotplug wlan0
+iface wlan0 inet static
+address 10.0.70.1
+netmask 255.255.255.0
+
+</code></pre>
+
+<p>So next time you reboot the computer, it will automatically get the ip address for wlan0.</p>
+
+<h3 id="enable-the-ip-forwarding">Enable the ip forwarding</h3>
+
+<p>Using following 2 commands for enabling your AP.</p>
+
+<pre><code>$ sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE
+$ sudo dhcpd wlan0
+</code></pre>
+
+<p>I add these two lines into the start file of awesome(My desktop environment).</p>
+
+<h3 id="disable-hostapd">Disable hostapd</h3>
+
+<p>You should remove the definition of the dhcpd, and the iptables forwarding rules, and
+also the definition in <code>/etc/network/interfaces</code>, and the hostapd configuration in
+<code>/etc/rc*.d</code> from <code>S</code> to <code>K</code>, while the <code>rc*.d</code> ranges from rc0 to rc6.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -562,113 +761,6 @@ trunks              : []
 vlan_mode           : []
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/07/quickly-change-centos-networking/">Quickly Change CentOS Networking</a>
-      </h1>
-      <span class="post-date">Jun 7, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>When adding the existing qcow2 files to a new machine, following steps needs to be done to enable the new configuration for the networking:</p>
-
-<h3 id="change-udev-rules">Change udev rules</h3>
-
-<p>Change the eth1 to eth0, and disable the previous defined eth0:</p>
-
-<pre><code>[root@CentOSVM1 ~]# cat /etc/udev/rules.d/70-persistent-net.rules
-# This file was automatically generated by the /lib/udev/write_net_rules
-# program, run by the persistent-net-generator.rules rules file.
-#
-# You can modify it, as long as you keep each rule on a single
-# line, and change only the value of the NAME= key.
-
-# PCI device 0x1af4:0x1000 (virtio-pci)
-#SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, DRIVERS==&quot;?*&quot;, ATTR{address}==&quot;52:54:00:23:14:96&quot;, ATTR{type}==&quot;1&quot;, KERNEL==&quot;eth*&quot;, NAME=&quot;eth0&quot;
-
-# PCI device 0x1af4:0x1000 (virtio-pci)
-SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, DRIVERS==&quot;?*&quot;, ATTR{address}==&quot;52:54:00:bc:c6:f5&quot;, ATTR{type}==&quot;1&quot;, KERNEL==&quot;eth*&quot;, NAME=&quot;eth0&quot;
-
-</code></pre>
-
-<h3 id="change-the-ethernet-configuration">Change the ethernet configuration</h3>
-
-<h4 id="hostname">Hostname</h4>
-
-<p>The hostname and the gateway could be modified via:</p>
-
-<pre><code># cat /etc/sysconfig/network
-NETWORKING=yes
-+ HOSTNAME=CentOSVM1
-+ GATEWAY=172.16.0.1
-</code></pre>
-
-<h4 id="change-the-ip-configuration-of-the-eth0">Change the IP configuration of the eth0</h4>
-
-<pre><code>[root@CentOSVM1 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0
-DEVICE=eth0
-TYPE=Ethernet
-UUID=9d92e12c-54a3-404a-bd1c-ae033e8e968c
-ONBOOT=yes
-NM_CONTROLLED=yes
-BOOTPROTO=none
-+ IPADDR=172.16.0.20
-PREFIX=24
-GATEWAY=172.16.0.1
-DNS1=114.114.114.114
-DNS2=180.76.76.76
-DEFROUTE=yes
-IPV4_FAILURE_FATAL=yes
-IPV6INIT=no
-NAME=&quot;System eth0&quot;
-#HWADDR=52:54:00:23:14:96
-+ HWADDR=52:54:00:BC:C6:F5
-
-</code></pre>
-
-<p>By now you could customize the network configuration of the CentOS using the same qcow2 disk file.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/03/tips-on-using-vagrant-and-chefdk/">Tips on using vagrant and chefdk</a>
-      </h1>
-      <span class="post-date">Jun 3, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      <ol>
-<li>You should install all of the gem of <code>berkshelf</code> via:<br /></li>
-</ol>
-
-<pre><code>$ gem install berkshelf
-$ /opt/chef/embedded/bin/gem install berkshelf
-$ /opt/vagrant/embedded/bin/gem install berkshelf
-</code></pre>
-
-<ol>
-<li>Besure to add following into your PATH:<br /></li>
-</ol>
-
-<pre><code>$  echo $PATH
-/opt/chefdk/bin:/home/kkk/.rvm/gems/ruby-2.2.1/bin:/home/kkk/.rvm/gems/ruby-2.2.1@global/bin:/home/kkk/.rvm/rubies/ruby-2.2.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/home/kkk/.rvm/bin:/home/kkk/.rvm/bin:/home/kkk/.rvm/bin
-</code></pre>
-
-<p>So now you could continue with <code>vagrant up</code> or other steps.</p>
 
       
     </div>
@@ -2085,8 +2177,17 @@ $ /opt/vagrant/embedded/bin/gem install berkshelf
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2095,7 +2196,7 @@ $ /opt/vagrant/embedded/bin/gem install berkshelf
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

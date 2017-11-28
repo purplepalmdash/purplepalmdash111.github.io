@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -105,6 +105,260 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/19/enable-bluetooth-headset-on-jogger-2/">Enable Bluetooth Headset on Jogger(2)</a>
+      </h1>
+      <span class="post-date">Dec 19, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      <p>Since trying to enable BT headset failed on Ubuntu12.04 Server, I decide to try xubuntu version. So I download the image from <a href="http://joggler.exotica.org.uk/ubuntu/">http://joggler.exotica.org.uk/ubuntu/</a>, then extract it to get the image.<br />
+###Get the filesystem
+Use fdisk to get the img layout</p>
+
+<pre><code>	root@joggler:/media/nfs/xubuntu# fdisk -l xubuntu_12.04-v1.4-ext4.img 
+	                      Device Boot      Start         End      Blocks   Id  System
+	xubuntu_12.04-v1.4-ext4.img1   *        2048      126975       62464    e  W95 FAT16 (LBA)
+	xubuntu_12.04-v1.4-ext4.img2          126976      626687      249856   82  Linux swap / Solaris
+	xubuntu_12.04-v1.4-ext4.img3          626688     7800831     3587072   83  Linux
+
+</code></pre>
+
+<p>So we can caculate the offset is 626688X512=320864256.<br />
+Use following commands to copy the filesystem out to the actual disk:</p>
+
+<pre><code>	$ mount ./xubuntu_12.04-v1.4-ext4.img  -o offset=320864256 /mnt3/
+	$ mount /dev/uba5 /mnt
+	$ cp -ar /mnt3/* /mnt/
+
+</code></pre>
+
+<p>My disk layout is:<br />
+<img src="/images/playout.jpg" alt="playout.jpg" />
+###Modification for bootup Xubuntu
+####Add new item for grub:
+Get the disk labels:</p>
+
+<pre><code>	$ ls /dev/disk/by-label/
+	Xubuntu  linux-boot  linux-root  linux-swap  mmc-boot  mmc-root
+
+</code></pre>
+
+<p>The newly added label &ldquo;Xubuntu&rdquo; is the one we store the filesystem of Xubuntu. We need to add a new item to point at this partition.</p>
+
+<pre><code>	root@joggler:/boot# cat grub.cfg
+	loadfont /unicode.pf2
+	terminal_output gfxterm
+	set timeout=5
+	menuentry &quot;XUbuntu 12.04 LTS (Precise) - 3.2.32joggler1&quot; {
+	  linux /vmlinuz-3.2.32joggler1 root=LABEL=Xubuntu ro quiet splash text
+	  initrd /initrd.img-3.2.32joggler1
+	}
+
+</code></pre>
+
+<p>#####Change the fstab
+We have to change the root partition to &ldquo;Xubuntu&rdquo;</p>
+
+<pre><code>	root@joggler:/mnt3# cat /mnt3/etc/fstab
+	# /etc/fstab: static file system information.
+	#
+	# Use 'blkid -o value -s UUID' to print the universally unique identifier
+	# for a device; this may be used with UUID= as a more robust way to name
+	# devices that works even if disks are added and removed. See fstab(5).
+	#
+	# &lt;file system&gt; &lt;mount point&gt;   &lt;type&gt;  &lt;options&gt;       &lt;dump&gt;  &lt;pass&gt;
+	proc             /proc		proc	nodev,noexec,nosuid	0       0
+	LABEL=Xubuntu	 /		ext4	errors=remount-ro,noatime		0       1
+	LABEL=linux-boot /boot		vfat	defaults		0       0
+	LABEL=linux-swap none		swap	sw			0       0
+
+</code></pre>
+
+<p>Now reboot to see if we could enter xubuntu?  Since we cannot use keyboard in grub, we could only enable one distribution, this is different from the tranditional grub.
+####Configure Bluetooth
+Install module for pulseaudio</p>
+
+<pre><code>	apt-get install pulseaudio-module-bluetooth
+
+</code></pre>
+
+<p>Then reboot. Currently connect the bluetooth, then in pulseaudio you will select the corresponding sound card. Enjoy it!<br />
+Tips for avoiding auto hiberate of usb disk, as root:</p>
+
+<pre><code>	$ crontab -e
+	*/4 * * * * fdisk -l /dev/uba &gt;/dev/null
+
+</code></pre>
+
+<p>Now your disk will never be hiberate, avoiding system from broken.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/18/enable-bluetooth-headset-on-joggler/">Enable Bluetooth headset on Joggler</a>
+      </h1>
+      <span class="post-date">Dec 18, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      <p>###TroubleShooting on alsa
+Current user canot use alsamixer</p>
+
+<pre><code>	Trusty@joggler:~$ alsamixer 
+	cannot open mixer: No such file or directory
+
+</code></pre>
+
+<p>This is because the current user is not in the &ldquo;audio&rdquo; group, use root to add current user into &ldquo;audio&rdquo; group:</p>
+
+<pre><code>	root@joggler:~# usermod -a -G audio Trusty
+
+</code></pre>
+
+<p>Unmute the channel:</p>
+
+<pre><code>	$ amixer sset Master unmute
+	Simple mixer control 'Master',0
+	  Capabilities: pvolume pswitch penum
+	  Playback channels: Front Left - Front Right
+	  Limits: Playback 0 - 31
+	  Mono:
+	  Front Left: Playback 24 [77%] [-10.50dB] [on]
+	  Front Right: Playback 24 [77%] [-10.50dB] [on]
+
+</code></pre>
+
+<p>Now we can use wired headset for listening music.
+###Setup Bluetooth
+Scan the available equipments:</p>
+
+<pre><code>	Trusty@joggler:~$ hcitool scan
+	Scanning ...
+		geougwoguw  geige 	
+		geougwoguw  geige521
+		geougwoguw  geige 	
+		geougwoguw  geige723
+
+</code></pre>
+
+<p>Repair:</p>
+
+<pre><code>	bluez-simple-agent hci0 dd:64:22:KK:FF:BD repair
+
+</code></pre>
+
+<p>Then edit your /etc/asound.conf file:</p>
+
+<pre><code>	#/etc/asound.conf
+	
+	pcm.btheadset {
+	   type plug
+	   slave {
+	       pcm {
+	           type bluetooth
+	           device XX:XX:XX:XX:XX:XX 
+	           profile &quot;auto&quot;
+	       }   
+	   }   
+	   hint {
+	       show on
+	       description &quot;BT Headset&quot;
+	   }   
+	}
+	ctl.btheadset {
+	  type bluetooth
+	}  
+
+</code></pre>
+
+<p>mplayer using bluetooth:</p>
+
+<pre><code>	mplayer -ao alsa:device=btheadset bad.mp3
+
+</code></pre>
+
+<p>###Set the default sound card to bluetooth
+Edit the .asoundrc file.</p>
+
+<pre><code>	Trusty@joggler:~$ cat .asoundrc    
+	pcm.!default {
+	   type plug
+	   slave {
+	       pcm {
+	           type bluetooth
+	           device dd:64:22:KK:FF:BD
+	           profile &quot;auto&quot;
+	       }   
+	   }   
+	   hint {
+	       show on
+	       description &quot;BT Headset&quot;
+	   }   
+	}
+	##ctl.btheadset {
+	##  type bluetooth
+	##}
+	
+	bluez-simple-agent hci0 dd:64:22:KK:FF:BD repair
+
+</code></pre>
+
+<p>Then edit your /etc/asound.conf file:</p>
+
+<pre><code>	#/etc/asound.conf
+	
+	pcm.btheadset {
+	   type plug
+	   slave {
+	       pcm {
+	           type bluetooth
+	           device XX:XX:XX:XX:XX:XX 
+	           profile &quot;auto&quot;
+	       }   
+	   }   
+	   hint {
+	       show on
+	       description &quot;BT Headset&quot;
+	   }   
+	}
+	ctl.btheadset {
+	  type bluetooth
+	}  
+
+</code></pre>
+
+<p>mplayer using bluetooth:</p>
+
+<pre><code>	mplayer -ao alsa:device=btheadset bad.mp3
+
+</code></pre>
+
+<p>###Set the default sound card to bluetooth
+TBD, here I meet lots of problems.
+Edit the .asoundrc file.</p>
+
+<pre><code>	
+	
+	apt-get autoremove pulseaudio
+	pulseaudio --start
+
+</code></pre>
+
+<p>Why aplay -L and aplay -l will get different result? I have no idea.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/12/17/fastly-search-package-infos-in-archlinux/">Fastly search package infos in ArchLinux</a>
       </h1>
       <span class="post-date">Dec 17, 2013 
@@ -182,266 +436,6 @@ On ArchLinux, Install &ldquo;bluez&rdquo; and &ldquo;bluez-utils&rdquo;</p>
 	$ sudo systemctl start bluetooth &amp;&amp; sudo systemctl enable bluetooth
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/12/14/deploy-your-octopress-website-on-heroku/">Deploy your octopress website on heroku</a>
-      </h1>
-      <span class="post-date">Dec 14, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">Web</a>
-        
-      </span>
-      
-      <p>I&rsquo;ve been using octopress for writing blogs for nearly half of a year. The website is hosted on my family computer, which is a arm-based machine, runs Debian Linux. But such machine can sometimes be powered off by accident. That&rsquo;s while I want to put my webpages onto a stable server. Most of the people put their website on github, but github may be banned in china, so I choose heroku, I think it may be much more safer.<br />
-###Preparation
-First you have to register the heroku, and then create a new App, you will got a pop-up window which contains following message:</p>
-
-<pre><code>	Your app, XXXX, has been Created.
-	App URL:   http://XXXX.herokuapp.com/
-	Git URL: git@heroku.com:XXXX.git
-	Use the following code to set up your app for local development
-	git clone git@heroku.com:XXXX.git -o heroku
-
-</code></pre>
-
-<p>You have to remember these messages, for later we will use them to upload our own website.
-###Local Modification
-Clone your remote app to local directory</p>
-
-<pre><code>	git clone git@heroku.com:XXXX.git -o heroku
-	cd heroku
-
-</code></pre>
-
-<p>Copy your existing octopress to local directory, be sure to remove the existing .git directory in your octopress directory.</p>
-
-<pre><code>	cp Source_Directory ./
-
-</code></pre>
-
-<p>Remove some files</p>
-
-<pre><code>	rm Gemfile.lock README.markdown CHANGELOG.markdown
-
-</code></pre>
-
-<p>Clear out the .slugignore file</p>
-
-<pre><code>	&gt;.slugignore
-
-</code></pre>
-
-<p>Update your gemfile:</p>
-
-<pre><code>	source &quot;https://rubygems.org&quot;
-	
-	group :development do
-	  gem 'rake', '~&gt; 0.9'
-	  gem 'jekyll', '~&gt; 0.12'
-	  gem 'rdiscount', '~&gt; 1.6.8'
-	  gem 'pygments.rb', '~&gt; 0.3.4'
-	  gem 'RedCloth', '~&gt; 4.2.9'
-	  gem 'haml', '~&gt; 3.1.7'
-	  gem 'compass', '~&gt; 0.12.2'
-	  gem 'sass', '~&gt; 3.2'
-	  gem 'sass-globbing', '~&gt; 1.0.0'
-	  gem 'rubypants', '~&gt; 0.2.0'
-	  gem 'rb-fsevent', '~&gt; 0.9'
-	  gem 'stringex', '~&gt; 1.4.0'
-	  gem 'liquid', '~&gt; 2.3.0'
-	  gem 'directory_watcher', '1.4.1'
-	end
-	gem 'rake', '~&gt; 0.9'
-	gem 'jekyll', '~&gt; 0.12'
-	gem 'rdiscount', '~&gt; 1.6.8'
-	gem 'pygments.rb', '~&gt; 0.3.4'
-	gem 'RedCloth', '~&gt; 4.2.9'
-	gem 'haml', '~&gt; 3.1.7'
-	gem 'compass', '~&gt; 0.12.2'
-	gem 'sass-globbing', '~&gt; 1.0.0'
-	gem 'rubypants', '~&gt; 0.2.0'
-	gem 'stringex', '~&gt; 1.4.0'
-	gem 'liquid', '~&gt; 2.3.0'
-	gem 'sinatra', '~&gt; 1.4.2'
-
-</code></pre>
-
-<p>Since we use the rdiscount version is 1.6.8, when generate pages, this will cause failure, we also have to update one line in &ldquo;_config.yml&rdquo;:</p>
-
-<pre><code>	markdown: rdiscount
-	rdiscount:
-	  extensions:
-	    - autolink
-	      #- footnotes
-	    - smart
-
-</code></pre>
-
-<p>###Setup
-Install the dependencies:</p>
-
-<pre><code>	bundle install
-
-</code></pre>
-
-<p>Also you want to notice the rvm information, for example I use 1.9.3 for octopress, then my configuration is listed as:</p>
-
-<pre><code>	$ cat .rvmrc
-	rvm use 1.9.3
-	$ cat ~/.bashrc | grep rvm
-	PATH=$PATH:$HOME/.rvm/bin # Add RVM to PATH for scripting
-
-</code></pre>
-
-<p>###Testing
-Generate the website:</p>
-
-<pre><code>	rake generate
-
-</code></pre>
-
-<p>Preview the website:</p>
-
-<pre><code>	rake preview
-
-</code></pre>
-
-<p>Open <a href="http://127.0.0.1:4000">http://127.0.0.1:4000</a> to view the preview result.
-###Deploy
-Add all of the files in current directory to git</p>
-
-<pre><code>	git add .
-
-</code></pre>
-
-<p>Commit all of the changes:</p>
-
-<pre><code>	git commit -m 'site initialized'
-
-</code></pre>
-
-<p>Push your changes to heroku</p>
-
-<pre><code>	git push heroku master
-
-</code></pre>
-
-<p>View your website:</p>
-
-<pre><code>	heroku open
-
-</code></pre>
-
-<p>###Ignore some tmp files
-Create a .gitignore file under the current directory</p>
-
-<pre><code>	.bundle
-	.DS_Store
-	.sass-cache
-	.gist-cache
-	.pygments-cache
-	_deploy
-	public
-	sass.old
-	source.old
-	source/_stash
-	source/stylesheets/screen.css
-	vendor
-	node_modules
-	*~
-
-</code></pre>
-
-<p>Update the cache via:</p>
-
-<pre><code>	git rm -r --cached .
-	git add .
-	git commit -m &quot;fixed untracked files&quot;
-
-</code></pre>
-
-<p>Push again:</p>
-
-<pre><code>	git push heroku master
-
-</code></pre>
-
-<p>Unfortunately, the .gitignore couldn&rsquo;t remove public, so the final file only contains:</p>
-
-<pre><code>	*~
-
-</code></pre>
-
-<p>###Future Modification
-Add new blogs:</p>
-
-<pre><code>	rake new_post[&quot;Your_Article_Name&quot;]
-
-</code></pre>
-
-<p>Generate locally:</p>
-
-<pre><code>	rake generate 
-
-</code></pre>
-
-<p>Add changes:</p>
-
-<pre><code>	git commit -a 
-
-</code></pre>
-
-<p>Push to heroku:</p>
-
-<pre><code>	git push heroku master
-
-</code></pre>
-
-<p>Now you have a stable and swift website on heroku, enjoy it.
-###Modify theme</p>
-
-<pre><code>	git clone git://github.com/lucaslew/whitespace .themes/Whitespace
-	rake install['Whitespace']
-	rake generate
-
-</code></pre>
-
-<p>More themes could be found at <a href="https://github.com/imathis/octopress/wiki/3rd-Party-Octopress-Themes">https://github.com/imathis/octopress/wiki/3rd-Party-Octopress-Themes</a>.<br />
-You can preview these themes at <a href="http://opthemes.com/">http://opthemes.com/</a>.<br />
-###Change Colorscheme
-Since our theme locates under the .themes/Whitespace folder, simply change the following files:</p>
-
-<pre><code>$ pwd
-/home/Trusty/code/octo/heroku/Tomcat/.themes/Whitespace/sass/base
-[Trusty@~/code/octo/heroku/Tomcat/.themes/Whitespace/sass/base]$ cat _solarized.scss
-//$solarized: dark !default;
-$solarized: light !default;
-
-</code></pre>
-
-<p>Now your blog should have the light theme of solarized.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/12/13/write-blogger-in-linux/">Write Blogger in Linux</a>
-      </h1>
-      <span class="post-date">Dec 13, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>###blogtk
-Install it via &ldquo;yaourt -S blogtk&rdquo;</p>
 
       
     </div>
@@ -1858,8 +1852,17 @@ Install it via &ldquo;yaourt -S blogtk&rdquo;</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1868,7 +1871,7 @@ Install it via &ldquo;yaourt -S blogtk&rdquo;</p>
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

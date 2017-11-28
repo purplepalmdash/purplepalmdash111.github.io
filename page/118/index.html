@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,167 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/03/18/moving-weather-app-to-bbb/">Moving Weather App to BBB</a>
+      </h1>
+      <span class="post-date">Mar 18, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/beaglebone">BeagleBone</a>
+        
+      </span>
+      
+      <p>Following is the steps for moving the weather app to BBB(BeagleBone Black)<br />
+###Apache Configuration
+Create the site definition file under /etc/apache2/sites-available: <br /></p>
+
+<pre><code>	$ cp default nanjing
+
+</code></pre>
+
+<p>Edit the nanjing file with the following content:</p>
+
+<pre><code>	$ cat nanjing
+	&lt;VirtualHost *:7778&gt;
+		ServerAdmin webmaster@localhost
+	        ServerName nanjing
+	        ServerAlias nanjing.weather
+	
+		DocumentRoot /srv/www1
+		&lt;Directory /&gt;
+			Options FollowSymLinks
+			AllowOverride None
+		&lt;/Directory&gt;
+		&lt;Directory /srv/www1/&gt;
+			Options Indexes FollowSymLinks MultiViews
+			AllowOverride None
+			Order allow,deny
+			Allow from all
+		&lt;/Directory&gt;
+	
+		ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+		&lt;Directory &quot;/usr/lib/cgi-bin&quot;&gt;
+			AllowOverride None
+			Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+			Order allow,deny
+			Allow from all
+		&lt;/Directory&gt;
+	
+		ErrorLog ${APACHE_LOG_DIR}/error.log
+	
+		# Possible values include: debug, info, notice, warn, error, crit,
+		# alert, emerg.
+		LogLevel warn
+	
+		CustomLog ${APACHE_LOG_DIR}/access.log combined
+	&lt;/VirtualHost&gt;
+
+</code></pre>
+
+<p>Then we have to edit the /etc/apache2/ports.conf file, to add the newly-added site definition file. <br /></p>
+
+<pre><code>	$ cat ports.conf
+	NameVirtualHost *:7777
+	Listen 7777
+	NameVirtualHost *:7778
+	Listen 7778
+	NameVirtualHost *:7779
+	Listen 7779
+	NameVirtualHost *:7780
+	Listen 7780
+
+</code></pre>
+
+<p>Now you already could visit the site of <a href="http://Your_Ip_Address:7777">http://Your_Ip_Address:7777</a> for the nanjing weather infos. <br />
+###Script Moving
+Be sure following modules has been installed:&lt; br /&gt;</p>
+
+<pre><code>	$ pip install django pywapi pinyin
+	$ pip install BeautifulSoup
+
+</code></pre>
+
+<p>Add the crontab tasks:<br /></p>
+
+<pre><code>	0 */1 * * * python /root/code/genhtml.py
+	15 */1 * * * python /root/code/genhtml_bj.py
+	30 */1 * * * python /root/code/genhtml_changsha.py
+
+</code></pre>
+
+<p>Now the script will be run every hour at 0/15/30 minutes, enjoy it. <br />
+Notice the timezone should be correctly configured:<br /></p>
+
+<pre><code>	$  dpkg-reconfigure tzdata
+	# Choose Asia/Shanghai
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/03/17/deploy-weather-app-on-raspberrypi/">Deploy Weather APP on RaspberryPI</a>
+      </h1>
+      <span class="post-date">Mar 17, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/raspberrypi">RaspberryPI</a>
+        
+      </span>
+      
+      <p>Since I enabled the RaspberryPI and disabled the PogoPlug, I have to move the Weather App on RaspberryPI. <br />
+The main difference lies on the python version, on PogoPlug the default python version is python2.7, while on RaspberryPI it&rsquo;s python3.3, thus I have to use the virtualenvironment of Python. <br /></p>
+
+<p>###Setup the virtualenv
+Following is the steps for setting up the virtual environment for python2.7 on ArchLinux:<br /></p>
+
+<pre><code>	$ mkdir ~/pyves
+	$ cat &gt;~/.virtualenvrc &lt;&lt;EOF
+	export WORKON_HOME=&quot;$HOME/pyves&quot;
+	export PROJECT_HOME=&quot;$HOME/pyves&quot;
+	source /usr/bin/virtualenvwrapper.sh
+	EOF
+	$ source  ~/.virtualenvrc
+	$ cat &gt;&gt;~/.bashrc &lt;&lt;EOF
+	source $HOME/.virtualenvrc
+	EOF
+	$ mkvirtualenv --python=/usr/bin/python2.7 v27
+	$ workon v27
+	$ pip install pywapi django sqlite3
+
+</code></pre>
+
+<p>###Deployment Python Script
+Copy the script to some directory, mine is under /root/code/weather.<br />
+If we want cron to call the virtual environment, we have to create a script and in the script to call the python script.<br /></p>
+
+<pre><code>	#!/bin/bash
+	# Export everything.
+	source /root/.bashrc
+	# Change to the virtual environment
+	workon v27
+	# Call python
+	python /root/code/weather/genhtml.py
+
+</code></pre>
+
+<p>Now we add this script to crontab, at every whole point, each hour it will run once. <br /></p>
+
+<pre><code>	crontab -e
+	0 */1 * * * /root/code/weather/NJ.sh
+	15 */1 * * * /root/code/weather/BJ.sh
+	30 */1 * * * /root/code/weather/CS.sh
+
+</code></pre>
+
+<p>Now at every 0/15/30, our cron job will be run, and retrieve the data generate the flot image for displaying.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -277,212 +438,6 @@ But wait, midori relies on window, but we&rsquo;d better do everything in comman
 <p>You have to change the configuration-&gt;General, from <a href="http://xxx.xxx.xxx.xxx">http://xxx.xxx.xxx.xxx</a> to <a href="http://xxx.xxx.xxx.xxx:7777">http://xxx.xxx.xxx.xxx:7777</a>, then we can change the port and let it show in browser. <br /></p>
 
 <p>Now you can access the wordpress in everywhere.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/03/13/customize-wordpress-on-beaglebone-black/">Customize Wordpress on BeagleBone Black</a>
-      </h1>
-      <span class="post-date">Mar 13, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/wordpress">Wordpress</a>
-        
-      </span>
-      
-      <p>For Using proxy for Wordpress, we can directly edit the wp-config file:<br /></p>
-
-<pre><code>	$ cat wp-config.php
-	/** Set following for working behind the proxy **/
-	//define('WP_PROXY_HOST', '10.0.0.221');
-	//define('WP_PROXY_PORT', '9001');
-	#define('WP_PROXY_BYPASS_HOSTS','*.local-intranet');
-	##
-	define('WP_EMMORY_LIMIT', '64M');
-
-</code></pre>
-
-<p>A trouble shooting, you have to edit the /etc/resolv.conf to change the default dns server, then your wordpress could reach the network and install new plugins or themes. <br /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/03/13/setting-up-wordpress-on-beaglebone-black/">Setting Up Wordpress on BeagleBone Black</a>
-      </h1>
-      <span class="post-date">Mar 13, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/beaglebone">BeagleBone</a>
-        
-      </span>
-      
-      <p>Since BeagleBone Black&rsquo;s hardware configuration is enough for running LAMP, I decide to run wordpress on it. <br />
-###Environment
-Hardware Configuration:<br />
-CPU: Generic AM33XX (Flattened Device Tree)<br />
-MEM: MemTotal:         507428 kB<br />
-Disk: 1.8&rdquo; USB Disk, 30 GB<br />
-I also add 512MB swapfile for swapping partition. <br /></p>
-
-<p>Software Configuration:<br />
-Kernel: Linux arm 3.8.13-bone30 #1 SMP Mon Nov 18 14:53:22 CST 2013 armv7l GNU/Linux<br />
-OS:  Debian GNU/Linux 7 \n \l<br />
-###LAMP Configuration
-####Install Apache<br /></p>
-
-<pre><code>	$ apt-get install apache2
-
-</code></pre>
-
-<p>After installation, simply open the browser and visit the <a href="http://YourIPAddress">http://YourIPAddress</a>, if you can find &ldquo;It works!&rdquo;, then this says the apache server is running now. <br /></p>
-
-<p>####Install MySQL<br />
-MySQL is a powerful database management system which is used for organizing and retrieving data.<br /></p>
-
-<pre><code>	$ apt-get install mysql-server libapache2-mod-auth-mysql php5-mysql
-
-</code></pre>
-
-<p>You should be asked to provide the MySQL &ldquo;root&rdquo; user password.<br />
-Activate MySQL via following command:<br /></p>
-
-<pre><code>	$ mysql_install_db
-	Change the root password? [Y/n] n 
-	Remove anonymous users? [Y/n] Y
-	Disallow root login remotely? [Y/n] Y
-	Remove test database and access to it? [Y/n] Y
-	Reload privilege tables now? [Y/n] Y
-
-</code></pre>
-
-<p>Now the MySQL is OK, you have to install PHP<br /></p>
-
-<p>####Install PHP<br />
-Install following packages:<br /></p>
-
-<pre><code>	$ apt-get install php5 libapache2-mod-php5 php5-mcrypt
-
-</code></pre>
-
-<p>Edit the directory index file:<br /></p>
-
-<pre><code>	# cat /etc/apache2/mods-enabled/dir.conf
-	&lt;IfModule mod_dir.c&gt;
-	          DirectoryIndex index.php index.html index.cgi index.pl index.php index.xhtml index.htm
-	&lt;/IfModule&gt;
-Install modules for using the searched result:&lt;br /&gt;
-	apt-cache search php5-
-Testing PHP on your own apache search:&lt;br /&gt;
-	root@arm:/home# cat /var/www/info.php
-	&lt;?php
-	phpinfo();
-	?&gt;
-
-</code></pre>
-
-<p>Restart apache server and view the result:<br /></p>
-
-<pre><code>	# /etc/init.d/apache2 restart
-
-</code></pre>
-
-<p>View the <a href="http://YourIpAddress/info.php">http://YourIpAddress/info.php</a> you can see the php printed out messages. <br /></p>
-
-<p>###Wordpress Setup
-Download the latest Wordpress via:<br /></p>
-
-<pre><code>	# wget http://wordpress.org/latest.tar.gz
-
-</code></pre>
-
-<p>Install the ntp server, or you may meet some time and date problem:<br /></p>
-
-<pre><code>	# apt-get install ntp
-
-</code></pre>
-
-<p>Ok, the time is really an issue, gonna be discussed later. <br />
-Simply set the time via &ldquo; date -s &ldquo;$timestring&rdquo;&rdquo; is enough.<br /></p>
-
-<p>Now uncompress the wordpress. <br /></p>
-
-<p>Create the Wordpress Database and User:<br /></p>
-
-<pre><code>	# mysql -u root -p
-	mysql&gt; CREATE DATABASE wordpress;
-	Query OK, 1 row affected (0.01 sec)
-	mysql&gt; CREATE USER wordpressuser@localhost;
-	Query OK, 0 rows affected (0.00 sec)
-	mysql&gt; SET PASSWORD FOR wordpressuser@localhost= PASSWORD(&quot;xxxxxxxx&quot;);
-	Query OK, 0 rows affected (0.00 sec)
-	mysql&gt; GRANT ALL PRIVILEGES ON wordpress.* TO wordpressuser@localhost IDENTIFIED BY 'password';
-	Query OK, 0 rows affected (0.00 sec)
-	mysql&gt; FLUSH PRIVILEGES;
-	Query OK, 0 rows affected (0.00 sec)
-	mysql&gt; exit
-	Bye
-
-</code></pre>
-
-<p>Setup the WordPress Configuration:<br /></p>
-
-<pre><code>	cp ~/wordpress/wp-config-sample.php ~/wordpress/wp-config.php
-
-</code></pre>
-
-<p>Edit the configuration file:<br /></p>
-
-<pre><code>	cat ~/wordpress/wp-config.php
-	// ** MySQL settings - You can get this info from your web host ** //
-	/** The name of the database for WordPress */
-	define('DB_NAME', 'wordpress');
-	
-	/** MySQL database username */
-	define('DB_USER', 'wordpressuser');
-	
-	/** MySQL database password */
-	define('DB_PASSWORD', 'password');
-
-</code></pre>
-
-<p>Install rsync:<br /></p>
-
-<pre><code>	# apt-get install rsync
-
-</code></pre>
-
-<p>Use rsync for sync to the website&rsquo;s root directory:<br /></p>
-
-<pre><code>	# rsync -avP ~/wordpress/ /var/www/
-
-</code></pre>
-
-<p>Change to the website&rsquo;s root directory and change the ownership to the apache user:<br /></p>
-
-<pre><code>	root@arm:/etc# cd /var/www/
-	root@arm:/var/www# chown www-data:www-data /var/www -R 
-	root@arm:/# chmod g+w /var/www -R 
-
-</code></pre>
-
-<p>To know the username of apache:</p>
-
-<pre><code>	lsof -i 
-	Notice the :http part.
-
-</code></pre>
-
-<p>Install php5-gd , which is the required php module to run wordpress.</p>
-
-<pre><code>	apt-get install php5-gd
-
-</code></pre>
-
-<p>Now access the page of  /wp-admin/install.php  is OK. or you can access the <a href="http://YourIPAddress">http://YourIPAddress</a> is ready for install the wordpress on your BeagleBone Black.</p>
 
       
     </div>
@@ -1899,8 +1854,17 @@ Simply set the time via &ldquo; date -s &ldquo;$timestring&rdquo;&rdquo; is enou
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1909,7 +1873,7 @@ Simply set the time via &ldquo; date -s &ldquo;$timestring&rdquo;&rdquo; is enou
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

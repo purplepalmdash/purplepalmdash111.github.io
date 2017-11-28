@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,148 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/23/import-more-isos-in-cobbler/">Import More ISOs in Cobbler</a>
+      </h1>
+      <span class="post-date">Jun 23, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="ubuntu12-04">Ubuntu12.04</h3>
+
+<p>Since you have the iso files, import it via:</p>
+
+<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop /mnt/iso/ubuntu-12.04.3-server-amd64.iso /mnt1
+[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
+[root@CobblerServer iso]# cobbler profile list
+   CentOS-7-x86_64
+   Ubuntu-12.04-x86_64
+   Ubuntu14.04-x86_64
+</code></pre>
+
+<p>To make it quickly deployment, visit:<br />
+<a href="http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/</a></p>
+
+<p>Edit its profile like following:</p>
+
+<pre><code>[root@CobblerServer kickstarts]# cobbler profile edit --name=Ubuntu-12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1204.seed 
+</code></pre>
+
+<p>Create a new virtual machine for testing.</p>
+
+<pre><code>[root@CobblerServer kickstarts]# cobbler system add --name=test1204 --profile=Ubuntu-12.04-x86_64 --mac=52:54:00:e4:2c:df --interface=eth0 --ip-address=10.3.3.33 --hostname=test1204 --gateway=10.3.3.1 --dns-name=test1204
+</code></pre>
+
+<p>Testing the tftpserver via:</p>
+
+<pre><code>[dash@~]$ tftp 10.3.3.3   
+tftp&gt; get /pxelinux.0
+tftp&gt; quit
+[dash@~]$ ls pxelinux.0 
+pxelinux.0
+</code></pre>
+
+<p>Trouble-Shooting, you should very careful on your pxelinux.0 file, make sure you have the correct ones. Recently it&rsquo;s hard to get the right pxelinux.0 from cobbler loader sync.</p>
+
+<h3 id="ubuntu15-04">Ubuntu15.04</h3>
+
+<p>Import the iso via:</p>
+
+<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop ./ubuntu-15.04-server-amd64.iso /mnt1/
+[root@CobblerServer iso]# cobbler import --name=Ubuntu-15.04 --arch=x86_64 --path=/mnt1
+</code></pre>
+
+<p>Notice, here you will met Signature mismatch problem, do following:<br />
+First update Cobbler: ?</p>
+
+<pre><code>$ vim /etc/yum.repos.d/cobbler26.repo
+[home_libertas-ict_cobbler26]
+name=Cobbler (2.6.x) (CentOS_CentOS-6)
+type=rpm-md
+baseurl=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/
+gpgcheck=1
+gpgkey=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/repodata/repomd.xml.key
+enabled=1
+$ sudo yum install -y cobbler cobbler-web
+</code></pre>
+
+<p>And Trouble-Shooting for iptables(If you use redsocks):</p>
+
+<pre><code># iptables -t nat -I OUTPUT -d 10.3.3.0/24 -j RETURN
+</code></pre>
+
+<p>Then signature update will OK:</p>
+
+<pre><code>[root@CobblerServer redsocks]# cobbler signature update
+task started: 2015-06-23_144247_sigupdate
+task started (id=Updating Signatures, time=Tue Jun 23 14:42:47 2015)
+Successfully got file from http://cobbler.github.com/signatures/2.6.x/latest.json
+*** TASK COMPLETE ***
+
+</code></pre>
+
+<p>Re-import:</p>
+
+<pre><code>[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
+*** TASK COMPLETE ***
+[root@CobblerServer mnt]# cobbler profile list
+   CentOS-7-x86_64
+   Ubuntu-12.04-x86_64
+   Ubuntu-15.04-x86_64
+   Ubuntu14.04-x86_64
+</code></pre>
+
+<p>Edit the profile via:</p>
+
+<pre><code>[root@CobblerServer lib]# cd /var/lib/cobbler/kickstarts/
+[root@CobblerServer kickstarts]# ls
+default.ks    esxi5-ks.cfg      legacy.ks     sample_autoyast.xml  sample_esx4.ks   sample_esxi5.ks  sample_old.seed  ubuntu1204.seed
+esxi4-ks.cfg  install_profiles  pxerescue.ks  sample_end.ks        sample_esxi4.ks  sample.ks        sample.seed
+[root@CobblerServer kickstarts]# vim ubuntu1504.seed
+</code></pre>
+
+<p>Test it via:</p>
+
+<pre><code>$ qemu-img create -f qcow2 Cobbler1504Test.qcow2 100G
+$ cobbler profile edit --name=Ubuntu-15.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1504.seed
+$  cobbler system add --name=test1504 --profile=Ubuntu-15.04-x86_64 --mac=52:54:00:2e:c0:ff --interface=eth0 --ip-address=10.3.3.34 --hostname=test1504 --gateway=10.3.3.1 --dns-name=test1504
+
+</code></pre>
+
+<p>Installed failed, verify it tomorrow.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/19/wh-worktips-5/">WH Worktips(5)</a>
+      </h1>
+      <span class="post-date">Jun 19, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>This worktips will enable the visibility for ansible deployed nodes.</p>
+
+<pre><code>[root@z_WHServer Code]# cd ansible-tower-setup-2.1.5/
+[root@z_WHServer ansible-tower-setup-2.1.5]# ls
+ansible.cfg  configure  group_vars  host_vars  README.md  roles  setup.sh  site.yml
+</code></pre>
+
+<p>Later I will finish this. But remember the tutorial pdf works well.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -541,205 +683,6 @@ Which will prompt you for a new password.
 Once you have updated the password remember to run
 $ cobbler sync
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/16/xenserver-tips/">XenServer Tips</a>
-      </h1>
-      <span class="post-date">Jun 16, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Recently I want to research desktop virtualization on Xen, so this blog records all of the tips for Xen Hypervisor related info.</p>
-
-<h3 id="nested-virtualization">Nested Virtualization</h3>
-
-<p>I place 4 core(Copy Host Configuration on CPU parameter), but the XenServer refuse to start, by using a none-hosted-configuration CPU configuration, it will fail on starting the machine, So I choose to install xen hypervisor on Ubuntu14.04.</p>
-
-<h3 id="ubuntu-and-xen">Ubuntu and Xen</h3>
-
-<p>Install via:</p>
-
-<pre><code>$ sudo apt-get install xen-hypervisor-amd64
-$ sudo reboot
-</code></pre>
-
-<p>The Ubuntu will automatically choose xen for startup, so verify it via:</p>
-
-<pre><code>$ sudo xl list
-Name                                        ID   Mem VCPUs      State   Time(s)
-Domain-0                                     0  7832     4     r-----      72.8
-</code></pre>
-
-<h3 id="networking">Networking</h3>
-
-<p>Since the network is pretty complicated on my own machine, I decide to use openVSwitch for managing my own networking.</p>
-
-<pre><code>$ sudo apt-get install -y openvswitch-switch
-</code></pre>
-
-<p>Configuration of the networking:</p>
-
-<pre><code>$ cat /etc/network/interfaces
-###########################################
-## By using openVswitch, we enabled the following
-###########################################
-allow-hotplug ovsbr0
-iface ovsbr0 inet static
-address 192.168.0.119
-netmask 255.255.0.0
-gateway 192.168.0.176
-dns-nameservers 114.114.114.114
-dns-nameservers 180.76.76.76
-
-$ sudo ovs-vsctl add-br ovsbr0
-$ sudo ovs-vsctl set Bridge ovsbr0 stp_enable=false other_config:stp-max-age=6 other_config:stp-forward-delay=4
-$ sudo ovs-vsctl list Bridge
-$ sudo ovs-vsctl add-port ovsbr0 eth0
-</code></pre>
-
-<p>Disable the netfilter on all bridges:</p>
-
-<pre><code>$ sudo vi /etc/sysctl.conf
-
-net.bridge.bridge-nf-call-ip6tables = 0
-net.bridge.bridge-nf-call-iptables = 0
-net.bridge.bridge-nf-call-arptables = 0
-
-$ sudo sysctl -p /etc/sysctl.conf
-# Note: These settings are created in /proc/sys/net. The bridge folder only appears to be created after first creating a bridge with the ''brctl' command.
-</code></pre>
-
-<h3 id="administrator-tools">Administrator Tools</h3>
-
-<pre><code>$ sudo apt-get install virt-manager
-$ sudo apt-get install xen-tools
-</code></pre>
-
-<h3 id="connect-with-virt-manager">Connect with virt-manager</h3>
-
-<p>Change following parameters and re-connect again.</p>
-
-<pre><code># vim /etc/xen/xend-config.sxp 
-     xend-unix-server yes
-     xend-unix-path /var/lib/xend/xend-socket
-# service libvirt-bin restart
-libvirt-bin stop/waiting
-libvirt-bin start/running, process 5345
-# service xen restart
- * Restarting Xen daemons                                                                                                             ^[[A                                                                                                                           [ OK ]
-# service xendomains restart
-
-</code></pre>
-
-<pre><code>$ sudo virt-install --connect=xen:/// --name u14.04 --ram 1024 --disk u14.04.img,size=4 --location http://ftp.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/
-
-
-# http://ftp.ubuntu.com/ubuntu/dists/trusty/main/installer-amd64/
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/11/use-8188eu-and-hostapd-for-setting-soft-ap-router/">Use 8188eu and Hostapd For Setting Soft-AP Router</a>
-      </h1>
-      <span class="post-date">Jun 11, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="hostapd">HostAPD</h3>
-
-<p>Install HostAPD via following commands:</p>
-
-<pre><code>$ sudo apt-get autoremove hostapd
-$ wget https://github.com/jenssegers/RTL8188-hostapd/archive/v2.0.tar.gz
-$ tar -zxvf v2.0.tar.gz
-$ cd RTL8188-hostapd-2.0/hostapd
-$ sudo make
-$ sudo make install
-$ sudo service hostapd restart
-[ ok ] Stopping advanced IEEE 802.11 management: hostapd.
-[ ok ] Starting advanced IEEE 802.11 management: hostapd.
-
-</code></pre>
-
-<h3 id="dhcpd">dhcpd</h3>
-
-<p>We need a dhcp server for assigning a new IP address to the clients who joins the ap:<br />
-An example file is listed as following:</p>
-
-<pre><code>ddns-update-style none;
-ignore client-updates;
-authoritative;
-option local-wpad code 252 = text;
- 
-subnet
-10.0.0.0 netmask 255.255.255.0 {
-# --- default gateway
-option routers
-10.0.0.1;
-# --- Netmask
-option subnet-mask
-255.255.255.0;
-# --- Broadcast Address
-option broadcast-address
-10.0.0.255;
-# --- Domain name servers, tells the clients which DNS servers to use.
-option domain-name-servers
-10.0.0.1, 8.8.8.8, 8.8.4.4;
-option time-offset
-0;
-range 10.0.0.3 10.0.0.13;
-default-lease-time 1209600;
-max-lease-time 1814400;
-}
-</code></pre>
-
-<h3 id="wlan0-network">WLAN0 Network</h3>
-
-<p>The WLAN0 equipment network should be configured as following:</p>
-
-<pre><code>$ cat /etc/network/interface
-# wireless wlan0
-allow-hotplug wlan0
-iface wlan0 inet static
-address 10.0.70.1
-netmask 255.255.255.0
-
-</code></pre>
-
-<p>So next time you reboot the computer, it will automatically get the ip address for wlan0.</p>
-
-<h3 id="enable-the-ip-forwarding">Enable the ip forwarding</h3>
-
-<p>Using following 2 commands for enabling your AP.</p>
-
-<pre><code>$ sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE
-$ sudo dhcpd wlan0
-</code></pre>
-
-<p>I add these two lines into the start file of awesome(My desktop environment).</p>
-
-<h3 id="disable-hostapd">Disable hostapd</h3>
-
-<p>You should remove the definition of the dhcpd, and the iptables forwarding rules, and
-also the definition in <code>/etc/network/interfaces</code>, and the hostapd configuration in
-<code>/etc/rc*.d</code> from <code>S</code> to <code>K</code>, while the <code>rc*.d</code> ranges from rc0 to rc6.</p>
 
       
     </div>
@@ -2156,8 +2099,17 @@ also the definition in <code>/etc/network/interfaces</code>, and the hostapd con
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2166,7 +2118,7 @@ also the definition in <code>/etc/network/interfaces</code>, and the hostapd con
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

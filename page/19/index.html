@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,234 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/07/vagrantpluginissue/">vagrantpluginissue</a>
+      </h1>
+      <span class="post-date">Dec 7, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>After updating vagrant, my vagrant could use, the error msg are listed as
+following:</p>
+
+<pre><code>$ vagrant box list
+Vagrant failed to initialize at a very early stage:
+
+The plugins failed to initialize correctly. This may be due to manual
+modifications made within the Vagrant home directory. Vagrant can
+attempt to automatically correct this issue by running:
+
+  vagrant plugin repair
+
+If Vagrant was recently updated, this error may be due to incompatible
+versions of dependencies. To fix this problem please remove and re-install
+all plugins. Vagrant can attempt to do this automatically by running:
+
+  vagrant plugin expunge --reinstall
+
+</code></pre>
+
+<p>I tried <code>vagrant plugin repair</code> and <code>vagrant plugin expunge --reinstall</code> but
+both failed.</p>
+
+<p>So , manually reinstall the vagrant-libvirt plugin:</p>
+
+<pre><code>$  CONFIGURE_ARGS='with-ldflags=-L/opt/vagrant/embedded/lib \
+with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib' \
+  GEM_HOME=~/.vagrant.d/gems GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems  \
+PATH=/opt/vagrant/embedded/bin:$PATH \
+  vagrant plugin install vagrant-libvirt
+
+Installing the 'vagrant-libvirt' plugin. This can take a few minutes...
+/opt/vagrant/embedded/lib/ruby/2.2.0/rubygems/dependency.rb:315:in `to_specs':
+Could not find 'fog-core' (&gt;= 0) among 44 total gem(s) (Gem::LoadError)
+Checked in 'GEM_PATH=/opt/vagrant/embedded/gems', execute `gem env` for more
+information
+</code></pre>
+
+<p>Seems we need to reinstall fog-core to vagrant&rsquo;s <code>GEM_PATH</code>, use following
+commands:</p>
+
+<pre><code>$ sudo pacman -S ruby
+$ gem source -r https://rubygems.org
+$ gem source -a http://rubygems.org
+$ GEM_HOME=~/.vagrant.d/gems GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems \
+PATH=/opt/vagrant/embedded/bin:$PATH
+$ sudo chmod 777 -R /opt/vagrant/embedded/gems
+$ vim ~/.gemrc
+gem: &quot;--user-install&quot;
++ install: --no-user-install
+$ proxychains4 gem install --install-dir /opt/vagrant/embedded/gems/ fog-core
+$  CONFIGURE_ARGS='with-ldflags=-L/opt/vagrant/embedded/lib \
+with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib' \
+  GEM_HOME=~/.vagrant.d/gems GEM_PATH=$GEM_HOME:/opt/vagrant/embedded/gems  \
+PATH=/opt/vagrant/embedded/bin:$PATH \
+  vagrant plugin install vagrant-libvirt
+$ vim ~/.gemrc
+gem: &quot;--user-install&quot;
+- install: --no-user-install
+</code></pre>
+
+<p>Now vagrant will work ok, verify it via:</p>
+
+<pre><code>$ vagrant box list
+CentOS72ForKubernetes                 (virtualbox, 0)
+CentOS72KVM                           (libvirt, 0)
+CentOS72Kubernetes                    (virtualbox, 0)
+</code></pre>
+
+<h3 id="fog-libvirt-issue">fog-libvirt issue</h3>
+
+<p>When build fog-libvirt, we met:</p>
+
+<pre><code>domain.c:5696:29: error: ‘VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK’ undeclared (first use in this function)
+                     INT2NUM(VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK));
+                             ^
+/opt/vagrant/embedded/include/ruby-2.2.0/ruby/ruby.h:241:30: note: in definition of macro ‘INT2FIX’
+ #define INT2FIX(i) (((VALUE)(i))&lt;&lt;1 | FIXNUM_FLAG)
+</code></pre>
+
+<p>Then the solution would be change the ld from :</p>
+
+<pre><code># ln -fs /usr/bin/ld.gold /usr/bin/ld
+# vagrant plugin install --plugin-version 0.0.3 fog-libvirt
+# rm -f /usr/bin/ld
+# ln -fs /usr/bin/ld.bfd /usr/bin/ld
+</code></pre>
+
+<p>Now you got the vagrant-libvirt working again.</p>
+
+<p><strong>Notice</strong>: This would be happend in vagrant-1.9.1</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/07/downloadxenserver62patches/">DownloadXenServer62Patches</a>
+      </h1>
+      <span class="post-date">Dec 7, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      <p>The script is listed as following, use python2 for running it:</p>
+
+<pre><code>from bs4 import BeautifulSoup
+import urllib2
+import re
+
+## Pages contains the download page url
+url_list = [
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0&quot;,
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=10&quot;,
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=20&quot;,
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=30&quot;,
+]
+
+for url in url_list:
+  #response = urllib2.urlopen('https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0')
+  response = urllib2.urlopen(url)
+  
+  ### Fetch the urllib2 result.
+  html = response.read()
+  # print len(html)
+  
+  ### Make soup of the html.
+  soup = BeautifulSoup(html, 'html.parser')
+  # print soup.prettify()
+  
+  ### Get all of the download page link:
+  for i in soup.findAll('h4'):
+    for a in i.findAll('a'):
+      #print a['href']
+      page_response = urllib2.urlopen(a['href'])
+      page_html = page_response.read()
+      page_soup = BeautifulSoup(page_html, 'html.parser')
+      for elem in page_soup(text=re.compile(r&quot;window.location.href&quot;)):
+        prefix = elem.string.find(&quot;supportkc&quot;)
+        #print prefix
+        url_begin_pos = elem.string.find(&quot;window.location.href&quot;) + 24
+        url_end_pos = elem.string.find(&quot;zip&quot;) + 3
+        if prefix &gt; 0:
+          print &quot;https://support.citrix.com&quot;+elem.string[url_begin_pos:url_end_pos]
+        else:
+          print elem.string[url_begin_pos:url_end_pos]
+</code></pre>
+
+<p>The total patches are around 2G size.</p>
+
+<p>The correct version:</p>
+
+<pre><code>from bs4 import BeautifulSoup
+import urllib2
+import re
+
+## Pages contains the download page url
+url_list = [
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0&quot;,
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=10&quot;,
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=20&quot;,
+&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=30&quot;,
+]
+
+for url in url_list:
+  response = urllib2.urlopen(url)
+  
+  ### Fetch the urllib2 result.
+  html = response.read()
+  # print len(html)
+  
+  ### Make soup of the html.
+  soup = BeautifulSoup(html, 'html.parser')
+  # print soup.prettify()
+  
+  ### Get all of the download page link:
+  for i in soup.findAll('h4'):
+    for a in i.findAll('a'):
+      print a['href']
+      print a.text
+      page_response = urllib2.urlopen(a['href'])
+      page_html = page_response.read()
+      page_soup = BeautifulSoup(page_html, 'html.parser')
+      try:
+        print page_soup.findAll('blockquote')[1].text
+      except:
+        pass
+      else:
+        pass
+      try:
+        print page_soup.find_all('span',attrs={'class':'block-quote'})[1].text
+      except:
+        pass
+      else:
+        pass
+      for elem in page_soup(text=re.compile(r&quot;window.location.href&quot;)):
+        prefix = elem.string.find(&quot;supportkc&quot;)
+        #print prefix
+        url_begin_pos = elem.string.find(&quot;window.location.href&quot;) + 24
+        url_end_pos = elem.string.find(&quot;zip&quot;) + 3
+        if prefix &gt; 0:
+          print &quot;https://support.citrix.com&quot;+elem.string[url_begin_pos:url_end_pos]
+        else:
+          print elem.string[url_begin_pos:url_end_pos]
+</code></pre>
+
+<p>Manually get the result, and this time we get the uuid.</p>
+
+<p>a tip for reverse the output is using <code>tac</code> rather than <code>cat</code>.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -465,746 +693,6 @@ website running.</p>
 
 <p>Now open your browser visit <code>http://localhost:8078</code>, then you could visit the
 blog.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/11/28/runwordpressonminikube/">RunWordPressOnMinikube</a>
-      </h1>
-      <span class="post-date">Nov 28, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>On Ubuntu16.04, first download the deb package from</p>
-
-<p><a href="https://github.com/kubernetes/minikube/releases">https://github.com/kubernetes/minikube/releases</a></p>
-
-<p>Install virtualbox:</p>
-
-<pre><code>$ sudo apt-get install -y virtualbox
-$ sudo dpkg -i minikube_0.12-2.deb
-$ which minikube-linux-amd64 
-/usr/bin/minikube-linux-amd64
-</code></pre>
-
-<h3 id="start-cluster">Start Cluster</h3>
-
-<p>First install kubectl:</p>
-
-<pre><code>$ curl -Lo kubectl \
-https://storage.googleapis.com/kubernetes-release/release/v1.3.0/bin/linux/amd64/kubectl \
-&amp;&amp; chmod +x kubectl &amp;&amp; sudo mv kubectl /usr/local/bin/
-</code></pre>
-
-<p>Start kubernetes cluster via:</p>
-
-<pre><code>$ minikube-linux-amd64 start
-Starting local Kubernetes cluster...
-Downloading Minikube ISO
- 36.00 MB / 36.00 MB [==============================================] 100.00%
-0s
-Kubectl is now configured to use the cluster.
-</code></pre>
-
-<p>Examine the result:</p>
-
-<pre><code>$ kubectl get pods --all-namespaces
-NAMESPACE     NAME                          READY     STATUS RESTARTS   AGE
-kube-system   kube-addon-manager-minikube   0/1       ContainerCreating   0	1m
-</code></pre>
-
-<p>Examine the status:</p>
-
-<pre><code>$ minikube-linux-amd64 status
-minikubeVM: Running
-localkube: Running
-</code></pre>
-
-<p>View add-on lists:</p>
-
-<pre><code>$ minikube addons list
-- heapster: disabled
-- ingress: disabled
-- registry-creds: disabled
-- addon-manager: enabled
-- dashboard: enabled
-- kube-dns: enabled
-</code></pre>
-
-<p>Trouble-Shooting:<br />
-When getting following error msgs, delete <code>~/.minikube</code> and run <code>minikube
-start</code> again solves the problem.</p>
-
-<pre><code>~$ minikube start
-Starting local Kubernetes cluster...
-E0224 15:08:58.755236    7977 start.go:107] Error starting host: Error getting state for host: machine does not exist.
-</code></pre>
-
-<h3 id="minikube-upgrade">minikube upgrade</h3>
-
-<p>Upgrade minikube in ubuntu by installing the newest deb package.</p>
-
-<p>Upgrade minikube in ArchLinux by <code>yaourt -S minikube</code>, then <code>minikube start</code>
-will use the newest version.</p>
-
-<h3 id="trouble-shooting-in-dashboard">Trouble-Shooting In Dashboard</h3>
-
-<p>When startup the dashboard, the minikube will complains could not find the endpoint:</p>
-
-<pre><code>$ minikube-linux-amd64 dashboard
-Could not find finalized endpoint being pointed to by kubernetes-dashboard: Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
-Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
-Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
-Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
-</code></pre>
-
-<p>Solved:<br />
-Get all of the pods in all namespaces:</p>
-
-<pre><code>$ kubectl get pods --all-namespaces
-NAMESPACE     NAME                          READY     STATUS              RESTARTS   AGE
-default       nginx-3449338310-vna7q        0/1       ContainerCreating   0          2h
-kube-system   kube-addon-manager-minikube   0/1       ContainerCreating   0          3h
-</code></pre>
-
-<p>Get the description of the pod <code>kube-addon-manager-minikube</code>:</p>
-
-<pre><code>$ kubectl describe --namespace=kube-system po kube-addon-manager-minikube
-Name:		kube-addon-manager-minikube
-Namespace:	kube-system
-Node:		minikube/192.168.99.100
-Start Time:	Mon, 28 Nov 2016 12:17:40 +0800
-Labels:		component=kube-addon-manager
-		version=v5.1
-Status:		Pending
-IP:		192.168.99.100
-Controllers:	&lt;none&gt;
-Containers:
-  kube-addon-manager:
-    Container ID:	
-    Image:		gcr.io/google-containers/kube-addon-manager:v5.1
-    Image ID:		
-    Port:		
-    Requests:
-      cpu:			5m
-      memory:			50Mi
-    State:			Waiting
-      Reason:			ContainerCreating
-    Ready:			False
-    Restart Count:		0
-    Environment Variables:	&lt;none&gt;
-Conditions:
-  Type		Status
-  Initialized 	True 
-  Ready 	False 
-  PodScheduled 	True 
-Volumes:
-  addons:
-    Type:	HostPath (bare host directory volume)
-    Path:	/etc/kubernetes/
-QoS Tier:	Burstable
-No events.
-</code></pre>
-
-<p>Then manually download the docker images of
-<code>gcr.io/google-containers/kube-addon-manager:v5.1</code>, load it via following command:</p>
-
-<pre><code>$ eval $(minikube-linux-amd64 docker-env)
-$ docker load&lt;kubeaddonmanagerv51.tar.bz2 
-</code></pre>
-
-<p>Also the default nginx-3449338310-vna7q is failed, use the same method for manually download
-the pause image and load it into the docker system:</p>
-
-<pre><code>$ eval $(minikube-linux-amd64 docker-env)
-$ docker load&lt;kubepause30.tar.bz2
-</code></pre>
-
-<p>Also load the dns:</p>
-
-<pre><code>$ eval $(minikube-linux-amd64 docker-env)
-$ docker load&lt;kubedns18.tar.bz2
-</code></pre>
-
-<h3 id="wordpress-installation">Wordpress Installation</h3>
-
-<p>Refers to :</p>
-
-<p><a href="https://www.linux-toys.com/?p=887">https://www.linux-toys.com/?p=887</a></p>
-
-<p>Download yaml file:</p>
-
-<pre><code>$ wget https://gist.githubusercontent.com/rusher81572/ddf2e1487b609f294b21a2463a8be104/raw/1ba33c7a2dfbef9118c6043030b76babb0a80c7b/wordpress-k8s -O wordpress.yaml
-$ sudo docker pull rusher81572/phpfpm
-$ sudo docker pull rusher81572/mysql
-$ sudo docker pull rusher81572/nginx
-</code></pre>
-
-<p>Create the services from yaml file:</p>
-
-<pre><code>$ kubectl create -f wordpress.yaml
-$ minikube-linux-amd64 service nginx --url
-http://192.168.99.100:32400
-</code></pre>
-
-<p>Open the url in your browser:</p>
-
-<p><img src="/images/2016_11_28_17_24_10_527x489.jpg" alt="/images/2016_11_28_17_24_10_527x489.jpg" /></p>
-
-<p>Manually create the database named <code>wordpress</code>:</p>
-
-<pre><code>$ kubectl get pods (To find the Mysql pod name)
-$ kubectl exec -it mysql-qe900 bash
-$ mysql
-$ create database wordpress;
-</code></pre>
-
-<p>Insert the following items in webpage:</p>
-
-<pre><code>Username: root
-Password: sql
-Database Name: wordpress
-Database Host: mysql
-</code></pre>
-
-<p>After installation, now refresh the webpage you will see the installed wordpress.</p>
-
-<h3 id="echo-server">Echo Server</h3>
-
-<p>First download the image and load it into the minikube VM:</p>
-
-<pre><code>$ docker pull gcr.io/google_containers/echoserver:1.4
-$ kubectl run hello-minikube --image=gcr.io/google_containers/echoserver:1.4 \
---hostport=8000 --port=8080 
-$ kubectl get pod
-NAME                              READY     STATUS    RESTARTS   AGE
-hello-minikube-3383150820-x72om   1/1       Running   0          1m
-</code></pre>
-
-<p>You could use <code>kubectl describe pod hellxxxx</code> for displaying the detailed
-info.</p>
-
-<p>Test echo server:</p>
-
-<pre><code># curl $(minikube service hello-minikube --url) --data &quot;param1=value1&quot;
-CLIENT VALUES:
-client_address=172.17.0.1
-command=POST
-real path=/
-query=nil
-request_version=1.1
-request_uri=http://192.168.99.101:8080/
-
-SERVER VALUES:
-server_version=nginx: 1.10.0 - lua: 10001
-
-HEADERS RECEIVED:
-accept=*/*
-content-length=13
-content-type=application/x-www-form-urlencoded
-host=192.168.99.101:32520
-user-agent=curl/7.51.0
-BODY:
-param1=value1%                                        
-</code></pre>
-
-<p>Or use nmap for scan all of the ports:</p>
-
-<pre><code>$ nmap 192.168.99.101
-
-Starting Nmap 7.31 ( https://nmap.org ) at 2016-11-28 22:09 CST
-Nmap scan report for 192.168.99.101
-Host is up (0.0043s latency).
-Not shown: 996 closed ports
-PORT      STATE SERVICE
-22/tcp    open  ssh
-8000/tcp  open  http-alt
-8443/tcp  open  https-alt
-30000/tcp open  ndmps
-</code></pre>
-
-<p>8000 port is the port listening for, testing this port:</p>
-
-<pre><code>$  curl http://192.168.99.101:8000 --data &quot;param1=value1&quot;
-CLIENT VALUES:
-client_address=192.168.99.1
-command=POST
-real path=/
-query=nil
-request_version=1.1
-request_uri=http://192.168.99.101:8080/
-
-SERVER VALUES:
-server_version=nginx: 1.10.0 - lua: 10001
-
-HEADERS RECEIVED:
-accept=*/*
-content-length=13
-content-type=application/x-www-form-urlencoded
-host=192.168.99.101:8000
-user-agent=curl/7.51.0
-BODY:
-param1=value1% 
-</code></pre>
-
-<h3 id="deployment-using-dashboard">Deployment Using dashboard</h3>
-
-<p>Specify the namespace:<br />
-<img src="/images/2016_11_29_10_35_29_283x454.jpg" alt="/images/2016_11_29_10_35_29_283x454.jpg" /></p>
-
-<p><img src="/images/2016_11_29_10_35_37_205x403.jpg" alt="/images/2016_11_29_10_35_37_205x403.jpg" /></p>
-
-<p>Create app name:</p>
-
-<pre><code>App name: hello-yang
-Container Image: gcr.io/google_containers/echoserver:1.4
-Number of pods: 5
-Service: External
-Port: 8080  Target port: 8080  Protocol: TCP
-</code></pre>
-
-<p>After deployment, examine the result via:</p>
-
-<pre><code>➜  ~ kubectl get namespace
-NAME            STATUS    AGE
-default         Active    14h
-devops-meetup   Active    13h
-kube-system     Active    14h
-➜  ~ kubectl get deployment --namespace=&quot;devops-meetup&quot;
-NAME         DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-hello-yang   5         5         5            5           24m
-</code></pre>
-
-<p>Delete the deployment via:</p>
-
-<pre><code># kubectl delete deployment hello-yang --namespace=&quot;devops-meetup&quot;
-deployment &quot;hello-yang&quot; deleted
-</code></pre>
-
-<h3 id="deployment-using-yaml">Deployment Using yaml</h3>
-
-<p>Download the yaml file:</p>
-
-<pre><code>$  wget
-https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/guestbook/all-in-one/guestbook-all-in-one.yaml
-$ vim guestbook-all-in-one.yaml
-  # type: LoadBalancer
-  type: LoadBalancer
-</code></pre>
-
-<p>Create the service via:</p>
-
-<pre><code>$ kubectl create -f guestbook-all-in-one.yaml
-</code></pre>
-
-<p>Get the service and view the result:</p>
-
-<pre><code>➜  ~ kubectl get services
-NAME           CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
-frontend       10.0.0.164   &lt;pending&gt;     80/TCP     15m
-kubernetes     10.0.0.1     &lt;none&gt;        443/TCP    15h
-redis-master   10.0.0.100   &lt;none&gt;        6379/TCP   15m
-redis-slave    10.0.0.14    &lt;none&gt;        6379/TCP   15m
-➜  ~ minikube service frontend --url
-http://192.168.99.101:30640
-</code></pre>
-
-<p>Then open the browser and view the result.</p>
-
-<p><img src="/images/2016_11_29_11_31_56_375x301.jpg" alt="/images/2016_11_29_11_31_56_375x301.jpg" /></p>
-
-<h3 id="tips">Tips</h3>
-
-<p>Login to minikube VM:</p>
-
-<pre><code>$ minikube-linux-amd64 ssh
-</code></pre>
-
-<p>View minikube dashboard URL:</p>
-
-<pre><code>$ minikube-linux-amd64 dashboard --url
-http://192.168.99.100:30000
-</code></pre>
-
-<p>View minikube service URL:</p>
-
-<pre><code>$ minikube-linux-amd64 service nginx --url
-http://192.168.99.100:32400
-</code></pre>
-
-<p>Delete pod in terminating status in force:</p>
-
-<pre><code># kubectl delete pod mypod --grace-period=0
-</code></pre>
-
-<p>Using kubectl proxy:</p>
-
-<pre><code>$ kubectl proxy --port=8001
-Starting to serve on localhost:8001
-</code></pre>
-
-<p>Now visit: <code>http://localhost:8001/ui</code> for accessing the dashboard.</p>
-
-<p>wide output:</p>
-
-<pre><code>$ kubectl get pods -o wide
-NAME       READY     STATUS    RESTARTS   AGE       IP           NODE
-hugoblog   1/1       Running   2          22h       172.17.0.4   minikube
-$ kubectl get pods        
-NAME       READY     STATUS    RESTARTS   AGE
-hugoblog   1/1       Running   2          22h
-</code></pre>
-
-<p>Create deployment command:</p>
-
-<pre><code># kubectl run my-nginx --image=nginx --replicas=2 --port=808 --expose
-</code></pre>
-
-<p>so if you want to delete all of the pods, simply delete:</p>
-
-<pre><code># kubectl delete deployments my-nginx
-</code></pre>
-
-<p>Prevent image pull in json definition files(take zookeeper.json for example):</p>
-
-<pre><code>$ cat zookeeper.json
-{
-  &quot;kind&quot;: &quot;Pod&quot;,
-  &quot;apiVersion&quot;: &quot;v1&quot;,
-  &quot;metadata&quot;: {
-    &quot;name&quot;: &quot;zookeeper&quot;,
-    &quot;labels&quot;: {
-      &quot;name&quot;: &quot;zookeeper&quot;
-    }
-  },
-  &quot;spec&quot;: {
-    &quot;containers&quot;: [
-      {
-        &quot;name&quot;: &quot;zookeeper&quot;,
-        &quot;image&quot;: &quot;mattf/zookeeper:latest&quot;,
-	&quot;imagePullPolicy&quot;: &quot;IfNotPresent&quot;,
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/11/26/workingtipsonkubernetes/">WorkingTipsOnKubernetes</a>
-      </h1>
-      <span class="post-date">Nov 26, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="先决条件">先决条件</h3>
-
-<p>CentOS 7.2 1511, Vagrant for kvm.<br />
-关闭selinux, 关闭firewalld, 使用以下命令安装docker最新版:</p>
-
-<pre><code>$ curl -sSL \
-http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/internet |
-\ sh -
-</code></pre>
-
-<p>IP地址配置:</p>
-
-<pre><code>master	192.168.0.223
-node1	192.168.0.224
-</code></pre>
-
-<p>配置无密码登录，master到master, master到node1.</p>
-
-<pre><code># ssh-copy-id root@192.168.0.223
-# ssh-copy-id root@192.168.0.224
-</code></pre>
-
-<h3 id="安装kubernetes">安装kubernetes</h3>
-
-<p>修改配置文件如下:</p>
-
-<pre><code>$ cat kubernetes/cluster/centos/config-default.sh 
-
-# Master配置
-export MASTER=${MASTER:-&quot;root@192.168.0.223&quot;}
-export MASTER_IP=${MASTER#*@}
-
-# Minion节点配置
-export NODES=${NODES:-&quot;root@192.168.0.223 root@192.168.0.224&quot;}
-
-# Cluster中含有的节点数
-export NUM_NODES=${NUM_NODES:-2}
-
-# service cluster配置的IP地址范围
-export SERVICE_CLUSTER_IP_RANGE=${SERVICE_CLUSTER_IP_RANGE:-&quot;192.168.22.0/24&quot;}
-
-# flannel的overlay网络IP地址范围, 不能和上面定义的SERVICE_CLUSTER_IP_RANGE地址范围冲突
-export FLANNEL_NET=${FLANNEL_NET:-&quot;172.20.0.0/16&quot;}
-
-# Docker参数，这里我们开启daocloud加速模式
-export DOCKER_OPTS=${DOCKER_OPTS:-&quot;--cluster-store=etcd://$MASTER_IP:2379, --registry-mirror=http://1a653205.m.daocloud.io&quot;}
-</code></pre>
-
-<p>开始部署kubernetes集群:</p>
-
-<pre><code>$ KUBERNETES_PROVIDER=centos ./kube-up.sh
-</code></pre>
-
-<p>安装完毕后，运行以下脚本，重新加载docker的配置后，重启两台机器:</p>
-
-<pre><code>$ sudo systemctl stop docker
-$ sudo systemctl daemon-reload
-$ sudo systemctl start docker
-</code></pre>
-
-<p>重启完毕后，运行以下命令查看节点状态:</p>
-
-<pre><code># kubectl get nodes
-NAME            STATUS    AGE
-192.168.0.223   Ready     10h
-192.168.0.224   Ready     10h
-</code></pre>
-
-<p>加载两个docker镜像:</p>
-
-<pre><code># docker images
-gcr.io/google_containers/kubernetes-dashboard-amd64   v1.4.0  
-gcr.io/google_containers/pause-amd64                  3.0     
-</code></pre>
-
-<p>添加kubectl到系统路径中:</p>
-
-<pre><code># cp cluster/centos/binaries/kubectl /opt/kubernetes/bin/
-# vim ~/.bashrc
-export PATH=$PATH:/opt/kubernetes/bin/
-</code></pre>
-
-<h3 id="启动kubernetes-ui">启动kubernetes UI</h3>
-
-<p>启动dashboard-controller服务和dashboard-service服务:</p>
-
-<pre><code># cd ./cluster/gce/coreos/kube-manifests/addons/dashboard
-# kubectl create -f dashboard-controller.yaml 
-# kubectl create -f dashboard-service.yaml 
-</code></pre>
-
-<p>在node1上可以查看docker运行状态:</p>
-
-<pre><code># docker ps
-b22047f30d55        gcr.io/google_containers/kubernetes-dashboard-amd64:v1.4.0   &quot;/dashboard --port=90&quot;
-8979b7b1db14        gcr.io/google_containers/pause-amd64:3.0                     &quot;/pause&quot;
-</code></pre>
-
-<p>查看<code>http://192.168.0.223:8080/ui</code>，得到dashboard的网页.</p>
-
-<p><img src="/images/2016_11_26_22_01_29_891x497.jpg" alt="/images/2016_11_26_22_01_29_891x497.jpg" /></p>
-
-<p>service截图:</p>
-
-<p><img src="/images/2016_11_26_22_03_57_758x176.jpg" alt="/images/2016_11_26_22_03_57_758x176.jpg" /></p>
-
-<h3 id="nginx服务">nginx服务</h3>
-
-<p>配置nginx-rc.yaml文件用于启动nginx服务:</p>
-
-<pre><code>$ vim nginx-rc.yaml 
-apiVersion: v1 
-kind: ReplicationController 
-metadata: 
-  name: nginx-controller 
-spec: 
-  replicas: 2 
-  selector: 
-    name: nginx 
-  template: 
-    metadata: 
-      labels: 
-        name: nginx 
-    spec: 
-      containers: 
-        - name: nginx
-          image: nginx
-          ports: 
-            - containerPort: 80
-</code></pre>
-
-<p>启动服务:</p>
-
-<pre><code>$ kubectl -s http://192.168.0.223:8080 create -f nginx-rc.yaml
-</code></pre>
-
-<p>检查创建的pods情况:</p>
-
-<pre><code># kubectl get pods
-NAME                     READY     STATUS              RESTARTS   AGE
-nginx-controller-1bx6j   0/1       ContainerCreating   0          13s
-nginx-controller-attgh   0/1       ContainerCreating   0          13s
-</code></pre>
-
-<p>得到pod的运行情况:</p>
-
-<pre><code># kubectl describe pod nginx-controller-1bx6j
-Name:		nginx-controller-1bx6j
-Namespace:	default
-Node:		192.168.0.224/192.168.0.224
-Start Time:	Sat, 26 Nov 2016 14:08:33 +0000
-Labels:		name=nginx
-Status:		Running
-IP:		172.20.99.3
-Controllers:	ReplicationController/nginx-controller
-......
-</code></pre>
-
-<p>此刻可以在对应的节点上看到nginx的运行情况: <code>curl 172.20.99.3</code>在master节点上。</p>
-
-<h3 id="节点内可访问的nginx-service">节点内可访问的nginx service</h3>
-
-<p>Service的type有ClusterIP和NodePort之分，缺省是ClusterIP，这种类型的Service
-只能在集群内部访问。配置文件如下：</p>
-
-<pre><code>$ vim nginx-service-clusterip.yaml 
-apiVersion: v1 
-kind: Service 
-metadata: 
-  name: nginx-service-clusterip 
-spec: 
-  ports: 
-    - port: 8001 
-      targetPort: 80 
-      protocol: TCP 
-  selector: 
-    name: nginx
-</code></pre>
-
-<p>创建服务:</p>
-
-<pre><code># kubectl create -f nginx-service-clusterip.yaml
-</code></pre>
-
-<p>查看创建出的service情况:</p>
-
-<pre><code># kubectl get service
-NAME                      CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-kubernetes                192.168.22.1     &lt;none&gt;        443/TCP    34m
-nginx-service-clusterip   192.168.22.189   &lt;none&gt;        8001/TCP   27s
-</code></pre>
-
-<p>访问节点内可访问的nginx service, 在master和node1上都可以访问到:</p>
-
-<pre><code>$ curl 192.168.22.189:8001
-</code></pre>
-
-<h3 id="外部可访问的nginx服务">外部可访问的nginx服务</h3>
-
-<p>type为NodePort的为外部可访问的nginx服务，定义文件如下:</p>
-
-<pre><code>$ vim nginx-service-nodeport.yaml 
-apiVersion: v1 
-kind: Service 
-metadata: 
-  name: nginx-service-nodeport 
-spec: 
-  ports: 
-    - port: 8000
-      targetPort: 80 
-      protocol: TCP 
-  type: NodePort
-  selector: 
-    name: nginx
-</code></pre>
-
-<p>运行<code>kubectl create -f nginx-service-nodeport.yaml</code>, 得到服务如下:</p>
-
-<pre><code># kubectl get service
-NAME                      CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-kubernetes                192.168.22.1     &lt;none&gt;        443/TCP    58m
-nginx-service-clusterip   192.168.22.189   &lt;none&gt;        8001/TCP   23m
-nginx-service-nodeport    192.168.22.209   &lt;nodes&gt;       8000/TCP   2m
-</code></pre>
-
-<p>可以看到，新增加了一个<code>nginx-service-nodeport</code>的服务.</p>
-
-<p>查看其端口，30923为其映射的端口号:</p>
-
-<pre><code># kubectl describe service nginx-service-nodeport
-Name:			nginx-service-nodeport
-Namespace:		default
-Labels:			&lt;none&gt;
-Selector:		name=nginx
-Type:			NodePort
-IP:			192.168.22.209
-Port:			&lt;unset&gt;	8000/TCP
-NodePort:		&lt;unset&gt;	30923/TCP
-Endpoints:		172.20.62.2:80,172.20.99.3:80
-Session Affinity:	None
-</code></pre>
-
-<p>从外部(192.168.0.220)验证nginx服务:</p>
-
-<pre><code># curl http://192.168.0.223:30923
-&lt;!DOCTYPE html&gt;
-&lt;html&gt;
-&lt;head&gt;
-&lt;title&gt;Welcome to nginx!&lt;/title&gt;
-</code></pre>
-
-<h3 id="删除服务">删除服务</h3>
-
-<p>删除我们上面创建的基于nodeport的服务:</p>
-
-<pre><code># kubectl delete -f ./nginx-service-nodeport.yaml
-</code></pre>
-
-<p>删除以后，检查service情况:</p>
-
-<pre><code># kubectl get service
-NAME                      CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-kubernetes                192.168.22.1     &lt;none&gt;        443/TCP    1h
-nginx-service-clusterip   192.168.22.189   &lt;none&gt;        8001/TCP   55m
-</code></pre>
-
-<p>可以看到<code>nginx-service-nodeport</code>服务已经被删除。</p>
-
-<h3 id="指定端口">指定端口</h3>
-
-<p>创建配置文件如下:</p>
-
-<pre><code>$ vim specifynode.yaml 
-apiVersion: v1 
-kind: Service 
-metadata: 
-  name: nginx-service-nodeport 
-spec: 
-  ports: 
-    - port: 80
-      nodePort: 30080 
-      protocol: TCP 
-  type: NodePort
-  selector: 
-    name: nginx
-</code></pre>
-
-<p>创建服务:</p>
-
-<pre><code>$ kubectl create -f ./specifynode.yaml
-</code></pre>
-
-<p>现在访问<code>http://192.168.0.223:30080</code>即可访问到nginx服务.</p>
-
-<p>注: 端口需要绑定在<code>30000-32767</code>.</p>
 
       
     </div>
@@ -2621,8 +2109,17 @@ spec:
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2631,7 +2128,7 @@ spec:
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,343 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/25/linux2-dot-6-39-for-utu2440-2/">Linux2.6.39 for Utu2440(2)</a>
+      </h1>
+      <span class="post-date">Oct 25, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="serial-port-support">Serial Port Support</h3>
+
+<p>Enable the Device Driver&mdash;-&gt; Character deivces &mdash;-&gt; Serial drivers &mdash;-&gt; Samsung related settings, My setting is listed as following:<br />
+<img src="/images/serialport.jpg" alt="/images/serialport.jpg" /><br />
+Then you will see serial output during kernel boot.</p>
+
+<h3 id="dm9000-support">DM9000 Support</h3>
+
+<p>Add following code into the linux/arch/arm/mach-s3c2440/mach-smdk2440.c:</p>
+
+<pre><code>#include &lt;linux/serial_core.h&gt;
++ /* Added dm9000 support for utu2400 */
++ #include &lt;linux/dm9000.h&gt;
+#include &lt;linux/platform_device.h&gt;
+
+#include &lt;plat/common-smdk.h&gt;
+
++ /* DM9000 Base address for SMDK2440 */
++ #define MACH_SMDK2440_DM9K_BASE (S3C2410_CS3 + 0x300)
+
+static struct map_desc smdk2440_iodesc[] __initdata = {
+
++ /* Added for dm9000 */
++ static struct resource smdk2440_dm9k_resource[] = 
++ {
++     [0] = 
++      {
++           .start = MACH_SMDK2440_DM9K_BASE,
++           .end   = MACH_SMDK2440_DM9K_BASE + 3,
++           .flags = IORESOURCE_MEM
++      },
++     [1] = 
++      {
++           .start = MACH_SMDK2440_DM9K_BASE + 4,
++           .end   = MACH_SMDK2440_DM9K_BASE + 7,
++           .flags = IORESOURCE_MEM
++      },
++     [2] = 
++     {
++         .start = IRQ_EINT9,
++         .end   = IRQ_EINT9,
++         .flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
++     }
++ };
++ 
++ /*
++  * The DM9000 has no eeprom, and it's MAC address is set by
++  * the bootloader before starting the kernel.
++  */
++ static struct dm9000_plat_data smdk2440_dm9k_pdata = 
++ {
++ 	.flags        = (DM9000_PLATF_16BITONLY | DM9000_PLATF_NO_EEPROM),
++ };
++ 
++ static struct platform_device smdk2440_device_eth = 
++ {
++ 	.name        = &quot;dm9000&quot;,
++ 	.id      = -1,
++ 	.num_resources = ARRAY_SIZE(smdk2440_dm9k_resource),
++ 	.resource  = smdk2440_dm9k_resource,
++ 	.dev       = {
++ 		.platform_data   = &amp;smdk2440_dm9k_pdata,
++ 	},
++ };
+
+static struct platform_device *smdk2440_devices[] __initdata = {
+	&amp;s3c_device_ohci,
+	&amp;s3c_device_lcd,
+	&amp;s3c_device_wdt,
+	&amp;s3c_device_i2c0,
+	&amp;s3c_device_iis,
++  	&amp;smdk2440_device_eth,
+};
+
+</code></pre>
+
+<p>Then select the dm9000 support from:<br />
+Device Driver&mdash;-&gt; Network device support -&gt; Ethernet(10 or 100Mbit) &mdash;-&gt; DM9000 support<br />
+Now testing the kernel, you will see the kernel starts with dm9000 support, thus we could use NFS for booting the system.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/25/linux2-dot-6-39-for-utu2440-3/">Linux2.6.39 for Utu2440(3)</a>
+      </h1>
+      <span class="post-date">Oct 25, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="building-filesystems">Building Filesystems</h3>
+
+<p>Use following script for building the basic filesystem:</p>
+
+<pre><code>$ cat mkrootfs 
+#!/bin/sh
+echo &quot;------Create rootfs directons start...--------&quot;
+mkdir rootfs
+cd rootfs
+echo &quot;--------Create root,dev....----------&quot;
+mkdir bin boot dev etc home lib mnt proc root sbin sys tmp usr var  www
+mkdir etc/init.d etc/rc.d etc/sysconfig
+mkdir usr/sbin usr/bin usr/lib usr/modules
+echo &quot;make node in dev/console dev/null&quot;
+mknod -m 666 dev/console c 5 1
+mknod -m 666 dev/null c 1 3
+mkdir mnt/etc mnt/jffs2 mnt/yaffs mnt/data mnt/temp
+mkdir var/lib var/lock var/run var/tmp
+chmod 1777 tmp
+chmod 1777 var/tmp
+echo &quot;-------make direction done---------&quot;
+
+</code></pre>
+
+<p>Run it and you will get an folder which contains the newly created directory structure.</p>
+
+<pre><code>$ sudo ./mkrootfs 
+------Create rootfs directons start...--------
+--------Create root,dev....----------
+make node in dev/console dev/null
+-------make direction done---------
+$ ls rootfs 
+bin  boot  dev  etc  home  lib  mnt  proc  root  sbin  sys  tmp  usr  var  www
+
+</code></pre>
+
+<p>After making the filesystem, you should install all of the kernel modules into your fs:</p>
+
+<pre><code>$ make modules_install ARCH=arm INSTALL_MOD_PATH=The_PATH_TO_YOUR_ROOTFS
+
+</code></pre>
+
+<h3 id="busybox">BusyBox</h3>
+
+<p>Busybox provides almost all of the tools used in system, first we should download and cross-compile it.</p>
+
+<pre><code>$ wget http://www.busybox.net/downloads/busybox-1.22.1.tar.bz2
+$ tar xjvf busybox-1.22.1.tar.bz2
+$ cd busybox-1.22.1
+$ vim Makefile
++ CROSS_COMPILE ?= arm-linux-
+# bbox: we may have CONFIG_CROSS_COMPILER_PREFIX in .config,
+$ make menuconfig
+
+</code></pre>
+
+<p>Parameters:</p>
+
+<pre><code>Build Options---&gt; Build BusyBox as a static binary(no shared libs)
+Installation Options--&gt; Busybox installation prefix(See following pictures)
+Linux Module Utilities--&gt;  Default directory containing modules(/lib/modules)
+Linux System Utilities ---&gt;
+[*]Support /etc/mdev.conf
+[*]Support command execution at device addition/removal
+Init Utilities ---&gt;
+&quot;Support reading an inittab file&quot;
+&quot;Support running commands with a controlling-tty&quot;
+
+
+</code></pre>
+
+<p><img src="/images/busyboxinstall.jpg" alt="/images/busyboxinstall.jpg" /><br />
+Then Make and make install:</p>
+
+<pre><code>$ make &amp;&amp; make install
+
+</code></pre>
+
+<p>Now list the rootfs you have created you could see a new file named linuxrc is located under the / directory. Also you will see lots of executable files under the /bin which links to the /bin/busybox.</p>
+
+<h3 id="startup-configuration">Startup Configuration</h3>
+
+<p>Create the /etc/group file:</p>
+
+<pre><code>$ cat etc/group
+root:*:0:
+daemon:*:1:
+bin:*:2:
+sys:*:3:
+adm:*:4:
+tty:*:5:
+disk:*:6:
+lp:*:7:lp
+mail:*:8:
+news:*:9:
+u p:*:10:
+proxy:*:13:
+kmem:*:15:
+dialout:*:20:
+fax:*:21:
+voice:*:22:
+cdrom:*:24:
+floppy:*:25:
+tape:*:26:
+s o:*:27:
+a io:*:29:
+sshd:*:74:
+ppp:x:99:
+500:x:500:plg
+501:x:501:fa
+
+</code></pre>
+
+<p>Edit the /etc/passwd file:</p>
+
+<pre><code>$ cat etc/passwd
+root::0:0:root:/:/bin/sh
+ftp::14:50:FTP User:/var/ftp:
+bin:*:1:1:bin:/bin:
+daemon:*:2:2:daemon:/sbin:
+nobody:*:99:99:Nobody:/:
+sky::502:502:Linux User,,,:/home/sky:/bin/sh
+
+</code></pre>
+
+<p>Add the hostname:</p>
+
+<pre><code>$ cat etc/sysconfig/HOSTNAME 
+utu2440
+
+</code></pre>
+
+<p>Edit the inittab file:</p>
+
+<pre><code>$ cat etc/inittab
+#etc/inittab
+::sysinit:/etc/init.d/rcS
+
+# Start an &quot;askfirst&quot; shell on /dev/tty2-4
+console::askfirst:-/bin/sh
+tty2::askfirst:-/bin/sh
+tty3::askfirst:-/bin/sh
+tty4::askfirst:-/bin/sh
+
+# /sbin/getty invocations for selected ttys
+tty4::respawn:/sbin/getty 38400 tty5
+tty5::respawn:/sbin/getty 38400 tty6
+
+
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a –r
+$ chmod 777 etc/init.d/rcS
+
+</code></pre>
+
+<p>Edit etc/init.d/rcS, this file will be executed everytime we bootup the linux system:</p>
+
+<pre><code>$ cat etc/init.d/rcS
+#!/bin/sh
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+runlevel=S 
+prevlevel=N
+umask 022 
+export PATH runlevel prevlevel
+echo &quot;----------mount all----------------&quot;
+mount -a 
+echo /sbin/mdev&gt;/proc/sys/kernel/hotplug
+mdev -s
+### Added from utu2440
+
+trap &quot;:&quot; INT QUIT TSTP
+##################################
+#/bin/mount -t tmpfs tmpfs /dev
+#/bin/mount -t sysfs sysfs /sys
+
+################################## 
+mkdir /dev/pts
+/bin/mknod /dev/pts/0 c 136 0
+/bin/mknod /dev/pts/1 c 136 1
+/bin/mknod /dev/pts/2 c 136 2
+/bin/mknod /dev/pts/3 c 136 3
+/bin/mknod /dev/pts/4 c 136 4
+/bin/mknod /dev/pts/5 c 136 5
+
+
+/bin/mount -t devpts devpts /dev/pts
+#/bin/mount -t proc none /proc
+ln -s /dev/ts0 /dev/h3600_tsraw
+/sbin/ifconfig eth0 10.0.0.15
+/usr/sbin/telnetd -l /bin/login
+echo &quot;After telnetd&quot;
+/usr/bin/tty&gt;/root/tty.txt
+
+</code></pre>
+
+<p>Create a new fstab file:</p>
+
+<pre><code>$ cat etc/fstab 
+#device mount-point  type       option      dump  fsck  order
+proc      /proc             proc      defaults        0      0
+none     /tmp              ramfs     defaults       0       0
+sysfs     /sys              sysfs      defaults        0      0
+mdev    /dev              ramfs     defaults        0       0
+
+</code></pre>
+
+<h3 id="testing-filesystem">Testing filesystem</h3>
+
+<p>Set the nfs boot options:</p>
+
+<pre><code>utu-bootloader=&gt;&gt;&gt;setenv bootargs 'console=ttySAC0 init=/linuxrc root=/dev/nfs nfsroot=10.0.0.11:/media/nfs/rootfs,proto=tcp,nolock ip=10.0.0.15:10.0.0.1:10.0.0.1:255.255.255.0:www.yctek.com:eth0:off'
+utu-bootloader=&gt;&gt;&gt;setenv bootargs 'console=ttySAC0 init=/linuxrc root=/dev/nfs nfsroot=10.0.0.11:/media/nfs/rootfs,proto=tcp,nolock ip=10.0.0.15'
+
+</code></pre>
+
+<p>then we could boot into the nfs based filesystem.</p>
+
+<pre><code>Please press Enter to activate this console. NET: Registered protocol family 10
+
+[root@www ~]# 
+[root@www ~]# uname -a
+Linux www 2.6.39 #6 Mon Oct 20 16:12:43 CST 2014 armv4tl GNU/Linux
+
+</code></pre>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -644,275 +981,6 @@ turn is 0
   893 root       0:00 grep telnet
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/22/enable-sshd-on-2440/">Enable sshd on 2440</a>
-      </h1>
-      <span class="post-date">Oct 22, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="package-preparation">Package Preparation</h3>
-
-<p>For openssh requires the following packages, first we have to download them all from internet.<br />
-zlib, openssl, openssh.</p>
-
-<pre><code>$ wget http://zlib.net/zlib-1.2.8.tar.gz
-$ wget https://www.openssl.org/source/openssl-0.9.8zc.tar.gz
-$ wget http://mirror.internode.on.net/pub/OpenBSD/OpenSSH/portable/openssh-6.7p1.tar.gz
-
-</code></pre>
-
-<h3 id="building">Building</h3>
-
-<h4 id="cross-compile-zlib">Cross-compile zlib</h4>
-
-<p>We have to manually change the following line in Makefile :</p>
-
-<pre><code>LDSHARED=gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
-to
-LDSHARED=arm-linux-gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
-
-</code></pre>
-
-<p>Then:</p>
-
-<pre><code>$ ./configure --prefix=/media/nfs/rootfs/usr/
-$ make CC=arm-linux-gcc AR=arm-linux-ar LD=arm-linux-ld
-$ make install
-
-</code></pre>
-
-<h4 id="cross-compile-openssh">Cross-compile openssh</h4>
-
-<p>Get the openssl&rsquo;s configure help menus:</p>
-
-<pre><code># ./Configure --help
-Usage: Configure [no-&lt;cipher&gt; ...] [enable-&lt;cipher&gt; ...] [experimental-&lt;cipher&gt; ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]shared] [[no-]zlib|zlib-dynamic] [enable-montasm] [no-asm] [no-dso] [no-krb5] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--with-xxx[=vvv]] [--test-sanity] os/compiler[:flags]
-
-</code></pre>
-
-<p>Then configure the building via:</p>
-
-<pre><code>$ ./Configure --prefix=/media/nfs/rootfs/usr os/compiler:/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
-$ make &amp;&amp; make install
-
-</code></pre>
-
-<h4 id="cross-compile-openssh-1">Cross-compile openssh</h4>
-
-<p>Configure the openssh via following command, the lib&rsquo;s directory should be adjust to previous installed directory:</p>
-
-<pre><code>$ /configure --host=arm-linux --with-libs --with-zlib=/media/nfs/rootfs/usr/ --with-ssl-dir=/media/nfs/rootfs/usr/ --disable-etc-default-login CC=/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
-
-</code></pre>
-
-<p>Make but don&rsquo;t install.<br />
-Install steps:</p>
-
-<pre><code>$ cp sshd /media/nfs/rootfs/usr/local/sbin/
-$ cp scp sftp ssh ssh-add ssh-agent ssh-keygen ssh-keyscan /media/nfs/rootfs/usr/local/bin/
-$ cp sftp-server ssh-keysign /media/nfs/rootfs/usr/local/libexec/
-
-</code></pre>
-
-<p>In 2440 board, run:</p>
-
-<pre><code>[root@TrustyArch busybox-1.22.1]# mkdir -p /usr/local/etc/
-[root@TrustyArch busybox-1.22.1]# mkdir -p /var/run/
-[root@TrustyArch busybox-1.22.1]# mkdir -p /var/empty/sshd
-[root@TrustyArch busybox-1.22.1]# chmod 755 /var/empty
-
-</code></pre>
-
-<p>Generate the key files:</p>
-
-<pre><code>$ ssh-keygen -t rsa -f ssh_host_rsa_key -N &quot;&quot;
-$ ssh-keygen -t rsa1 -f ssh_host_key -N &quot;&quot;
-$ ssh-keygen -t dsa -f ssh_host_dsa_key -N &quot;&quot;
-$ cp ssh_host_dsa_key ssh_host_dsa_key.pub ssh_host_key ssh_host_key.pub ssh_host_rsa_key ssh_host_rsa_key.pub /media/nfs/rootfs/usr/local/etc/
-
-</code></pre>
-
-<p>Add lines into /etc/passwd and /etc/group in embedded system rootfs:</p>
-
-<pre><code>$ cat /etc/passwd
-sshd:*:74:74:Privilege-separated SSH:/var/empty/sshd:/sbin/nologin
-$ cat /etc/group
-sshd:*:74:
-
-</code></pre>
-
-<p>Change the sshd_config file:</p>
-
-<pre><code>$ cp sshd_config /media/nfs/rootfs/usr/local/etc/
-$ vim /media/nfs/rootfs/usr/local/etc/sshd_config
-HostKey /usr/local/etc/ssh_host_key
-HostKey /usr/local/etc/ssh_host_rsa_key
-HostKey /usr/local/etc/ssh_host_dsa_key
-PermitRootLogin yes
-PermitEmptyPasswords yes
-UsePrivilegeSeparation no
-Subsystem	sftp	/usr/local/libexec/sftp-server
-
-</code></pre>
-
-<p>Then start the sshd via:</p>
-
-<pre><code>/usr/local/sbin/sshd
-
-</code></pre>
-
-<p>Good, we get segment fault, later will investigate this issue.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/21/install-openvpn-in-raspberrypi/">Install OpenVPN in RaspberryPI</a>
-      </h1>
-      <span class="post-date">Oct 21, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="packages">Packages</h3>
-
-<p>Raspberry PI runs ArchLinux, first install related packages.</p>
-
-<pre><code>$ sudo pacman -S openvpn
-$ sudo pacman -S easy-rsa
-$ sudo pacman -S dnsmasq
-
-</code></pre>
-
-<p>openvpn is the OpenVPN&rsquo;s Kernel.<br />
-easy-rsa is used for manage the keys.<br />
-dnsmasq will acts like the domain name server.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>First Make the directory and copy the easy-rsa&rsquo;s files:</p>
-
-<pre><code># mkdir /etc/openvpn/easy-rsa
-[root@alarmpi ~]#  cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa
-[root@alarmpi ~]# ls /etc/openvpn/easy-rsa/
-build-ca	build-key-pkcs12  inherit-inter      sign-req
-build-dh	build-key-server  list-crl	     vars
-build-inter	build-req	  openssl-1.0.0.cnf  whichopensslcnf
-build-key	build-req-pass	  pkitool
-build-key-pass	clean-all	  revoke-full
-
-</code></pre>
-
-<p>Now go and run easy-rsa:</p>
-
-<pre><code>[root@alarmpi ~]# cd /etc/openvpn/easy-rsa/
-[root@alarmpi easy-rsa]# source vars
-NOTE: If you run ./clean-all, I will be doing a rm -rf on /etc/openvpn/easy-rsa/keys
-[root@alarmpi easy-rsa]# ./clean-all 
-[root@alarmpi easy-rsa]# ./build-ca
-
-
-</code></pre>
-
-<h3 id="generate-the-keys-and-certifications">Generate the keys and certifications</h3>
-
-<p>My name is <code>Trusty_delta</code>.</p>
-
-<pre><code>[root@alarmpi easy-rsa]# sh build-key-server Trusty_delta
-[root@alarmpi easy-rsa]# ls keys/Trusty_*
-keys/Trusty_delta.crt  keys/Trusty_delta.csr  keys/Trusty_delta.key
-
-</code></pre>
-
-<h3 id="diffie-hellman-parameters">Diffie-Hellman Parameters</h3>
-
-<p>This may takes extremely long time, especially on RaspberryPI, OMG&hellip;&hellip;.</p>
-
-<pre><code>[root@alarmpi easy-rsa]# sh build-dh 
-# cd keys
-# cp ca.crt delta.crt delta.key dh2048.pem /etc/openvpn
-# cd ..
-
-</code></pre>
-
-<h3 id="generate-the-private-key">Generate the private key</h3>
-
-<pre><code># source vars
-NOTE:If you run ./clean-all, I will be doing a rm -rf on /etc/openvpn/easy-rsa/keys
-root@delta:/etc/openvpn/easy-rsa# ./build-key laptop
-Generating a 1024 bit RSA private key
-
-</code></pre>
-
-<p>The private key called &ldquo;laptop&rdquo; then we could make a directory for holding private keys and copy them into that directory.</p>
-
-<pre><code># mkdir ~/ovpn-client
-# cp ca.crt laptop.crt laptop.key ~/ovpn-client
-
-</code></pre>
-
-<p>If you develier these 3 files to client, client could use them for connecting your VPN server.</p>
-
-<h3 id="openvpn-server">OpenVPN Server</h3>
-
-<p>Copy the server.conf file into /etc/openvpn/:</p>
-
-<pre><code># cd /usr/share/openvpn/examples/
-# cp server.conf /etc/openvpn/Trusty_delta.conf
-# vim Trusty_delta.conf
-cert delta.crt
-key delta.key
-dh dh2048.pem
-push &quot;redirect-gateway def1&quot;
-push &quot;dhcp-option DNS 172.8.0.1&quot;
-
-</code></pre>
-
-<p>Make service start automatically:</p>
-
-<pre><code># systemctl start openvpn@Trusty_delta.conf
-# systemctl enable openvpn@Trusty_delta.conf
-
-</code></pre>
-
-<p>Then we could test the vpn in other linux servers, using modified client.conf file.</p>
-
-<h3 id="check-service">Check service</h3>
-
-<p>Use netstat for check the status of openvpn server:</p>
-
-<pre><code>netstat -anp| grep openvpn
-
-</code></pre>
-
-<p>Following is directly copy from the ubuntu related.</p>
-
-<h3 id="dns-server">DNS Server</h3>
-
-<p>Edit the dnsmasq.conf:</p>
-
-<pre><code>listen-address = 127.0.0.1, 172.8.0.1
-bind-interfaces
-
-</code></pre>
-
-<p>Then restart the dnsmasq.</p>
 
       
     </div>
@@ -2329,8 +2397,17 @@ bind-interfaces
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2339,7 +2416,7 @@ bind-interfaces
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

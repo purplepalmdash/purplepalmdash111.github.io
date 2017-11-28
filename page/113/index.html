@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,507 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/04/08/programming-in-c-of-fc-tutorial-6/">Programming in C of FC tutorial 6</a>
+      </h1>
+      <span class="post-date">Apr 8, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/fc">FC</a>
+        
+      </span>
+      
+      <p>###Full Circle C 8
+####Limitation
+Fibonacci sequence: normally this program limited by the limitation of unsigned long long</p>
+
+<pre><code>#include &lt;stdio.h&gt;
+
+typedef unsigned long long fibo_type;
+#define FIBO_FORMAT &quot;%10llu&quot;
+
+void printFibo(fibo_type num)
+{
+        printf(FIBO_FORMAT, num);
+}
+
+int main()
+{
+        int num = 0;
+        fibo_type a = 0, b=1, c;
+
+        printf(&quot;%4d: &quot;, ++num);
+        printFibo(a);
+        printf(&quot;\n&quot;);
+
+        printf(&quot;%4d: &quot;,++num);
+        printFibo(b);
+        printf(&quot;\n&quot;);
+
+        c=a+b;
+        while(c&gt;=b)
+        {
+                printf(&quot;%4d: &quot;,++num);
+                printFibo(c);
+                printf(&quot;\n&quot;);
+                a=b;
+                b=c;
+                c=a+b;
+        }
+
+        printf(&quot;Stopped after %d digits\n&quot;, num);
+        printFibo(c);
+        printf(&quot;\n&quot;);
+        return 0;
+}
+
+</code></pre>
+
+<p>This program will exit when c reach the limitation of definition of unsigned long long
+####Using GMP
+Using gmp to re-write this program:</p>
+
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;gmp.h&gt;
+
+int main()
+{
+        int num = 0;
+        mpz_t f_1;
+        mpz_t f_2;
+
+        mpz_init(f_1);
+        mpz_init(f_2);
+        mpz_set_ui(f_1, 0);
+        mpz_set_ui(f_1, 1);
+        printf(&quot;%10d: 0\n&quot;, ++num);
+
+        while(1)
+        {
+                mpz_add(f_1, f_2, f_1);
+                mpz_swap(f_1, f_2);
+                char *res = mpz_get_str(NULL, 10, f_2);
+                printf(&quot;%10d: %s\n&quot;, ++num, res);
+                free(res);
+                sleep(1);
+        }
+
+        mpz_clear(f_1);
+        mpz_clear(f_2);
+        return 0;
+}
+
+</code></pre>
+
+<p>Compile it via:</p>
+
+<pre><code>gcc -o Fibonacci2 Fibonacci2.c -lgmp
+
+</code></pre>
+
+<p>This won&rsquo;t have limitation currently, but you have to finish the execises, when you get internet connection.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/04/08/programming-in-c-of-fc-tutorial-5/">Programming in C of FC tutorial 5</a>
+      </h1>
+      <span class="post-date">Apr 8, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/fc">FC</a>
+        
+      </span>
+      
+      <p>###Full Circle C 7
+####Example
+Following is the origin ifstat.c, this program will list the net-interface payloads, and it will print out the net interface statistics every 2 seconds, but notice this program have several bugs:</p>
+
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;unistd.h&gt;
+typedef unsigned long long ull;
+int parseDevFile(const char * iface, ull *bRx, ull *pRx, ull *bTx, ull *pTx);
+void dumpInterfaceUsage(const char * iface);
+int parseDevFile(const char * iface, ull *bRx, ull *pRx, ull *bTx, ull *pTx)
+{
+        FILE * fp = NULL;
+        char * line = NULL;
+        unsigned int len = 0;
+        fp = fopen(&quot;/proc/net/dev&quot;, &quot;r&quot;);
+        if(fp == NULL)
+        {
+                return -1;
+        }
+        while(getline(&amp;line, &amp;len, fp) != -1)
+        {
+                if(strstr(line, iface) != NULL)
+                {
+                        sscanf(strstr(line, &quot;:&quot;)+1, &quot;%llu%llu%*u%*u%*u%*u%*u%*u%llu%llu&quot;, bRx, pRx, bTx, pTx);
+                }
+        }
+        fclose(fp);
+        free(line);
+        return 0;
+}
+void dumpInterfaceUsage(const char * iface)
+{
+        ull ifaceBRxOld = 0, ifaceBTxOld = 0, ifacePRxOld = 0, ifacePTxOld = 0;
+        ull ifaceBRxNew = 0, ifaceBTxNew = 0, ifacePRxNew = 0, ifacePTxNew = 0;
+        const int SLEEP_TIME = 2;
+
+        if(parseDevFile(iface, &amp;ifaceBRxOld, &amp;ifacePRxOld, &amp;ifaceBTxOld, &amp;ifacePTxOld) == -1) return;
+        sleep(SLEEP_TIME);
+        while(1)
+        {
+                if(parseDevFile(iface, &amp;ifaceBRxNew, &amp;ifacePRxNew, &amp;ifaceBTxNew, &amp;ifacePTxNew) == -1) return;
+                printf(&quot;%s In: %8.2f kbytes/s  %5llu P/s Out: %8.2f kbytes/s %5llu P/s\n&quot;, iface,
+                                (ifaceBRxNew - ifaceBRxOld)/(SLEEP_TIME *1024.0),
+                                (ifacePRxNew - ifacePRxOld)/(SLEEP_TIME),
+                                (ifaceBTxNew - ifaceBTxOld)/(SLEEP_TIME *1024.0),
+                                (ifacePTxNew - ifacePTxOld)/(SLEEP_TIME));
+                ifaceBRxOld = ifaceBRxNew;
+                ifaceBTxOld = ifaceBTxNew;
+                ifacePRxOld = ifacePRxNew;
+                ifacePTxOld = ifacePTxNew;
+                sleep(SLEEP_TIME);
+        }
+}
+
+int main(int argc, char **argv)
+{
+        if(argc != 2)
+        {
+                printf(&quot;Usage: %s interfacename\n&quot;, argv[0]);
+                return 1;
+        }
+        dumpInterfaceUsage(argv[1]);
+        return 0;
+}
+
+</code></pre>
+
+<p>Running result:</p>
+
+<pre><code>[root@localhost C7]# ./ifstat eth0
+eth0 In:     0.24 kbytes/s      2 P/s Out:     0.25 kbytes/s     1 P/s
+eth0 In:     0.32 kbytes/s      4 P/s Out:     0.97 kbytes/s     3 P/s
+eth0 In:     1.29 kbytes/s     13 P/s Out:     5.06 kbytes/s    13 P/s
+eth0 In:     0.06 kbytes/s      1 P/s Out:     0.08 kbytes/s     0 P/s
+
+</code></pre>
+
+<p>####Bugs
+Ok, now let&rsquo;s see its bug:</p>
+
+<pre><code>#enable the unlimited:
+[root@localhost C7]# ulimit -c unlimited
+#Get the core file: 
+[root@localhost C7]# ./ifstat b
+Segmentation fault (core dumped)
+
+</code></pre>
+
+<p>####Debugging</p>
+
+<pre><code>[root@localhost C7]# ls -l -h core*
+-rw------- 1 root root 272K Oct 14 06:53 core.3961
+#Use gdb for anlysing the corefile:    
+[root@localhost C7]# gdb ifstat core.3961
+GNU gdb Fedora (6.8-27.el5)
+Copyright (C) 2008 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later &lt;http://gnu.org/licenses/gpl.html&gt;
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type &quot;show copying&quot;
+and &quot;show warranty&quot; for details.
+This GDB was configured as &quot;i386-redhat-linux-gnu&quot;...
+
+warning: Can't read pathname for load map: Input/output error.
+Reading symbols from /lib/libc.so.6...done.
+Loaded symbols for /lib/libc.so.6
+Reading symbols from /lib/ld-linux.so.2...done.
+Loaded symbols for /lib/ld-linux.so.2
+Core was generated by `./ifstat b'.
+Program terminated with signal 11, Segmentation fault.
+[New process 3961]
+#0  0x00b6f957 in rawmemchr () from /lib/libc.so.6
+
+</code></pre>
+
+<p>Seems the corefile is useless, this because the error is not derived from our own code, but rather from the library. Run gdb for anlysing the ./ifstat b</p>
+
+<pre><code>[root@localhost C7]# gdb ./ifstat
+GNU gdb Fedora (6.8-27.el5)
+Copyright (C) 2008 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later &lt;http://gnu.org/licenses/gpl.html&gt;
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type &quot;show copying&quot;
+and &quot;show warranty&quot; for details.
+This GDB was configured as &quot;i386-redhat-linux-gnu&quot;...
+(gdb) run b
+Starting program: /root/code/C7/ifstat b
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00b6f957 in rawmemchr () from /lib/libc.so.6
+(gdb) break parseDevFile
+Breakpoint 1 at 0x804854a: file ifstat.c, line 10.
+(gdb) run b
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /root/code/C7/ifstat b
+
+Breakpoint 1, parseDevFile (iface=0xbfe52b5e &quot;b&quot;, bRx=0xbfe50f80, pRx=0xbfe50f70, bTx=0xbfe50f78, pTx=0xbfe50f68) at ifstat.c:10
+10              FILE * fp = NULL;
+(gdb) step
+11              char * line = NULL;
+(gdb)
+12              unsigned int len = 0;
+(gdb)
+13              fp = fopen(&quot;/proc/net/dev&quot;, &quot;r&quot;);
+(gdb) print fp
+$1 = (FILE *) 0x0
+(gdb) step
+14              if(fp == NULL)
+(gdb) step
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+(gdb) display line
+1: line = 0x0
+(gdb) step
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9730170 &quot;Inter-|   Receive&quot;, ' ' &lt;repeats 48 times&gt;, &quot;|  Transmit\n&quot;
+(gdb) step
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9730170 &quot;Inter-|   Receive&quot;, ' ' &lt;repeats 48 times&gt;, &quot;|  Transmit\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9730170 &quot; face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n&quot;
+(gdb)
+22                              sscanf(strstr(line, &quot;:&quot;)+1, &quot;%llu%llu%*u%*u%*u%*u%*u%*u%llu%llu&quot;, bRx, pRx, bTx, pTx);
+1: line = 0x9730170 &quot; face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n&quot;
+(gdb)
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00b6f957 in rawmemchr () from /lib/libc.so.6
+(gdb)
+
+</code></pre>
+
+<p>We found another bug, also we can see ./ifstat dba</p>
+
+<pre><code>[root@localhost C7]# gdb ./ifstat
+GNU gdb Fedora (6.8-27.el5)
+Copyright (C) 2008 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later &lt;http://gnu.org/licenses/gpl.html&gt;
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type &quot;show copying&quot;
+and &quot;show warranty&quot; for details.
+This GDB was configured as &quot;i386-redhat-linux-gnu&quot;...
+(gdb) run dba
+Starting program: /root/code/C7/ifstat dba
+dba In:     0.00 kbytes/s      0 P/s Out:     0.00 kbytes/s     0 P/s
+dba In:     0.00 kbytes/s      0 P/s Out:     0.00 kbytes/s     0 P/s
+
+Program received signal SIGINT, Interrupt.
+0x00ef3402 in __kernel_vsyscall ()
+(gdb) break parseDevFile
+Breakpoint 1 at 0x804854a: file ifstat.c, line 10.
+(gdb) run dba
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /root/code/C7/ifstat dba
+
+Breakpoint 1, parseDevFile (iface=0xbf81bb5c &quot;dba&quot;, bRx=0xbf81ad40, pRx=0xbf81ad30, bTx=0xbf81ad38, pTx=0xbf81ad28) at ifstat.c:10
+10              FILE * fp = NULL;
+(gdb) step
+11              char * line = NULL;
+(gdb) step
+12              unsigned int len = 0;
+(gdb) step
+13              fp = fopen(&quot;/proc/net/dev&quot;, &quot;r&quot;);
+(gdb) step
+14              if(fp == NULL)
+(gdb) step
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+(gdb) display line
+1: line = 0x0
+(gdb) step
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;Inter-|   Receive&quot;, ' ' &lt;repeats 48 times&gt;, &quot;|  Transmit\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;Inter-|   Receive&quot;, ' ' &lt;repeats 48 times&gt;, &quot;|  Transmit\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot; face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot; face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;    lo: 4684910    2267    0    0    0     0          0         0  4684910    2267    0    0    0     0       0          0\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;    lo: 4684910    2267    0    0    0     0          0         0  4684910    2267    0    0    0     0       0          0\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;  eth0: 5135043   75928    0    0    0     0          0         0 15204045  129941    0    0    0     0       0          0\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;  eth0: 5135043   75928    0    0    0     0          0         0 15204045  129941    0    0    0     0       0          0\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+25              fclose(fp);
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+26              free(line);
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+27              return 0;
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+28      }
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+dumpInterfaceUsage (iface=0xbf81bb5c &quot;dba&quot;) at ifstat.c:36
+36              sleep(SLEEP_TIME);
+(gdb)
+39                      if(parseDevFile(iface, &amp;ifaceBRxNew, &amp;ifacePRxNew, &amp;ifaceBTxNew, &amp;ifacePTxNew) == -1) return;
+(gdb)
+
+Breakpoint 1, parseDevFile (iface=0xbf81bb5c &quot;dba&quot;, bRx=0xbf81ad20, pRx=0xbf81ad10, bTx=0xbf81ad18, pTx=0xbf81ad08) at ifstat.c:10
+10              FILE * fp = NULL;
+1: line = 0xaf5ca0 &quot;&quot;
+(gdb)
+11              char * line = NULL;
+1: line = 0xaf5ca0 &quot;&quot;
+(gdb)
+12              unsigned int len = 0;
+1: line = 0x0
+(gdb)
+13              fp = fopen(&quot;/proc/net/dev&quot;, &quot;r&quot;);
+1: line = 0x0
+(gdb)
+14              if(fp == NULL)
+1: line = 0x0
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x0
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;Inter-|   Receive&quot;, ' ' &lt;repeats 48 times&gt;, &quot;|  Transmit\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;Inter-|   Receive&quot;, ' ' &lt;repeats 48 times&gt;, &quot;|  Transmit\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot; face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot; face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;    lo: 4684910    2267    0    0    0     0          0         0  4684910    2267    0    0    0     0       0          0\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;    lo: 4684910    2267    0    0    0     0          0         0  4684910    2267    0    0    0     0       0          0\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;  eth0: 5141021   76010    0    0    0     0          0         0 15217535  130042    0    0    0     0       0          0\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;  eth0: 5141021   76010    0    0    0     0          0         0 15217535  130042    0    0    0     0       0          0\n&quot;
+(gdb)
+20                      if(strstr(line, iface) != NULL)
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+18              while(getline(&amp;line, &amp;len, fp) != -1)
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+25              fclose(fp);
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+26              free(line);
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+27              return 0;
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+28      }
+1: line = 0x9101170 &quot;  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0\n&quot;
+(gdb)
+dumpInterfaceUsage (iface=0xbf81bb5c &quot;dba&quot;) at ifstat.c:40
+40                      printf(&quot;%s In: %8.2f kbytes/s  %5llu P/s Out: %8.2f kbytes/s %5llu P/s\n&quot;, iface,
+(gdb)
+dba In:     0.00 kbytes/s      0 P/s Out:     0.00 kbytes/s     0 P/s
+
+</code></pre>
+
+<p>####Conclusion:
+And now we can get the reason, the ./ifstat b is because we reached the line2 of the /proc/net/dev, it has b for &ldquo;bytes&rdquo;.<br />
+./ifstat dba always print 0 because we don&rsquo;t have this equipment at all !<br />
+####Correcting
+So the corrected code is listed as following:</p>
+
+<pre><code>int parseDevFile(const char * iface, ull *bRx, ull *pRx, ull *bTx, ull *pTx)
+{
+        FILE * fp = NULL;
+        char * line = NULL;
+        unsigned int len = 0;
+        short int exists = 0;
+        fp = fopen(&quot;/proc/net/dev&quot;, &quot;r&quot;);
+        if(fp == NULL)
+        {
+                return -1;
+        }
+        while(getline(&amp;line, &amp;len, fp) != -1)
+        {
+                if(strstr(line, iface) != NULL)
+                {
+                        if(strstr(line, &quot;:&quot;) != NULL)
+                        {
+                                sscanf(strstr(line, &quot;:&quot;)+1, &quot;%llu%llu%*u%*u%*u%*u%*u%*u%llu%llu&quot;, bRx, pRx, bTx, pTx);
+                                exists = 1;
+                        }
+                }
+        }
+        fclose(fp);
+        free(line);
+        if( exists != 1)
+        {
+                fprintf(stderr, &quot;Your device %s is not in the file /proc/net/dev!\n&quot;, iface);
+                exit(2);
+        }
+        return 0;
+}
+
+</code></pre>
+
+<p>Now run it and the result is listed as:</p>
+
+<pre><code>[root@localhost C7]# ./ifstat_upgrade b
+Your device b is not in the file /proc/net/dev!
+[root@localhost C7]# ./ifstat_upgrade bba
+Your device bba is not in the file /proc/net/dev!
+[root@localhost C7]# ./ifstat_upgrade eth0
+eth0 In:     0.03 kbytes/s      0 P/s Out:     0.00 kbytes/s     0 P/s
+eth0 In:     0.03 kbytes/s      0 P/s Out:     0.08 kbytes/s     0 P/s
+
+</code></pre>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -944,285 +1445,6 @@ int main(int argc, char **argv)
 }
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/07/programming-in-c-new-words/">Programming In C New Words</a>
-      </h1>
-      <span class="post-date">Apr 7, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/fc">FC</a>
-        
-      </span>
-      
-      <p>###Programming In C
-intermediate: 中级的<br />
-hereby: 特此<br />
-scary: 恐慌的，提心吊胆的<br />
-de facto (法)，事实上的<br />
-span: 跨越<br />
-interpreted: 可交互的<br />
-fanatic: 狂热者<br />
-novice: 新手，入门者<br />
-concrete: 实际的<br />
-prime number: 素数，质数
-ternary: 三重的，三元的<br />
-intrusive: 侵入的，打扰的<br />
-grind: 磨难，磨碎，折磨<br />
-confessed: 坦白的<br />
-scary: 提心吊胆的，胆小的<br />
-apropos: 恰好的<br />
-grasp: 掌握<br />
-instalment: 分期付款的<br />
-gibberish: 乱语，快速而不清楚的话语<br />
-condense: 电容器</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/07/programming-in-c-of-fc-tutorial/">Programming in C of FC tutorial</a>
-      </h1>
-      <span class="post-date">Apr 7, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/fc">FC</a>
-        
-      </span>
-      
-      <p>###Programming In C
-GCC&rsquo;s funcitionality:<br />
-gcc command calls a compiler(which transforms a higher level language into assembler), an assembler translates assembler into object files(machine instructions), and a linker, which combines several object files into an executable.</p>
-
-<p>launchpad.net is a unique collaboration and hosting platform for free software. <a href="http://www.launchpad.net">http://www.launchpad.net</a>.</p>
-
-<p>###Programming In C II
-Example code:</p>
-
-<pre><code>#include &lt;stdio.h&gt;
-#define VERSION &quot;1.0&quot;
-
-/* 
- * Runs a prime check on a given integer, return
- * 1 when the integer is a prime number, 0 otherwise
- */
-int isPrime(int prime)
-{
-	int count = 2;
-
-	// Catch two special cases 
-	if(prime == 1)
-	{
-		return 0;
-	}
-	else if(prime == 2)
-	{
-		return 1;
-	}
-	else
-	{
-		while(prime % count != 0 &amp;&amp; count*count&lt;=prime)
-		{
-			count++;
-		}
-		return (prime%count==0)?0:1;
-	}
-}
-/*
- * Print version information
- */
-void printVersion()
-{
-	printf(&quot;Primality checker version %s\n&quot;, VERSION);
-	printf(&quot;Compiled on %s %s\n&quot;, __DATE__, __TIME__);
-}
-
-int main()
-{
-	int i = 1;
-	const int max_prime = 2500;
-
-	printVersion();
-
-	for (i = 1; i&lt;max_prime; i++)
-	{
-		if(isPrime(i))
-		{
-			printf(&quot;%d is prime\n&quot;, i);
-		}
-		else
-		{
-			printf(&quot;%d is not prime\n&quot;, i);
-		}
-	}
-	return 0;
-}
-
-</code></pre>
-
-<p>####Execise 1
-Rewrite the for loop in the main() function so it becomes a while loop.</p>
-
-<pre><code>	//for (i = 1; i&lt;max_prime; i++)
-	while(i&lt;max_prime)
-	{
-		if(isPrime(i))
-		{
-			printf(&quot;%d is prime\n&quot;, i);
-		}
-		else
-		{
-			printf(&quot;%d is not prime\n&quot;, i);
-		}
-		i++;
-	}
-
-</code></pre>
-
-<p>####Execise 2
-Rewrite the if&hellip;else if&hellip;else structure in the isPrime() function to a switch&hellip;case structure.</p>
-
-<pre><code>	int count = 2;
-	int returnvalue = 0;
-
-	// Catch two special cases 
-	switch(prime)
-	{
-		case 1:
-			returnvalue = 0;
-			break;
-		case 2:
-			returnvalue = 1;
-			break;
-		default:
-			while(prime % count != 0 &amp;&amp; count*count &lt;= prime)
-			{
-				count++;
-			}
-			returnvalue =  (prime % count == 0)?0:1;
-
-	}
-	return returnvalue;
-
-</code></pre>
-
-<p>####Execise 3
-Rewrite the ternary(condition)?value1:value2 to an if..else structure</p>
-
-<pre><code>//return (prime%count==0)?0:1;
-if(prime%count == 0)
-{
-	return 0;
-}
-else
-{
-	return 1;
-}
-
-</code></pre>
-
-<p>####Execise 4
-Rewrite the if&hellip;else in the main() funciton to make sure the ternary operator</p>
-
-<pre><code>/*
-if(isPrime(i))
-{
-	printf(&quot;%d is prime\n&quot;, i);
-}
-else
-{
-	printf(&quot;%d is not prime\n&quot;, i);
-}
-*/
-printf(&quot;%d %s prime\n&quot;, i, isPrime(i)?&quot;is&quot;:&quot;is not&quot;);
-
-</code></pre>
-
-<p>####Execise 5
-Replace the isPrime() function by an isOdd() function which return 1 when a given integer is odd.</p>
-
-<pre><code>int isOdd(int odd)
-{
-	if(odd == 1)
-	{
-		return 1;
-	}
-	else
-	{
-		if(odd%2 == 0)
-		{
-			return 0;
-		}
-		else
-		{
-			return 1;
-		}
-	}
-}
-
-/* Called via */
-if(isOdd(i))
-{
-	printf(&quot;%d is Odd\n&quot;, i);
-}
-else
-{
-	printf(&quot;%d is not Odd\n&quot;, i);
-}
-
-</code></pre>
-
-<p>####Execise 6
-Design and write a small application which print out the n Fibonacci sequence, where n should be easily modifiable.</p>
-
-<pre><code>#include &lt;stdio.h&gt;
-
-/* The formula is like
- * a(n+2) = a(n)+a(n+1)
- * while when a1 = 1, a2 =1
- */
-
-int Fib(int fib)
-{
-	if(fib == 1)
-	{
-		return 1;
-	}
-	else if(fib == 2)
-	{
-		return 1;
-	}
-	else
-	{
-		return (Fib(fib-1) + Fib(fib-2));
-	}
-}
-
-int main(int argc, char **argv)
-{
-	int i;
-	int j = 1;
-
-	printf(&quot;Please input an integer number\n&quot;);
-	scanf(&quot;%d&quot;, &amp;i);
-
-	printf(&quot;The Fibonacci sequence is: \n&quot;);
-	for( j = 1; j &lt;= i; j++)
-	{
-		printf(&quot;a[%d] is %d.\n&quot;, j, Fib(j));
-	}
-
-	return 0;
-}
-
-</code></pre>
-
-<p>Because we use recursion here, when the n is too big, the calculation maybe very slow.</p>
 
       
     </div>
@@ -2639,8 +2861,17 @@ int main(int argc, char **argv)
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2649,7 +2880,7 @@ int main(int argc, char **argv)
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

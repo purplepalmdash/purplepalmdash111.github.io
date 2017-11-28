@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,172 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/16/ebc-exercises-on-bbb-pwm/">EBC Exercises on BBB - PWM</a>
+      </h1>
+      <span class="post-date">Nov 16, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="pwm">PWM</h3>
+
+<p>Simply enable the <code>P9_21</code> to PWM, then connect to the LED. The LED connection could refer to <code>EBC Exercises on BBB - Control LED</code></p>
+
+<pre><code>SLOTS=/sys/devices/bone_capemgr.*/slots
+echo am33xx_pwm &gt; $SLOTS
+echo bone_pwm_P9_21 &gt; $SLOTS
+cd /sys/devices/ocp.3/pwm_test_P9_21.15/
+echo 1000000000 &gt; period
+echo  250000000 &gt; duty
+echo 1 &gt; run
+
+</code></pre>
+
+<p>From now you could see the LED begin to flash. In fact using this pwm we could control servo motor:<br />
+<a href="http://www.linux.com/learn/tutorials/776799-servo-control-from-the-beaglebone-black/">http://www.linux.com/learn/tutorials/776799-servo-control-from-the-beaglebone-black/</a></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/16/gpio-via-mmap/">EBC Exercises on BBB -GPIO Via Mmap</a>
+      </h1>
+      <span class="post-date">Nov 16, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="operate-on-device-tree">Operate On Device Tree</h3>
+
+<p>Turn off the trigger and then shine on the LED USR3 via following command:</p>
+
+<pre><code>root@arm:~# cd /sys/class/leds/beaglebone\:green\:usr3
+root@arm:/sys/class/leds/beaglebone:green:usr3# ls
+brightness  device  max_brightness  power  subsystem  trigger  uevent
+root@arm:/sys/class/leds/beaglebone:green:usr3# echo none &gt; trigger 
+root@arm:/sys/class/leds/beaglebone:green:usr3# echo 1 &gt; brightness
+
+</code></pre>
+
+<p>We could find the gpio is attached to which pin:</p>
+
+<pre><code># ./findGPIO.js USR3                                                                
+{ name: 'USR3',                                                                                         
+ gpio: 56,                                                                                             
+ led: 'usr3',                                                                                          
+ mux: 'gpmc_a8',                                                                                       
+ key: 'USR3',                                                                                          
+ muxRegOffset: '0x060',                                                                                
+ options:                                                                                              
+  [ 'gpmc_a8',                                                                                         
+    'gmii2_rxd3',                                                                                      
+    'rgmii2_rd3',                                                                                      
+    'mmc2_dat6',                                                                                       
+    'gpmc_a24',                                                                                        
+    'pr1_mii1_rxd0',                                                                                   
+    'mcasp0_aclkx',                                                                                    
+    'gpio1_24' ] }
+USR3 (gpio 56) mode: 7 (gpio1_24) 0x060 pullup
+pin 24 (44e10860): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+
+</code></pre>
+
+<p><code>gpio1_24</code> is what we want. Then refer Memory Map table in the Technical Reference Manual, its base address is 0x4804c000.</p>
+
+<h3 id="devmem2">devmem2</h3>
+
+<p>An easy way to read the contents of a memory location is with devmem2:</p>
+
+<pre><code>root@arm:~/code/gpio# devmem2 0x4804c13c
+/dev/mem opened.
+Memory mapped at address 0xb6fea000.
+Value at address 0x4804C13C (0xb6fea13c): 0x9A00000
+
+</code></pre>
+
+<p>Light ON the USR3 led:</p>
+
+<pre><code>root@arm:~/code/gpio# devmem2 0x4804c190 w 0x01000000
+/dev/mem opened.
+Memory mapped at address 0xb6f52000.
+Value at address 0x4804C190 (0xb6f52190): 0x9800000
+Written 0x1000000; readback 0x1000000
+
+</code></pre>
+
+<p>Light OFF the USR3 led:</p>
+
+<pre><code>root@arm:~/code/gpio# devmem2 0x4804c194 w 0x01000000
+/dev/mem opened.
+Memory mapped at address 0xb6f1c000.
+Value at address 0x4804C194 (0xb6f1c194): 0x8A00000
+Written 0x1000000; readback 0x1000000
+
+</code></pre>
+
+<h3 id="mmap-code">mmap code</h3>
+
+<p>The critical Code:</p>
+
+<pre><code>    int fd = open(&quot;/dev/mem&quot;, O_RDWR);
+
+    gpio_addr = mmap(0, GPIO1_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO1_START_ADDR);
+
+    gpio_oe_addr           = gpio_addr + GPIO_OE;
+    gpio_setdataout_addr   = gpio_addr + GPIO_SETDATAOUT;
+    gpio_cleardataout_addr = gpio_addr + GPIO_CLEARDATAOUT;
+
+    // Set USR3 to be an output pin
+    reg = *gpio_oe_addr;
+    printf(&quot;GPIO1 configuration: %X\n&quot;, reg);
+    reg &amp;= ~USR3;       // Set USR3 bit to 0
+    *gpio_oe_addr = reg;
+    printf(&quot;GPIO1 configuration: %X\n&quot;, reg);
+
+    printf(&quot;Start blinking LED USR3\n&quot;);
+    while(keepgoing) {
+        // printf(&quot;ON\n&quot;);
+        *gpio_setdataout_addr = USR3;
+        usleep(250000);
+        // printf(&quot;OFF\n&quot;);
+        *gpio_cleardataout_addr = USR3;
+        usleep(250000);
+    }
+
+</code></pre>
+
+<p>Run the program and see its heartbeat:</p>
+
+<pre><code># ./gpioToggle 
+Mapping 4804C000 - 4804E000 (size: 2000)
+GPIO mapped to 0xb6f91000
+GPIO OE mapped to 0xb6f91134
+GPIO SETDATAOUTADDR mapped to 0xb6f91194
+GPIO CLEARDATAOUT mapped to 0xb6f91190
+GPIO1 configuration: F60FFFFF
+GPIO1 configuration: F60FFFFF
+Start blinking LED USR3
+
+</code></pre>
+
+<h3 id="gpiothru">gpioThru</h3>
+
+<p>This example need to be clearly written later.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -589,107 +755,6 @@ ___|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^^^^^^^|______|^
 </code></pre>
 
 <p>This seems like a little game.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-device-tree/">EBC Exercises on BBB - Device Tree</a>
-      </h1>
-      <span class="post-date">Nov 13, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="install-js-wrapped-bonescript">Install js wrapped bonescript</h3>
-
-<p>For using the javascript wrapped library, first we have to install following packages:</p>
-
-<pre><code>$ sudo apt-get install nodejs npm nodejs-legacy
-$ npm config set proxy http://1xx.xx.xx.xxx:2xxx
-$ npm config set https-proxy http://1xx.xx.xx.xx:2xxx
-$ npm install bonescript
-
-</code></pre>
-
-<p>Because my network environment is under the firewall, so I need to set the proxy, if you directly connect to internet, you could ignore the <code>npm config set</code> commands.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-read-analog/">EBC Exercises on BBB - Read Analog</a>
-      </h1>
-      <span class="post-date">Nov 13, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="connection">Connection</h3>
-
-<p>The wired connection is listed as following:<br />
-Pin 34(analog ground) &mdash;&gt; Negative Pin<br />
-Pin 32(1.8 V) &mdash;&gt; Positive Pin<br />
-Pin 36(AIN5) &mdash;&gt; Wiper<br />
-Pin 32: VADC, Pin 34: AGND, Pin36, AIN5.</p>
-
-<h3 id="operation">Operation</h3>
-
-<pre><code>root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# cat /sys/devices/bone_capemgr.*/slots
- 0: 54:PF--- 
- 1: 55:PF--- 
- 2: 56:PF--- 
- 3: 57:PF--- 
- 4: ff:P-O-L Bone-LT-eMMC-2G,00A0,Texas Instrument,BB-BONE-EMMC-2G
- 5: ff:P-O-L Bone-Black-HDMI,00A0,Texas Instrument,BB-BONELT-HDMI
-root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# SLOTS=/sys/devices/bone_capemgr.*/slots
-root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# PINS=/sys/kernel/debug/pinctrl/44e10800.pinmux/pins
-root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# echo cape-bone-iio &gt; $SLOTS
-root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# cat $SLOTS
- 0: 54:PF--- 
- 1: 55:PF--- 
- 2: 56:PF--- 
- 3: 57:PF--- 
- 4: ff:P-O-L Bone-LT-eMMC-2G,00A0,Texas Instrument,BB-BONE-EMMC-2G
- 5: ff:P-O-L Bone-Black-HDMI,00A0,Texas Instrument,BB-BONELT-HDMI
- 7: ff:P-O-L Override Board Name,00A0,Override Manuf,cape-bone-iio
-root@arm:/sys/kernel/debug/pinctrl/44e10800.pinmux# find /sys -name &quot;*AIN*&quot;
-/sys/devices/ocp.3/helper.15/AIN0
-/sys/devices/ocp.3/helper.15/AIN1
-/sys/devices/ocp.3/helper.15/AIN2
-/sys/devices/ocp.3/helper.15/AIN3
-/sys/devices/ocp.3/helper.15/AIN4
-/sys/devices/ocp.3/helper.15/AIN5
-/sys/devices/ocp.3/helper.15/AIN6
-/sys/devices/ocp.3/helper.15/AIN7
-
-</code></pre>
-
-<p>Now try to read the value out:</p>
-
-<pre><code># cd /sys/devices/ocp.3/helper.15
-# ls
-AIN0  AIN1  AIN2  AIN3  AIN4  AIN5  AIN6  AIN7  driver  modalias  power  subsystem  uevent
-# cat AIN5
-537
-
-</code></pre>
-
-<p>In the origin material it said should plus 1, to read AIN5 you have to look at AIN6, but it seems wrong, because the table and the interface all starts from 0.</p>
-
-<p>AIN pins are sampled at 12bits and 100k samples per time. while the input voltage is between 0 and 1.8V.</p>
-
-<p>It&rsquo;s very easy to use anlog read value for controlling some variables, like volumn, brightness, etc.</p>
 
       
     </div>
@@ -2106,8 +2171,17 @@ AIN0  AIN1  AIN2  AIN3  AIN4  AIN5  AIN6  AIN7  driver  modalias  power  subsyst
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2116,7 +2190,7 @@ AIN0  AIN1  AIN2  AIN3  AIN4  AIN5  AIN6  AIN7  driver  modalias  power  subsyst
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

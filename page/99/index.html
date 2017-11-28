@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,335 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/08/27/lxc-computer-in-lab/">LXC Computer</a>
+      </h1>
+      <span class="post-date">Aug 27, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/lxc">lxc</a>
+        
+      </span>
+      
+      
+
+<h3 id="network-configuration">Network Configuration</h3>
+
+<p>Add the rules in udevd:</p>
+
+<pre><code>linux-:~ # cd /etc/udev/rules.d/
+linux-:/etc/udev/rules.d # cat 10-network.rules
+SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth1&quot;
+SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth0&quot;
+SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth2&quot;
+SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, ATTR{address}==&quot;00:22:22:22:22&quot;, NAME=&quot;eth3&quot;
+
+</code></pre>
+
+<p>Add following network configuration:</p>
+
+<pre><code>linux-:/etc/sysconfig # cd network/
+linux-:/etc/sysconfig/network # cat ifcfg-eth0
+# Loopback (lo) configuration
+IPADDR=1xx.xx.xx.xxx
+NETMASK=255.255.255.0
+BROADCAST=1xx.xx.xx.xxx
+STARTMODE=auto
+USERCONTROL=yes
+FIREWALL=no
+
+</code></pre>
+
+<p>Default Gateway Setup:</p>
+
+<pre><code>linux-:~ # cat /etc/sysconfig/network/ifroute-br0
+# Destination     Dummy/Gateway     Netmask            Device
+#
+default		xxx.xxx.xx.1	    255.255.255.255	br0
+
+</code></pre>
+
+<p>Restart computer then you got the fixed ip address in eth0.<br />
+Add the default route so we could get outside.</p>
+
+<pre><code>vim routes
+xxx.xxx.xx.1 -eth0 
+or manually: 
+route add default gw xxx.xxx.xx.1 eth0
+
+</code></pre>
+
+<p>Bridge Networking Configuration:</p>
+
+<pre><code>linux-:/etc/sysconfig/network # cat ifcfg-br0
+STARTMODE='auto'
+BOOTPROTO='static'
+DNS1=xxx.xxx.xx.1
+GATEWAY=xxx.xxx.xx.1
+IPADDR=xxx.xxx.xx.59
+NETMASK=255.255.255.0
+ONBOOT=yes
+USERCONTROL='no'
+BRIDGE='yes'
+BRIDGE_PORTS='eth0'
+BRIDGE_AGEINGTIME='20'
+BRIDGE_FORWARDDELAY='0'
+BRIDGE_HELLOTIME='2'
+BRIDGE_MAXAGE='20'
+BRIDGE_PATHCOSTS='3'
+BRIDGE_STP='on'
+linux-:/etc/sysconfig/network # cat ifcfg-eth0
+BOOTPROTO='static'
+STARTMODE='ifplugd'
+IFPLUGD_PRIORITY='1'
+NAME = '1000 mBIT ETHERNET'
+USERCTL=no
+
+
+</code></pre>
+
+<p>The route should changed to:</p>
+
+<pre><code>route add default gw xxx.xxx.xx.1 br0
+
+</code></pre>
+
+<h3 id="lxc-install">LXC Install</h3>
+
+<p>Enable the free ways:</p>
+
+<pre><code>ssh -C -L 127.0.0.1:9001:1xx.xxx.2xx:2xxxx root@1xx.xx.1xx.xxx
+
+</code></pre>
+
+<p>Use zypper to install the container.</p>
+
+<pre><code>zypper search lxc
+# zypper install lxc lxc-devel yast2-lxc libvirt-daemon-lxc libvirt-daemon-driver-lxc
+# lxc-checkconfig 
+# ls /usr/share/lxc/templates/
+
+</code></pre>
+
+<p>Yes we have the opensuse specified configuraton.</p>
+
+<p>Create The first Container:</p>
+
+<pre><code>lxc-create -n ixxxxxSimulator1 -t /usr/share/lxc/templates/lxc-opensuse
+
+</code></pre>
+
+<p>List the installed Container:</p>
+
+<pre><code>linux-:~ # lxc-ls
+xxxxhxxSimulator1
+
+</code></pre>
+
+<p>Username and password are <code>root</code>.</p>
+
+<p>Start the lxc machine via:</p>
+
+<pre><code>lxc-start -n xxxxxSimulator1
+
+</code></pre>
+
+<h3 id="lxc-configuration">LXC Configuration</h3>
+
+<p>No Network, Add it!<br />
+First we remove the desktop kernel. and use the default kernel</p>
+
+<pre><code># uname -a
+Linux XXXXSimulator1 3.11.6-4-desktop 
+# zypper in kernel-default
+# zypper rm kernel-desktop
+# uname -a
+Linux linux- 3.11.10-21-default
+
+</code></pre>
+
+<p>Enable the xfce4 for the default vnc server desktop:</p>
+
+<pre><code>zypper in -t pattern xfce
+
+</code></pre>
+
+<p>Change the default lxc configuraiton of network:</p>
+
+<pre><code>$ vim /var/lib/lxc/XXXXSimulator1/config
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = br0
+lxc.network.name = eth0
+
+</code></pre>
+
+<p>Now if you start the lxc container, the network eth0 will be automatically started.</p>
+
+<h3 id="lxc-expand">LXC Expand</h3>
+
+<p>Duplicate LXC Machine.<br />
+This is strange when we directly call lxc-clone will cause failed silently:</p>
+
+<pre><code> # lxc-clone -o XXXXSimulator1 -n XXXXSimulator2
+linux-:~ # echo $?
+1
+
+</code></pre>
+
+<p>Then we use this:</p>
+
+<pre><code># bash /usr/bin/lxc-clone -o XXXXSimulator1 -n XXXXSimulator2
+Tweaking configuration
+Copying rootfs...
+Updating rootfs...
+'XXXXSimulator2' created
+linux-:~ # lxc-ls
+XXXXSimulator1  XXXXSimulator2
+
+</code></pre>
+
+<p>Change the XXXXSimulator2&rsquo;s configuration:</p>
+
+<pre><code>$ vim /var/lib/lxc/XXXXSimulator2/config
+lxc.network.ipv4 = xxx.xxx.xx.67
+
+</code></pre>
+
+<p>Now start the two LXC via:</p>
+
+<pre><code># lxc-start  -n XXXXSimulator2
+# lxc-start  -n XXXXSimulator1
+[Trusty@Linux01 ~]$ ping -c 1 xxx.xxx.xx.66
+PING xxx.xxx.xx.66 (xxx.xxx.xx.66) 56(84) bytes of data.
+64 bytes from xxx.xxx.xx.66: icmp_seq=1 ttl=64 time=1.50 ms
+
+--- xxx.xxx.xx.66 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 1ms
+rtt min/avg/max/mdev = 1.506/1.506/1.506/0.000 ms
+[Trusty@Linux01 ~]$ ping -c 1 xxx.xxx.xx.67
+PING xxx.xxx.xx.67 (xxx.xxx.xx.67) 56(84) bytes of data.
+64 bytes from xxx.xxx.xx.67: icmp_seq=1 ttl=64 time=1.56 ms
+
+--- xxx.xxx.xx.67 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 1ms
+rtt min/avg/max/mdev = 1.567/1.567/1.567/0.000 ms
+
+</code></pre>
+
+<p>Later we could configure the LXC, to let the container start at bootup, Or control its behavior.</p>
+
+<h3 id="lxc-computer-configuration">LXC Computer Configuration</h3>
+
+<p>The IP address and Default Gateway Configuration:</p>
+
+<pre><code>lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = br0
+lxc.network.name = eth0
+lxc.network.ipv4 = xxx.xxx.xx.59/24
+lxc.network.ipv4.gateway = xxx.xxx.xx.1
+
+</code></pre>
+
+<p>Then start the LXC Container, you will see the ip address/netmask already configured.</p>
+
+<h3 id="lxc-destroy">LXC Destroy</h3>
+
+<p>Destroyed the unused Container2:</p>
+
+<pre><code>linux-:~ # lxc-ls
+XXXXSimulator1  XXXXSimulator2
+linux-:~ # lxc-destroy -n XXXXSimulator2
+linux-:~ # lxc-ls
+XXXXSimulator1
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/08/13/puppet-on-archlinux-2/">Puppet on ArchLinux(2)</a>
+      </h1>
+      <span class="post-date">Aug 13, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/puppet">puppet</a>
+        
+      </span>
+      
+      
+
+<h3 id="add-arch">Add Arch</h3>
+
+<p>step1, add the hosts into /etc/hosts:</p>
+
+<pre><code># Puppet 
+10.0.0.88	puppet
+10.0.0.89	client
+
+</code></pre>
+
+<p>step2, edit the /etc/puppet/puppet.conf:</p>
+
+<pre><code>[agent]
+    # add server
+    [agent]
+    server = puppet
+
+</code></pre>
+
+<p>Restart the puppet.service:</p>
+
+<pre><code>systemctl restart puppet.service
+systemctl enable puppet.service
+
+</code></pre>
+
+<p>step3, in 10.0.0.88(server), add the ssl certification of archlinux:</p>
+
+<pre><code>root@Ubuntu88:/home/Trusty# !44
+puppet cert --list
+Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
+   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
+  &quot;XXXyyy.lan&quot; (SHA256) 8XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+root@Ubuntu88:/home/Trusty# puppet cert --sign XXXyyy.lan
+Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
+   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
+Notice: Signed certificate request for XXXyyy.lan
+Notice: Removing file Puppet::SSL::CertificateRequest XXXyyy.lan at '/var/lib/puppet/ssl/ca/requests/XXXyyy.lan.pem'
+
+</code></pre>
+
+<p>Now check the /tmp, we will see our test file in last chapter.</p>
+
+<p>For test pupose, we will disable archLinux&rsquo;s puppet via:</p>
+
+<pre><code>[root@TrustyArch tmp]# systemctl stop puppet.service
+[root@TrustyArch tmp]# systemctl disable puppet.service
+Removed symlink /etc/systemd/system/multi-user.target.wants/puppet.service.
+
+</code></pre>
+
+<h3 id="install-package">Install package</h3>
+
+<p>Add following lines into 10.0.0.88, /etc/puppet/manifests/site.pp:</p>
+
+<pre><code>package {
+    'xplot':
+        ensure =&gt; installed
+}
+
+</code></pre>
+
+<p>Then restart the puppetmaster, in 10.0.0.89, the package xplot will be installed.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -494,220 +823,6 @@ book=# \q
 (1 row)
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/10/lxc-archlinux-tutorial/">LXC ArchLinux Tutorial</a>
-      </h1>
-      <span class="post-date">Aug 10, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Install <code>lxc</code>, <code>bridge-utils</code>, <code>netctl</code> from the official repository.</p>
-
-<pre><code>$ sudo pacman -S lxc bridge-utils netctl
-
-</code></pre>
-
-<p>For creating ArchLinux Container, install arch-install-scripts:</p>
-
-<pre><code>$ sudo pacman -S arch-install-scripts
-
-</code></pre>
-
-<p>Check Configurations:</p>
-
-<pre><code>$ lxc-checkconfig
-
-</code></pre>
-
-<h3 id="network-configuration">Network Configuration</h3>
-
-<p>Since I use systemd for bridged network, so this step remains blank, the official Arch Wiki use netctl.</p>
-
-<h3 id="creating-container-using-template">Creating Container Using Template</h3>
-
-<p>List all of the available templates:</p>
-
-<pre><code>$ ls /usr/share/lxc/templates 
-lxc-alpine     lxc-centos    lxc-fedora        lxc-oracle  lxc-ubuntu-cloud
-lxc-altlinux   lxc-cirros    lxc-gentoo        lxc-plamo
-lxc-archlinux  lxc-debian    lxc-openmandriva  lxc-sshd
-lxc-busybox    lxc-download  lxc-opensuse      lxc-ubuntu
-
-</code></pre>
-
-<p>Now using the template for creating the Linux Container:</p>
-
-<pre><code>$ sudo lxc-create -n Arch_Container -t /usr/share/lxc/templates/lxc-archlinux
-
-</code></pre>
-
-<p>If the container is created successfully, it will indicates that you could use it from now.</p>
-
-<h3 id="start-the-container">Start the Container</h3>
-
-<p>List the installed Containers:</p>
-
-<pre><code>$ sudo lxc-ls
-Arch_Container  
-
-</code></pre>
-
-<p>Start the installed Container:</p>
-
-<pre><code>$ sudo lxc-start -n Arch_Container
-
-</code></pre>
-
-<p>The default username is root, and you will got a terminal window, now check the network configuration:</p>
-
-<pre><code>[root@Arch_Container ~]# ip link show dev eth0
-5: eth0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000
-    link/ether xx:xx:xx:xx brd ff:ff:ff:ff:ff:ff
-
-</code></pre>
-
-<p>Simply use <code>dhcpcd</code> we could get the ip address currently, and surely we can see this network configuration is OK now.<br />
-Enable the automatically dhcpcd at startup</p>
-
-<pre><code>$ dhcpcd
-$ systemctl enable dhcpcd.service
-
-</code></pre>
-
-<p>Now reboot you will notice the ip address has been configurated automatically.</p>
-
-<h3 id="create-other-distributions">Create Other Distributions</h3>
-
-<p>First you should install yum and debootstrap from AUR repository.</p>
-
-<pre><code>$ yaourt -S yum
-$ yaourt -S debootstrap
-
-</code></pre>
-
-<h4 id="fedora">Fedora</h4>
-
-<p>Install Fedora or CentOS will failed, I don&rsquo;t know why.</p>
-
-<h4 id="debian">Debian</h4>
-
-<p>Install rxync first via:</p>
-
-<pre><code>pacman -S rsync
-
-</code></pre>
-
-<p>Some packages failed to download, so won&rsquo;t install.</p>
-
-<p>After installed rsync, install debian container via:</p>
-
-<pre><code>sudo lxc-create -n Debian_Container -t /usr/share/lxc/templates/lxc-debian
-
-</code></pre>
-
-<p>Start the container via:</p>
-
-<pre><code> sudo lxc-start -n Debian_Container
-
-</code></pre>
-
-<p>The default username/password are root, In Debian network is not configured.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/08/08/configure-network-in-rc-dot-local/">Configure Network in rc.local</a>
-      </h1>
-      <span class="post-date">Aug 8, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>Following is the configuration of the vlan and whole network:<br />
-In rc.local, RHEL.</p>
-
-<pre><code>#!/bin/sh
-#
-# This script will be executed *after* all the other init scripts.
-# You can put your own initialization stuff in here if you don't
-# want to do the full Sys V style init stuff.
-
-touch /var/lock/subsys/local
-
-echo VLAN=yes &gt; /etc/sysconfig/network 
-
-/sbin/vconfig add eth1 10
-/sbin/vconfig add eth1 11
-/sbin/vconfig add eth1 12
-/sbin/vconfig add eth1 13
-/sbin/vconfig add eth1 30
-/sbin/vconfig add eth1 40
-
-/sbin/vconfig add eth1 100
-/sbin/vconfig add eth1 110
-/sbin/vconfig add eth1 120
-/sbin/vconfig add eth1 130
-/sbin/vconfig add eth1 200
-
-/sbin/ifconfig eth1.10 172.10.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.10:11 172.10.11.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.11 172.11.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.12 172.12.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.13 172.13.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.30 172.30.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.30:11 172.30.11.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.40 172.40.1.55 netmask 255.255.0.0 up
-
-/sbin/ifconfig eth1.100 20.100.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.110 20.110.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.120 20.120.1.55 netmask 255.255.0.0 up
-/sbin/ifconfig eth1.130 20.130.1.55 netmask 255.255.0.0 up
-
-/sbin/ifconfig eth1.10 inet6 add fd00::410:172:10:1:88/64
-/sbin/ifconfig eth1.10 inet6 add fd00::410:172:10:11:88/64
-/sbin/ifconfig eth1.11 inet6 add fd00::411:172:11:1:88/64
-/sbin/ifconfig eth1.12 inet6 add fd00::412:172:12:1:88/64
-/sbin/ifconfig eth1.13 inet6 add fd00::413:172:13:1:88/64
-/sbin/ifconfig eth1.30 inet6 add fd00::430:172:30:1:88/64
-/sbin/ifconfig eth1.30 inet6 add fd00::430:172:30:11:88/64
-/sbin/ifconfig eth1.40 inet6 add fd00::440:172:40:1:88/64
-
-route add -net 224.0.0.0 netmask 224.0.0.0 dev eth1.40
-/sbin/route add default gw 10.9.134.1 dev eth1
-
-echo 1 &gt; /proc/sys/net/ipv4/ip_forward
-
-echo 1 &gt; /proc/sys/net/ipv6/conf/all/forwarding
-echo 1 &gt; /proc/sys/net/ipv6/conf/all/mc_forwarding
-
-modprobe sctp
-
-#/etc/init.d/xinetd restart
-#/usr/sbin/xinetd -stayalive -pidfile /var/run/xinetd.pid
-#echo &quot;nameserver 10.9.133.243&quot; &gt;&gt; /etc/resolv.conf
-# Activate eth0 again. 
-/sbin/ifconfig eth0 1xx.xx.xxx.xxx netmask 255.255.255.0 up
-/sbin/route add default gw 1xx.xx.xxx.1 dev eth0
-
-</code></pre>
-
-<p>For eth0 will lose configuration, so we add the eth0 again.</p>
 
       
     </div>
@@ -2124,8 +2239,17 @@ modprobe sctp
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2134,7 +2258,7 @@ modprobe sctp
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

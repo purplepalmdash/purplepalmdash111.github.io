@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,258 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/12/12/ba-wan-tl-sg108e/">把玩TL-SG108E</a>
+      </h1>
+      <span class="post-date">Dec 12, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/network">network</a>
+        
+      </span>
+      
+      
+
+<p>前段时间黑色星期五在美国亚马逊败了个TP-LINK TL-SG108E, 直邮到手人民币200不到.
+本意是拿来以后在家里跑虚拟机时,虚拟机可以在不同的VLAN里作用,譬如单独的存储/管
+理网络等.</p>
+
+<h3 id="配置">配置</h3>
+
+<p>更改IP地址, 随意指定原有局域网内的某IP地址给交换机即可. 随后所有的节点均可添加
+在交换机上.</p>
+
+<h3 id="vlan">VLAN</h3>
+
+<p>VLAN可以实现的功能, 位于不同交换机上的机器可以位于同一局域网内.</p>
+
+<p><img src="/images/2015_12_12_14_25_15_724x626.jpg" alt="/images/2015_12_12_14_25_15_724x626.jpg" /></p>
+
+<p>默认在交换机上打开的VLAN是基于端口的VLAN(Port Based VLAN), 我们这里配置的是
+802.1Q VLAN, 打开以后,基于端口的VLAN将自动被禁止.</p>
+
+<p><img src="/images/2015_12_12_15_16_33_541x300.jpg" alt="/images/2015_12_12_15_16_33_541x300.jpg" /></p>
+
+<p>默认的配置页面如下:</p>
+
+<p><img src="/images/2015_12_12_15_17_52_927x570.jpg" alt="/images/2015_12_12_15_17_52_927x570.jpg" /></p>
+
+<p>Tag 与 Untagged方式的差别:</p>
+
+<p>端口接收数据时：<br />
+  如果端口是tagged方式，当数据包本身不包含VLAN的话，输入的数据包就加上该缺省
+vlan；如果数据包本身已经包含了VLAN，那么就不再添加。<br />
+  如果是untagged方式，输入的数据包全部都要加上该缺省vlan。不管输入的数据包是否
+已经有VLAN标记。</p>
+
+<p>端口发送数据时：<br />
+  如果端口是tagged方式，如果端口缺省VLAN等于发送的数据包所含的VLAN，那么就会将
+VLAN标记从发送的数据包中去掉；如果不相等，则数据包将带着VLAN发送出去，实现VLAN
+的透传。<br />
+  如果是untagged方式，则不管端口缺省VLAN为多少，是否等于要输出的数据包的VLAN，
+都会将VLAN ID从数据包中去掉。</p>
+
+<p>配置了vlan 22和33, 分别在7口和8口上.</p>
+
+<h3 id="ovs-后的vlan-tag">OVS 后的VLAN TAG</h3>
+
+<p>在7口上接入一台Ubuntu服务器,配置为open-vswitch桥接, 虚拟机通过以下配置, 制定
+VLAN ID为22.</p>
+
+<pre><code># virsh edit Gentoo
+    &lt;interface type='bridge'&gt;
+      &lt;mac address='52:54:00:fd:03:e9'/&gt;
+      &lt;source bridge='ovsbr0'/&gt;
+      &lt;vlan trunk='yes'&gt;
+        &lt;tag id='22' nativeMode='untagged'/&gt;
+      &lt;/vlan&gt;
+      &lt;virtualport type='openvswitch'&gt;
+        &lt;parameters interfaceid='fb3e7f34-6fcd-41dc-8fed-c3ffe0d54b18'/&gt;
+      &lt;/virtualport&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
+    &lt;/interface&gt;
+# virsh start Gentoo
+</code></pre>
+
+<p>这样启动后的虚拟机<code>Gentoo</code>就处于VLAN ID 22隔离的网络里. 手动配置其IP地址为
+<code>10.48.58.2</code>.</p>
+
+<h3 id="物理机上的vlan">物理机上的VLAN</h3>
+
+<p>这里附带了Ubuntu On Jogger的过程, Joggler XUbuntu下载地址在:<br />
+<a href="http://jwills.co.uk/projects/joggler-xubuntu/download/">http://jwills.co.uk/projects/joggler-xubuntu/download/</a></p>
+
+<p>操作指令在:<br />
+<a href="http://jwills.co.uk/projects/joggler-xubuntu/instructions/">http://jwills.co.uk/projects/joggler-xubuntu/instructions/</a></p>
+
+<p>默认用户名/密码都是joggler.</p>
+
+<p>我们需要在joggler上配置一个vlan, 和另一台机器上vlan后的虚拟机通信.</p>
+
+<pre><code>$ sudo apt-get install -y vlan
+$ sudo modprobe 8021q
+$ sudo vconfig add eth0 22
+$ sudo ifconfig eth0.22 10.47.58.3/24 up
+$ sudo su -c 'echo &quot;8021q&quot;&gt;&gt;/etc/modules'
+$ cat /etc/module
+8021q
+$ sudo vim /etc/network/interface
+....
+auto eth0
+iface eth0 inet dhcp
+
+auto eth0.22
+iface eth0.22 inet static
+    address 10.47.58.3
+    netmask 255.255.255.0
+    vlan-raw-device eth0
+</code></pre>
+
+<p>这样,重启以后, eth0.22会启动, 就可以通过VLAN 22 ping <code>10.47.58.2</code>了.</p>
+
+<h3 id="换口">换口</h3>
+
+<p>把joggler从7口换到6口, 可以看到eth0还是可以通的,但是eth0.22则无法通信. 这是因
+为我们只在7口和8口上添加了VLAN 22标记的缘故.换回7口,一切正常.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/12/10/openvswitch-on-ubuntu14-dot-04/">OpenVswitch On Ubuntu14.04</a>
+      </h1>
+      <span class="post-date">Dec 10, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="installation">Installation</h3>
+
+<p>Install openvswitch via:</p>
+
+<pre><code># apt-get update
+# apt-get install -y openvswitch-common openvswitch-switch
+</code></pre>
+
+<p>List the installed module via:</p>
+
+<pre><code># lsmod | grep open
+openvswitch            66901  0 
+gre                    13808  1 openvswitch
+vxlan                  37619  1 openvswitch
+libcrc32c              12644  1 openvswitch
+# ovs-vsctl --version
+ovs-vsctl (Open vSwitch) 2.0.2
+Compiled May 13 2015 18:49:53
+</code></pre>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>Edit the configuration of the networking:</p>
+
+<pre><code>$ sudo vim /etc/network/interfaces
+###########################################
+## By using openVswitch, we enabled the following
+###########################################
+auto ovsbr0
+iface ovsbr0 inet static
+address 192.168.1.xx
+netmask 255.255.0.0
+gateway 192.168.1.xx
+dns-nameservers 223.5.5.5 180.76.76.76
+</code></pre>
+
+<p>Now configure the ovs-switched bridge:</p>
+
+<pre><code># ovs-vsctl add-br ovsbr0
+# ovs-vsctl list-br
+ovsbr0
+# ovs-vsctl add-port ovsbr0 eth0 &amp;&amp; reboot
+</code></pre>
+
+<p>Now restart the computer you will get the ovs-bridged network running.</p>
+
+<h3 id="bridged-with-vlan">Bridged With VLAN</h3>
+
+<p>Add/Remove port of the ovs-bridged:</p>
+
+<pre><code># ovs-vsctl add-port ovsbr0 tap0 tag=22
+# ovs-vsctl show
+901c2b29-0764-4370-8d06-168b18339236
+    Bridge &quot;ovsbr0&quot;
+        Port &quot;eth0&quot;
+            Interface &quot;eth0&quot;
+        Port &quot;tap0&quot;
+            tag: 22
+            Interface &quot;tap0&quot;
+        Port &quot;ovsbr0&quot;
+            Interface &quot;ovsbr0&quot;
+                type: internal
+    ovs_version: &quot;2.0.2&quot;
+# ovs-vsctl del-port ovsbr0 tap0
+</code></pre>
+
+<p>If you want to remove the tag, then:</p>
+
+<pre><code>ovs-vsctl set port vnet0 tag=100
+ovs-vsctl remove port vnet0 tag 100
+</code></pre>
+
+<h3 id="vlan-openvswitch-virt-manager">VLAN / OpenVswitch/ virt-manager</h3>
+
+<p>Dumpxml will displayed as following:</p>
+
+<pre><code>    &lt;interface type='bridge'&gt;
+      &lt;mac address='52:54:00:0e:6b:d1'/&gt;
+      &lt;source bridge='ovsbr0'/&gt;
+      &lt;vlan trunk='yes'&gt;
+        &lt;tag id='22' nativeMode='untagged'/&gt;
+      &lt;/vlan&gt;
+      &lt;virtualport type='openvswitch'&gt;
+        &lt;parameters interfaceid='d5b7b981-8998-44c0-9344-0ade6b69ec1f'/&gt;
+      &lt;/virtualport&gt;
+      &lt;target dev='vnet0'/&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;alias name='net0'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
+    &lt;/interface&gt;
+    &lt;interface type='bridge'&gt;
+      &lt;mac address='52:54:00:3c:c9:24'/&gt;
+      &lt;source bridge='ovsbr0'/&gt;
+      &lt;vlan trunk='yes'&gt;
+        &lt;tag id='100' nativeMode='untagged'/&gt;
+      &lt;/vlan&gt;
+      &lt;virtualport type='openvswitch'&gt;
+        &lt;parameters interfaceid='06898d54-c0da-48c6-8b01-3307e70b995a'/&gt;
+      &lt;/virtualport&gt;
+      &lt;target dev='vnet1'/&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;alias name='net1'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0'/&gt;
+    &lt;/interface&gt;
+    &lt;interface type='bridge'&gt;
+      &lt;mac address='52:54:00:7b:e7:b0'/&gt;
+      &lt;source bridge='ovsbr0'/&gt;
+      &lt;virtualport type='openvswitch'&gt;
+        &lt;parameters interfaceid='303c1f65-23ff-4017-93ba-f196ca1d05fb'/&gt;
+      &lt;/virtualport&gt;
+      &lt;target dev='vnet2'/&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;alias name='net2'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/&gt;
+    &lt;/interface&gt;
+</code></pre>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -369,142 +621,6 @@ created, you could see it via <code>ifconfig bnep0</code>.</p>
 
 <p>Assign the same IP network range address to the client side, as in the br1
 side in server. After that you could ping each other via bluetooth!</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/12/04/on-bluetooth-pan/">On Bluetooth PAN</a>
-      </h1>
-      <span class="post-date">Dec 4, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="aim">AIM</h3>
-
-<p>For sharing the internet connection from working PC to Surface Pro.</p>
-
-<h3 id="setup-and-configuration">Setup And Configuration</h3>
-
-<h4 id="surfacepro">SurfacePro</h4>
-
-<p>Install bluez/bluez-libs/bluez-utils:</p>
-
-<pre><code>$ sudo pacman -S bluez bluez-utils bluez-libs
-</code></pre>
-
-<p>Modprobe the bnep kernel module:</p>
-
-<pre><code>[root@surfacepro ~]# modprobe bnep
-[root@surfacepro ~]# lsmod | grep bnep
-bnep                   20480  0
-bluetooth             450560  6 bnep,btbcm,btrtl,btusb,btintel
-[root@surfacepro ~]# modprobe btusb
-</code></pre>
-
-<p>Start the bluetooth.service via:</p>
-
-<pre><code>$ sudo systemctl start bluetooth.service
-</code></pre>
-
-<p><code>bluetoothctl</code> will give access for configurating bluetooth equipment, following steps
-shows how to connect to a bluetooth keyboard:</p>
-
-<pre><code>[root@surfacepro ~]# bluetoothctl 
-[NEW] Controller xx:xx:xx:xx:xx:xx surfacepro [default]
-[bluetooth]#
-[bluetooth]# agent KeyboardOnly 
-Agent registered
-[bluetooth]# default-agent      
-Default agent request successful
-[bluetooth]# power on
-[CHG] Controller xx:xx:xx:xx:xx:xx Class: 0x00011c
-Changing power on succeeded
-[CHG] Controller xx:XX:XX:XX:XX:XX Powered: yes
-[bluetooth]# scan on
-Discovery started
-[bluetooth]# pair D0:13:1E:11:F5:45
-Attempting to pair with D0:13:1E:11:F5:45
-[bluetooth]# connect D0:13:1E:11:F5:45
-</code></pre>
-
-<p>Now try to connect to the keyboard, yes you could use keyboard for typing.</p>
-
-<h4 id="pan">PAN</h4>
-
-<p>Network Aggregation Point - NAP</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/12/03/customize-surfacepro-kernel/">Customize SurfacePro Kernel</a>
-      </h1>
-      <span class="post-date">Dec 3, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/kernel">Kernel</a>
-        
-      </span>
-      
-      
-
-<h3 id="preparation">Preparation</h3>
-
-<p>Get the kernel and patch file:</p>
-
-<pre><code>To be Written
-</code></pre>
-
-<h3 id="build">Build</h3>
-
-<p>Prepare for compiliation:</p>
-
-<pre><code>$ make mrproper
-</code></pre>
-
-<p>Get the current running configuration:</p>
-
-<pre><code>$ zcat /proc/config.gz &gt; .config
-$ make menuconfig
-$ make -j3
-$ make modules_install
-</code></pre>
-
-<p>Install Kernel, you newly generated kernel will be named as
-<code>vmlinuz-4.1.13-surfacepro3</code>(Though surfacepro, surfacepro3 will remains its name) :</p>
-
-<pre><code>$ sudo cp -v arch/x86/boot/bzImage /boot/vmlinuz-4.1.13-surfacepro3
-</code></pre>
-
-<p>Generate the initial RAM disk:</p>
-
-<pre><code>$ sudo mkinitcpio -k 4.1.13-surfacepro3 -c /etc/mkinitcpio.conf -g  \ 
-/boot/initramfs-4.1.13-surfacepro3.img
-</code></pre>
-
-<p>Copy System.map, it contains a list of kernel symbols.</p>
-
-<pre><code>$ sudo cp System.map /boot/System.map-4.1.13-surfacepro3
-$ sudo ln -sf /boot/System.map-4.1.13-surfacepro3 /boot/System.map
-</code></pre>
-
-<p>Install the grub&rsquo;s configuration into grub.cfg:</p>
-
-<pre><code>$ sudo vim /etc/default/grub
-Edit with the name specified
-$ sudo grub-mkconfig -o /boot/grub/grub.cfg
-</code></pre>
-
-<p>But still this modification didn&rsquo;t solve surfacepro&rsquo;s wireless problem. finally I have
-to fall back to using yaourt&rsquo;s surfac pro kernel.</p>
 
       
     </div>
@@ -1921,8 +2037,17 @@ to fall back to using yaourt&rsquo;s surfac pro kernel.</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1931,7 +2056,7 @@ to fall back to using yaourt&rsquo;s surfac pro kernel.</p>
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

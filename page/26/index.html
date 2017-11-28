@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,372 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/07/12/%E7%94%A8flask%E6%A1%86%E6%9E%B6%E6%90%AD%E5%BB%BAweb-app/">用Flask框架搭建Web App</a>
+      </h1>
+      <span class="post-date">Jul 12, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">Web</a>
+        
+      </span>
+      
+      
+
+<p>拥有Web界面的好处是显而易见的，譬如说，我们可能需要下载Youtube上的某一段视频。传统的操
+作方式是这样的：登录位于国外的vps-&gt; 下载youtube视频到VPS -&gt; 退出vps登录 -&gt;采用某种手段
+(ftp/scp?)传送到本地。这时候如果有一个运行于远端VPS上的Web App，本地输入Youtube视频链接
+，下载完毕后直接生成下载链接，这该有多好！这里我们来实现这个功能。</p>
+
+<h3 id="flask">Flask</h3>
+
+<h4 id="运行环境">运行环境</h4>
+
+<p>远程VPS位于Digital Ocean上，运行Ubuntu14.04。 这里我们基于python virtualenv来构建Flask
+开发框架.</p>
+
+<pre><code>$ sudo apt-get install -y python-virtualenv
+$ virtualenv myflask
+$ source ~/myflask/bin/activate
+$ mkdir ~/flask_youtube
+$ vim requirements.txt
+Flask==0.10.1
+$ pip install -r requirements.txt
+</code></pre>
+
+<p>运行完上述命令后，flask运行环境就已经就绪了。</p>
+
+<h4 id="flask-app">Flask App</h4>
+
+<p>这里我们参考了以下链接（实际上是照搬):<br />
+<a href="http://charlesleifer.com/blog/a-flask-front-end-and-chrome-extension-for-youtube-dl/">http://charlesleifer.com/blog/a-flask-front-end-and-chrome-extension-for-youtube-dl/</a></p>
+
+<p>也参考了(关于virtualenv):<br />
+<a href="https://realpython.com/blog/python/setting-up-a-simple-ocr-server/">https://realpython.com/blog/python/setting-up-a-simple-ocr-server/</a></p>
+
+<pre><code>$ vim youtube.py
+import subprocess
+import sys
+
+from flask import Flask, flash, redirect, request, render_template, url_for
+
+DEBUG = False
+SECRET_KEY = 'this is needed for flash messages'
+
+BINARY = '/usr/bin/youtube-dl'
+DEST_DIR = '/home/dash/videos'
+OUTPUT_TEMPLATE = '%s/%%(title)s-%%(id)s.%%(ext)s' % DEST_DIR
+
+app = Flask(__name__)
+app.config.from_object(__name__)
+
+@app.route('/', methods=['GET', 'POST'])
+def download():
+    if request.method == 'POST':
+        url = request.form['url']
+        p = subprocess.Popen([BINARY, '-o', OUTPUT_TEMPLATE, '-q', url])
+        p.communicate()
+        flash('Successfully downloaded!', 'success')
+        return redirect(url_for('download'))
+    return render_template('download.html')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8801)
+</code></pre>
+
+<p>实例中用到了flask里的模版，为此我们需要创建template目录:</p>
+
+<pre><code>$ mkdir templates
+$ vim templates/download.html
+&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;title&gt;youtuber&lt;/title&gt;
+    &lt;link rel=stylesheet type=text/css href=&quot;{{ url_for('static', filename='css/youtuber.min.css') }}&quot; /&gt;
+    &lt;script src=&quot;{{ url_for('static', filename='js/jquery-1.11.0.min.js') }}&quot; type=&quot;text/javascript&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;{{ url_for('static', filename='js/bootstrap.min.js') }}&quot;&gt;&lt;/script&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div class=&quot;container&quot;&gt;
+      {% for category, message in get_flashed_messages(with_categories=true) %}
+        &lt;div class=&quot;alert alert-{{ category }} alert-dismissable&quot;&gt;
+          &lt;button type=&quot;button&quot; class=&quot;close&quot; data-dismiss=&quot;alert&quot; aria-hidden=&quot;true&quot;&gt;×&lt;/button&gt;
+          &lt;p&gt;{{ message }}&lt;/p&gt;
+        &lt;/div&gt;
+      {% endfor %}
+
+      &lt;h1&gt;Download&lt;/h1&gt;
+      &lt;form action=&quot;{{ url_for('download') }}&quot; method=&quot;post&quot;&gt;
+        &lt;div class=&quot;form-group&quot;&gt;
+          &lt;label for=&quot;url&quot;&gt;URL&lt;/label&gt;
+          &lt;input type=&quot;text&quot; name=&quot;url&quot; class=&quot;form-control&quot; id=&quot;url&quot; placeholder=&quot;url&quot; /&gt;
+        &lt;/div&gt;
+        &lt;button type=&quot;submit&quot; class=&quot;btn btn-primary&quot;&gt;Download&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt; 
+</code></pre>
+
+<p>因为我们这里有指定用<code>static/js</code>下的静态文件，所以需要手动创建目录并下载文件:</p>
+
+<pre><code>$ mkdir -p static/js
+$ cd static/js
+$ wget https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css
+$ wget https://code.jquery.com/jquery-1.11.0.js
+</code></pre>
+
+<p><code>youtuber.min.css</code>是样式表文件，这里先不加入，除了效果差一点，没啥副作用。</p>
+
+<h4 id="运行">运行</h4>
+
+<p>键入<code>python youtube.py</code>即可运行该Web App. 访问<code>http://YourIPAddress:8801</code>即可访问到该WebApp的界面:</p>
+
+<p><img src="/images/2016_07_12_15_59_39_272x160.jpg" alt="/images/2016_07_12_15_59_39_272x160.jpg" /></p>
+
+<p>输入下载链接后，点击submit按钮后，VPS将自动下载该youtube影片。</p>
+
+<h3 id="下载结果页面">下载结果页面</h3>
+
+<p>下载结果页面需要在static目录下新建一个用于存放视频的<code>videos/</code>目录夹. 同时需要添加一个模
+板文件.</p>
+
+<pre><code>$ tree
+.
+└── down
+    ├── requirements.txt
+    ├── static
+    │   ├── js
+    │   │   ├── bootstrap-3.0.0.min.js
+    │   │   ├── bootstrap.min.js
+    │   │   ├── jquery-1.10.2.min.js
+    │   │   └── jquery-1.11.0.min.js
+    │   └── videos
+    │       ├── abc.mp4
+    │       └── ccc.mp4
+    ├── templates
+    │   ├── download.html
+    │   └── videos.html
+    └── youtube.py
+</code></pre>
+
+<p>其中<code>templates/videos.html</code>文件是用于渲染下载视频文件的模版，内容如下:</p>
+
+<pre><code>&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;title&gt;Video download info&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div class=&quot;container&quot;&gt;
+      &lt;h1&gt;All Downloadable Videos&lt;/h1&gt;
+      {% for video in video_url %}
+      &lt;a href=&quot;/static/videos/{{ video }}&quot;&gt;{{ video }}&lt;/a&gt;&lt;br /&gt;
+      {% endfor %}
+      &lt;h1&gt;Click Following Links For Downloading!&lt;/h1&gt;
+      &lt;a href=&quot;/&quot;&gt;Go Back To Download Page&lt;/a&gt;&lt;br /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<p>在<code>youtube.py</code>文件中添加<code>/videos</code>路由，及相关处理函数:</p>
+
+<pre><code>import subprocess
+import sys
+import os
+from flask import Flask, flash, redirect, request, render_template, url_for
+
+DEBUG = False
+SECRET_KEY = 'this is needed for flash messages'
+
+BINARY = '/usr/bin/youtube-dl'
+DEST_DIR = '/home/dash/down/static/videos/'
+OUTPUT_TEMPLATE = '%s/%%(title)s-%%(id)s.%%(ext)s' % DEST_DIR
+
+app = Flask(__name__)
+app.config.from_object(__name__)
+
+@app.route('/', methods=['GET', 'POST'])
+def download():
+    if request.method == 'POST':
+        url = request.form['url']
+        print url
+        p = subprocess.Popen([BINARY, '-o', OUTPUT_TEMPLATE, '-q', url])
+        p.communicate()
+        flash('Successfully downloaded!', 'success')
+        return redirect(url_for('videos'))
+    return render_template('download.html')
+
+# For holding all of the videos
+@app.route('/videos')
+def videos():
+    names = os.listdir(os.path.abspath(DEST_DIR))
+    return render_template('videos.html', video_url=names)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8801)
+</code></pre>
+
+<h3 id="下载流程">下载流程</h3>
+
+<p>首先，访问<code>http://YourIpAddress:8801/</code>, 得到的结果如下:</p>
+
+<p><img src="/images/2016_07_12_19_34_59_309x177.jpg" alt="/images/2016_07_12_19_34_59_309x177.jpg" /></p>
+
+<p>填入youtube上的视频地址以后，下载完毕后，可以看到videos页面变成了:</p>
+
+<p><img src="/images/2016_07_12_19_38_03_582x271.jpg" alt="/images/2016_07_12_19_38_03_582x271.jpg" /></p>
+
+<h3 id="删除功能">删除功能</h3>
+
+<p><code>youtube.py</code>添加一个函数和路由:</p>
+
+<pre><code># For deleting specified file
+@app.route('/delete/&lt;filename&gt;')
+def remove_file(filename):
+    filename_full = os.path.join(DEST_DIR, filename)
+    print filename_full
+    os.remove(filename_full)
+    return redirect(url_for('videos'))
+</code></pre>
+
+<p>模版文件更改:</p>
+
+<pre><code>$ vim templates/videos.html 
+&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;title&gt;Video download info&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div class=&quot;container&quot;&gt;
+      &lt;h1&gt;All Downloadable Videos&lt;/h1&gt;
+      {% for video in video_url %}
+      &lt;a href=&quot;/static/videos/{{ video }}&quot;&gt;{{ video }}&lt;/a&gt;
+      &lt;a href=&quot;/delete/{{ video }}&quot;&gt;&lt;img src=&quot;/static/img/fuck.png&quot; alt=&quot;FuckYou&quot;&gt;&lt;/a&gt;
+      &lt;a href=&quot;/delete/{{ video }}&quot;&gt; Delete this video&lt;/a&gt;
+      &lt;br /&gt;
+      &lt;hr&gt;
+      {% endfor %}
+...........
+</code></pre>
+
+<p><code>fuck.png</code>是从网上下载的图片，更改完毕后，页面如下:<br />
+<img src="/images/2016_07_12_20_27_39_748x382.jpg" alt="/images/2016_07_12_20_27_39_748x382.jpg" /></p>
+
+<h3 id="todo">ToDo</h3>
+
+<p>添加权限，只有认证过后的用户才能使用删除功能。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/07/08/%E6%90%AD%E5%BB%BA%E5%9F%BA%E4%BA%8Edocker%E7%9A%84piwigo%E7%85%A7%E7%89%87%E7%AE%A1%E7%90%86%E7%BD%91%E7%AB%99/">搭建基于Docker的Piwigo照片管理网站</a>
+      </h1>
+      <span class="post-date">Jul 8, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/tools">Tools</a>
+        
+      </span>
+      
+      
+
+<p>最近和小伙伴一起出去玩的次数比较多，免不了要拍下不少照片。考虑到照片共享的便捷性，特地调研了
+几个关于照片共享的方法，最后打算基于Piwigo来搭建，以下是详细的步骤。</p>
+
+<h3 id="从iphone同步图片到archlinux">从Iphone同步图片到ArchLinux</h3>
+
+<p>参考了<a href="https://wiki.archlinux.org/index.php/IPod">https://wiki.archlinux.org/index.php/IPod</a></p>
+
+<pre><code>$ sudo pacman -S ifuse usbmuxd libplist
+$ lsmod | grep -i fuse
+fuse                   94208  3
+$ ifuse ~/iphone 
+$ cd ~/iphone 
+$ ls
+Books  DCIM  Downloads  MediaAnalysis  PhotoData  PhotoStreamsData
+Photos  Purchases  Radio  Recordings  iTunes_Control
+</code></pre>
+
+<p><code>DCIM/100APPLE</code>下即为我们Iphone里所储存的图片。可以直接拷贝到本地。</p>
+
+<h3 id="piwigo">Piwigo</h3>
+
+<p>有了容器以后，很多配置的工作就完全被简化了。以下是步骤：</p>
+
+<pre><code>$ sudo docker pull mathieuruellan/piwigo
+$ sudo docker pull mysql:5.5
+</code></pre>
+
+<p>而后，在某个目录下，创建一个fig.yml文件, fig可以通过<code>pip install fig</code>来安装.</p>
+
+<pre><code>$ pwd
+/home/dash/Code/piwigo
+$ cat fig.yml
+mysqlpiwigo:
+   image: mysql:5.5 
+   volumes:
+      - /home/dash/piwigo/mysql/:/var/lib/mysql 
+   environment:
+      - MYSQL_ROOT_PASSWORD=XXXXXXXX
+      - MYSQL_DATABASE=piwigo
+      - MYSQL_USER=piwigo
+      - MYSQL_PASSWORD=XXXXXX
+piwigo:
+   image: mathieuruellan/piwigo
+   links:
+      - mysqlpiwigo:mysql 
+   volumes:
+      - /home/dash/piwigo/data/galleries:/var/www/galleries
+      - /home/dash/piwigo/data/local:/var/www/local
+      - /home/dash/piwigo/data/plugins:/var/www/plugins
+      - /home/dash/piwigo/data/themes:/var/www/themes
+      - /home/dash/piwigo/cache:/var/www/_data/i
+      - /home/dash/piwigo/upload:/var/www/upload&quot;
+      - /var/log
+      - /var/log/piwigo:/var/log/apache2
+   ports:
+      - &quot;8964:80&quot;
+   hostname: piwigo
+   domainname: localhost
+</code></pre>
+
+<p>写好以上的配置文件以后，在该目录下运行<code>sudo fig up -d</code>即可将Piwigo运行起来。<br />
+运行的结果检查：</p>
+
+<pre><code>$ sudo docker ps
+CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                  NAMES
+9575cd9dbbae        mathieuruellan/piwigo   &quot;/bin/sh -c /entrypoi&quot;   40 minutes ago      Up 40 minutes       0.0.0.0:8964-&gt;80/tcp   piwigo_piwigo_1
+31f7ecc60985        mysql:5.5               &quot;docker-entrypoint.sh&quot;   41 minutes ago      Up 41 minutes       3306/tcp               piwigo_mysqlpiwigo_1
+</code></pre>
+
+<p>容器启动完毕后，就可以开始配置网站了。</p>
+
+<p>###配置piwigo</p>
+
+<p>打开浏览器，访问<code>http://localhost:8964</code>， 即可访问到piwigo的初始配置页面，如下图:</p>
+
+<p><img src="/images/2016_07_08_21_04_21_822x818.jpg" alt="/images/2016_07_08_21_04_21_822x818.jpg" /></p>
+
+<p>这里要注意的是，MySQL主机名字应该填我们在fig配置文件中定义出的<code>mysql</code>。数据库名称填piwigo，
+这些同样在启动piwigo容器的fig文件中被定义。</p>
+
+<p>配置好以后，进入到后台，可以选择上传图片，如图:</p>
+
+<p><img src="/images/2016_07_08_22_13_40_1318x660.jpg" alt="/images/2016_07_08_22_13_40_1318x660.jpg" /></p>
+
+<p>400多M的图片大概需要用1分钟时间上传完毕。</p>
+
+<p>好了，一个完全可控的图像分享站点OK了，你可以用它来管理你的家庭照片。一切就只需要两个容器而已。</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -512,467 +878,6 @@ CARBON_NAME = collectd.com.IT.servers.xen.
 
 <p>Run <code>python2 xengraphite.py</code> you could get your XenServer statistic data into your
 graphite database, enjoy it.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/06/29/site-to-site-vpn/">site-to-site VPN</a>
-      </h1>
-      <span class="post-date">Jun 29, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="reference">Reference</h3>
-
-<p>Refers to:</p>
-
-<p><a href="https://clauseriksen.net/2011/02/02/ipsec-on-debianubuntu/">https://clauseriksen.net/2011/02/02/ipsec-on-debianubuntu/</a><br />
-And
-<a href="http://xmodulo.com/create-site-to-site-ipsec-vpn-tunnel-openswan-linux.html">http://xmodulo.com/create-site-to-site-ipsec-vpn-tunnel-openswan-linux.html</a></p>
-
-<h3 id="network-topology">Network Topology</h3>
-
-<p>The topology is listed as following:</p>
-
-<p>Host1 &ndash; LAN1 &ndash; Router1 &ndash;[BIG, BAD INTERNET]&ndash; Router2 &ndash; LAN2 &ndash; Host2</p>
-
-<p>Router1 and Router2 are Ubuntu14.04 machine, which runs in virt-manager,thus you have
-to create 2 new networks, each in one physical machine.</p>
-
-<p>Physical Machine 1: 192.168.1.79<br />
-Router1:<br />
-eth0: bridge to physical machine&rsquo;s networking. 192.168.10.100<br />
-eth1: 10.47.70.2.<br />
-DHCP on eth1.</p>
-
-<p>Physical Machine 2: 192.168.1.69<br />
-Router2:<br />
-eth0: bridge to physical machine&rsquo;s networking. 192.168.10.200<br />
-eth1: 10.47.67.2.<br />
-DHCP on eth1.</p>
-
-<h3 id="router-network-configuration">Router Network Configuration</h3>
-
-<p>Router1&rsquo;s networking configuration:</p>
-
-<pre><code>$ vim /etc/network/interfaces
-    # The loopback network interface
-    auto lo
-    iface lo inet loopback
-    
-    # The primary network interface
-    auto eth0
-    iface eth0 inet static
-    address 192.168.10.100
-    netmask 255.255.0.0
-    gateway 192.168.0.176
-    dns-nameservers 223.5.5.5
-    
-    auto eth1
-    iface eth1 inet static
-    address 10.47.70.2
-    netmask 255.255.255.0
-</code></pre>
-
-<p>Router2&rsquo;s networking configuration:</p>
-
-<pre><code>$ vim /etc/network/interfaces
-    # The loopback network interface
-    auto lo
-    iface lo inet loopback
-    
-    # The primary network interface
-    auto eth0
-    iface eth0 inet static
-    address 192.168.10.200
-    netmask 255.255.0.0
-    gateway 192.168.0.176
-    dns-nameservers 223.5.5.5
-    auto eth1
-    iface eth1 inet static
-    address 10.47.67.2
-    netmask 255.255.255.0
-</code></pre>
-
-<p>After configuration , restart the Router1 and Router2.</p>
-
-<h3 id="ipsec-configuration">IPSEC Configuration</h3>
-
-<h4 id="router1">Router1</h4>
-
-<p>Install following package:</p>
-
-<pre><code>$ sudo apt-get install -y openswan
-</code></pre>
-
-<p>Append following lines at the end of <code>/etc/sysctl.conf</code>,then run <code>sysctl -p
-/etc/sysctl.conf</code> to take effects.</p>
-
-<pre><code>$ vim /etc/sysctl.conf
-net.ipv4.ip_forward=1
-net.ipv4.conf.all.accept_redirects = 0
-net.ipv4.conf.all.send_redirects = 0
-net.ipv4.conf.default.send_redirects = 0
-net.ipv4.conf.eth0.send_redirects = 0
-net.ipv4.conf.default.accept_redirects = 0
-net.ipv4.conf.eth0.accept_redirects = 0
-</code></pre>
-
-<p>Also you have to disable the redirects via following commands:</p>
-
-<pre><code>for vpn in /proc/sys/net/ipv4/conf/*;
-do echo 0 &gt; $vpn/accept_redirects;
-echo 0 &gt; $vpn/send_redirects;
-done
-</code></pre>
-
-<p>iptables rules should be done via following:</p>
-
-<pre><code>iptables -A INPUT -p udp --dport 500 -j ACCEPT
-iptables -A INPUT -p tcp --dport 4500 -j ACCEPT
-iptables -A INPUT -p udp --dport 4500 -j ACCEPT
-iptables -t nat -A POSTROUTING -s 10.47.70.0/24 -d 10.47.67.0/24 -j SNAT --to 192.168.10.100
-#iptables -t nat -A POSTROUTING -s site-A-private-subnet -d site-B-private-subnet -j SNAT --to site-A-Public-IP
-iptables -A POSTROUTING -t nat -d 10.47.70.0/24 -o eth1 -m policy --dir out --pol ipsec -j ACCEPT
-iptables -A INPUT -m policy --dir in --pol ipsec -j ACCEPT
-iptables -A INPUT -p udp -m multiport --dports 500,4500 -j ACCEPT
-iptables -A INPUT -p esp -j ACCEPT
-iptables -A FORWARD -m policy --dir in --pol ipsec -j ACCEPT
-</code></pre>
-
-<p>Now continue to configure the ipsec:</p>
-
-<pre><code>$ sudo vim /etc/ipsec.conf
-    ## general configuration parameters ##
-     
-    config setup
-            plutodebug=all
-            plutostderrlog=/var/log/pluto.log
-            protostack=netkey
-            nat_traversal=yes
-            virtual_private=%v4:10.0.0.0/8,%v4:192.168.0.0/16,%v4:172.16.0.0/12
-            ## disable opportunistic encryption in Red Hat ##
-            oe=off
-     
-    ## disable opportunistic encryption in Debian ##
-    ## Note: this is a separate declaration statement ##
-    #include /etc/ipsec.d/examples/no_oe.conf 
-     
-    ## connection definition in Debian ##
-    conn demo-connection-debian
-            authby=secret
-            auto=start
-            ## phase 1 ##
-            keyexchange=ike
-            ## phase 2 ##
-            esp=3des-md5
-            pfs=yes
-            type=tunnel
-            left=192.168.10.100
-            leftsourceip=192.168.10.100
-            leftsubnet=10.47.70.0/24
-            ## for direct routing ##
-            #leftsubnet=192.168.10.100/32
-            #leftnexthop=%defaultroute
-            leftnexthop=192.168.10.200
-            right=192.168.10.200
-            rightsubnet=10.47.67.0/24
-</code></pre>
-
-<p>Notice the left/right configuration, should corresponding the our definition
-of the networking.</p>
-
-<p>Now generate the pre-shared keys via:</p>
-
-<pre><code>$ dd if=/dev/random count=24 bs=1 | xxd -ps
-24+0 records in
-24+0 records out
-24 bytes copied, 4.5529e-05 s, 527 kB/s
-cece1b0ffe27f82c27efc94339f08c418abb9e5f5c0d5bf5
-</code></pre>
-
-<p>the <code>cece1b0ffe27f82c27efc94339f08c418abb9e5f5c0d5bf5</code> is the keys we want to
-fill into the secrets:</p>
-
-<pre><code>$ sudo cat /etc/ipsec.secrets 
-    # This file holds shared secrets or RSA private keys for inter-Pluto
-    # authentication.  See ipsec_pluto(8) manpage, and HTML documentation.
-    
-    # RSA private key for this host, authenticating it to any other host
-    # which knows the public part.  Suitable public keys, for ipsec.conf, DNS,
-    # or configuration of other implementations, can be extracted conveniently
-    # with &quot;ipsec showhostkey&quot;.
-    
-    # this file is managed with debconf and will contain the automatically created RSA keys
-    include /var/lib/openswan/ipsec.secrets.inc
-    192.168.10.100  192.168.10.200:  PSK  &quot;cece1b0ffe27f82c27efc94339f08c418abb9e5f5c0d5bf5&quot;
-</code></pre>
-
-<p>Now Router1 is configured, we continue to configure Router2.</p>
-
-<h4 id="router2">Router2</h4>
-
-<p>Ipsec and sysctl are the same as in Router1, the iptables scripts is listed as:</p>
-
-<pre><code>iptables -A INPUT -p udp --dport 500 -j ACCEPT
-iptables -A INPUT -p tcp --dport 4500 -j ACCEPT
-iptables -A INPUT -p udp --dport 4500 -j ACCEPT
-iptables -t nat -A POSTROUTING -s 10.47.67.0/24 -d 10.47.70.0/24 -j SNAT --to 192.168.10.200
-
-#iptables -A POSTROUTING -t nat -d 192.168.1.0/24 -o eth0 -m policy --dir out --pol ipsec -j ACCEPT
-iptables -A POSTROUTING -t nat -d 10.47.67.0/24 -o eth1 -m policy --dir out --pol ipsec -j ACCEPT
-iptables -A INPUT -m policy --dir in --pol ipsec -j ACCEPT
-iptables -A INPUT -p udp -m multiport --dports 500,4500 -j ACCEPT
-iptables -A INPUT -p esp -j ACCEPT
-iptables -A FORWARD -m policy --dir in --pol ipsec -j ACCEPT
-</code></pre>
-
-<p>Now configure the ipsec.conf like following:</p>
-
-<pre><code>$ sudo vim /etc/ipsec.conf
-## general configuration parameters ##
- 
-config setup
-        plutodebug=all
-        plutostderrlog=/var/log/pluto.log
-        protostack=netkey
-        nat_traversal=yes
-        virtual_private=%v4:10.0.0.0/8,%v4:192.168.0.0/16,%v4:172.16.0.0/12
-        ## disable opportunistic encryption in Red Hat ##
-        oe=off
- 
-## disable opportunistic encryption in Debian ##
-## Note: this is a separate declaration statement ##
-#include /etc/ipsec.d/examples/no_oe.conf 
- 
-## connection definition in Debian ##
-conn demo-connection-debian
-        authby=secret
-        auto=start
-        ## phase 1 ##
-        keyexchange=ike
-        ## phase 2 ##
-        esp=3des-md5
-        pfs=yes
-        type=tunnel
-        left=192.168.10.200
-        leftsourceip=192.168.10.200
-        leftsubnet=10.47.67.0/24
-        ## for direct routing ##
-        #leftsubnet=192.168.10.200/32
-        #leftnexthop=%defaultroute
-        leftnexthop=192.168.10.100
-        right=192.168.10.100
-        rightsubnet=10.47.70.0/24
-</code></pre>
-
-<p>Notice the definition&rsquo;s differences comparing to Router1.</p>
-
-<p>The ipsec.secrets is the same as Router1, but you have to change like following:</p>
-
-<pre><code>$ sudo vim /etc/ipsec.secrets
-192.168.10.200  192.168.10.100:  PSK  &quot;3030804556207bde9fc5c9a043c6ac13fce136ce41eb98a6&quot;
-</code></pre>
-
-<h3 id="examine">Examine</h3>
-
-<p>Restart the ipsec services on both Router.</p>
-
-<pre><code>$ sudo  /etc/init.d/ipsec restart
-</code></pre>
-
-<p>Examine the route via:</p>
-
-<pre><code>adminubuntu@vpn1:~$ ip route
-default via 192.168.0.176 dev eth0 
-10.47.67.0/24 dev eth0  scope link  src 192.168.10.100 
-10.47.70.0/24 dev eth1  proto kernel  scope link  src 10.47.70.2 
-192.168.0.0/16 dev eth0  proto kernel  scope link  src 192.168.10.100 
-adminubuntu@vpn2:~$ ip route
-default via 192.168.0.176 dev eth0 
-10.47.67.0/24 dev eth1  proto kernel  scope link  src 10.47.67.2 
-10.47.70.0/24 dev eth0  scope link  src 192.168.10.200 
-192.168.0.0/16 dev eth0  proto kernel  scope link  src 192.168.10.200 
-</code></pre>
-
-<p>So we can see the route shows the connection of the vpn.</p>
-
-<p>Now examine the ipsec status:</p>
-
-<pre><code>$ sudo service ipsec status
-IPsec running  - pluto pid: 930
-pluto pid 930
-1 tunnels up
-some eroutes exist
-</code></pre>
-
-<p>More detailed infos could be examine via: <code>sudo ipsec auto --status</code>.</p>
-
-<h3 id="dhcp-server">DHCP Server</h3>
-
-<p>Install dhcpd and configure it via following command:</p>
-
-<pre><code>$ sudo apt-get install -y isc-dhcp-server
-$ sudo vim /etc/default/isc-dhcp-server
-INTERFACES=&quot;eth1&quot;
-</code></pre>
-
-<p>Append following lines to <code>/etc/dhcp/dhcpd.conf</code>:<br />
-Router1:</p>
-
-<pre><code>subnet
-10.47.70.0 netmask 255.255.255.0 {
-# --- default gateway
-option routers
-10.47.70.2;
-# --- Netmask
-option subnet-mask
-255.255.255.0;
-# --- Broadcast Address
-option broadcast-address
-10.47.70.255;
-# --- Domain name servers, tells the clients which DNS servers to use.
-option domain-name-servers
-223.5.5.5,180.76.76.76;
-option time-offset 0;
-range 10.47.70.3 10.47.70.254;
-default-lease-time 1209600;
-max-lease-time 1814400;
-}
-</code></pre>
-
-<p>Router2:</p>
-
-<pre><code>subnet
-10.47.67.0 netmask 255.255.255.0 {
-# --- default gateway
-option routers
-10.47.67.2;
-# --- Netmask
-option subnet-mask
-255.255.255.0;
-# --- Broadcast Address
-option broadcast-address
-10.47.67.255;
-# --- Domain name servers, tells the clients which DNS servers to use.
-option domain-name-servers
-223.5.5.5,180.76.76.76;
-option time-offset 0;
-range 10.47.67.3 10.47.67.254;
-default-lease-time 1209600;
-max-lease-time 1814400;
-}
-</code></pre>
-
-<p>Now your subnet is ready, restart the Router1 and Router2, next step we will
-verify our site-to-site VPN.</p>
-
-<h3 id="verification">Verification</h3>
-
-<p>Create 2 new vm on 2 physical machine, each of them attached to our Router&rsquo;s
-eth1 networking. I use tinycore for experiment.</p>
-
-<p>Tinycore Attaches to Router1:<br />
-<img src="/images/2016_06_29_19_23_50_469x212.jpg" alt="/images/2016_06_29_19_23_50_469x212.jpg" /><br />
-Tinycore Attaches to Router2:<br />
-<img src="/images/2016_06_29_19_25_18_497x351.jpg" alt="/images/2016_06_29_19_25_18_497x351.jpg" /></p>
-
-<p>The picture also shows the ping each other without any problem.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/06/20/da-jian-ji-yu-dockerde-jian-kong-xi-tong/">搭建基于docker的监控系统</a>
-      </h1>
-      <span class="post-date">Jun 20, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="graphite-grafana">Graphite/Grafana</h3>
-
-<p>这两个用于记录和展示监控数据，通过以下命令可以快速搭建:</p>
-
-<h4 id="graphite">Graphite</h4>
-
-<p>开启容器:</p>
-
-<pre><code>$ mkdir -p /local/path/to/graphite/storage/whisper/
-$ sudo docker run -d \
-  --name graphite \
-  -p 8080:80 \
-  -p 2003:2003 \
-  -v /local/path/to/.htpasswd:/etc/nginx/.htpasswd \
-  -v /local/path/to/graphite/storage/whisper:/opt/graphite/storage/whisper \
-  sitespeedio/graphite
-</code></pre>
-
-<p>创建htpasswd文件的方法可以参阅:<br />
-<a href="http://httpd.apache.org/docs/2.2/programs/htpasswd.html">http://httpd.apache.org/docs/2.2/programs/htpasswd.html</a></p>
-
-<p>当然如果你使用默认的密码的话，用户名/密码是:guest/guest.</p>
-
-<h4 id="grafana">Grafana</h4>
-
-<p>开启容器:</p>
-
-<pre><code># mkdir -p /local/path/to/grafana
-# docker run -d -p 3000:3000 --name=grafana -v /local/path/to/grafana:/var/lib/grafana  grafana/grafana
-</code></pre>
-
-<p>默认用户名/密码为admin/admin.</p>
-
-<h3 id="collectd">Collectd</h3>
-
-<p>用于采集节点机上的数据，</p>
-
-<pre><code># docker run -d --net=host --privileged -v /:/hostfs:ro --name=collectd -e \
-HOST_NAME=localhost -e \
-GRAPHITE_HOST=192.168.1.79 andreasjansson/collectd-write-graphite
-</code></pre>
-
-<p>参数说明:</p>
-
-<pre><code>--net=host : 	使用主机上的网络配置
-GRAPHITE_HOST:  前面设置的graphite机器的地址
-</code></pre>
-
-<h3 id="systemd-启动方式">systemd 启动方式</h3>
-
-<p>collectd启动方式:</p>
-
-<pre><code>$ sudo vim /usr/lib/systemd/system/collectddocker.service
-[Unit]
-Description=collectd container
-Requires=docker.service
-After=docker.service
-
-[Service]
-Restart=always
-ExecStart=/usr/bin/docker start -a collectd
-ExecStop=/usr/bin/docker stop -t 2 collectd
-
-[Install]
-WantedBy=multi-user.target
-</code></pre>
-
-<p>启动并使能服务:</p>
-
-<pre><code>$ sudo systemctl enable collectddocker.service
-</code></pre>
 
       
     </div>
@@ -2389,8 +2294,17 @@ WantedBy=multi-user.target
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2399,7 +2313,7 @@ WantedBy=multi-user.target
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,236 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/08/29/builddebiandockerimagelocally/">BuildDebianDockerImageLocally</a>
+      </h1>
+      <span class="post-date">Aug 29, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="aim">AIM</h3>
+
+<p>Recently I am working in a network isolated environment, this means, I am
+unable to connect to internet freely. But I have to finish my working using
+some specific docker images, how? So I have to build them locally using iso.</p>
+
+<h3 id="preparation">Preparation</h3>
+
+<p>Download debian dvds from internet and tranfer them into the intranet:</p>
+
+<pre><code># ls -l debian*
+-rw-r--r-- 1 dash root 3.6G Jul 21 00:59 debian-9.0.0-amd64-DVD-1.iso
+-rw-r--r-- 1 dash root 4.4G Jul 21 01:57 debian-9.0.0-amd64-DVD-2.iso
+-rw-r--r-- 1 dash root 4.4G Jul 21 02:52 debian-9.0.0-amd64-DVD-3.iso
+</code></pre>
+
+<p>Install debian in virtualbox using debian-9.0.0-amd64 DVD1 iso. Using basic
+desktop with sshd server.</p>
+
+<h3 id="repository">Repository</h3>
+
+<p>Change the repository with following command:</p>
+
+<pre><code># mount -t iso9660 -o loop /media/sdb/iso/debian-9.0.0-amd64-DVD-1.iso /media/sdb/debianrepo/cd1/
+# mount -t iso9660 -o loop /media/sdb/iso/debian-9.0.0-amd64-DVD-2.iso /media/sdb/debianrepo/cd2/
+# mount -t iso9660 -o loop /media/sdb/iso/debian-9.0.0-amd64-DVD-3.iso /media/sdb/debianrepo/cd3/
+</code></pre>
+
+<p>While the directory <code>/media/sdb/debianrepo/</code> is the directory under the web server. Thus we could change the apt&rsquo;s source file pointint to this webserver.</p>
+
+<pre><code># vim /etc/apt/sources.list
+deb http://192.168.56.1/debianrepo/cd1/	stable main contrib
+deb http://192.168.56.1/debianrepo/cd2/	stable main contrib
+deb http://192.168.56.1/debianrepo/cd3/	stable main contrib
+</code></pre>
+
+<p>Enable the Unauthenticated installation, and install vim for testing:</p>
+
+<pre><code># vim /etc/apt/apt.conf.d/99myown 
+APT::Get::AllowUnauthenticated &quot;true&quot;;
+# apt-get update
+# apt-get -y install vim
+</code></pre>
+
+<h3 id="bootstrap">BootStrap</h3>
+
+<p>Standard Bootstrap won&rsquo;t be used, so we have to use a tool called <code>demoostrap</code>.<br />
+Download position:</p>
+
+<pre><code># git clone https://github.com/jwilk/demoostrap.git
+</code></pre>
+
+<p>Install some necessray packages:</p>
+
+<pre><code># apt-get install -y python3-debian apt-utils debootstrap dpkg-repack
+</code></pre>
+
+<p>demoostrap the basic filesystem via:</p>
+
+<pre><code># mkdir docker_root
+# ./demoostrap docker_root/
+# du -hs docker_root/
+179M	docker_root/
+</code></pre>
+
+<p>In next step we will chroot into this new filesystem and install some necessary package.</p>
+
+<h3 id="chroot">chroot</h3>
+
+<p>The filesystem under <code>docker_root</code> only contains basic filesystem. In order to work properly we have to install at least minimum <code>apt-get</code>, so following are the steps:</p>
+
+<pre><code># mount -t devpts devpts docker_root/dev/pts
+# mount -t proc proc docker_root/proc
+# mount -t sysfs sysfs docker_root/sys
+</code></pre>
+
+<p>Before chroot into the system we have to download some packages manually into the <code>docker_root</code> folder, because in chrooted system we could only use dpkg for installation.</p>
+
+<pre><code># mkdir -p docker_root/install
+# cd docker_root/install
+# wget http://192.192.192.91/debianrepo/cd1/debian/debian/pool/main/a/apt/apt_1.4.6_amd64.deb
+# wget http://192.192.192.91/debianrepo/cd1/debian/pool/main/a/apt/libapt-pkg5.0_1.4.6_amd64.deb
+# wget http://192.192.192.91/debianrepo/cd1/debian//pool/main/g/gcc-6/libstdc++6_6.3.0-18_amd64.deb
+# wget http://192.192.192.91/debianrepo/cd1/debian/pool/main/a/adduser/adduser_3.115_all.deb
+# wget http://192.192.192.91/debianrepo/cd1/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2017.5_all.deb
+# wget http://192.192.192.91/debianrepo/cd1/debian//pool/main/g/gnupg2/gpgv_2.1.18-6_amd64.deb
+</code></pre>
+
+<p>Now chroot in, and manually install these packages:</p>
+
+<pre><code># chroot docker_root/
+#  cd /install
+# dpkg -i gpgv_2.1.18-6_amd64.deb 
+# dpkg -i libstdc++6_6.3.0-18_amd64.deb 
+# dpkg -i libapt-pkg5.0_1.4.6_amd64.deb 
+# dpkg -i debian-archive-keyring_2017.5_all.deb 
+# dpkg -i adduser_3.115_all.deb 
+# dpkg -i apt_1.4.6_amd64.deb
+# which apt-get
+/usr/bin/apt-get
+</code></pre>
+
+<h3 id="further-modification">Further Modification</h3>
+
+<p>In host machine, we manually change the <code>sources.list</code> file and
+Now we could exit the chroot system, and tar <code>docker_root</code> directory,</p>
+
+<pre><code># vim etc/apt/sources.list
+deb http://192.168.56.1/debianrepo/cd1/	stable main contrib
+deb http://192.168.56.1/debianrepo/cd2/	stable main contrib
+deb http://192.168.56.1/debianrepo/cd3/	stable main contrib
+</code></pre>
+
+<p>Enable the Unauthenticated installation:</p>
+
+<pre><code># vim etc/apt/apt.conf.d/99myown 
+APT::Get::AllowUnauthenticated &quot;true&quot;;
+</code></pre>
+
+<h3 id="zip-and-import">zip and import</h3>
+
+<p>tar the directory using following command:</p>
+
+<pre><code># tar czvf docker_root.tar.gz docker_root/
+</code></pre>
+
+<p>Then in the untared directory you could import it into docker repository via:</p>
+
+<pre><code># tar -c * | docker import - myowndebian:raw
+# docker images | grep myowndebian
+myowndebian                                                    raw                 909759ad7fad        23 seconds ago      189MB
+# docker run -it myowndebian:raw /bin/bash
+root@f95e7f8d6427:/# ls
+bin   dev  home     lib    media  opt	root  sbin  sys  usr
+boot  etc  install  lib64  mnt	  proc	run   srv   tmp  var
+</code></pre>
+
+<p>At this point, you have a selt-built docker box, from this start point you could add more packages into your docker images and form your own images offline. Just enjoy it!</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/08/24/setupvinoserver/">SetupVinoServer</a>
+      </h1>
+      <span class="post-date">Aug 24, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="background">Background</h3>
+
+<p>For enable rdp server, but I installed vino server for vncserver, faint.</p>
+
+<h3 id="centos-configuration">CentOS Configuration</h3>
+
+<p>Install Gnome Desktop.</p>
+
+<p>Enable root autologin(This is pretty dangerous):</p>
+
+<pre><code># vim /etc/gdm/custom.conf 
+
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=username
+</code></pre>
+
+<p>So next time you will login to the desktop automatically.</p>
+
+<h3 id="vino-server">Vino Server</h3>
+
+<p>Vino will be automatically installed for gnome desktop ,config it via:</p>
+
+<pre><code># gsetting set org.gnome.Vino require-encryption false
+</code></pre>
+
+<p>Also setting up the password.</p>
+
+<p><img src="/images/2017_08_24_15_49_18_565x466.jpg" alt="/images/2017_08_24_15_49_18_565x466.jpg" /></p>
+
+<p>Now reboot the machine you could enjoy the vncserver.</p>
+
+<h3 id="xrdp">xrdp</h3>
+
+<p>Install xrdp via epel:</p>
+
+<pre><code># yum install -y xrdp
+# systemctl enable xrdp.service
+# systemctl start xrdp.service
+# echo &quot;mate-session&quot; &gt; ~/.Xclients
+# chmod +x ~/.Xclients
+# sudo systemctl restart xrdp.service
+</code></pre>
+
+<p>Then using some rdp clients for connecting to desktop.</p>
+
+<h3 id="finding-minimal-packages">Finding minimal packages</h3>
+
+<pre><code># /bin/bash
+for i in `cat xrdp.txt`
+do
+	find_or_not=`find /media/sdb/centos73-isorepo/Packages/ | grep $i`
+	if  [ $? == 1 ]
+	then
+		echo $i
+	fi
+done
+</code></pre>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -474,99 +704,6 @@ foo  htmlcov  tests
 </code></pre>
 
 <p>nosetests could be run with coverage items.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/08/10/thinkingoncloud/">ThinkingOnCloud</a>
-      </h1>
-      <span class="post-date">Aug 10, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>Comparison On Chinese cloud vs Citrix cloud</p>
-
-<p><img src="/images/2017_08_10_16_31_34_1192x457.jpg" alt="/images/2017_08_10_16_31_34_1192x457.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/08/02/makeciin3rdparty/">MakeCIIn3rdParty</a>
-      </h1>
-      <span class="post-date">Aug 2, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="docker-images">Docker Images</h3>
-
-<p>需要用到的Docker Image: <code>wgetbuildcs6</code>, 构建的Dockerfile:</p>
-
-<pre><code>FROM centos:centos6
-
-MAINTAINER dash xxx &lt;xxxx@gmail.com&gt;
-
-RUN yum -y install curl git gcc make rpm-build python-devel which lrzsz tar gnutls gnutls-devel
-</code></pre>
-
-<p>将创建好的镜像上传到私有仓库(某台内网主机):</p>
-
-<pre><code>$ sudo docker load&lt;wgetbuildcs6.tar
-$ sudo docker images | grep wgetbuildcs6
-$ sudo docker tag 1020xxxxx 192.168.124.102:5000/xxxxx/wgetbuildcs6:latest
-$ sudo docker push  192.168.124.102:5000/xxxxx/wgetbuildcs6:latest
-</code></pre>
-
-<p><img src="/images/2017_08_02_15_12_12_484x294.jpg" alt="/images/2017_08_02_15_12_12_484x294.jpg" /></p>
-
-<h3 id="git-repository">Git Repository</h3>
-
-<p>在CentOS7.3系统上，安装git daemon:</p>
-
-<pre><code># yum install -y git-daemon
-</code></pre>
-
-<p>在源码目录下, 执行以下命令:</p>
-
-<pre><code># git init
-# git add .
-# git commit -m &quot;initial commit&quot;
-# cd ..
-# git clone --bare wgetbuild wgetbuild.git
-</code></pre>
-
-<p><img src="/images/2017_08_02_15_43_19_426x427.jpg" alt="/images/2017_08_02_15_43_19_426x427.jpg" /></p>
-
-<p>现在运行:</p>
-
-<pre><code># git daemon --verbose --export-all --base-path=.
-</code></pre>
-
-<p>即可激活git server.<br />
-测试:</p>
-
-<pre><code># git clone git://192.192.192.91/wgetbuild.git mybuild
-</code></pre>
-
-<p>证明友商方案对git协议支持不佳，切换回gitlab，用http继续测试。</p>
-
-<h3 id="enable-push-in-git">Enable push in git</h3>
-
-<p>Enable push to git server in git daemon:</p>
-
-<pre><code># git daemon --enable=receive-pack --verbose --export-all --base-path=.
-</code></pre>
 
       
     </div>
@@ -1978,8 +2115,17 @@ $ sudo docker push  192.168.124.102:5000/xxxxx/wgetbuildcs6:latest
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1988,7 +2134,7 @@ $ sudo docker push  192.168.124.102:5000/xxxxx/wgetbuildcs6:latest
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

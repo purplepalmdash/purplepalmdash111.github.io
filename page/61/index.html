@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,256 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno/">三节点搭建OpenStack Juno(1)</a>
+      </h1>
+      <span class="post-date">May 24, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="目的">目的</h3>
+
+<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
+
+<h3 id="硬件及网络准备">硬件及网络准备</h3>
+
+<h4 id="物理服务器">物理服务器</h4>
+
+<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。<br />
+物理服务器操作系统: Ubuntu14.04</p>
+
+<h4 id="虚拟机">虚拟机：</h4>
+
+<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.<br />
+虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.<br />
+虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
+
+<h4 id="网络规划">网络规划</h4>
+
+<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。<br />
+Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。<br />
+External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。<br />
+当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
+
+<h4 id="节点网络名规划">节点网络名规划</h4>
+
+<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.<br />
+Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
+Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
+
+<p>一个参考的例图如下:<br />
+<img src="/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
+
+<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
+
+<h3 id="虚拟机初始化配置">虚拟机初始化配置</h3>
+
+<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
+
+<pre><code>$ pwd
+/media/repo/Image/3NodeOpenStack
+$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
+Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
+Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
+Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
+
+</code></pre>
+
+<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:<br />
+<img src="/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
+
+<p>各个节点的network定义文件如下:</p>
+
+<p>控制节点:</p>
+
+<pre><code># The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.55.55.2
+netmask 255.255.255.0
+gateway 10.55.55.1
+dns-nameservers 114.114.114.114
+</code></pre>
+
+<p>网络节点:</p>
+
+<pre><code># The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.55.55.3
+netmask 255.255.255.0
+gateway 10.55.55.1
+dns-nameservers 114.114.114.114
+
+
+auto eth1
+iface eth1 inet static
+address 10.66.66.3
+netmask 255.255.255.0
+
+auto eth2
+iface eth2 inet static
+address 192.168.1.3
+netmask 255.255.255.0
+</code></pre>
+
+<p>计算节点:</p>
+
+<pre><code>auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 10.55.55.4
+netmask 255.255.255.0
+gateway 10.55.55.1
+dns-nameservers 114.114.114.114
+
+auto eth1
+iface eth1 inet static
+address 10.66.66.4
+netmask 255.255.255.0
+
+</code></pre>
+
+<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:</p>
+
+<pre><code>$ cat /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       Controller
+10.55.55.2      Controller
+10.55.55.3      Network
+10.55.55.4      Compute
+......
+
+$ cat /etc/hostname
+Controller
+
+</code></pre>
+
+<p>网络配置完毕后，保证可以通过<code>ping Controller</code>等命令达到互通。</p>
+
+<p>在进入到后续步骤前，更新所有节点到最新状态:</p>
+
+<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get upgrade &amp;&amp; sudo apt-get dist-upgrade &amp;&amp; sudo reboot
+</code></pre>
+
+<h3 id="ntp-服务器-客户端配置">NTP 服务器/客户端配置</h3>
+
+<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
+
+<h4 id="ntp服务器">NTP服务器</h4>
+
+<pre><code># apt-get -y install ntp
+# vim /etc/ntp.conf
+    # 修改成大陆时间
+    server 2.cn.pool.ntp.org
+    server 1.asia.pool.ntp.org
+    server 2.asia.pool.ntp.org
+    # 修改 restrict 設定
+    restrict -4 default kod notrap nomodify
+    restrict -6 default kod notrap nomodify
+# service ntp restart
+</code></pre>
+
+<h4 id="ntp客户端">NTP客户端</h4>
+
+<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
+
+<pre><code># apt-get -y install ntp
+# vim /etc/ntp.conf
+    # 設定 controller 為參照的 time server
+    # 並將其他 server 開頭的設定進行註解
+    server 10.55.55.2 iburst
+# service ntp restart
+</code></pre>
+
+<p>检查结果是否正确:</p>
+
+<pre><code>root@JunoNetwork:~# ntpq -c peers
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+ Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
+</code></pre>
+
+<p>接下来真正进入OpenStack的安装和配置过程。</p>
+
+<h3 id="源设定">源设定</h3>
+
+<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:<br />
+所有节点上(Controller,Network,Compute):</p>
+
+<pre><code>$ sudo apt-get install ubuntu-cloud-keyring
+$ sudo bash
+# echo &quot;deb http://ubuntu-cloud.archive.canonical.com/ubuntu&quot; &quot;trusty-updates/juno main&quot; &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
+# apt-get update &amp;&amp; apt-get -y dist-upgrade
+</code></pre>
+
+<p>第一部分就先到这里。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/23/use-apt-cacher-for-speeding-up-deployment/">Use apt-cacher For Speeding Up Deployment</a>
+      </h1>
+      <span class="post-date">May 23, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="installation">Installation</h3>
+
+<p>Install apt-cacher via following command:</p>
+
+<pre><code>$ sudo apt-get install apt-cacher
+</code></pre>
+
+<p>Choose &ldquo;Daemon&rdquo; When you see following picture:</p>
+
+<p><img src="/images/2015_05_23_08_28_39_418x264.jpg" alt="/images/2015_05_23_08_28_39_418x264.jpg" /></p>
+
+<h3 id="configuration">Configuration</h3>
+
+<p>Make sure the configuration <code>AUTOSTART=1</code> in <code>/etc/default/apt-cacher</code>.</p>
+
+<p>Enable <code>allowed_hosts=*</code> in <code>/etc/apt-cacher/apt-cacher.conf</code>.</p>
+
+<p>Now restart the machine, and check the apt-cacher service via following command:</p>
+
+<pre><code>$ ps -ef | grep apt
+www-data   825     1  0 20:34 ?        00:00:00 /usr/bin/perl /usr/sbin/apt-cacher -R 3 -d -p /var/run/apt-cacher.pid
+$ sudo netstat -anp | grep 3142
+tcp6       0      0 :::3142                 :::*                    LISTEN      825/perl
+</code></pre>
+
+<p>Now when you setup the machines, point the http-proxy into this machine, it will automatically cache the packages.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -412,146 +662,6 @@ deb-src ftp://YourURL/ubuntu/ trusty-backports main restricted universe multiver
 [root:/var/www/html]# ln /home/juju/myrepo/mirror/mirrors.aliyun.com/ubuntu -s
 [root:/var/www/html]# chkconfig httpd on
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">My Configuration On Cobbler For Deploying Ubuntu12.04</a>
-      </h1>
-      <span class="post-date">May 18, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      <p>Configuration file for preseed, put it under: /var/lib/cobbler/kickstarts/autoinstall.seed:</p>
-
-<pre><code># BASIC
-d-i  debian-installer/locale    string en_US.UTF-8
-d-i  debian-installer/splash    boolean false
-d-i  console-setup/ask_detect   boolean false
-d-i  console-setup/layoutcode   string us
-d-i  console-setup/variantcode  string
-d-i  clock-setup/utc            boolean true
-d-i  clock-setup/ntp            boolean true
-
-# DISKPART
-d-i  partman-auto/method                string regular
-d-i  partman-lvm/device_remove_lvm      boolean true
-d-i  partman-lvm/confirm                boolean true
-d-i  partman/confirm_write_new_label    boolean true
-d-i  partman/choose_partition           select Finish partitioning and write changes to disk
-d-i  partman/confirm                    boolean true
-d-i  partman/confirm_nooverwrite        boolean true
-d-i  partman/default_filesystem         string ext3
-
-# SOFTWARE
-# /var/www/cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu/
-d-i  mirror/country             string manual
-d-i  mirror/http/hostname       string $http_server
-d-i  mirror/http/directory      string /cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu
-d-i  mirror/http/proxy          string
-d-i  apt-setup/security_host    string $http_server
-d-i  apt-setup/security_path    string /cobbler/ks_mirror/Ubuntu12.04-x86_64/ubuntu
-d-i  apt-setup/services-select  multiselect none
-d-i  pkgsel/upgrade             select none
-d-i  pkgsel/language-packs      multiselect
-d-i  pkgsel/update-policy       select none
-d-i  pkgsel/updatedb            boolean true
-d-i  pkgsel/include             string openssh-server
-
-# USER
-d-i  passwd/root-login                  boolean true
-d-i  passwd/make-user                   boolean false
-d-i  passwd/root-password               password root
-d-i  passwd/root-password-again         password root
-d-i  user-setup/allow-password-weak     boolean true
-
-# FINISH
-d-i  grub-installer/skip                boolean false
-d-i  lilo-installer/skip                boolean false
-d-i  grub-installer/only_debian         boolean true
-d-i  grub-installer/with_other_os       boolean true
-d-i  finish-install/keep-consoles       boolean false
-d-i  finish-install/reboot_in_progress  note
-d-i  cdrom-detect/eject                 boolean true
-d-i  debian-installer/exit/halt         boolean false
-d-i  debian-installer/exit/poweroff     boolean false
-
-# EXTRA
-d-i  preseed/late_command       string echo &quot;UseDNS no&quot; &gt;&gt; /target/etc/ssh/sshd_config
-
-</code></pre>
-
-<p>Edit the profile via:</p>
-
-<pre><code>$ cobbler profile list
-$ cobbler profile edit --name=Ubuntu12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/autoinstall.seed 
-</code></pre>
-
-<p>Now select the installation, your installation will use local repository.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/16/re-orgnize-blog/">Re-Orgnize Blog</a>
-      </h1>
-      <span class="post-date">May 16, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      
-
-<p>Since my last blog touched something special, I have to delete the whole repository and re-orgnize the structure again. This time I also use Octopress, but the version has been upgraded to the 3.0, this article records the steps.</p>
-
-<h3 id="github-account">Github Account</h3>
-
-<p>Register a new account, and verrify the email, add your own ssh key, test it via ssh -T git@github.com</p>
-
-<h3 id="repository">Repository</h3>
-
-<p>Get the latest repository via:</p>
-
-<pre><code>$ git clone https://github.com/imathis/octopress.git
-
-</code></pre>
-
-<p>Configuration of the konsole, enable the <code>zsh -l</code> at the login shell.   Settings-&gt; Edit Current Profile-&gt; General -&gt; Command(/bin/zsh -l)</p>
-
-<pre><code>$ rvm use 1.9.3
-$ ruby --version
-ruby 1.9.3p547 (2014-05-14 revision 45962) [x86_64-linux]
-$ gem install bundler
-$ vim Gemfile
-#source &quot;https://rubygems.org&quot;
-source &quot;http://mirrors.aliyun.com/rubygems/&quot;
-$ bundle install
-$ rake install
-
-</code></pre>
-
-<p>Now the basic configuration of the repository has been added.</p>
-
-<h3 id="plugins">Plugins</h3>
-
-<p>For adding videos:</p>
-
-<pre><code>$ git clone https://github.com/manojlds/octopress-plugins.git
-$ cd octopress
-$ cd plugins
-$ cp ../../octopress-plugins/youtube.rb ./
-
-</code></pre>
-
-<h3 id="encryption">Encryption</h3>
 
       
     </div>
@@ -1968,8 +2078,17 @@ $ cp ../../octopress-plugins/youtube.rb ./
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -1978,7 +2097,7 @@ $ cp ../../octopress-plugins/youtube.rb ./
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

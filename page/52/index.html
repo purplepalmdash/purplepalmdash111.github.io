@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
 <head>
-	<meta name="generator" content="Hugo 0.31-DEV" />
+	<meta name="generator" content="Hugo 0.32-DEV" />
   <link href="http://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   
@@ -102,6 +102,216 @@
 <div class="content container">
   <div class="posts">
     
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/11/added-precise-repository-in-spacewalk/">Added Precise Repository In SpaceWalk</a>
+      </h1>
+      <span class="post-date">Aug 11, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="spacewalk-backend-configruation">SpaceWalk Backend Configruation</h3>
+
+<p>First Create the Channel:<br />
+<img src="/images/2015_08_11_16_27_35_420x157.jpg" alt="/images/2015_08_11_16_27_35_420x157.jpg" /><br />
+Then Create the Repository like following:<br />
+<img src="/images/2015_08_11_16_28_21_562x226.jpg" alt="/images/2015_08_11_16_28_21_562x226.jpg" /><br />
+Associate the channel together with repository:<br />
+<img src="/images/2015_08_11_16_29_33_659x385.jpg" alt="/images/2015_08_11_16_29_33_659x385.jpg" /></p>
+
+<h3 id="install-packages">Install packages</h3>
+
+<p>Do following for the prerequisition for syncing the repository.</p>
+
+<pre><code># yum update python-debian
+# vim  /usr/lib/python2.6/site-packages/debian/debfile.py 
+PART_EXTS = ['gz', 'xz', 'lzma']
+# wget http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+# rpm -ivh epel-release-6-8.noarch.rpm
+# cat epel-testing.repo  | more
+[epel-testing]
+name=Extra Packages for Enterprise Linux 6 - Testing - $basearch
+#baseurl=http://download.fedoraproject.org/pub/epel/testing/6/$basearch
+#mirrorlist=https://mirrors.fedoraproject.org/metalink?repo=testing-epel6&amp;arch=$basearch
+baseurl=http://mirrors.aliyun.com/epel/testing/6/x86_64/
+failovermethod=priority
+</code></pre>
+
+<h3 id="sync-with-local-repository">Sync With Local Repository</h3>
+
+<p>An example of precise-backports is listed like following, take this example for
+example, create other 3 shell scripts:</p>
+
+<pre><code># cat precise-backports.sh
+until spacewalk-debian-sync.pl --username xxxxx --password xxxxxx --channel 'precise-backports' --url 'http://192.168.0.79/ubuntu/dists/precise-backports/main/binary-amd64/'
+do
+        echo &quot;retry again&quot;
+        sleep 30
+done
+# ls *.sh
+precise-backports.sh  precise-security.sh  precise.sh  precise-update.sh
+</code></pre>
+
+<p>Sync repository via <code>sh precise-backports.sh</code> or other scripts.</p>
+
+<p>After a long while, you repository will be updated.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/10/add-ubuntu-agent-into-spacewalk/">Add Ubuntu Agent into SpaceWalk</a>
+      </h1>
+      <span class="post-date">Aug 10, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Install via:</p>
+
+<pre><code>$ sudo apt-get install debhelper build-essential gcc devscripts git intltool quilt \
+automake python-all-dev libnl-route-3-dev asciidoc pkg-config libxml2-utils \
+docbook-xml xsltproc sgml-data docbook-xs
+$ sudo apt-get install apt-transport-spacewalk rhnsd
+</code></pre>
+
+<p>Fix the bug of XMLRPCLib:</p>
+
+<pre><code>--- /usr/lib/python2.7/xmlrpclib.py 2013-05-28 20:44:38.000000000 +0200
++++ new/xmlrpclib.py 2013-05-28 20:44:24.000000000 +0200
+@@ -654,8 +654,8 @@
+f(self, value, write)
+
+def dump_nil (self, value, write):
+- if not self.allow_none:
+- raise TypeError, &quot;cannot marshal None unless allow_none is enabled&quot;
++# if not self.allow_none:
++# raise TypeError, &quot;cannot marshal None unless allow_none is enabled&quot;
+write(&quot;&lt;value&gt;&lt;nil/&gt;&lt;/value&gt;&quot;)
+dispatch[NoneType] = dump_nil
+</code></pre>
+
+<p>Create a key for managing trusty clients:<br />
+<img src="/images/2015_08_10_15_18_26_629x476.jpg" alt="/images/2015_08_10_15_18_26_629x476.jpg" /></p>
+
+<p>Register with SpaceWalk Server:</p>
+
+<pre><code>$ sudo mkdir /var/lock/subsys
+$ sudo rhnreg_ks --activationkey=1-TrustyKey --serverUrl=http://10.9.10.13/XMLRPC
+Warning: unable to enable rhnsd with chkconfig
+</code></pre>
+
+<p>Seeing the warning doesn&rsquo;t matter. Now your computer is registered into the SpaceWalker
+Root Node.</p>
+
+<p>Make sure the subscribed software are listed as following:</p>
+
+<p><img src="/images/2015_08_10_16_00_26_795x557.jpg" alt="/images/2015_08_10_16_00_26_795x557.jpg" /></p>
+
+<p>Now change the apt configuration of the registed nodes:</p>
+
+<pre><code># echo 'deb spacewalk://10.9.10.13/XMLRPC channels: trusty-main trusty-updates trusty-backports trusty-security'&gt; /etc/apt/sources.list.d/spacewalk.list
+# mv /etc/apt/sources.list /etc/apt/sources.list.bak
+# apt-get update
+</code></pre>
+
+<p>After updating, the repo will be refresed as:</p>
+
+<pre><code># cat /etc/apt/sources.list.d/spacewalk.list 
+deb spacewalk://10.9.10.13 channels: main trusty-backports trusty-updates trusty-security
+</code></pre>
+
+<p>Seems something error happened, syncing the repository, tomorrow will use precise for
+verification.</p>
+
+<h3 id="use-precise">Use Precise</h3>
+
+<p>Manually build the package and install the generated packages.</p>
+
+<pre><code># apt-get install debhelper build-essential gcc devscripts git intltool quilt automake  python-all-dev libnl-route-3-dev asciidoc pkg-config libxml2-utils docbook-xml xsltproc  sgml-data docbook-xsl
+# apt-get -f install
+
+# git clone git://anonscm.debian.org/collab-maint/spacewalk/rhnlib.git
+# git clone git://anonscm.debian.org/collab-maint/spacewalk/rhn-client-tools.git  rhn-client-tools
+# git clone git://anonscm.debian.org/collab-maint/spacewalk/python-ethtool.git  python-ethtool
+# git clone git://anonscm.debian.org/collab-maint/spacewalk/rhnsd.git rhnsd
+# git clone git://anonscm.debian.org/collab-maint/spacewalk/apt-spacewalk.git
+
+# debuild -i -us -uc -b
+# dpkg -i *.deb
+# apt-get -f install
+</code></pre>
+
+<p>Change the code for bug-fix:</p>
+
+<pre><code>--- /usr/lib/python2.7/xmlrpclib.py 2013-05-28 20:44:38.000000000 +0200
++++ new/xmlrpclib.py 2013-05-28 20:44:24.000000000 +0200
+@@ -654,8 +654,8 @@
+f(self, value, write)
+
+def dump_nil (self, value, write):
+- if not self.allow_none:
+- raise TypeError, &quot;cannot marshal None unless allow_none is enabled&quot;
++# if not self.allow_none:
++# raise TypeError, &quot;cannot marshal None unless allow_none is enabled&quot;
+write(&quot;&lt;value&gt;&lt;nil/&gt;&lt;/value&gt;&quot;)
+dispatch[NoneType] = dump_nil
+</code></pre>
+
+<p>Register to Server:</p>
+
+<pre><code># apt-get install python-libxml2
+# mkdir /var/lock/subsys
+# rhnreg_ks --activationkey=1-precise --serverUrl=http://10.9.10.13/XMLRPC
+</code></pre>
+
+<p>Use Spacewalk for install the packages:</p>
+
+<pre><code># cat /etc/apt/sources.list.d/spacewalk.list 
+deb spacewalk://10.9.10.13 channels: main precise-backports precise-updates precise-security
+# mv /etc/apt/sources.list /etc/apt/sources.list.back
+# apt-get update
+</code></pre>
+
+<p>Now your repositories are managed by SpaceWalk.</p>
+
+<h3 id="upgrade-in-client">Upgrade in Client</h3>
+
+<p>List all of the channel that you subscribed:</p>
+
+<pre><code># rhn-channel --list
+</code></pre>
+
+<p>Check the update and apply them:</p>
+
+<pre><code># rhn_check
+</code></pre>
+
+<h3 id="install-packages-in-client">Install Packages in Client</h3>
+
+<p>Take install libreoffice for example:<br />
+First go to this page and select install new software:</p>
+
+<p><img src="/images/2015_08_11_11_19_58_665x396.jpg" alt="/images/2015_08_11_11_19_58_665x396.jpg" /></p>
+
+<p>Then search and get the searched result:</p>
+
+<p><img src="/images/2015_08_11_11_22_18_684x225.jpg" alt="/images/2015_08_11_11_22_18_684x225.jpg" /><br />
+Via <code>rhn_check</code> on client you will really install libreoffice.</p>
+
+      
+    </div>
     
     <div class="post">
       <h1 class="post-title">
@@ -467,186 +677,6 @@ channel would be looks like following:</p>
 </code></pre>
 
 <p>After the sync finished, the channel will be setup.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/">Enable DHCP/DNS Server For SpaceWalker Server</a>
-      </h1>
-      <span class="post-date">Aug 5, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="dhcp-server">DHCP Server</h3>
-
-<p>Install the dhcp server via:</p>
-
-<pre><code># yum install -y dhcp
-</code></pre>
-
-<p>Then edit the configuration of <code>/etc/dhcp/dhcpd.conf</code>, like following:</p>
-
-<pre><code>#
-# DHCP Server Configuration file.
-#   see /usr/share/doc/dhcp*/dhcpd.conf.example
-#   see dhcpd.conf(5) man page
-#
-# specify name server's hostname or IP address
-option domain-name-servers 10.9.10.13;
-# default lease time
-default-lease-time 600;
-# max lease time
-max-lease-time 7200;
-# this DHCP server to be declared valid
-authoritative;
-# specify network address and subnet mask
-subnet 10.9.10.0 netmask 255.255.255.0 {
-    # specify the range of lease IP address
-    range dynamic-bootp 10.9.10.200 10.9.10.254;
-    # specify broadcast address
-    option broadcast-address 10.9.10.255;
-    # specify default gateway
-    option routers 10.9.10.1;
-    # Specify default dns server
-    option domain-name-servers 10.9.10.13;
-}
-</code></pre>
-
-<p>Start the dhcpd server via:</p>
-
-<pre><code># service dhcpd start
-</code></pre>
-
-<h3 id="dns-server-bind9">DNS Server(Bind9)</h3>
-
-<p>Just serve the private network. Install the bind9 via:</p>
-
-<pre><code># yum install -y bind bind-utils
-</code></pre>
-
-<p>Our server&rsquo;s name is <code>spacewalker</code>, need to map to <code>10.9.10.13</code>, following is the
-configuration steps:<br />
-Edit the file of <code>/etc/named.conf</code>.</p>
-
-<p>Change the listen address of port 53:</p>
-
-<pre><code>options {
-        listen-on port 53 { 127.0.0.1; 10.9.10.13; };
-#        listen-on-v6 port 53 { ::1; };
-...
-</code></pre>
-
-<p>Also add the allow-query items, to let the local network nodes for querying its dns:</p>
-
-<pre><code> allow-query     { localhost; 10.9.10.0/24;};
-</code></pre>
-
-<p>Add a new zone named <code>spacewalker</code>:</p>
-
-<pre><code>zone &quot;spacewalker&quot; {
-        type master;
-        file &quot;/etc/named/zones/db.spacewalker&quot;;
-};
-</code></pre>
-
-<p>Now add the zone definition file:</p>
-
-<pre><code># vim /etc/named/zones/db.spacewalker
-$TTL 604800
-@       IN      SOA     spacewalker. root.spacewalker. (
-                                3               ;Serial
-                                604800          ;Refresh
-                                86400           ;Retry
-                                2419200         ;Expire
-                                604800 )        ;Negative Cache TTL
-;
-; name servers - NS records
-      IN      NS      spacewalker.
-
-; name servers  - A records
-spacewalker.         IN      A       10.9.10.13
-</code></pre>
-
-<p>Check the configuration file format:</p>
-
-<pre><code># sudo named-checkconf
-# sudo named-checkzone spacewalker /etc/named/zones/db.spacewalker 
-zone spacewalker/IN: loaded serial 3
-OK
-</code></pre>
-
-<p>Start bind9 service via:</p>
-
-<pre><code># systemctl start named
-</code></pre>
-
-<p>If in CentOS6, then the steps may like following:</p>
-
-<pre><code>[root@spacewalk named]# service named start
-Generating /etc/rndc.key:                                  [  OK  ]
-Starting named:                                            [  OK  ]
-[root@spacewalk named]# chkconfig --level 345 named on
-[root@spacewalk named]# chkconfig --list named
-named           0:off   1:off   2:off   3:on    4:on    5:on    6:off
-</code></pre>
-
-<p>You could verify the correctness by startup a live-cd and view its ping result of <code>ping
-spacewalker</code>.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/04/tips-on-using-spacewalker-for-deploying-centos7/">Tips On Using SpaceWalker For Deploying CentOS7</a>
-      </h1>
-      <span class="post-date">Aug 4, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="configuration">Configuration</h3>
-
-<p>After SpaceWalker has been setup, the configuration we need to done is listed as
-following:</p>
-
-<pre><code>In /etc/rhn/rhn.conf change the value of the parameter cobbler.host to the ip address of the spacewalk server.
-In /etc/cobbler/settings change the value of the parameters server and redhat_management_server to the ip-address of the spacewalk server.
-</code></pre>
-
-<p>Install cobbler bootloaders via:</p>
-
-<pre><code># yum install -y cobbler-loaders
-</code></pre>
-
-<h3 id="build-customized-iso">Build Customized ISO</h3>
-
-<p>via <code>cobbler buildiso</code>, and in the same folder you will get generated.iso.</p>
-
-<h3 id="add-customized-channel">Add Customized Channel</h3>
-
-<p>Under the Channel-&gt; Management Software Channel-&gt; Create New Channel.</p>
-
-<p><img src="/images/2015_08_05_16_50_50_649x442.jpg" alt="/images/2015_08_05_16_50_50_649x442.jpg" /></p>
-
-<p>Repo sync via:</p>
-
-<pre><code># spacewalk-repo-sync -c spacewalker_rhel7_23 -u \ 
-http://yum.spacewalkproject.org/2.3/RHEL/7/x86_64/
-</code></pre>
-
-<h3 id="add-ubuntu-deployment">Add Ubuntu Deployment</h3>
 
       
     </div>
@@ -2063,8 +2093,17 @@ http://yum.spacewalkproject.org/2.3/RHEL/7/x86_64/
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/153/">153</a></li>
+    ><a href="/page/154/">154</a></li>
     
     
     <li
@@ -2073,7 +2112,7 @@ http://yum.spacewalkproject.org/2.3/RHEL/7/x86_64/
     </li>
     
     <li>
-        <a href="/page/153/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>
