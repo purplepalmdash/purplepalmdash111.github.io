@@ -105,6 +105,131 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/12/trouble-shooting-on-spacewalk-osad-on-ubuntu-clients/">Trouble Shooting On SpaceWalk OSAD On Ubuntu Clients</a>
+      </h1>
+      <span class="post-date">Aug 12, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="problem">Problem</h3>
+
+<p>On Clients(Ubuntu nodes), you will see lots of the following message in
+<code>/var/log/osad</code>:</p>
+
+<pre><code>$ tail /var/log/osad
+2015-08-11 19:31:14 jabber_lib.main: Unable to connect to jabber servers, sleeping 78 seconds
+2015-08-11 19:32:32 jabber_lib.main: Unable to connect to jabber servers, sleeping 117 seconds
+</code></pre>
+
+<p>When restart the osda service you will see following error message:</p>
+
+<pre><code># service osad restart
+OSAD SpaceWalk Deamon osad                                                     Traceback (most recent call last):
+  File &quot;/usr/share/rhn/osad/jabber_lib.py&quot;, line 252, in setup_connection
+    c = self._get_jabber_client(js)
+  File &quot;/usr/share/rhn/osad/jabber_lib.py&quot;, line 309, in _get_jabber_client
+    c.connect()
+  File &quot;/usr/share/rhn/osad/jabber_lib.py&quot;, line 583, in connect
+    self.disconnect()
+  File &quot;/usr/share/rhn/osad/jabber_lib.py&quot;, line 653, in disconnect
+    jabber.Client.disconnect(self)
+  File &quot;/usr/lib/python2.7/dist-packages/jabber/jabber.py&quot;, line 432, in disconnect
+    xmlstream.Client.disconnect(self)
+  File &quot;/usr/lib/python2.7/dist-packages/jabber/xmlstream.py&quot;, line 388, in disconnect
+    while self.process(): pass
+  File &quot;/usr/share/rhn/osad/jabber_lib.py&quot;, line 1059, in process
+    raise JabberError(&quot;Premature EOF&quot;)
+JabberError: Premature EOF
+</code></pre>
+
+<p>Though seeing this error, your osad will start and running, but with errors.</p>
+
+<h3 id="trouble-shooting">Trouble Shooting</h3>
+
+<p>Make sure the port 5222 and 5269 of spacewalk server are telnet-able from client machine:</p>
+
+<pre><code>adminubuntu@spacewalknode1:~$ telnet spacewalk 5222
+Trying 10.11.11.3...
+Connected to spacewalk.
+Escape character is '^]'.
+^]
+telnet&gt; quit
+Connection closed.
+adminubuntu@spacewalknode1:~$ telnet spacewalk 5269
+Trying 10.11.11.3...
+Connected to spacewalk.
+Escape character is '^]'.
+^]
+telnet&gt; 
+</code></pre>
+
+<p>Make sure you register yourself on client using FQDN but not the IP Address:</p>
+
+<pre><code># rhnreg_ks --activationkey=1-precise --serverUrl=http://spacewalk/XMLRPC --force
+# service osad restart
+</code></pre>
+
+<p>If by this you won&rsquo;t pass the osad check, you should setup the local dns server, which
+enable name resolve of <code>spacewalk</code>, you could take following article for reference:<br />
+<a href="http://purplepalmdash.github.io/blog/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/">http://purplepalmdash.github.io/blog/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/</a></p>
+
+<p>For checking the dns resole, run following command on client:</p>
+
+<pre><code>adminubuntu@spacewalknode1:~$ dig spacewalk
+
+; &lt;&lt;&gt;&gt; DiG 9.8.1-P1 &lt;&lt;&gt;&gt; spacewalk
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 16045
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 1, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;spacewalk.                     IN      A
+
+;; ANSWER SECTION:
+spacewalk.              604800  IN      A       10.11.11.3
+
+;; AUTHORITY SECTION:
+spacewalk.              604800  IN      NS      spacewalk.
+
+;; Query time: 2 msec
+;; SERVER: 10.11.11.3#53(10.11.11.3)
+;; WHEN: Wed Aug 12 03:34:18 2015
+;; MSG SIZE  rcvd: 57
+</code></pre>
+
+<h3 id="result">Result</h3>
+
+<p>After resolving this problem, your log should like this:</p>
+
+<p>On Server:</p>
+
+<pre><code>$ tail /var/log/message
+Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] [::ffff:10.11.11.100, port=45486] connect
+Aug 12 10:34:50 spacewalk named[993]: error (network unreachable) resolving 'ns4.p27.dynect.net/A/IN': 2001:500:94::100#53
+Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] created user: user=osad-c942811c1c; realm=
+Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] registration succeeded, requesting user creation: jid=osad-c942811c1c@spacewalk
+Aug 12 10:34:50 spacewalk jabberd/sm[1371]: created user: jid=osad-c942811c1c@spacewalk
+Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] legacy authentication succeeded: host=, username=osad-c942811c1c, resource=osad, TLS negotiated
+Aug 12 10:34:50 spacewalk jabberd/c2s[1379]: [9] requesting session: jid=osad-c942811c1c@spacewalk/osad
+Aug 12 10:34:50 spacewalk jabberd/sm[1371]: session started: jid=osad-c942811c1c@spacewalk/osad
+</code></pre>
+
+<p>In SpaceWalk backend you will see:</p>
+
+<p><img src="/images/2015_08_12_11_37_48_538x222.jpg" alt="/images/2015_08_12_11_37_48_538x222.jpg" /><br />
+Now you could direct <code>push</code> your modification to clients in SpaceWalk backend.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/08/11/added-precise-repository-in-spacewalk/">Added Precise Repository In SpaceWalk</a>
       </h1>
       <span class="post-date">Aug 11, 2015 
@@ -594,89 +719,6 @@ extents) to 550.00 GiB (140800 extents).
   Logical volume lv_root successfully resized
 [root@csmgmt home]# resize2fs /dev/vg_centos/lv_root 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/06/setup-spacewalker-trusty-channel/">Setup SpaceWalker Trusty Channel</a>
-      </h1>
-      <span class="post-date">Aug 6, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="channel-definition">Channel Definition</h3>
-
-<p>The definition for this channel should includes Architecture to &lsquo;amd64-debian&rsquo;, and Yum
-Repository to SHA256:</p>
-
-<p>Yum Repository Checksum Type
-sha256
-Architecture
-AMD64 Debian</p>
-
-<h3 id="channel-definition-1">Channel Definition</h3>
-
-<p>The definition for this channel should includes Architecture to &lsquo;amd64-debian&rsquo;, and Yum
-Repository to SHA256:</p>
-
-<pre><code>Yum Repository Checksum Type
-sha256
-Architecture
-AMD64 Debian
-</code></pre>
-
-<p>Then create more channels with its parent channel to your named channel.</p>
-
-<p><img src="/images/2015_08_06_11_54_16_776x378.jpg" alt="/images/2015_08_06_11_54_16_776x378.jpg" /></p>
-
-<p>Also create <code>trusty-security</code> and <code>trusty-backports</code>, after all configuration, your
-channel would be looks like following:</p>
-
-<p><img src="/images/2015_08_06_11_57_47_649x191.jpg" alt="/images/2015_08_06_11_57_47_649x191.jpg" /></p>
-
-<p>Enable epel-testing and install python-debian:</p>
-
-<pre><code># wget http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
-# rpm -ivh epel-release-7-5.noarch.rpm 
-# yum-config-manager --enable epel-testing 
-# cat epel-testing.repo
-    [epel-testing]
-    name=Extra Packages for Enterprise Linux 7 - Testing - $basearch
-    #baseurl=http://download.fedoraproject.org/pub/epel/testing/7/$basearch
-    #mirrorlist=https://mirrors.fedoraproject.org/metalink?repo=testing-epel7&amp;arch=$basearch
-    baseurl=http://mirrors.aliyun.com/epel/testing/7/x86_64/
-# yum update python-debian
-</code></pre>
-
-<p>Patch the <code>debfile.py</code>:</p>
-
-<pre><code># vim /usr/lib/python2.7/site-packages/debian/debfile.py
-- PART_EXTS = ['gz', 'bz2', 'xz']   # possible extensions
-+ PART_EXTS = ['gz', 'bz2', 'xz', 'lzma']   # possible extensions
-</code></pre>
-
-<p>Repo sync:</p>
-
-<pre><code># git clone https://github.com/stevemeier/spacewalk-debian-sync.git
-# cd spacewalk-debian-sync/
-# mv spacewalk-debian-sync.pl /usr/bin/
-# chmod 777 /usr/bin/spacewalk-debian-sync.pl
-# yum install perl-WWW-Mechanize
-</code></pre>
-
-<p>Now sync the repository from remote server:</p>
-
-<pre><code>spacewalk-debian-sync.pl --username xxxxx --password xxxxx --channel 'trusty-backports' --url 'http://192.168.0.79/ubuntu/dists/trusty-backports/main/binary-amd64/'
-</code></pre>
-
-<p>After the sync finished, the channel will be setup.</p>
 
       
     </div>

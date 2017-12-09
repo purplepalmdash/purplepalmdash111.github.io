@@ -105,6 +105,124 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/07/13/setupjenkinsci/">SetupJenkinsCI</a>
+      </h1>
+      <span class="post-date">Jul 13, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/dev">Dev</a>
+        
+      </span>
+      
+      
+
+<h3 id="aim">AIM</h3>
+
+<p>Jenkins + Packer.io + GitLab + Gogs, for automatically building the virtual machine
+images.</p>
+
+<h3 id="jenkins-installation-configuration">Jenkins Installation/Configuration</h3>
+
+<p>TBD</p>
+
+<h3 id="gitlab">GitLab</h3>
+
+<p>Refers to:<br />
+<a href="https://github.com/sameersbn/docker-gitlab">https://github.com/sameersbn/docker-gitlab</a></p>
+
+<h4 id="image-preparation">Image Preparation</h4>
+
+<p>Using docker for installing gitlab. First pull the docker image back via:</p>
+
+<pre><code>$ docker pull sameersbn/gitlab:8.9.6
+</code></pre>
+
+<p>Also pull back the postgres and redis images, for we will link to these container&rsquo;s
+services:</p>
+
+<pre><code>$ docker pull sameersbn/postgresql:9.4-22
+$ docker pull sameersbn/redis:latest
+</code></pre>
+
+<h4 id="run-gitlab">Run GitLab</h4>
+
+<p>Create the data directory for holding the data:</p>
+
+<pre><code>$ mkdir -p /root/data/gitlab
+$ cd /root/data/gitlab
+$ mkdir redis postgresql gitlab
+$ chmod 777 -R /root/data/gitlab/
+</code></pre>
+
+<p>Launch a postgresql container via:</p>
+
+<pre><code># docker run --name gitlab-postgresql -d \
+     --env 'DB_NAME=gitlabhq_production' \
+     --env 'DB_USER=gitlab' --env 'DB_PASS=password' \
+     --env 'DB_EXTENSION=pg_trgm' \
+     --volume /root/data/gitlab/postgresql:/var/lib/postgresql \
+     sameersbn/postgresql:9.4-22
+</code></pre>
+
+<p>Launch a redis container via:</p>
+
+<pre><code># docker run --name gitlab-redis -d \
+     --volume /root/data/gitlab/redis:/var/lib/redis \
+     sameersbn/redis:latest
+</code></pre>
+
+<p>Launch the gitlab container:</p>
+
+<pre><code># docker run --name gitlab -d \
+     --link gitlab-postgresql:postgresql --link gitlab-redis:redisio \
+     --publish 10022:22 --publish 10080:80 \
+     --env 'GITLAB_PORT=10080' --env 'GITLAB_SSH_PORT=10022' \
+     --env 'GITLAB_SECRETS_DB_KEY_BASE=long-and-random-alpha-numeric-string' \
+     --volume /root/data/gitlab/gitlab:/home/git/data \ 
+     sameersbn/gitlab:8.9.6
+</code></pre>
+
+<p>Now visit <code>http://127.0.0.1:10080</code>, for setting up the password:</p>
+
+<p><img src="/images/2016_07_13_19_49_55_969x420.jpg" alt="/images/2016_07_13_19_49_55_969x420.jpg" /></p>
+
+<h4 id="systemd-services">Systemd Services</h4>
+
+<p>For automatically startup the docker service in system boot, create the service items
+in systemd, listed in following:</p>
+
+<p>Create the gitlab service:</p>
+
+<pre><code>$ vim /usr/lib/systemd/system/gitlab.service
+[Unit]
+Description=gitlab
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker start -a gitlab
+ExecStop=/usr/bin/docker stop -t 2 gitlab
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<p>Also create another 2 service named <code>gitlab-redis.service</code> and
+<code>gitlab-postgres.service</code>, then enable the service via:</p>
+
+<pre><code># systemctl enable gitlabpostgres.service
+# systemctl enable gitlabredis.service
+# systemctl enable gitlab.service
+</code></pre>
+
+<p>Then next time when system reboot, these service will automatically restart.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/07/12/%E7%94%A8flask%E6%A1%86%E6%9E%B6%E6%90%AD%E5%BB%BAweb-app/">用Flask框架搭建Web App</a>
       </h1>
       <span class="post-date">Jul 12, 2016 
@@ -835,49 +953,6 @@ $ sed -i -- 's|{% codeblock *.*%}|\`\`\`|' *.markdown
 </code></pre>
 
 <p>Now all of the syntax hightlight is OK.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/07/01/xenserver-statistics/">XenServer Statistics</a>
-      </h1>
-      <span class="post-date">Jul 1, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      <p>Direct write rrd into graphite, refers to:</p>
-
-<pre><code>$ git clone https://github.com/jgilmour/XenGraphiteIT.git
-</code></pre>
-
-<p>Then you get the storage pool information fro xsconsole via:</p>
-
-<pre><code>$ xe vdi-list
-</code></pre>
-
-<p>Notice it will contain the hard disk and iso repositories, use harddisk.</p>
-
-<p>Now edit the .config file:</p>
-
-<pre><code>[XENAPI]
-URL = http://192.168.10.187
-USERNAME = root
-PASSWORD = xxxxxxx
-SR-UUID = 51977c4b-8dc2-bcff-b7ad-de7cc5c7e717
-
-[GRAPHITE]
-CARBON_HOST = 192.168.1.79
-CARBON_PORT = 2003
-CARBON_NAME = collectd.com.IT.servers.xen.
-</code></pre>
-
-<p>Run <code>python2 xengraphite.py</code> you could get your XenServer statistic data into your
-graphite database, enjoy it.</p>
 
       
     </div>

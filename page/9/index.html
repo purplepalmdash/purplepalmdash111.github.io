@@ -105,6 +105,237 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/05/24/migrationforcentos7/">MigrationForCentOS7</a>
+      </h1>
+      <span class="post-date">May 24, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="目的">目的</h3>
+
+<p>使用磁盘克隆的方式快速安装、部署系统。</p>
+
+<h3 id="验证环境">验证环境</h3>
+
+<p>Virt-manager, CentOS 7 ISO安装盘</p>
+
+<h3 id="安装注意事项">安装注意事项</h3>
+
+<p>分区时选择xfs(CentOS默认)， 选择LVM分区。</p>
+
+<p><img src="/images/2017_05_24_15_16_47_460x471.jpg" alt="/images/2017_05_24_15_16_47_460x471.jpg" /></p>
+
+<p>The disk partition should be <code>Automatically create them</code>.</p>
+
+<p><img src="/images/2017_05_24_15_17_58_595x456.jpg" alt="/images/2017_05_24_15_17_58_595x456.jpg" /></p>
+
+<p>安装时选择minimum installation. 安装完毕后，关闭虚拟机</p>
+
+<h3 id="安装后调整">安装后调整</h3>
+
+<p>复制安装好的硬盘:</p>
+
+<pre><code>$ ls
+CentOS5G.qcow2
+$ cp CentOS5G.qcow2 Duplicated.qcow2
+$ ls
+CentOS5G.qcow2  Duplicated.qcow2
+</code></pre>
+
+<p>创建一个中转盘，一个大小为50G的目标盘,
+中转盘用于存放克隆文件，而目标盘则是我们将克隆文件拷贝过去的盘。</p>
+
+<pre><code>$ qemu-img create -f qcow2 Middle.qcow2 16G
+Formatting 'Middle.qcow2', fmt=qcow2 size=17179869184 encryption=off cluster_size=65536 lazy_refcounts=off refcount_bits=16
+$ qemu-img create -f qcow2 Dest.qcow2 50G
+Formatting 'Dest.qcow2', fmt=qcow2 size=53687091200 encryption=off cluster_size=65536 lazy_refcounts=off refcount_bits=16
+</code></pre>
+
+<p>在virt-manager中，依次添加剩余的三块硬盘.</p>
+
+<p><img src="/images/2017_05_24_14_49_04_614x394.jpg" alt="/images/2017_05_24_14_49_04_614x394.jpg" /></p>
+
+<p>查看磁盘格局为,
+可以看到，vdb和vda其实一样，但因为vdb没有被挂载，所以可以直接从其上往目标盘使用dd进行拷贝:</p>
+
+<pre><code># fdisk -l
+
+Disk /dev/vda: 8589 MB, 8589934592 bytes, 16777216 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x000c7c16
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/vda1   *        2048     1026047      512000   83  Linux
+/dev/vda2         1026048    16777215     7875584   8e  Linux LVM
+
+Disk /dev/vdb: 8589 MB, 8589934592 bytes, 16777216 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x000c7c16
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/vdb1   *        2048     1026047      512000   83  Linux
+/dev/vdb2         1026048    16777215     7875584   8e  Linux LVM
+
+Disk /dev/vdc: 17.2 GB, 17179869184 bytes, 33554432 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+
+Disk /dev/vdd: 53.7 GB, 53687091200 bytes, 104857600 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+</code></pre>
+
+<p>中转盘可以用于制作img文件,
+这里我们先不制作img文件，我们直接从复制的盘往目标盘写入:</p>
+
+<pre><code>[root@localhost ~]# dd if=/dev/vdb of=/dev/vdd bs=1M
+8192+0 records in
+8192+0 records out
+8589934592 bytes (8.6 GB) copied, 150.443 s, 57.1 MB/s
+</code></pre>
+
+<p>现在查看<code>/dev/vdd</code>的磁盘结构，可以看到与<code>/dev/vda</code>和<code>/dev/vdb</code>是一样的.</p>
+
+<p>扩展<code>/dev/vdd</code>的分区，从8G 扩展到50G：</p>
+
+<pre><code># fdisk /dev/vdd
+Welcome to fdisk (util-linux 2.23.2).
+
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+
+Command (m for help): d
+Partition number (1,2, default 2): 
+Partition 2 is deleted
+
+Command (m for help): n
+Partition type:
+   p   primary (1 primary, 0 extended, 3 free)
+   e   extended
+Select (default p): p
+Partition number (2-4, default 2): 
+First sector (1026048-104857599, default 1026048): 
+Using default value 1026048
+Last sector, +sectors or +size{K,M,G} (1026048-104857599, default 104857599): 
+Using default value 104857599
+Partition 2 of type Linux and of size 49.5 GiB is set
+
+Command (m for help): 
+Command (m for help): p
+
+Disk /dev/vdd: 53.7 GB, 53687091200 bytes, 104857600 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x000c7c16
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/vdd1   *        2048     1026047      512000   83  Linux
+/dev/vdd2         1026048   104857599    51915776   83  Linux
+
+Command (m for help): t
+Partition number (1,2, default 2): 2
+Hex code (type L to list all codes): 8e
+Changed type of partition 'Linux' to 'Linux LVM'
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+</code></pre>
+
+<p>现在关闭虚拟机，使用<code>Dest.qcow2</code>文件创建一台新的虚拟机，</p>
+
+<p><img src="/images/2017_05_24_15_00_08_582x284.jpg" alt="/images/2017_05_24_15_00_08_582x284.jpg" /></p>
+
+<h3 id="扩展分区">扩展分区</h3>
+
+<p>进入系统后，看到磁盘分区依然保持为8G下的磁盘格局</p>
+
+<pre><code># df -HT
+Filesystem                Type      Size  Used Avail Use% Mounted on
+/dev/mapper/centos00-root xfs       7.2G  897M  6.3G  13% /
+devtmpfs                  devtmpfs  510M     0  510M   0% /dev
+tmpfs                     tmpfs     521M     0  521M   0% /dev/shm
+tmpfs                     tmpfs     521M  7.0M  514M   2% /run
+tmpfs                     tmpfs     521M     0  521M   0% /sys/fs/cgroup
+/dev/vda1                 xfs       521M  131M  391M  26% /boot
+tmpfs                     tmpfs     105M     0  105M   0% /run/user/0
+</code></pre>
+
+<p>使用以下命令，扩展pv(physical volumn):</p>
+
+<pre><code>[root@localhost ~]# pvs
+  PV         VG       Fmt  Attr PSize PFree 
+  /dev/vda2  centos00 lvm2 a--  7.51g 40.00m
+[root@localhost ~]# pvresize /dev/vda2
+  Physical volume &quot;/dev/vda2&quot; changed
+  1 physical volume(s) resized / 0 physical volume(s) not resized
+[root@localhost ~]# pvs
+  PV         VG       Fmt  Attr PSize  PFree 
+  /dev/vda2  centos00 lvm2 a--  49.51g 42.04g
+</code></pre>
+
+<p>扩展根分区, 注意mapper的名称:</p>
+
+<pre><code>[root@localhost ~]# vgs
+  VG       #PV #LV #SN Attr   VSize  VFree 
+  centos00   1   2   0 wz--n- 49.51g 42.04g
+[root@localhost ~]# ls /dev/centos00/
+root  swap
+[root@localhost ~]# lvextend -l +100%FREE /dev/centos00/root 
+  Size of logical volume centos00/root changed from 6.67 GiB (1707 extents) to 48.71 GiB (12469 extents).
+  Logical volume root successfully resized.
+</code></pre>
+
+<p>扩展xfs:</p>
+
+<pre><code>[root@localhost ~]# xfs_growfs /dev/centos00/root
+meta-data=/dev/mapper/centos00-root isize=256    agcount=4, agsize=436992 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=0        finobt=0
+data     =                       bsize=4096   blocks=1747968, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=0
+log      =internal               bsize=4096   blocks=2560, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+data blocks changed from 1747968 to 12768256
+[root@localhost ~]# df -HT
+Filesystem                Type      Size  Used Avail Use% Mounted on
+/dev/mapper/centos00-root xfs        53G  897M   52G   2% /
+devtmpfs                  devtmpfs  510M     0  510M   0% /dev
+tmpfs                     tmpfs     521M     0  521M   0% /dev/shm
+tmpfs                     tmpfs     521M  7.0M  514M   2% /run
+tmpfs                     tmpfs     521M     0  521M   0% /sys/fs/cgroup
+/dev/vda1                 xfs       521M  131M  391M  26% /boot
+tmpfs                     tmpfs     105M     0  105M   0% /run/user/0
+</code></pre>
+
+<p>现在重新启动系统，发现根分区已经扩展到了50G的空间。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/05/23/vagrant-libvirt-issue-on-archlinux/">vagrant-libvirt issue on ArchLinux</a>
       </h1>
       <span class="post-date">May 23, 2017 
@@ -341,389 +572,6 @@ src/gz designated_driver_management http://openwrt.proxy.ustclug.org/snapshots/t
 </code></pre>
 
 <p>But the storage is too slow.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/05/03/onvrtest/">OnVRTest</a>
-      </h1>
-      <span class="post-date">May 3, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="preparation">Preparation</h3>
-
-<p>Ubuntu14.04, KVM(cpu host-passthrough), 16G memory, 8-Core CPU, 200G Disk.</p>
-
-<p>Update/upgrade to newest version of ubuntu:</p>
-
-<pre><code># apt-get update
-# apt-get upgrade -y
-</code></pre>
-
-<p>Enable root login with the password set as <code>engine123</code>.</p>
-
-<pre><code># sed -i '/PermitRootLogin without-password/PermitRootLogin yes' /etc/ssh/sshd_config
-# service ssh restart
-</code></pre>
-
-<h3 id="networking">Networking</h3>
-
-<p>Using bridged networking in ubuntu:<br />
-<code>/etc/network/interfaces</code> content:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet manual
-
-
-auto cloudbr0
-iface cloudbr0 inet static
-        address 10.17.17.2
-        netmask 255.255.255.0
-        gateway 10.17.17.1
-        dns-nameservers 180.76.76.76
-        bridge-ports eth0
-        bridge_fd 5
-        bridge_stp off
-        bridge_maxwait 1
-
-# Private network
-auto cloudbr1
-iface cloudbr1 inet manual
-        bridge_ports none
-        bridge_fd 5
-        bridge_stp off
-        bridge_maxwait 1
-</code></pre>
-
-<p>After configuration, restart the machine.</p>
-
-<h3 id="repository-for-cloudstack">Repository For CloudStack</h3>
-
-<p>Use local directory for holding cloudstack installation packages:</p>
-
-<pre><code># echo &quot;deb file:/root/CloudStack4.5.1 ./&quot;&gt;&gt;/etc/apt/sources.list
-# apt-get update
-</code></pre>
-
-<p>While the directory should contains following packages:</p>
-
-<pre><code>root@ubuntu:~# ls CloudStack4.5.1/
-Packages.gz                      cloudstack-cli_4.5.1_all.deb     cloudstack-management_4.5.1_all.deb
-cloudstack-agent_4.5.1_all.deb   cloudstack-common_4.5.1_all.deb  cloudstack-usage_4.5.1_all.deb
-cloudstack-awsapi_4.5.1_all.deb  cloudstack-docs_4.5.1_all.deb
-</code></pre>
-
-<h3 id="cloudstack-installation">CloudStack Installation</h3>
-
-<h4 id="management-server">Management Server</h4>
-
-<p>Install Cloudstack-management and mysql via:</p>
-
-<pre><code># apt-get install cloudstack-management mysql-server
-</code></pre>
-
-<p>Configure the password of mysql to <code>engine123</code>:</p>
-
-<p><img src="/images/2017_05_03_14_24_56_754x244.jpg" alt="/images/2017_05_03_14_24_56_754x244.jpg" /></p>
-
-<p>MySql Configuration:</p>
-
-<pre><code># cat &gt;&gt;/etc/mysql/conf.d/cloudstack.cnf &lt;&lt;EOM
-[mysqld]
-innodb_rollback_on_timeout=1
-innodb_lock_wait_timeout=600
-max_connections=350
-log-bin=mysql-bin
-binlog-format = 'ROW'
-EOM
-
-# service mysql restart
-</code></pre>
-
-<p>Initialize the mysql databases via:</p>
-
-<pre><code># cloudstack-setup-databases cloud:engine123@localhost --deploy-as=root:engine123 -e file -m mymskey44 -k mydbkey00
-</code></pre>
-
-<h3 id="nfs-service">NFS Service</h3>
-
-<pre><code># mkdir -p /export/primary /export/secondary
-# apt-get install nfs-kernel-server
-# service nfs-kernel-server start
-# cat &gt;&gt;/etc/exports &lt;&lt;EOM
-/export  *(rw,async,no_root_squash,no_subtree_check)
-EOM
-# exportfs -a
-</code></pre>
-
-<h3 id="agent">Agent</h3>
-
-<p>Install clouddstack-agent via:</p>
-
-<pre><code># apt-get install cloudstack-agent
-</code></pre>
-
-<p>libvirt:</p>
-
-<pre><code># vim /etc/libvirt/libvirtd.conf
-listen_tls = 0
-listen_tcp=1
-tcp_port=&quot;16509&quot;
-auth_tcp=&quot;none&quot;
-</code></pre>
-
-<p><code>libvirt-bin.conf</code>:</p>
-
-<pre><code># vim /etc/default/libvirt-bin
-libvirtd_opts=&quot;-d -l&quot;
-</code></pre>
-
-<p><code>qemu.conf</code> for listening all of the window:</p>
-
-<pre><code># vim /etc/libvirt/qemu.conf
-vnc_listen = &quot;0.0.0.0&quot;
-</code></pre>
-
-<p>Now reboot your machien for taking all of the configurations effects.</p>
-
-<h3 id="trouble-shooting">Trouble-Shooting</h3>
-
-<p>When meeting following issue:</p>
-
-<p><img src="/images/2017_05_03_15_21_42_454x266.jpg" alt="/images/2017_05_03_15_21_42_454x266.jpg" />
-Do following commands for restart the service:</p>
-
-<pre><code># service cloudstack-management status
-# service cloudstack-agent status
-# service tomcat6 status
-
-# service cloudstack-management stop
-# service tomcat6 stop
-# service cloudstack-agent stop
-# ps -efl | grep java
-
-# service cloudstack-management start
-# service cloudstack-management status
-# service cloudstack-agent start
-# service cloudstack-agent status
-</code></pre>
-
-<p>OR:</p>
-
-<pre><code>update-rc.d tomcat6 disable
-cloudstack-setup-management
-</code></pre>
-
-<h3 id="systemvm">systemvm</h3>
-
-<p>Edit the configuration, and restart the service of cloudstack management.</p>
-
-<p><img src="/images/2017_05_03_15_27_44_692x195.jpg" alt="/images/2017_05_03_15_27_44_692x195.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_01_29_665x68.jpg" alt="/images/2017_05_03_16_01_29_665x68.jpg" /></p>
-
-<pre><code># service cloudstack-management restart
-</code></pre>
-
-<p>Install the systemvm like following:</p>
-
-<pre><code># /usr/share/cloudstack-common/scripts/storage/secondary/cloud-install-sys-tmplt -m /mnt -u http://192.168.1.69/systemvm64template-4.5-kvm.qcow2.bz2  -h kvm -F
-</code></pre>
-
-<h3 id="cloudstack-env">CloudStack Env</h3>
-
-<p><img src="/images/2017_05_03_15_31_47_652x486.jpg" alt="/images/2017_05_03_15_31_47_652x486.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_32_28_472x491.jpg" alt="/images/2017_05_03_15_32_28_472x491.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_32_47_450x358.jpg" alt="/images/2017_05_03_15_32_47_450x358.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_34_53_650x265.jpg" alt="/images/2017_05_03_15_34_53_650x265.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_35_16_503x411.jpg" alt="/images/2017_05_03_15_35_16_503x411.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_35_26_461x240.jpg" alt="/images/2017_05_03_15_35_26_461x240.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_35_37_531x231.jpg" alt="/images/2017_05_03_15_35_37_531x231.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_35_57_588x342.jpg" alt="/images/2017_05_03_15_35_57_588x342.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_36_19_525x338.jpg" alt="/images/2017_05_03_15_36_19_525x338.jpg" /></p>
-
-<p><img src="/images/2017_05_03_15_36_30_647x395.jpg" alt="/images/2017_05_03_15_36_30_647x395.jpg" /></p>
-
-<h3 id="bombserver">BombServer</h3>
-
-<p>New Service Offering:</p>
-
-<p><img src="/images/2017_05_03_16_02_19_405x574.jpg" alt="/images/2017_05_03_16_02_19_405x574.jpg" /></p>
-
-<p>Template, download from <code>http://192.168.1.69/myubuntu.qcow2</code>:</p>
-
-<p><img src="/images/2017_05_03_16_02_58_720x244.jpg" alt="/images/2017_05_03_16_02_58_720x244.jpg" /></p>
-
-<p>Start new instance:</p>
-
-<p><img src="/images/2017_05_03_16_03_42_436x386.jpg" alt="/images/2017_05_03_16_03_42_436x386.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_03_58_299x244.jpg" alt="/images/2017_05_03_16_03_58_299x244.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_04_08_357x316.jpg" alt="/images/2017_05_03_16_04_08_357x316.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_04_22_439x415.jpg" alt="/images/2017_05_03_16_04_22_439x415.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_04_36_430x449.jpg" alt="/images/2017_05_03_16_04_36_430x449.jpg" /></p>
-
-<p>Networking:</p>
-
-<p><img src="/images/2017_05_03_16_06_54_760x305.jpg" alt="/images/2017_05_03_16_06_54_760x305.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_07_13_746x111.jpg" alt="/images/2017_05_03_16_07_13_746x111.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_07_40_800x237.jpg" alt="/images/2017_05_03_16_07_40_800x237.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_08_02_429x322.jpg" alt="/images/2017_05_03_16_08_02_429x322.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_08_35_717x315.jpg" alt="/images/2017_05_03_16_08_35_717x315.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_09_13_717x381.jpg" alt="/images/2017_05_03_16_09_13_717x381.jpg" /></p>
-
-<p><img src="/images/2017_05_03_16_09_49_479x377.jpg" alt="/images/2017_05_03_16_09_49_479x377.jpg" /></p>
-
-<p>Now you could ping <code>10.17.17.13</code> and log into this machine via this IP.</p>
-
-<h3 id="exceed-limitation">Exceed Limitation</h3>
-
-<p>In Server<code>10.17.17.2</code>:</p>
-
-<pre><code># vim /etc/security/limits.conf
-* soft nofile 1048576
-* hard nofile 1048576
-root - nofile 1048576
-root hard nofile 1048576
-root soft nofile 1048576
-</code></pre>
-
-<p>And add following 3 lines into <code>/etc/sysctl.conf</code>:</p>
-
-<pre><code># vim /etc/sysctl.conf
-fs.file-max=1048576
-net.netfilter.nf_conntrack_max = 6553500
-net.ipv4.ip_local_port_range= 1024 65535
-# sysctl -p /etc/sysctl.conf 
-fs.file-max = 1048576
-net.netfilter.nf_conntrack_max = 6553500
-net.ipv4.ip_local_port_range = 1024 65535
-</code></pre>
-
-<p>Add it into <code>/etc/rc.local</code>:</p>
-
-<pre><code># vim /etc/rc.local
-modprobe nf_conntrack
-sysctl -p /etc/sysctl.conf
-exit 0
-</code></pre>
-
-<p>Do the same things to BombServer and BombClient. Examine via:</p>
-
-<pre><code># cat /proc/sys/net/netfilter/nf_conntrack_max 
-6553500
-# ulimit -n
-1048576
-......
-</code></pre>
-
-<h3 id="bombserver-setting">BombServer Setting</h3>
-
-<p>In instance <code>10.17.17.13</code>, download Server-side code and compile:</p>
-
-<pre><code># wget https://gist.github.com/yongboy/5318930/raw/ccf8dc236da30fcf4f89567d567eaf295b363d47/server.c
-$ sudo apt-get install -y libev-dev
-$ vim server.c
-comment ev.h , replace it into `#include &lt;ev.h&gt;`
-$ gcc -o server server.c -lev -lm
-</code></pre>
-
-<p>Start server via:</p>
-
-<pre><code># ./server 
-start free -m is 
-             total       used       free     shared    buffers     cached
-Mem:          3009        526       2483          0         16        419
--/+ buffers/cache:         90       2919
-Swap:          511          0        511
-</code></pre>
-
-<h3 id="client-setting">Client Setting</h3>
-
-<p>Use a Ubuntu qcow2 file, start a qemu based vm on <code>10.17.17.2</code>.</p>
-
-<p>The <code>ubuntu1404origin.qcow2</code> is modified to have a <code>10.17.17.190</code> ip address.</p>
-
-<p><code>/etc/network/interfaces</code> content:</p>
-
-<pre><code># This file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
-
-# The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.17.17.190
-netmask 255.255.255.0
-gateway 10.17.17.1
-dns-nameservers 180.76.76.76
-
-</code></pre>
-
-<p>Start command:</p>
-
-<pre><code>root@ubuntu:~/testmachine# ls
-startmachine.sh  ubuntu1404origin.qcow2
-root@ubuntu:~/testmachine# cat startmachine.sh 
-qemu-system-x86_64 -net nic,model=virtio,macaddr=52:54:00:12:34:56,vlan=1 -net tap,vlan=1 -net nic,model=virtio,macaddr=52:54:00:12:34:57,vlan=2 -net tap,vlan=2 -net nic,model=virtio,macaddr=52:54:00:12:34:58,vlan=3 -net tap,vlan=3 -net nic,model=virtio,macaddr=52:54:00:12:34:59,vlan=4 -net tap,vlan=4 -net nic,model=virtio,macaddr=52:54:00:12:34:60,vlan=5 -net tap,vlan=5 -net nic,model=virtio,macaddr=52:54:00:12:34:61,vlan=6 -net tap,vlan=6 -net nic,model=virtio,macaddr=52:54:00:12:34:62,vlan=7 -net tap,vlan=7 -net nic,model=virtio,macaddr=52:54:00:12:34:63,vlan=8 -net tap,vlan=8 -hda ./ubuntu1404origin.qcow2 -m 3072 --enable-kvm
-# ./startmachine.sh
-</code></pre>
-
-<p>Login into client machine(10.17.17.190), do following command:</p>
-
-<pre><code># ifconfig eth1 10.17.17.254/24
-# ifconfig eth2 10.17.17.253/24
-# ifconfig eth3 10.17.17.252/24
-# ifconfig eth4 10.17.17.251/24
-# ifconfig eth5 10.17.17.250/24
-# ifconfig eth6 10.17.17.249/24
-# ifconfig eth7 10.17.17.248/24
-# ifconfig eth8 10.17.17.247/24
-# ifconfig eth9 10.17.17.246/24
-# ./client -h 10.17.17.13 -p 8000 -m 64000 -o 10.17.17.190,10.17.17.254,10.17.17.253,10.17.17.252,10.17.17.251,10.17.17.250,10.17.17.249,10.17.17.248
-</code></pre>
-
-<p>The  client file is downloaded and compile via:</p>
-
-<pre><code># wget https://gist.github.com/yongboy/5324779/raw/f29c964fcd67fefc3ce66e487a44298ced611cdc/client2.c
-# gcc -o client client2.c -levent
-</code></pre>
-
-<p>When start Bombing the server, the captured image is listed as following:</p>
-
-<p><img src="/images/2017_05_03_17_19_58_324x455.jpg" alt="/images/2017_05_03_17_19_58_324x455.jpg" /></p>
 
       
     </div>

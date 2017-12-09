@@ -105,6 +105,176 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a>
+      </h1>
+      <span class="post-date">Jun 8, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it.</p>
+
+<h3 id="preparation">Preparation</h3>
+
+<p>I use two VMs for this experiment, created a new virtual network, it&rsquo;s 10.94.94.0/24, every vm machines adds into this network.<br />
+VM1, VM2, both have 1G Memory. 1 Core.<br />
+VM1: 10.94.94.11, VM2: 10.94.94.12.</p>
+
+<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade
+$ sudo apt-get install build-essential$
+$ sudo reboot
+$ uname -a
+$ uname -a
+Linux OpenVSwitchVM1 3.13.0-24-generic #47-Ubuntu SMP Fri May 2 23:30:00 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux
+</code></pre>
+
+<h3 id="generate-deb">Generate DEB</h3>
+
+<p>Following steps includes install dependencies, fetching source code, build, generate package, notice we use 2.3.0 version of the openvswitch.</p>
+
+<pre><code>$ sudo apt-get install -y build-essential fakeroot debhelper \
+                    autoconf automake bzip2 libssl-dev \
+                    openssl graphviz python-all procps \
+                    python-qt4 python-zopeinterface \
+                    python-twisted-conch libtool
+$ wget http://openvswitch.org/releases/openvswitch-2.3.0.tar.gz
+$ tar xzvf openvswitch-2.3.0.tar.gz
+$ cd openvsiwtch-2.3.0
+$ DEB_BUILD_OPTIONS='parallel=8 nocheck' fakeroot debian/rules binary
+$ cd ..
+$ ls -al *.deb
+openvswitch-common_2.3.0-1_amd64.deb         openvswitch-ipsec_2.3.0-1_amd64.deb   openvswitch-vtep_2.3.0-1_amd64.deb
+openvswitch-datapath-dkms_2.3.0-1_all.deb    openvswitch-pki_2.3.0-1_all.deb       python-openvswitch_2.3.0-1_all.deb
+openvswitch-datapath-source_2.3.0-1_all.deb  openvswitch-switch_2.3.0-1_amd64.deb
+openvswitch-dbg_2.3.0-1_amd64.deb            openvswitch-test_2.3.0-1_all.deb
+
+</code></pre>
+
+<p>Also copy all of the deb files into another PC.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>In two machines, do following steps for installing.</p>
+
+<pre><code>$ sudo apt-get install -y bridge-utils
+$ sudo dpkg -i openvswitch-common_2.3.1-1_amd64.deb \
+         openvswitch-switch_2.3.1-1_amd64.deb
+</code></pre>
+
+<h3 id="vm-netorking-configuration">VM Netorking Configuration</h3>
+
+<p>For VM1:</p>
+
+<pre><code>root@OpenVSwitchVM1:~# ovs-vsctl add-br br0
+root@OpenVSwitchVM1:~# ovs-vsctl add-br br1
+# ovs-vsctl add-port br0 eth0
+# ifconfig eth0 0 up
+# ifconfig br0 10.94.94.11
+# route add default gw 10.94.94.1 br0
+# ifconfig br1 172.10.0.1
+
+</code></pre>
+
+<p>For VM2:</p>
+
+<pre><code># ovs-vsctl add-br br0
+# ovs-vsctl add-br br1
+# ovs-vsctl add-port br0 eth0
+# ifconfig eth0 0 up &amp;&amp; ifconfig br0 10.94.94.12
+# route add default gw 10.94.94.1
+# ifconfig br1 172.10.1.1
+</code></pre>
+
+<p>Ping each other, we could see br1 is not OK.</p>
+
+<h3 id="vxlan-setup">VXLAN Setup</h3>
+
+<p>On VM1, do following operation, to set the vx1:</p>
+
+<pre><code>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.12
+root@OpenVSwitchVM1:~# ovs-vsctl show
+a1e9afb6-345a-4f79-8e0b-131cd43cfb67
+    Bridge &quot;br0&quot;
+        Port &quot;eth0&quot;
+            Interface &quot;eth0&quot;
+        Port &quot;br0&quot;
+            Interface &quot;br0&quot;
+                type: internal
+    Bridge &quot;br1&quot;
+        Port &quot;br1&quot;
+            Interface &quot;br1&quot;
+                type: internal
+        Port &quot;vx1&quot;
+            Interface &quot;vx1&quot;
+                type: vxlan
+                options: {remote_ip=&quot;10.94.94.12&quot;}
+    ovs_version: &quot;2.3.0&quot;
+</code></pre>
+
+<p>On VM2, do following operation, to set vx1</p>
+
+<pre><code>root@OpenVSwitchVM2:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.11
+root@OpenVSwitchVM2:~# ovs-vsctl show
+bce3f2b5-9b77-41dc-8130-b8922dd7ac9e
+    Bridge &quot;br1&quot;
+        Port &quot;vx1&quot;
+            Interface &quot;vx1&quot;
+                type: vxlan
+                options: {remote_ip=&quot;10.94.94.11&quot;}
+        Port &quot;br1&quot;
+            Interface &quot;br1&quot;
+                type: internal
+    Bridge &quot;br0&quot;
+        Port &quot;br0&quot;
+            Interface &quot;br0&quot;
+                type: internal
+        Port &quot;eth0&quot;
+            Interface &quot;eth0&quot;
+    ovs_version: &quot;2.3.0&quot;
+</code></pre>
+
+<p>So now you could ping each other via the br1 address.</p>
+
+<h3 id="mirror-port">Mirror Port</h3>
+
+<p>Do the following things for setting up the mirror port.</p>
+
+<pre><code>#  modprobe dummy
+#  ip link set up dummy0
+root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 dummy0
+root@OpenVSwitchVM1:~# ovs-vsctl --id=@m create mirror name=mirror0 -- add bridge br1 mirrors @m
+33931f5a-008f-44cf-abc6-38afb3062b5e
+root@OpenVSwitchVM1:~# ovs-vsctl list port dummy0
+_uuid               : 5f5fe675-b1ee-4acd-a0ab-f14e952d1603
+bond_downdelay      : 0
+bond_fake_iface     : false
+bond_mode           : []
+bond_updelay        : 0
+external_ids        : {}
+fake_bridge         : false
+interfaces          : [a6fbabe9-790d-4be8-a362-b7cbdd46db89]
+lacp                : []
+mac                 : []
+name                : &quot;dummy0&quot;
+other_config        : {}
+qos                 : []
+statistics          : {}
+status              : {}
+tag                 : []
+trunks              : []
+vlan_mode           : []
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/06/07/quickly-change-centos-networking/">Quickly Change CentOS Networking</a>
       </h1>
       <span class="post-date">Jun 7, 2015 
@@ -358,305 +528,6 @@ $ vim ./mysql2_chef_gem/libraries/provider_mysql2_chef_gem_mysql.rb
 <p>After installation and configuration, you could visit following URL for your OpenStack:</p>
 
 <p><a href="https://127.0.0.1:9443">https://127.0.0.1:9443</a></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/26/chef-setup/">Chef Setup</a>
-      </h1>
-      <span class="post-date">May 26, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/chef">Chef</a>
-        
-      </span>
-      
-      
-
-<p>For automatically deploying OpenStack, I use Chef for deployment, following records the steps for setting up the whole environment.</p>
-
-<h3 id="machine-preparation">Machine Preparation</h3>
-
-<p>Chef Server: 2-Core, 3G Memory, IP address: xxx.xxx.10.211, Ubuntu14.04.<br />
-Chef Workstation: 4-Core, 8G Memory, a physical machine, IP address: xxx.xxx.0.119, Ubuntu14.04.</p>
-
-<h3 id="install-server">Install Server</h3>
-
-<p>Install the chef-server package, which downloaded from chef.io website, after installation, simply reconfigure it, this finishes the installation and configuration.</p>
-
-<pre><code>$ sudo dpkg -i chef-server-core_12.0.8-1_amd64.deb
-$ sudo chef-server-ctl reconfigure
-</code></pre>
-
-<p>Configure the permit file, also create the user and organization for the chef:</p>
-
-<pre><code># sudo chef-server-ctl user-crate YourName FirstName LastName Email PassWord --filename YourPermitFileName
-$ sudo chef-server-ctl user-create youname YYYXXX Man xxxxxxx@163.com YOURPASSWORD --filename ~/youname.pem
-# sudo chef-server-ctl org-create YourOrgName Your Company Name  --association_user YourUser --filename  YourOrgnizationPermitFile
-$ sudo chef-server-ctl org-create youname YYYXXX Software, Inc. --association_user youname --filename ~/youname_org.pem
-</code></pre>
-
-<p>Install opscode-manager and reconfigure it via following commands:</p>
-
-<pre><code>$ sudo dpkg -i opscode-manage_1.13.0-1_amd64.deb 
-$ sudo opscode-manage-ctl reconfigure
-</code></pre>
-
-<p>Now visit the webiste to see the Chef Server UI.</p>
-
-<p><a href="https://YourURL">https://YourURL</a></p>
-
-<p><img src="/images/2015_05_26_16_44_58_610x297.jpg" alt="/images/2015_05_26_16_44_58_610x297.jpg" /></p>
-
-<h3 id="chef-workstation">Chef Workstation</h3>
-
-<p>I use the physical machine for Chef Workstation.</p>
-
-<p>Install it via:</p>
-
-<pre><code>$ sudo dpkg -i chef_12.3.0-1_amd64.deb
-</code></pre>
-
-<p>Fetch back the chef repository from github, configure it and add the ignore directory:</p>
-
-<pre><code>$ git clone https://github.com/opscode/chef-repo.git
-$ cd chef-repo 
-$ mkdir .chef
-$ echo &quot;.chef&quot;&gt;&gt;~/chef-repo/.gitignore
-$ git add .
-$ git commit -m &quot;Exclude the ./.chef directory from version control&quot;
-[master 64515ff] Exclude the ./.chef directory from version control
- 1 file changed, 1 insertion(+)
-</code></pre>
-
-<p>Install the chefdk, and verify the chef, you should see all of the components OK, then you could continue for next step:</p>
-
-<pre><code>$ sudo dpkg -i chefdk_0.6.0-1_amd64.deb 
-$ chef verify
-</code></pre>
-
-<p>Transfer all of the pem file from the ChefServer to ChefWorkstation, and put them under the folder of ~/chef-repo/.chef:</p>
-
-<pre><code>$ scp xxx@xxxxx:/home/xxx/*.pem xxxx@ChefWorkstation:/home/xxxx/chef-repo/.chef
-</code></pre>
-
-<p>Add following item under the Workstation&rsquo;s configuration:</p>
-
-<pre><code>$ sudo vim /etc/hosts
-XXX.xxx.xxx.xxx  ChefServer
-</code></pre>
-
-<p>Now configure the knife.rb and let your authentification be verified.</p>
-
-<pre><code>$ vim ~/chef-repo/.chef/knife.rb
-current_dir = File.dirname(__FILE__)
-log_level                :info
-log_location             STDOUT
-node_name                &quot;xxxxxxxxx&quot;
-client_key               &quot;#{current_dir}/xxxxxxxxx.pem&quot;
-validation_client_name   &quot;xxxxxxxxx_org&quot;
-validation_key           &quot;#{current_dir}/xxxxxxxxx_org.pem&quot;
-chef_server_url          &quot;https://ChefServer/organizations/xxxxxxxxx&quot;
-syntax_check_cache_path  &quot;#{ENV['HOME']}/.chef/syntaxcache&quot;
-cookbook_path            [&quot;#{current_dir}/../cookbooks&quot;]
-$ knife ssl fetch
-WARNING: Certificates from ChefServer will be fetched and placed in your trusted_cert
-directory (/home/dash/chef-repo/.chef/trusted_certs).
-
-Knife has no means to verify these are the correct certificates. You should
-verify the authenticity of these certificates after downloading.
-
-Adding certificate for ChefServer in /home/xxxx/chef-repo/.chef/trusted_certs/ChefServer.crt
-$ knife ssl check
-Connecting to host ChefServer:443
-Successfully verified certificates from `ChefServer'
-</code></pre>
-
-<p>Check how many clients has been added into the ChefServer, currently only one,</p>
-
-<pre><code>$ knife client list
-xxxxxx-validator
-</code></pre>
-
-<h3 id="added-nodes">Added Nodes</h3>
-
-<p>In Client1, Install the</p>
-
-<pre><code>$ sudo dpkg -i chef_12.3.0-1_amd64.deb 
-</code></pre>
-
-<p>Add the pem files to every nodes:</p>
-
-<pre><code># knife bootstrap Client1 -x xxxxxx -P XXXXXXXXXXXXX --sudo
-</code></pre>
-
-<p>If above steps fail, you should manually specify the ssl verification.</p>
-
-<pre><code># scp Server/xxx.pem /home/xxxxx
-# cp /home/xxxx/xxx.pem /etc/chef/validation.pem
-# sudo chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /etc/chef/validation.pem
-##### OR
-#  sudo chef-client -l debug -S https://ChefServer/organizations/xxxxx  -K /home/xxxx/xxxxx.pem
-</code></pre>
-
-<p>Bootstrap again:</p>
-
-<pre><code># knife bootstrap Client1  -N ChefClient1 -x xxxxx -P xxxxxx --sudo --use-sudo-password
-</code></pre>
-
-<p>After bootstrap success, list all of the client:</p>
-
-<pre><code>root@ChefWorkstation:~/chef-repo# knife client list
-ChefClient1                                                                                                                                
-xxxx-validator 
-</code></pre>
-
-<h3 id="using-cookbook">Using Cookbook</h3>
-
-<p>Create the Cookbook named <code>nginx</code>:</p>
-
-<pre><code>root@ChefWorkstation:~# cd chef-repo/
-root@ChefWorkstation:~/chef-repo# ls
-chefignore  cookbooks  data_bags  environments  LICENSE  README.md  roles
-root@ChefWorkstation:~/chef-repo# knife cookbook create nginx
-oot@ChefWorkstation:~/chef-repo/cookbooks/nginx# ls
-attributes  CHANGELOG.md  definitions  files  libraries  metadata.rb  providers  README.md  recipes  resources  templates
-</code></pre>
-
-<p>Edit the cookbook:</p>
-
-<p>Enable the installation:</p>
-
-<pre><code># vim recipes/default.rb
-package 'nginx' do
-  action :install
-end
-</code></pre>
-
-<p>Enable check the status:</p>
-
-<pre><code>service 'nginx' do
-  action [ :enable, :start ]
-end
-</code></pre>
-
-<p>Change the index.html file:</p>
-
-<pre><code>cookbook_file &quot;/usr/share/nginx/html/index.html&quot; do
-  source &quot;index.html&quot;
-  mode &quot;0644&quot;
-end
-</code></pre>
-
-<p>Prepare the default index.html file:</p>
-
-<pre><code>$ cd ~/chef-repo/cookbooks/nginx/files/default
-$ vim index.html
-&lt;html&gt;
-  &lt;head&gt;
-    &lt;title&gt;Hello there&lt;/title&gt;
-  &lt;/head&gt;
-  &lt;body&gt;
-    &lt;h1&gt;This is a test&lt;/h1&gt;
-    &lt;p&gt;Please work!&lt;/p&gt;
-  &lt;/body&gt;
-&lt;/html&gt;
-</code></pre>
-
-<p>Since the nginx need apt-get to achive the latest status, add another package named apt:</p>
-
-<pre><code>knife cookbook create apt
-</code></pre>
-
-<p>Edit the default rb file:</p>
-
-<pre><code>vim ~/chef-repo/cookbooks/apt/recipes/default.rb
-execute &quot;apt-get update&quot; do
-  command &quot;apt-get update&quot;
-end
-</code></pre>
-
-<p>Change the default rb file of the nginx:</p>
-
-<pre><code>+++ include_recipe &quot;apt&quot;
-
-package 'nginx' do
-  action :install
-end
-</code></pre>
-
-<p>Also add it to the metadata.rb file:</p>
-
-<pre><code>$ vim ~/chef-repo/cookbooks/nginx/metadata.rb
-
-long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
-version          '0.1.0'
-
-+++  depends &quot;apt&quot;
-</code></pre>
-
-<p>Add Cookbook to your nodes:</p>
-
-<pre><code>knife cookbook upload apt
-knife cookbook upload nginx
-</code></pre>
-
-<p>Or</p>
-
-<pre><code>knife cookbook upload -a
-</code></pre>
-
-<p>Edit the specified node:</p>
-
-<pre><code>knife node edit name_of_node
-
-{
-  &quot;name&quot;: &quot;client1&quot;,
-  &quot;chef_environment&quot;: &quot;_default&quot;,
-  &quot;normal&quot;: {
-    &quot;tags&quot;: [
-
-    ]
-  },
-  &quot;run_list&quot;: [
-
-+++ &quot;recipe[name_of_recipe1]&quot;, 
-+++ &quot;recipe[name_of_recipe2]&quot; 
-
-  ]
-}
-</code></pre>
-
-<p>In every want-to-deploy nodes, run:</p>
-
-<pre><code>$ sudo chef-client
-</code></pre>
-
-<h3 id="use-market">Use  Market</h3>
-
-<p>Download and use the knife</p>
-
-<pre><code>$ knife cookbook site download learn_chef_apache2
-$ tar xzvf learn_chef_apache2-0.2.1.tar.gz -C cookbooks/
-$ knife cookbook  upload -a 
-</code></pre>
-
-<p>Besure to edit the node&rsquo;s recipes.</p>
-
-<p>Two tips:</p>
-
-<p>Remove the cookbook from the server&rsquo;s list:</p>
-
-<pre><code># knife cookbook delete learn_chef_apache2 0.2.1
-</code></pre>
-
-<p>Directly remove the recipe from the node:</p>
-
-<pre><code># knife node run_list remove ChefClient1 recipe[nginx]
-# knife node run_list remove ChefClient1 recipe[eclipse]
-</code></pre>
 
       
     </div>
