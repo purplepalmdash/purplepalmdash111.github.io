@@ -105,6 +105,184 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/27/single-node-openstack-startup/">Single Node OpenStack Startup</a>
+      </h1>
+      <span class="post-date">Feb 27, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Following records the main steps for starting up the single node Openstack environment.</p>
+
+<h3 id="ubuntu-setup-and-configuration">Ubuntu Setup and Configuration</h3>
+
+<h4 id="setup">Setup</h4>
+
+<p>Use virt-manager, create a new virtual machine, install the system from ubuntu-12.04.3-server-amd64.iso, allocate 2 CPU and 4096 Memory, allocate the 80GB disk.<br />
+Create disk via:</p>
+
+<pre><code>Trusty@pc119:~/Code/Virt-Manager/SingleNode&gt; qemu-img create -f qcow2 SingleNode.qcow2 80G
+Formatting 'SingleNode.qcow2', fmt=qcow2 size=85899345920 encryption=off cluster_size=65536 lazy_refcounts=off
+
+</code></pre>
+
+<p>Configure the networking, bridge, then beging installing.<br />
+IP address set to 192.168.188.<sup>190</sup>&frasl;<sub>255</sub>.255.255.0, gateway first we set it to 192.168.188.1, later we will change it, because it&rsquo;s a pseudo-addresses.</p>
+
+<h4 id="configuration">Configuration</h4>
+
+<p>First save a snapshot, shutdown the running virtual machine, then you could clone it for back up.<br />
+Configure the network in virtual machine via:</p>
+
+<pre><code>$ sudo ip route add default gw 192.168.0.xxx
+$ sudo ip route add 192.168.0.0/24 dev eth0
+
+</code></pre>
+
+<p>SSH fast connect:</p>
+
+<pre><code>$ sudo vi /etc/ssh/sshd_config
+UseDNS no
+$ sudo service ssh restart
+
+</code></pre>
+
+<p>Now you could ssh to the virtual machine and update corresponding configurations.</p>
+
+<p>In fact the snapshot could be made here.<br />
+Transfer the installtion media to virtual machine:</p>
+
+<pre><code>$ scp ./contrail-install-packages_1.21-74\~havana_all.deb Trusty@192.168.188.190:/home/Trusty/
+
+</code></pre>
+
+<h3 id="install-opencontrail">Install OpenContrail</h3>
+
+<p>Set the root password:</p>
+
+<pre><code>$ sudo bash
+root@SingleNode:~# passwd
+Enter new UNIX password: 
+Retype new UNIX password: 
+passwd: password updated successfully
+
+</code></pre>
+
+<p>Install the deb file via:</p>
+
+<pre><code>root@SingleNode:~# ls
+contrail-install-packages_1.21-74~havana_all.deb
+root@SingleNode:~# dpkg -i contrail-install-packages_1.21-74~havana_all.deb 
+
+</code></pre>
+
+<p>Now setup the whole packages.</p>
+
+<pre><code>root@SingleNode:/etc/apt# cd /opt/contrail/contrail_packages/
+root@SingleNode:/opt/contrail/contrail_packages# ls
+contrail_debs.tgz  preferences  setup.sh  sources.list  VERSION
+root@SingleNode:/opt/contrail/contrail_packages# ./setup.sh
+
+</code></pre>
+
+<p>Copy the example testbed file to <code>testbed.py</code>:</p>
+
+<pre><code>root@SingleNode:/opt/contrail/utils# cp fabfile/testbeds/testbed_singlebox_example.py fabfile/testbeds/testbed.py
+
+</code></pre>
+
+<p>Edit this file to, notice the + means we did modifications    :</p>
+
+<pre><code>from fabric.api import env
+
+#Management ip addresses of hosts in the cluster
++++ host1 = 'root@127.0.0.1'
+
+#External routers if any
+#for eg. 
+#ext_routers = [('mx1', '10.204.216.253')]
+ext_routers = []
+
+#Autonomous system number
+router_asn = 64512
+
+#Host from which the fab commands are triggered to install and provision
++++ host_build = 'root@127.0.0.1'
+
+#Role definition of the hosts.
+env.roledefs = {
+    'all': [host1],
+    'cfgm': [host1],
+    'openstack': [host1],
+    'control': [host1],
+    'compute': [host1],
+    'collector': [host1],
+    'webui': [host1],
+    'database': [host1],
+    'build': [host_build],
+    'storage-master': [host1],
+    'storage-compute': [host1],
+}
+
+#Openstack admin password
+env.openstack_admin_password = 'secret123'
+
+#Hostnames
+env.hostnames = {
++    'all': ['SingleNode']
+}
+
++++ env.password = 'rootpass'
+#Passwords of each host
+env.passwords = {
++++     host1: 'rootpass',
+
++++     host_build: 'rootpass',
+}
+
+#For reimage purpose
+env.ostypes = {
++++    host1:'ubuntu',
+}
+
+</code></pre>
+
+<p>Now use fab to install :</p>
+
+<pre><code>root@SingleNode:/opt/contrail/utils# fab -c fabrc install_contrail
+
+</code></pre>
+
+<p>This will take some minutes.<br />
+Then setup all:</p>
+
+<pre><code># cd /opt/congrail/utils
+# fab setup_all
+
+</code></pre>
+
+<p>After installation the machine will be reboot.<br />
+A snapshot will be created when reboot done, this will be the cloned initial startpoint for OpenContrail.</p>
+
+<h3 id="start">Start</h3>
+
+<p>Create a simple web server via python:</p>
+
+<pre><code>python -m SimpleHTTPServer 8000
+
+</code></pre>
+
+<p>Then Create the image in OpenStack via:</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/02/18/install-opencontrail-on-virt-manager/">Install OpenContrail On Virt-Manager</a>
       </h1>
       <span class="post-date">Feb 18, 2015 
@@ -511,111 +689,6 @@ group=&quot;root&quot;
 </code></pre>
 
 <p>Now continue to install OpenContrail.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/10/build-opencontrail-on-centos7-local/">Build OpenContrail On CentOS7(Local)</a>
-      </h1>
-      <span class="post-date">Feb 10, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      <p>Fresh steps.</p>
-
-<pre><code>$ sudo yum update
-$ sudo yum install vim
-$ sudo yum install net-tools
-$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
-$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
-$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
-$ sudo yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler 
-$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
-
-</code></pre>
-
-<p>As root, Add repositories:</p>
-
-<pre><code># wget -q -O - http://www.atomicorp.com/installers/atomic | sh
-# yum update
-# yum install dpkg dpkg-devel
-
-</code></pre>
-
-<p>Missing fakeroot, so can&rsquo;t be continue.</p>
-
-<p>Change back to CentOS 6.6.</p>
-
-<pre><code>$ sudo yum install vim net-tools
-$ wget https://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
-$ sudo rpm -ivh epel-release-6-8.noarch.rpm 
-$ sudo yum install -y scons git python-lxml wget gcc patch make unzip flex bison gcc-c++ openssl-devel autoconf automake vim python-devel python-setuptools protobuf protobuf-devel protobuf-compiler net-snmp-python libtool kernel-devel bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel scons protobuf protobuf-devel protobuf-compiler
-$ sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo
-$ yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler  bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel xz
-
-</code></pre>
-
-<p>Install git:</p>
-
-<pre><code>$ yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
-$ wget https://www.kernel.org/pub/software/scm/git/git-1.9.4.tar.gz
-$ sudo yum install expat-devel tar
-$ make prefix=/usr install
-$ which git
-git version 1.9.4
-
-</code></pre>
-
-<p>Using repo sync:</p>
-
-<pre><code>$ repo init -u git@github.com:Juniper/contrail-vnc
-$ repo sync
-
-</code></pre>
-
-<p>Install argparse:</p>
-
-<pre><code>$ yum install python-argparse
-$ declare -x USER=&quot;root&quot;
-
-</code></pre>
-
-<p>We should upgrade some packages to let python could fetch back the packages:</p>
-
-<pre><code>$ wget http://ftp.gnu.org/gnu/autoconf/autoconf-latest.tar.gz
-$ tar xzvf autoconf-latest.tar.gz
-$ cd autoconf-2.69/
-$ ./configure --prefix=/usr &amp;&amp; make &amp;&amp; sudo make install
-$ sudo yum install libtool
-
-</code></pre>
-
-<p>Fetch the 3rd_party packages:</p>
-
-<pre><code>$ python third_party/fetch_package.py
-
-</code></pre>
-
-<p>Then tar and export it to the host machine.</p>
-
-<p>When Building, we have to install libipfix:</p>
-
-<pre><code>$ wget http://sourceforge.net/projects/libipfix/files/libipfix/libipfix_110209.tgz/download
-$ # build it.   
-
-</code></pre>
-
-<p>Enable the epel repository and install dpkg and dpkg-devel:</p>
-
-<pre><code>$ sudo sed -i -e 's/enabled=0/enabled=1/' /etc/yum.repos.d/epel.repo
-$ sudo yum update &amp;&amp; sudo yum install -y dpkg dpkg-devel
-
-</code></pre>
 
       
     </div>

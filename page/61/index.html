@@ -105,6 +105,115 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/25/lxcize-the-kvm-machine/">LXCize the KVM machine</a>
+      </h1>
+      <span class="post-date">May 25, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>In order to make exsiting kvm based machine to be lxc container, following is the steps.<br />
+Refers to:<br />
+<a href="https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/">https://www.stgraber.org/2012/03/04/booting-an-ubuntu-12-04-virtual-machine-in-an-lxc-container/</a></p>
+
+<h3 id="convert-disk-formats">Convert Disk Formats</h3>
+
+<p>First we want to convert the qcow2 format image to raw format, by following command:</p>
+
+<pre><code>$ qemu-img convert u12-debug-ui.qcow2 Contrail.raw
+</code></pre>
+
+<p>This will take a very long time, because qcow2 file will expand to a whole images, like mine, the Contrail.raw in fact expands to 100G size.</p>
+
+<h3 id="lxc-the-kvm">LXC the KVM</h3>
+
+<p>Since we have the raw image file, we could create a new configuration file for starting the machine:</p>
+
+<pre><code> myvm.conf
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = br0
+lxc.network.name = eth0
+lxc.network.ipv4 = xxx.xxx.10.230/24
+lxc.network.ipv4.gateway = xxx.xxx.0.176
+#lxc.network.link = lxcbr0
+lxc.utsname = myvminlxc
+
+lxc.tty = 4
+lxc.pts = 1024
+lxc.rootfs = /dev/mapper/loop0p1
+lxc.arch = amd64
+lxc.cap.drop = sys_module mac_admin
+
+lxc.cgroup.devices.deny = a
+# Allow any mknod (but not using the node)
+lxc.cgroup.devices.allow = c *:* m
+lxc.cgroup.devices.allow = b *:* m
+# /dev/null and zero
+lxc.cgroup.devices.allow = c 1:3 rwm
+lxc.cgroup.devices.allow = c 1:5 rwm
+# consoles
+lxc.cgroup.devices.allow = c 5:1 rwm
+lxc.cgroup.devices.allow = c 5:0 rwm
+#lxc.cgroup.devices.allow = c 4:0 rwm
+#lxc.cgroup.devices.allow = c 4:1 rwm
+# /dev/{,u}random
+lxc.cgroup.devices.allow = c 1:9 rwm
+lxc.cgroup.devices.allow = c 1:8 rwm
+lxc.cgroup.devices.allow = c 136:* rwm
+lxc.cgroup.devices.allow = c 5:2 rwm
+# rtc
+lxc.cgroup.devices.allow = c 254:0 rwm
+#fuse
+lxc.cgroup.devices.allow = c 10:229 rwm
+#tun
+lxc.cgroup.devices.allow = c 10:200 rwm
+#full
+lxc.cgroup.devices.allow = c 1:7 rwm
+#hpet
+lxc.cgroup.devices.allow = c 10:228 rwm
+#kvm
+lxc.cgroup.devices.allow = c 10:232 rwm
+</code></pre>
+
+<p>Now setup the image file via, this will use the <code>/dev/mapper/loop0p1</code> as the root partition:</p>
+
+<pre><code>$ sudo kpartx -a Contrail.img
+</code></pre>
+
+<p>Now start the machine via:</p>
+
+<pre><code>$ sudo lxc-start -n myvminlxc -f ./myvm.conf
+</code></pre>
+
+<p>Your machine will boot into the lxc, and its behavior is the same as the kvm based machine.</p>
+
+<h3 id="troubleshooting">TroubleShooting</h3>
+
+<p>The root could not login into the lxc, because of the selinux enabled in the Ubuntu Host, simply disable it in <code>/etc/selinux/config</code> by:</p>
+
+<pre><code>$ sudo vim /etc/selinux/config
+#SELINUX=permissive
+SELINUX=disabled
+
+</code></pre>
+
+<p>Added it into the startup file in <code>/etc/rc.local</code>, it&rsquo;s ugly, and it will cause  the first tty died. But, first use it:</p>
+
+<pre><code>kpartx -a /home/xxxxx/iso/Contrail.raw
+lxc-start -n myvminlxc -f /home/xxxxx/iso/myvm.conf
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno-2/">三节点搭建OpenStack Juno(2)</a>
       </h1>
       <span class="post-date">May 24, 2015 
@@ -923,161 +1032,6 @@ boot  dists  doc  EFI  install  isolinux  md5sum.txt  pics  pool  preseed  READM
 </code></pre>
 
 <p>After modification, next time if you re-install the compute, it will directly get the packages from the local repository.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/20/setup-centos6-slash-7-local-repository/">Setup CentOS6/7 Local Repository</a>
-      </h1>
-      <span class="post-date">May 20, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>For speeding up the deployment, I have to setup the local repository for CentOS6/7, following is the steps for setting up such two repositories.<br />
-The steps are followed by following URL:<br />
-<a href="https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror">https://support.opennodecloud.com/wiki/doku.php?id=usrdoc:os:repomirror</a></p>
-
-<pre><code># cd /etc/yum.repos.d/
-# curl -O https://copr.fedoraproject.org/coprs/baurzhanm/mrepo/repo/epel-6/baurzhanm-mrepo-epel-6.repo
-# vim baurzhanm-mrepo-epel-6.repo
-# yum update
-# yum -y install screen lftp httpd mrepo
-# vim mrepo.conf
-    ### Configuration file for mrepo
-    
-    ### The [main] section allows to override mrepo's default settings
-    ### The mrepo-example.conf gives an overview of all the possible settings
-    [main]
-    srcdir = /var/mrepo
-    wwwdir = /var/www/mrepo
-    confdir = /etc/mrepo.conf.d
-    arch = x86_64
-    
-    mailto = root@localhost
-    smtp-server = localhost
-    
-    #rhnlogin = username:password
-    
-    ### Any other section is considered a definition for a distribution
-    ### You can put distribution sections in /etc/mrepo.conf.d/
-    ### Examples can be found in the documentation at:
-    ###     /usr/share/doc/mrepo-0.8.9/dists/.
-</code></pre>
-
-<p>Add the configuration files for CentOS 6:</p>
-
-<pre><code># vim  /etc/mrepo.conf.d/centos6.conf
-[centos6]
-name = CentOS $release ($arch)
-release = 6
-arch = x86_64
-metadata = yum repomd
-
-#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-6.6-x86_64-bin-DVD?.iso
-#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-extras = http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/
-epel = http://mirrors.aliyun.com/epel/$release/$arch/
-</code></pre>
-
-<p>Add configuraiton files for CentOS 7:</p>
-
-<pre><code># vim  /etc/mrepo.conf.d/centos7.conf
-[centos7]
-name = CentOS $release ($arch)
-release = 7
-arch = x86_64
-metadata = yum repomd
-
-#iso = http://mirrors.aliyun.com/centos/$release/isos/$arch/CentOS-7.0-1406-x86_64-DVD.iso
-#os = http://mirrors.aliyun.com/centos/$release/os/$arch/Packages/ 
-#updates = http://mirrors.aliyun.com/centos/$release/updates/$arch/Packages/
-#epel = http://mirrors.aliyun.com/epel/$release/$arch/
-extra=http://mirrors.aliyun.com/centos/$release/extras/$arch/Packages/
-</code></pre>
-
-<p>Use following comands for initial sync, it will take a very~long~long~long time.</p>
-
-<pre><code># mrepo -g -u -vvv [centos6|centos7]
-</code></pre>
-
-<p>After syncing, add definition into the apache&rsquo;s configuration:</p>
-
-<pre><code># vi /etc/httpd/conf.d/mrepo.conf
---- ADD ---
-AddDescription &quot;CentOS 6 for x86&quot; centos6-i386
-AddDescription &quot;CentOS 6 for x86_64&quot; centos6-x86_64
-AddDescription &quot;CentOS 7 for x86&quot; centos7-i386
-AddDescription &quot;CentOS 7 for x86_64&quot; centos7-x86_64
---- ADD ---
-# Add repofile for CentOS 6 mirror
-cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos6-x86_64/CentOS-local-http.repo 
-#
-# CentOS-local-http.repo
-#
- 
-[0-base]
-name=CentOS-local-base
-baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.os/
-gpgcheck=0
- 
-[0-updates]
-name=CentOS-local-updates
-baseurl=http://mirror.local.int/mrepo/centos6-x86_64/RPMS.updates/
-gpgcheck=0
-EOF
- 
-# Add repofile for CentOS 7 mirror
-cat &lt;&lt; 'EOF' &gt; /var/www/mrepo/centos7-x86_64/CentOS-local-http.repo 
-#
-# CentOS-local-http.repo
-#
- 
-[0-base]
-name=CentOS-local-base
-baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.os/
-gpgcheck=0
- 
-[0-updates]
-name=CentOS-local-updates
-baseurl=http://mirror.local.int/mrepo/centos7-x86_64/RPMS.updates/
-gpgcheck=0
-EOF
- 
-# chkconfig httpd on
-# service httpd restart
-
-</code></pre>
-
-<h3 id="mrepo-for-centos6-5">mrepo for CentOS6.5</h3>
-
-<pre><code>[root:/home/juju/mrepo]# cat /etc/mrepo.conf.d/centos6.5.conf  
-### URL: http://www.centos.org/
- 
-[centos6.5]
-name = CentOS $release ($arch)
-release = 6.5
-arch = x86_64
-metadata = yum repomd
-
-os=http://vault.centos.org/$release/os/$arch/Packages/
-updates=http://vault.centos.org/$release/updates/$arch/Packages/
-extras=http://vault.centos.org/$release/extras/$arch/Packages/
-centosplus=http://vault.centos.org/$release/centosplus/$arch/Packages/
-fasttrack=http://vault.centos.org/$release/fasttrack/$arch/Packages/
-</code></pre>
-
-<p>sync the repository via:</p>
-
-<pre><code># mrepo -g -u -vvv centos6.5
-</code></pre>
 
       
     </div>

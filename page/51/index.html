@@ -105,6 +105,247 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/20/kickstarting-ubuntu-in-spacewalk/">Kickstarting Ubuntu In SpaceWalk</a>
+      </h1>
+      <span class="post-date">Aug 20, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="preparation">Preparation</h3>
+
+<p>You have to use apt-mirror for getting the packages to local repository, so that you
+could directly install the system via http method. The configuration file for
+apt-mirror is listed as following:</p>
+
+<pre><code>$ cat /etc/apt/mirror.list
+set base_path /mnt/myrepo
+set nthreads     20
+set _tilde 0
+#################Trusty Repository Starts ########################
+deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse main/debian-installer restricted/debian-installer multiverse/debian-installer universe/debian-installer
+deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
+deb-amd64 http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
+
+deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse main/debian-installer restricted/debian-installer multiverse/debian-installer universe/debian-installer
+deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
+deb-i386 http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
+
+deb-src http://mirrors.aliyun.com/ubuntu/ trusty main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu/ trusty-security main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu/ trusty-updates main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu/ trusty-proposed main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu/ trusty-backports main restricted universe multiverse
+#################Trusty Repository ends ########################
+
+#################Precise Repository starts ########################
+deb-amd64 http://mirrors.aliyun.com/ubuntu precise main main/debian-installer restricted restricted/debian-installer universe multiverse multiverse/debian-installer universe/debian-installer
+deb-amd64 http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-amd64 http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-amd64 http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
+deb-amd64 http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
+
+deb-i386 http://mirrors.aliyun.com/ubuntu precise main main/debian-installer restricted restricted/debian-installer universe multiverse multiverse/debian-installer universe/debian-installer
+deb-i386 http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-i386 http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse main/debian-installer restricted/debian-installer universe/debian-installer
+deb-i386 http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
+deb-i386 http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
+
+deb-src http://mirrors.aliyun.com/ubuntu precise-security main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu precise-updates main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu precise-proposed main restricted universe multiverse
+deb-src http://mirrors.aliyun.com/ubuntu precise-backports main restricted universe multiverse
+#################Precise Repository ends ########################
+</code></pre>
+
+<p>Sync your local repository via <code>apt-mirror</code>, the sync procedure could takes many days,
+depends on your bandwidth.</p>
+
+<h3 id="make-your-own-kickstart-file">Make Your Own KickStart File</h3>
+
+<p>You have to install <code>system-config-kickstart</code> for generating the kickstart file. But
+the official program conflicts with hwdata, we manually downgrade it and install
+specified version, then sytem-config-kickstart could be installed.</p>
+
+<pre><code># apt-get remove hwda
+# wget ftp://mirror.ovh.net/mirrors/ftp.debian.org/debian/pool/main/h/hwdata/hwdata_0.234-1_all.deb
+# dpkg -i hwdata_0.267-1_all.deb
+# sudo apt-get install system-config-kickstart
+</code></pre>
+
+<p>Run it and its effects is like following:</p>
+
+<p><img src="/images/2015_08_20_12_07_59_637x562.jpg" alt="/images/2015_08_20_12_07_59_637x562.jpg" /></p>
+
+<p>Select the installation method via:</p>
+
+<p><img src="/images/2015_08_20_12_09_02_541x361.jpg" alt="/images/2015_08_20_12_09_02_541x361.jpg" /></p>
+
+<p>Save your kickstart file, and save it into some webserver&rsquo;s directory, since PXE always
+have the network connection, we could put it the reachable webserver.</p>
+
+<h3 id="pxe-menu-configuration">PXE Menu Configuration</h3>
+
+<p>Just give out an example of the PXE Menu on SpaceWalk:</p>
+
+<pre><code># cat /var/lib/tftpboot/pxelinux.cfg/default 
+DEFAULT menu
+PROMPT 0
+MENU TITLE Cobbler | http://fedorahosted.org/cobbler
+TIMEOUT 200
+TOTALTIMEOUT 6000
+ONTIMEOUT local
+
+LABEL local
+        MENU LABEL (local)
+        MENU DEFAULT
+        LOCALBOOT 0
+
+LABEL precise-ia32:1:SpacewalkDefaultOrganization
+        kernel /images/precise-ia32:1:SpacewalkDefaultOrganization/vmlinuz
+        MENU LABEL precise-ia32:1:SpacewalkDefaultOrganization
+        append ks=http://192.168.0.79/ubuntu1204kickstart1.cfg initrd=/images/precise-ia32:1:SpacewalkDefaultOrganization/initrd.gz ksdevice=eth0 --
+        ipappend 2
+MENU end
+</code></pre>
+
+<p>We use the kickstart file located in a webserver, using this we could install the
+system unattendly.</p>
+
+<p>An example of the this kickstart file is listed:</p>
+
+<pre><code># cat ubuntu1204kickstart1.cfg  | more
+#Generated by Kickstart Configurator
+#platform=x86
+
+#System language
+lang en_US
+#Language modules to install
+langsupport en_US
+#System keyboard
+keyboard us
+#System mouse
+mouse
+#System timezone
+timezone Asia/Shanghai
+#Root password
+rootpw --iscrypted xxxxxxxxxxxxxxxxxxxxxxxxxxx
+#Initial user
+user xxxx --fullname &quot;xxxx&quot; --iscrypted --password xxxxxxxxxxxxxxxxxxxxxx
+#Reboot after installation
+reboot
+#Use text mode install
+text
+#Install OS instead of upgrade
+install
+#Use Web installation
+url --url http://192.168.0.79/ubuntu/
+#System bootloader configuration
+bootloader --location=mbr 
+#Clear the Master Boot Record
+zerombr yes
+#Partition clearing information
+clearpart --all --initlabel 
+#Disk partitioning information
+part swap --size 1024 
+part / --fstype ext4 --size 1 --grow 
+#System authorization infomation
+auth  --useshadow  --enablemd5 
+#Network information
+network --bootproto=dhcp --device=eth0
+#Firewall configuration
+firewall --disabled 
+#Do not configure the X Window System
+skipx
+
+%packages
+ubuntu-minimal
+openssh-server
+screen
+curl
+wget
+
+%post
+
+# update fstab for the root partition
+perl -pi -e 's/(errors=remount-ro)/noatime,nodiratime,$1,barrier=0/' /etc/fstab
+
+# point sh to bash instead of dash
+rm /bin/sh
+ln -s /bin/bash /bin/sh
+
+# add normal apt source list
+(
+cat &lt;&lt;'EOP'
+deb http://192.168.0.79/ubuntu/ precise main restricted universe
+deb http://192.168.0.79/ubuntu/ precise-security main restricted universe
+deb http://192.168.0.79/ubuntu/ precise-updates main restricted universe
+EOP
+) &gt; /etc/apt/sources.list
+apt-get update
+apt-get upgrade -y
+
+# install some additional packages
+# apt-get install -y xenstore-utils
+
+# set up xenserver automation scripts
+# AUTOMATER_REPO=https://raw.github.com/krobertson/xenserver-automater
+# curl $AUTOMATER_REPO/master/usr/sbin/xe-set-hostname &gt; /usr/sbin/xe-set-hostname
+# curl $AUTOMATER_REPO/master/usr/sbin/xe-set-network &gt; /usr/sbin/xe-set-network
+# curl $AUTOMATER_REPO/master/usr/sbin/generate-sshd-keys &gt; /usr/sbin/generate-sshd-keys
+# curl $AUTOMATER_REPO/master/etc/init/xe-automator.conf &gt; /etc/init/xe-automator.conf
+# chmod a+x /usr/sbin/xe-set-hostname
+# chmod a+x /usr/sbin/xe-set-network
+# chmod a+x /usr/sbin/generate-sshd-keys
+
+# setup locales
+locale-gen en_US.UTF-8
+update-locale LANG=&quot;en_US.UTF-8&quot;
+echo 'LANG=en_US.UTF-8' &gt;&gt; /etc/environment
+echo 'LC_ALL=en_US.UTF-8' &gt;&gt; /etc/environment
+
+# install xe tools
+# cd /tmp
+# wget http://some/url/to/xe-guest-utilities_6.0.0-743_amd64.deb
+# dpkg -i xe-guest-utilities_6.0.0-743_amd64.deb
+
+# install paravirt kernel image
+apt-get install -f -y linux-virtual
+dpkg -l | grep generic | grep linux | awk '{print $2}' | xargs apt-get remove -y
+
+# clean up some stuff
+rm -f /etc/ssh/ssh_host_*
+rm -f /var/cache/apt/archives/*.deb
+rm -f /var/cache/apt/*cache.bin
+rm -f /var/lib/apt/lists/*_Packages
+</code></pre>
+
+<h3 id="a-known-bug">A Known Bug</h3>
+
+<p>The initrd.gz file and vmlinuz file should be picked from the installation iso. While
+the spacewalk uses a CentOS based initrd.gz file for starting the system. thus you will
+met &ldquo;cdrom&rdquo; error.</p>
+
+<pre><code>$ ls -l /var/lib/tftpboot/images/precise-ia32:1:SpacewalkDefaultOrganization/
+total 31788
+-r--r--r-- 1 root root 18434355 Aug 20 11:36 initrd.gz
+-r--r--r-- 3 root root  8188836 Aug  7  2014 initrd.gz.back
+-r--r--r-- 3 root root  5919280 Jul 29  2014 vmlinuz
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/08/17/auto-configure-spacewalk-ubuntu-agent/">Auto Configure SpaceWalk Ubuntu Agent</a>
       </h1>
       <span class="post-date">Aug 17, 2015 
@@ -431,80 +672,6 @@ virsh start $1
 <p>Steps for create the machine:</p>
 
 <pre><code># ./createvm.sh zz_bee1
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/12/create-channel-slash-repository-in-spacewalk/">Create Channel/Repository In SpaceWalk</a>
-      </h1>
-      <span class="post-date">Aug 12, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/spacewalk">Spacewalk</a>
-        
-      </span>
-      
-      
-
-<h3 id="package-preparation">Package Preparation</h3>
-
-<p>First you should enable the repository via:</p>
-
-<pre><code># wget http://yum.spacewalkproject.org/2.3/RHEL/6/x86_64/spacewalk-repo-2.3-4.el6.noarch.rpm
-# rpm -ivh spacewalk-repo-2.3-4.el6.noarch.rpm
-# vim /etc/yum.repos.d/jpackage-repo.repo 
-[jpackage-generic]
-name=JPackage generic
-#baseurl=http://mirrors.dotsrc.org/pub/jpackage/5.0/generic/free/
-mirrorlist=http://www.jpackage.org/mirrorlist.php?dist=generic&amp;type=free&amp;release=5.0
-enabled=1
-gpgcheck=1
-gpgkey=http://www.jpackage.org/jpackage.asc
-</code></pre>
-
-<p>Install the <code>spacewalk-remote-utils</code> package:</p>
-
-<pre><code># yum install -y spacewalk-remote-utils
-</code></pre>
-
-<h3 id="webui-create-repository">WebUI Create Repository</h3>
-
-<p>Create an ia32-debian based channel, in WebUI:</p>
-
-<p><img src="/images/2015_08_12_17_22_47_651x391.jpg" alt="/images/2015_08_12_17_22_47_651x391.jpg" /></p>
-
-<p>Continue to create some child channel:</p>
-
-<p><img src="/images/2015_08_12_17_26_22_810x155.jpg" alt="/images/2015_08_12_17_26_22_810x155.jpg" /></p>
-
-<p>Now create the repository like following:</p>
-
-<p><img src="/images/2015_08_12_17_28_41_796x426.jpg" alt="/images/2015_08_12_17_28_41_796x426.jpg" /></p>
-
-<p>Until you created all of the ia32 based repositories:</p>
-
-<p><img src="/images/2015_08_12_17_30_39_609x115.jpg" alt="/images/2015_08_12_17_30_39_609x115.jpg" /></p>
-
-<p>Associate the repository with channels.</p>
-
-<h3 id="sync-repositories">Sync Repositories</h3>
-
-<p>Use following scripts for syncing the packages into the system:</p>
-
-<pre><code># vim precise-update.sh 
-until spacewalk-debian-sync.pl --username xxxxx --password xxxx --channel 'precise-ia32-updates' --url 'http://192.168.0.79/ubuntu/dists/precise-updates/main/binary-i386/'
-do
-        echo &quot;retry again&quot;
-        sleep 30
-done
-# sh precise-update.sh
-INFO: Repo URL: http://192.168.0.79/ubuntu/dists/precise-updates/main/binary-i386/
-INFO: Ubuntu root is http://192.168.0.79/ubuntu/
-INFO: Fetching Packages.gz... done
-........
 </code></pre>
 
       

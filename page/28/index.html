@@ -105,6 +105,227 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/06/07/rackhd-worktips/">RackHD Worktips</a>
+      </h1>
+      <span class="post-date">Jun 7, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="vagrant-preparation">Vagrant Preparation</h3>
+
+<p>rackhd/rackhd vagrant box could be downloaded from following link:</p>
+
+<p><a href="https://atlas.hashicorp.com/rackhd/boxes/rackhd">https://atlas.hashicorp.com/rackhd/boxes/rackhd</a></p>
+
+<p>Clone the repository from the github:</p>
+
+<pre><code>$ pwd
+/home/dash/Code/Jun13
+$ git clone https://github.com/RackHD/RackHD
+$ cd RackHD
+</code></pre>
+
+<p>Change into the directory example, create config and run the setup command:</p>
+
+<pre><code>$ cd example
+$ cp config/monorail_rack.cfg.example config/monorail_rack.cfg
+</code></pre>
+
+<p>Edits can be made to this new file to adjust the number of pxe clients created.</p>
+
+<pre><code>$ bin/monorail_rack
+</code></pre>
+
+<p>The <code>monorail_rack</code> script will auto-start all of the services by default, but you can also run them manually if you prefer.</p>
+
+<pre><code>$ vagrant ssh
+vagrant:~$ sudo nf start
+</code></pre>
+
+<p>Unfortunately, the vagrant machine won&rsquo;t work due to bad networking.</p>
+
+<h3 id="customization-deployment">Customization Deployment</h3>
+
+<p>Use a trusty based vagrant box for creating the rackhd node.</p>
+
+<pre><code>$ vagrant init trustyvirtualbox
+$ vim Vagrantfile
+</code></pre>
+
+<p>Vagrantfile&rsquo;s configuration modification is listed as following:</p>
+
+<pre><code>Vagrant.configure(2) do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+
+  # Added more disks
++   file_to_disk = File.realpath( &quot;.&quot; ).to_s + &quot;/disk.vdi&quot;
+
+  # config.vm.network &quot;private_network&quot;, ip: &quot;192.168.33.10&quot;
++   config.vm.network &quot;private_network&quot;, ip: &quot;172.31.128.1&quot;, virtualbox__intnet:  &quot;closednet&quot;
+
++  config.vm.provider &quot;virtualbox&quot; do |vb|
++    if ARGV[0] == &quot;up&quot; &amp;&amp; ! File.exist?(file_to_disk) 
++      puts &quot;Creating 5GB disk #{file_to_disk}.&quot;
++      vb.customize [
++        'createhd', 
++        '--filename', file_to_disk, 
++        '--format', 'VDI', 
++        '--size', 5000 * 1024 # 5 GB
++      ] 
++      vb.customize [
++        'storageattach', :id, 
++        '--storagectl', 'IDE Controller', 
++        '--port', 1, '--device', 0, 
++        '--type', 'hdd', '--medium', 
++        file_to_disk
++      ] 
++    end
++    vb.memory = &quot;4096&quot;
++    vb.cpus = 2
++    vb.customize [&quot;modifyvm&quot;, :id, &quot;--nicpromisc2&quot;, &quot;allow-all&quot;, &quot;--ioapic&quot;, &quot;on&quot;]
++  end
+</code></pre>
+
+<p>Then <code>vagrant up</code> for start up the machine.</p>
+
+<p>Notice: the controller of the disk should be noticed very carefully, you could choose
+&ldquo;IDE Controller&rdquo; Or &ldquo;SATA Controller&rdquo;, depending on your virtualbox configuration.<br />
+Then follow the tips on:</p>
+
+<p><a href="http://purplepalmdash.github.io/blog/2016/06/01/use-rakehd-for-deploying-systems/">http://purplepalmdash.github.io/blog/2016/06/01/use-rakehd-for-deploying-systems/</a><br />
+Extend the root partition of vagrant disk via:</p>
+
+<pre><code>$ sudo pvcreate /dev/sdb
+$ sudo vgextend vagrant-vg /dev/sdb
+$ sudo lvextend -l +100%FREE /dev/vagrant-vg/root
+$ sudo resize2fs  /dev/vagrant-vg/root
+</code></pre>
+
+<h3 id="adding-ubuntu-deployment">Adding Ubuntu Deployment</h3>
+
+<p>Install <code>apt-mirror</code> first, then using following mirror configuration file:</p>
+
+<pre><code>$ vim /etc/apt/mirror.list
+############# config ##################
+#
+# set base_path    /var/spool/apt-mirror
+#
+# set mirror_path  $base_path/mirror
+# set skel_path    $base_path/skel
+# set var_path     $base_path/var
+# set cleanscript $var_path/clean.sh
+# set defaultarch  &lt;running host architecture&gt;
+# set postmirror_script $var_path/postmirror.sh
+# set run_postmirror 0
+set base_path	/var/mirrors/ubuntu/14.04
+set nthreads     20
+set _tilde 0
+#
+############# end config ##############
+
+deb-amd64 http://mirrors.aliyun.com/ubuntu	trusty main main/debian-installers
+deb http://mirrors.aliyun.com/ubuntu	trusty main/installer-amd64
+deb-amd64 http://mirrors.aliyun.com/ubuntu	trusty-updates main
+deb-amd64 http://mirrors.aliyun.com/ubuntu	trusty-security main
+clean http://mirrors.aliyun.com/ubuntu
+</code></pre>
+
+<p>Also you have to create following script for downloading the debian-installer:</p>
+
+<pre><code>$ vim /var/mirrors/ubuntu/14.04/var/postmirror.sh 
+#!/bin/sh -x 
+# the udebs script gets the actual files we need 
+#/mnt/repo/apt-mirror/var/udebs.sh  
+# A quick apt directory structure primer: 
+# an apt server (e.g. archive.ubuntu.com) contains repositories (e.g. trusty-backports), 
+# which contain archives (e.g. multiverse), which contain directories 
+# a complete example - http://archive.ubuntu.com/ubuntu/dists/trusty-backports/multiverse/debian-installer/  
+# With this in mind, we create bash 'arrays' of the structure: 
+# server we're syncing against 
+#MIRROR=&quot;cn.archive.ubuntu.com&quot; 
+MIRROR=&quot;archive.ubuntu.com&quot; 
+# repositories we're mirroring 
+#REPOS=&quot;trusty trusty-updates trusty-security trusty-proposed trusty-backports&quot; 
+REPOS=&quot;trusty&quot;
+# archives in repositories 
+#ARCHIVES=&quot;main multiverse restricted universe&quot; 
+ARCHIVES=&quot;main&quot;
+# installer location inside archive 
+#DIRECTORIES=&quot;debian-installer dist-upgrader-all installer-amd64 installer-i386&quot; 
+DIRECTORIES=&quot;debian-installer installer-amd64&quot;
+#where we're storing it locally 
+LOCALDIR=&quot;/var/mirrors/ubuntu/14.04/mirror/mirrors.aliyun.com&quot;
+#LOCALDIR=&quot;/mnt/repo/apt-mirror/mirror/archive.ubuntu.com&quot;  
+for REPO in $REPOS; do 
+for ARCHIVE in $ARCHIVES; do 
+for DIRECTORY in $DIRECTORIES;do 
+# create directory structure 
+if [ ! -e &quot;$LOCALDIR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY&quot; ]; then
+mkdir -p &quot;$LOCALDIR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY&quot;
+fi
+# do the sync 
+rsync --recursive --times --links --hard-links --delete --delete-after \
+rsync://$MIRROR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY/ $LOCALDIR/ubuntu/dists/$REPO/$ARCHIVE/$DIRECTORY
+done
+done
+done
+</code></pre>
+
+<p>Now run <code>sudo apt-mirror</code> for syncing the repository to local storage.</p>
+
+<p>Also create a shortcut to the repository in RackHD System:</p>
+
+<pre><code>$ sudo ln -s /var/mirrors/ubuntu/14.04/mirror/mirrors.aliyun.com/ubuntu/ /opt/monorail/static/http/
+</code></pre>
+
+<p>Now restart the rackhd node, the ubuntu deployment is ready for use.</p>
+
+<h3 id="ubuntu-deployment">Ubuntu Deployment</h3>
+
+<p>Add the json file which holds the ubuntu deployment:</p>
+
+<pre><code>$ pwd
+/home/vagrant/RackHD/example
+$ vim samples/ubuntu_boot.json 
+{
+    &quot;name&quot;: &quot;Graph.InstallUbuntu&quot;,
+    &quot;options&quot;: {
+        &quot;defaults&quot;: {
+            &quot;obmServiceName&quot;: &quot;noop-obm-service&quot;
+        },
+        &quot;install-os&quot;: {
+            &quot;repo&quot;: &quot;{{api.server}}/ubuntu&quot;,
+            &quot;rootPassword&quot;: &quot;ubuntu&quot;,
+            &quot;profile&quot;: &quot;install-trusty.ipxe&quot;,
+            &quot;completionUri&quot;: &quot;renasar-ansible.pub&quot;
+        }
+    }
+}
+</code></pre>
+
+<p>In fact the <code>rootPassword</code> is not ready for use, the real password after deployment
+ is <code>RackHDRocks!</code>.</p>
+
+<p>Add one node(first you should make it pxed):</p>
+
+<pre><code>$ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/noop_body.json http://localhost:8080/api/1.1/nodes/575fce38d23ba028051b4711/obm
+$ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/ubuntu_boot.json http://localhost:8080/api/1.1/nodes/575fce38d23ba028051b4711/workflows
+</code></pre>
+
+<p>Then restart the machine, you will get it installing ubuntu.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2016/06/01/use-rakehd-for-deploying-systems/">Use RackHD For Deploying Systems</a>
       </h1>
       <span class="post-date">Jun 1, 2016 
@@ -797,333 +1018,6 @@ $ sudo apt-get install --no-install-recommends ubuntu-mate-core ubuntu-mate-desk
 
 <p>《羊城漫步(一)》完结。明天继续(如果可以的话)，打算把南越文王博物馆给逛了， 谁让哥每次坐地铁经过它都提醒你
 ”去往南越文王博物馆的乘客请在此站下车“呢？</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/05/18/working-tips-on-ansible-cobbler-3/">Working Tips on Ansible-cobbler(3)</a>
-      </h1>
-      <span class="post-date">May 18, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="apt-packages">APT Packages</h3>
-
-<p>The downloaded deb files should be under <code>/var/cache/apt</code>, use following command for copying to
-another position:</p>
-
-<pre><code>$ find . | grep -i deb$ | xargs % cp % ~/Dest_Folder
-$ scp -r ~/Dest_Folder Your_Cobbler_Machine
-</code></pre>
-
-<h3 id="repositories">Repositories</h3>
-
-<p>Install <code>dpkg-dev</code> package, so we could generate the dpkg packages:</p>
-
-<pre><code>$ sudo apt-get install -y dpkg-dev
-</code></pre>
-
-<p>Create a new repository:</p>
-
-<p><img src="/images/2016_05_18_21_28_37_717x452.jpg" alt="/images/2016_05_18_21_28_37_717x452.jpg" /></p>
-
-<p>Edit the advanced options:</p>
-
-<p><img src="/images/2016_05_18_21_30_04_508x314.jpg" alt="/images/2016_05_18_21_30_04_508x314.jpg" /></p>
-
-<p>Report the repository info via:</p>
-
-<pre><code>root@cobbler-ubuntu:~# cobbler repo report --name=ubuntu1604Mate
-Name                           : ubuntu1604Mate
-Apt Components (apt only)      : ['main']
-Apt Dist Names (apt only)      : ['stable']
-Arch                           : x86_64
-Breed                          : apt
-Comment                        : Ubuntu 16.04 Repository For installing MATE
-Createrepo Flags               : &lt;&lt;inherit&gt;&gt;
-Environment Variables          : {}
-Keep Updated                   : False
-Mirror                         : 
-Mirror locally                 : True
-Owners                         : ['admin']
-Priority                       : 99
-External proxy URL             : 
-RPM List                       : []
-Yum Options                    : {}
-</code></pre>
-
-<p>Repository Structure Creation:</p>
-
-<pre><code>$ mkdir /srv/www/cobbler/repo_mirror/ubuntu1604Mate
-$ cd /srv/www/cobbler/repo_mirror/ubuntu1604Mate
-$ mkdir -p pool/main dists/stable/main/binary-i386 dists/stable/main/binary-amd64
-$ cp ~/apt/debs/*.deb ./pool/main/
-</code></pre>
-
-<p>Enable the <code>allow_unauthenticated</code> options in kickstart file:</p>
-
-<pre><code>$ vim /var/lib/cobbler/kickstarts/sample.seed
- d-i debian-installer/allow_unauthenticated boolean true
-</code></pre>
-
-<p>Generate the gpg key:</p>
-
-<pre><code># gpg --gen-key
-  gpg (GnuPG) 2.0.14; Copyright (C) 2009 Free Software Foundation, Inc.
-  This is free software: you are free to change and redistribute it.
-  There is NO WARRANTY, to the extent permitted by law.
-
-  gpg: directory `/root/.gnupg' created
-  gpg: new configuration file `/root/.gnupg/gpg.conf' created
-  gpg: WARNING: options in `/root/.gnupg/gpg.conf' are not yet active during this run
-  gpg: keyring `/root/.gnupg/secring.gpg' created
-  gpg: keyring `/root/.gnupg/pubring.gpg' created
- Please select what kind of key you want:
-    (1) RSA and RSA (default)
-    (2) DSA and Elgamal
-    (3) DSA (sign only)
-    (4) RSA (sign only)
- Your selection? 1
- RSA keys may be between 1024 and 4096 bits long.
- What keysize do you want? (2048)
- Requested keysize is 2048 bits
- Please specify how long the key should be valid.
-          0 = key does not expire
-       &lt;n&gt;  = key expires in n days
-       &lt;n&gt;w = key expires in n weeks
-       &lt;n&gt;m = key expires in n months
-       &lt;n&gt;y = key expires in n years
- Key is valid for? (0)
- Key does not expire at all
- Is this correct? (y/N) y
-</code></pre>
-
-<p>For generating the random key, install the <code>haveged</code> in system:</p>
-
-<pre><code>$ sudo aptitude install haveged
-</code></pre>
-
-<p>List the keys via:</p>
-
-<pre><code># gpg --list-keys
-/home/vagrant/.gnupg/pubring.gpg
---------------------------------
-pub   2048R/16D87321 2016-05-18
-uid                  xxxxx &lt;xxxxxx@gmail.com&gt;
-sub   2048R/8C4A318A 2016-05-18
-</code></pre>
-
-<p>Generate the pgp signature via:</p>
-
-<pre><code># gpg --export -a 16D87321&gt;~/junk.key
-# gpg --no-default-keyring --keyring /srv/www/cobbler/repo_mirror/ubuntu1604Mate/public.pgp --import ~/junk.key
-# rm -f ~/junk.key
-# chmod a+r /srv/www/cobbler/repo_mirror/ubuntu1604Mate/public.pgp
-</code></pre>
-
-<p>Re-Generate the repository infos via:</p>
-
-<pre><code>$ cd /srv/www/cobbler/repo_mirror/ubuntu1604Mate/
-$ vim reindex_apt.sh
-$ chmod 777 reindex_apt.sh 
-$ ./reindex_apt.sh 
-</code></pre>
-
-<p>The content of <code>reindex_apt.sh</code> is listed as following:</p>
-
-<pre><code>#!/bin/bash
-
-GPG_NAME=16D87321
-REPONAME=stable
-VERSION=1.0
-
-for bindir in `find dists/${REPONAME} -type d -name &quot;binary*&quot;`; do
-    arch=`echo $bindir|cut -d&quot;-&quot; -f 2`
-    echo &quot;Processing ${bindir} with arch ${arch}&quot;
-
-    overrides_file=/tmp/overrides
-    package_file=$bindir/Packages
-    release_file=$bindir/Release
-
-    # Create simple overrides file to stop warnings
-    cat /dev/null &gt; $overrides_file
-    for pkg in `ls pool/main/ | grep -E &quot;(all|${arch})\.deb&quot;`; do
-        pkg_name=`/usr/bin/dpkg-deb -f pool/main/${pkg} Package`
-        echo &quot;${pkg_name} Priority extra&quot; &gt;&gt; $overrides_file
-    done
-
-    # Index of packages is written to Packages which is also zipped
-    dpkg-scanpackages -a ${arch} pool/main $overrides_file &gt; $package_file
-    # The line above is also commonly written as:
-    # dpkg-scanpackages -a ${arch} pool/main /dev/null &gt; $package_file
-    gzip -9c $package_file &gt; ${package_file}.gz
-    bzip2 -c $package_file &gt; ${package_file}.bz2
-
-    # Cleanup
-    rm $overrides_file
-done
-
-# Release info goes into Release &amp; Release.gpg which includes an md5 &amp; sha1 hash of Packages.*
-# Generate &amp; sign release file
-cd dists/${REPONAME}
-cat &gt; Release &lt;&lt;ENDRELEASE
-Suite: ${REPONAME}
-Version: ${VERSION}
-Component: main
-Origin: somewhere
-Label: ubuntu1604Mate
-Architecture: i386 amd64
-Date: `date`
-ENDRELEASE
-
-# Generate hashes
-echo &quot;MD5Sum:&quot; &gt;&gt; Release
-for hashme in `find main -type f`; do
-    md5=`openssl dgst -md5 ${hashme}|cut -d&quot; &quot; -f 2`
-    size=`stat -c %s ${hashme}`
-    echo &quot; ${md5} ${size} ${hashme}&quot; &gt;&gt; Release
-done
-echo &quot;SHA1:&quot; &gt;&gt; Release
-for hashme in `find main -type f`; do
-    sha1=`openssl dgst -sha1 ${hashme}|cut -d&quot; &quot; -f 2`
-    size=`stat -c %s ${hashme}`
-    echo &quot; ${sha1} ${size} ${hashme}&quot; &gt;&gt; Release
-done
-
-# Sign!
-gpg --yes -u $GPG_NAME --sign -bao Release.gpg Release
-cd -
-</code></pre>
-
-<p>Now continue to modify the kickstart file for using the generated gpgs:</p>
-
-<pre><code># pwd
-/var/lib/cobbler/snippets
-# cp preseed_apt_repo_config preseed_apt_repo_config_pgpkey
-</code></pre>
-
-<p>The <code>preseed_apt_repo_config_pgpkey</code> should be listed as following:</p>
-
-<pre><code># Additional repositories, local[0-9] available
-#set $cur=1
-#set $repo_data = $getVar(&quot;repo_data&quot;,[])
-#for $repo in $repo_data
- #for $dist in $repo.apt_dists
- #set $comps = &quot; &quot;.join($repo.apt_components)
-d-i apt-setup/local${cur}/repository string \
- #if $repo.mirror_locally
-      http://$http_server/cblr/repo_mirror/${repo.name} $dist $comps
- #else
-      ${repo.mirror} $dist $comps
- #end if
- #if $repo.comment != &quot;&quot;
-d-i apt-setup/local${cur}/comment string ${repo.comment}
- #end if
- #if $repo.breed == &quot;src&quot;
-# Enable deb-src lines
-d-i apt-setup/local${cur}/source boolean false
- #end if
-+++ # Add repo pgp pub key
-+++ d-i apt-setup/local${cur}/key string \
-+++       http://$http_server/cblr/repo_mirror/${repo.name}/public.pgp
- #set $cur=$cur+1
- #end for
-#end for
-</code></pre>
-
-<p>Using the new preseed file, and changint the <code>preseed_apt_repo_config_pgpkey</code>:</p>
-
-<pre><code># pwd
-/var/lib/cobbler/kickstarts
-# cp sample.seed ubuntu1604.seed
-# vim ubuntu1604.seed
--  $SNIPPET('preseed_apt_repo_config')
-+  $SNIPPET('preseed_apt_repo_config_pgpkey')
-</code></pre>
-
-<p>Changing the seed in the <code>cobbler_web</code>:</p>
-
-<p><img src="/images/2016_05_18_22_25_48_732x294.jpg" alt="/images/2016_05_18_22_25_48_732x294.jpg" /></p>
-
-<p>Use <code>cobbler sync</code> for syncing the configuration.</p>
-
-<h3 id="use-the-repository">Use the Repository</h3>
-
-<p>Add the <code>ubuntu1604Mate</code> into the Repos:</p>
-
-<p><img src="/images/2016_05_18_22_31_42_731x486.jpg" alt="/images/2016_05_18_22_31_42_731x486.jpg" /></p>
-
-<p>After added, the configuration should be:</p>
-
-<p><img src="/images/2016_05_18_22_33_00_471x149.jpg" alt="/images/2016_05_18_22_33_00_471x149.jpg" /></p>
-
-<p>Now <code>cobbler sync</code> for syncing the configuration.</p>
-
-<p>Bug: you should move the <code>preseed_apt_repo_config</code> and  then <code>cobbler sync</code> then your deployment will be OK:</p>
-
-<pre><code>$ mv /var/lib/cobbler/snippets/preseed_apt_repo_config /root/
-$ cobbler sync
-</code></pre>
-
-<h3 id="added-mate-installation">Added Mate Installation</h3>
-
-<p>Configure the preseed late:</p>
-
-<pre><code># cp /var/lib/cobbler/scripts/preseed_late_default /var/lib/cobbler/scripts/preseed_late_default_mate
-# vim /var/lib/cobbler/scripts/preseed_late_default_mate
-# vim preseed_late_default_mate 
-$SNIPPET('post_install_network_config_deb')
-$SNIPPET('late_apt_repo_config')
-$SNIPPET('post_run_deb')
-$SNIPPET('download_config_files')
-+ $SNIPPET('ubuntumate')
-$SNIPPET('kickstart_done')
-</code></pre>
-
-<p>Now add the snippet of <code>ubuntumate</code>:</p>
-
-<pre><code># cat ../snippets/ubuntumate 
-echo &quot;debconf debconf/frontend select noninteractive&quot; | sudo debconf-set-selections
-apt-get --allow-unauthenticated update -y
-apt-get --allow-unauthenticated upgrade -y
-apt-get --allow-unauthenticated install -y build-essential
-### apt-get --allow-unauthenticated install -y ubuntu-mate-desktop
-apt-get --allow-unauthenticated install -y vim
-### apt-get --allow-unauthenticated install -y chromium-browser
-### apt-get --allow-unauthenticated install -y meld vim-gtk
-### apt-get --allow-unauthenticated install -y evince
-### sudo apt-get --allow-unauthenticated install -y language-pack-zh-hans language-pack-zh-hans-base language-pack-gnome-zh-hans language-pack-gnome-zh-hans-base
-### sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
-### sudo localectl set-locale LANG=zh_CN.UTF-8
-### # TW/HK language support
-### sudo apt-get --allow-unauthenticated install -y language-pack-zh-hant language-pack-zh-hant-base language-pack-gnome-zh-hant language-pack-gnome-zh-hant-base
-### sudo apt-get --allow-unauthenticated install -y `check-language-support -l zh`
-### apt-get --allow-unauthenticated install -y fcitx
-### apt-get --allow-unauthenticated install -y fcitx-table-wubi fcitx-table-wubi-large
-### apt-get --allow-unauthenticated install -y fcitx-googlepinyin
-### apt-get --allow-unauthenticated install -y gimp
-### apt-get --allow-unauthenticated install -y ibus-pinyin 
-### apt-get --allow-unauthenticated install -y thunderbird-locale-en-us mythes-en-au hunspell-en-gb thunderbird-locale-en-gb fonts-arphic-ukai wbritish fcitx-sunpinyin openoffice.org-hyphenation language-pack-gnome-en hunspell-en-za fcitx-chewing fcitx-table-cangjie gimp-help-en language-pack-en mythes-en-us thunderbird-locale-en fcitx-module-cloudpinyin libreoffice-help-en-us firefox-locale-en libreoffice-help-en-gb fonts-arphic-uming hyphen-en-gb libreoffice-l10n-en-za fcitx-ui-qimpanel hunspell-en-au libreoffice-l10n-en-gb hyphen-en-us hunspell-en-ca 
-### apt-get --allow-unauthenticated install -y zsh
-### apt-get --allow-unauthenticated install -y fonts-wqy-zenhei fonts-wqy-microhei ttf-wqy-microhei  ttf-wqy-zenhei  xfonts-wqy
-### apt-get --allow-unauthenticated install -y eclipse
-### apt-get --allow-unauthenticated install -y gpicview
-### apt-get --allow-unauthenticated install -y scrot
-### apt-get --allow-unauthenticated install -y byobu
-### apt-get --allow-unauthenticated install -y subversion git
-### apt-get --allow-unauthenticated install -y kdiff3
-### apt-get --allow-unauthenticated install -y docker
-
-</code></pre>
-
-<p>Use <code>cobbler sync</code>, and now you could deploy mate desktop via cobbler.</p>
 
       
     </div>
