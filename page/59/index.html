@@ -105,6 +105,256 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/08/a-quick-setup-for-chef-server-slash-client-slash-workstation/">A Quick Setup For Chef Server/Client/Workstation</a>
+      </h1>
+      <span class="post-date">Jun 8, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/chef">Chef</a>
+        
+      </span>
+      
+      
+
+<h3 id="machine-preparation">Machine Preparation</h3>
+
+<p>QuickServer: 172.16.0.11, QuickClient: 172.16.0.12</p>
+
+<p>QuickServer Machine:</p>
+
+<pre><code>xxx@QuickServer:~$ cat /etc/hostname
+QuickServer
+xxx@QuickServer:~$ cat /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       QuickServer
+172.16.0.11     QuickServer
+172.16.0.12     QuickClient
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+xxx@QuickServer:~$ cat /etc/network/interfaces
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 172.16.0.11
+netmask 255.255.255.0
+gateway 172.16.0.1
+dns-nameservers 114.114.114.114
+
+</code></pre>
+
+<p>QuickClient Machine:</p>
+
+<pre><code>xxx@QuickClient:~$ cat /etc/hosts
+127.0.0.1       localhost
+127.0.1.1       QuickClient
+172.16.0.12     QuickClient
+172.16.0.11     QuickServer
+
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+xxx@QuickClient:~$ cat /etc/hostname 
+QuickClient
+xxx@QuickClient:~$ cat /etc/network/interfaces
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+address 172.16.0.12
+netmask 255.255.255.0
+gateway 172.16.0.1
+dns-nameservers 114.114.114.114
+</code></pre>
+
+<h3 id="quickserver-installation">QuickServer Installation</h3>
+
+<p>You should have following packges in this server/management node:</p>
+
+<pre><code>$ ls
+chefdk_0.6.0-1_amd64.deb  chef-server-core_12.0.8-1_amd64.deb  opscode-manage_1.13.0-1_amd64.deb
+</code></pre>
+
+<p>Install and configuration:</p>
+
+<pre><code>$ sudo dpkg -i chef-server-core_12.0.8-1_amd64.deb
+$ sudo chef-server-ctl reconfigure
+</code></pre>
+
+<p>Now configure the chefserver via following command:</p>
+
+<pre><code>$ sudo chef-server-ctl user-create twocloud cloud Yang twocloud@gmail.com engine --filename ~/twocloud.pem
+$ sudo chef-server-ctl org-create twocloud OneCloud Software, Inc. --association_user twocloud --filename ~/twocloud_org.pem
+$ ls ~/*.pem
+/home/xxxx/twocloud_org.pem  /home/xxxx/twocloud.pem
+</code></pre>
+
+<p>Install opscode:</p>
+
+<pre><code>$ sudo dpkg -i opscode-manage_1.13.0-1_amd64.deb
+$ sudo opscode-manage-ctl reconfigure
+</code></pre>
+
+<p>Also install the chefdk via:</p>
+
+<pre><code>$ sudo dpkg -i chefdk_0.6.0-1_amd64.deb
+</code></pre>
+
+<p>Install the git and configure the chef-repo:</p>
+
+<pre><code>$ sudo apt-get install git
+$ git config --global user.name &quot;purplepalm&quot;
+$ git config --global user.email &quot;purplepalm@gmail.com&quot;
+$ git clone https://github.com/opscode/chef-repo.git
+$ mkdir .chef
+$ cd .chef/
+$ scp xxxx@127.0.0.1:/home/xxxx/*.pem ./
+</code></pre>
+
+<p>Now under the .chef directory, create the knife.rb for letting knife using:</p>
+
+<pre><code>$ cat ~/chef-repo/.chef/knife.rb
+current_dir = File.dirname(__FILE__)
+log_level                :info
+log_location             STDOUT
+node_name                &quot;twocloud&quot;
+client_key               &quot;#{current_dir}/twocloud.pem&quot;
+validation_client_name   &quot;twocloud&quot;
+validation_key           &quot;#{current_dir}/twocloud_org.pem&quot;
+chef_server_url          &quot;https://QuickServer/organizations/twocloud&quot;
+syntax_check_cache_path  &quot;#{ENV['HOME']}/.chef/syntaxcache&quot;
+cookbook_path            [&quot;#{current_dir}/../cookbooks&quot;]
+</code></pre>
+
+<p>Verify ssl via:</p>
+
+<pre><code>$ knife ssl fetch
+WARNING: Certificates from QuickServer will be fetched and placed in your trusted_cert
+directory (/home/xxxx/chef-repo/.chef/trusted_certs).
+
+Knife has no means to verify these are the correct certificates. You should
+verify the authenticity of these certificates after downloading.
+
+Adding certificate for QuickServer in /home/xxxx/chef-repo/.chef/trusted_certs/QuickServer.crt
+
+$ knife ssl check
+Connecting to host QuickServer:443
+Successfully verified certificates from `QuickServer'
+$ knife client list
+twocloud-validator
+
+</code></pre>
+
+<p>Next, configure the QuickClient and add it to the Chef.</p>
+
+<h3 id="quickclient">QuickClient</h3>
+
+<p>Install the client deb file via:</p>
+
+<pre><code>$ ls
+chef_12.3.0-1_amd64.deb
+$ sudo dpkg -i chef_12.3.0-1_amd64.deb 
+</code></pre>
+
+<p>Now,On !!! QuickServer !!! , bootstrap the QuickClient via:</p>
+
+<pre><code>$ cd ~/chef-repo/
+$ knife bootstrap 172.16.0.12 -x xxxx -P xxxxxxxx --sudo
+Doing old-style registration with the validation key at /home/xxxx/chef-repo/.chef/twocloud_org.pem...
+Delete your validation key in order to use your user credentials instead
+
+Connecting to 172.16.0.12
+172.16.0.12 Starting first Chef Client run...
+172.16.0.12 Starting Chef Client, version 12.3.0
+172.16.0.12 Creating a new client identity for QuickClient using the validator key.
+172.16.0.12 
+172.16.0.12 ================================================================================
+172.16.0.12 Chef encountered an error attempting to create the client &quot;QuickClient&quot;
+172.16.0.12 ================================================================================
+
+</code></pre>
+
+<p>Yes, you will meet an error, Now go back to !!! QuickClient !!! and solve it.</p>
+
+<p>First retrieve the pem file under your own home directory:</p>
+
+<pre><code>$ scp xxxx@172.16.0.11:/home/xxxx/*.pem ./
+Password: 
+twocloud_org.pem                                                                                             100% 1674     1.6KB/s   00:00 
+twocloud.pem                                                                                                 100% 1674     1.6KB/s   00:00
+</code></pre>
+
+<p>Then fetch back the ssl via:</p>
+
+<pre><code>$ sudo knife ssl fetch --config /etc/chef/client.rb
+WARNING: Certificates from QuickServer will be fetched and placed in your trusted_cert
+directory (/etc/chef/trusted_certs).
+
+Knife has no means to verify these are the correct certificates. You should
+verify the authenticity of these certificates after downloading.
+
+Adding certificate for QuickServer in /etc/chef/trusted_certs/QuickServer.crt
+</code></pre>
+
+<p>Now manually use the <code>/home/xxxx/twocloud.pem</code> for ssl checking.</p>
+
+<pre><code>$ sudo chef-client -l debug -S https://QuickServer/organizations/twocloud -K /home/xxxx/twocloud.pem 2&gt;&amp;1
+</code></pre>
+
+<p>Your terminal may encounter Garbled codes, simply quit it, and go back to !!! QuickServer !!!, Bootstrap again via:</p>
+
+<pre><code>$ knife bootstrap 172.16.0.12 -x xxxx -P xxxxxxxx --sudo
+Doing old-style registration with the validation key at /home/xxxx/chef-repo/.chef/twocloud_org.pem...
+Delete your validation key in order to use your user credentials instead
+
+Connecting to 172.16.0.12
+172.16.0.12 Starting first Chef Client run...
+172.16.0.12 Starting Chef Client, version 12.3.0
+172.16.0.12 resolving cookbooks for run list: []
+172.16.0.12 Synchronizing Cookbooks:
+172.16.0.12 Compiling Cookbooks...
+172.16.0.12 [2015-06-08T09:12:09-04:00] WARN: Node QuickClient has an empty run list.
+172.16.0.12 Converging 0 resources
+172.16.0.12 
+172.16.0.12 Running handlers:
+172.16.0.12 Running handlers complete
+172.16.0.12 Chef Client finished, 0/0 resources updated in 1.179038534 seconds
+
+</code></pre>
+
+<p>Now you could list all of the client under your workstation directory:</p>
+
+<pre><code>$ knife client list
+QuickClient
+twocloud-validator
+</code></pre>
+
+<p>QuickClient is the node we just added.</p>
+
+<p>Here provides a good start-point for following operations, next step you could do more magics on newly added nodes, also you could add more nodes for deployment.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/06/08/chef-troubleshooting-2/">Chef TroubleShooting 2</a>
       </h1>
       <span class="post-date">Jun 8, 2015 
@@ -419,47 +669,6 @@ $ /opt/vagrant/embedded/bin/gem install berkshelf
 </code></pre>
 
 <p>So now you could continue with <code>vagrant up</code> or other steps.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/02/chef-trouble-shooting/">Chef Trouble-Shooting</a>
-      </h1>
-      <span class="post-date">Jun 2, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="error">Error</h3>
-
-<p>Could not Add new nodes.</p>
-
-<h3 id="reason">Reason</h3>
-
-<p>This is because the chefDK remains the old version of chef-client,</p>
-
-<pre><code>[dash@~/chef-repo]$ chef --version
-Chef Development Kit Version: 0.6.0
-chef-client version: ERROR
-berks version: ERROR
-kitchen version: 1.4.0
-</code></pre>
-
-<h3 id="solution">Solution</h3>
-
-<p>In node, manually get verified via following command:</p>
-
-<pre><code>$ knife ssl fetch --config /etc/chef/client.rb
-$ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxxxx.pem
-</code></pre>
-
-<p>Now bootstrap again, and you will see the node could be added into the Chef-Server&rsquo;s system.</p>
 
       
     </div>

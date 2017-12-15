@@ -105,6 +105,107 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/01/26/using-new-do-system/">Using New DO System</a>
+      </h1>
+      <span class="post-date">Jan 26, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<p>Since the coreOS met some critical errors, I have to re-construct the DO System using CentOS. So I destroyed the old CoreOS machine, runs CentOS.</p>
+
+<h3 id="configure">Configure</h3>
+
+<h3 id="install-packages">Install packages</h3>
+
+<p>Update and install vim</p>
+
+<pre><code>$ yum update
+$ yum install vim
+
+</code></pre>
+
+<h4 id="add-swap">Add Swap</h4>
+
+<p>512M is not enough for playing, enlarge the swapfile.</p>
+
+<pre><code># dd if=/dev/zero of=/swapfile bs=1M count=1024
+# chmod 600 /swapfile
+# mkswap /swapfile
+$ sudo vim /etc/systemd/system/swap.service
+ [Unit]  
+ Description=Turn on swap  
+ [Service]  
+ Type=oneshot  
+ Environment=&quot;SWAPFILE=/swapfile&quot;
+ RemainAfterExit=true  
+ ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
+ ExecStart=/usr/bin/sh -c &quot;/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ ExecStop=/usr/bin/sh -c &quot;/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ ExecStopPost=/usr/bin/sh -c &quot;/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ [Install]  
+ WantedBy=multi-user.target 
+$ sudo  systemctl enable /etc/systemd/system/swap.service  
+$ sudo systemctl start swap  
+
+</code></pre>
+
+<p>Now the swapfile is 1000MB, enough for doing various operations.</p>
+
+<h4 id="add-new-user">Add new user</h4>
+
+<p>Add new user and changes its password:</p>
+
+<pre><code># useradd -m -g root -G root -s /bin/bash Trusty
+# passwd Trusty
+
+</code></pre>
+
+<p>Change the sshd configuration, disable root login, and change the listening port.</p>
+
+<pre><code>vim /etc/ssh/sshd_config
+port changes, 
+PermitRootLogin no
+
+</code></pre>
+
+<p>Now reboot the system, you will got a safe DigitalOcean machine.</p>
+
+<h3 id="build-opencontrail">Build OpenContrail</h3>
+
+<p>The repo is the same as the above article, then we install other packages which needed for CengOS.</p>
+
+<pre><code>$ sudo yum install -y libtool kernel-devel 
+$ sudo yum install -y bzip2 boost-devel tbb-devel libcurl-devel libxml2-devel 
+
+</code></pre>
+
+<p>Install epel via:</p>
+
+<pre><code>$ sudo yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+$ sudo sed -i -e 's/enabled=1/enabled=0/' /etc/yum.repos.d/epel.repo 
+
+</code></pre>
+
+<p>Install following packages from epel:</p>
+
+<pre><code>$ sudo yum install -y --disablerepo=&quot;*&quot; --enablerepo=&quot;epel&quot; scons protobuf protobuf-devel protobuf-compiler 
+$  sudo yum install -y python-lxml patch unzip flex bison gcc-c++ openssl-devel make wget python-setuptools
+
+</code></pre>
+
+<p>So now you could run the whole compilation via <code>scons</code> under the ~/Code folder.<br />
+tips: tmux&rsquo;s q will quit ctrl+b mode.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/01/23/install-openfire-for-lan-chat/">Install OpenFire For LAN Chat</a>
       </h1>
       <span class="post-date">Jan 23, 2015 
@@ -353,92 +454,6 @@ GLIBCXX_DEBUG_MESSAGE_LENGTH
 <h3 id="upgrade-glibcxx">Upgrade GLIBCXX</h3>
 
 <p>TBD.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/01/21/questions-on-contrail/">Questions On Contrail</a>
-      </h1>
-      <span class="post-date">Jan 21, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/sdn">SDN</a>
-        
-      </span>
-      
-      
-
-<p>Following records my questions on Contrail.</p>
-
-<h3 id="what-is-l3-overlay">What is L3 OverLay?</h3>
-
-<p>对于大二层的互通，还有一种简单有效的方法就是vpn，vpn可以工作在二层（如openvpn中的tap模式，左右两边的子网可以相同，但IP肯定不能同，相当于bridge模式），也可以工作在三层（如openvpn中的tun模式, 要求左右两边子网不同）。IPSec只是一种加密模式，L2TP才是二层的vpn接入层，所以L2TP+IPSec肯定可以实现openvpn的tap模式，但是strongswan因为是三层的vpn应该不行。</p>
-
-<p>More detailed info could be found at:<br />
-<a href="http://blog.csdn.net/quqi99/article/details/11778413">http://blog.csdn.net/quqi99/article/details/11778413</a></p>
-
-<h3 id="mpls">MPLS?</h3>
-
-<p>MPLS(Multiprotocol Label Switching, 多协议标记交换)使用标签(Label)进行转发，一个标签是一个短的、长度固定的数值，由报文的头部携带，不含拓扑信息，只有局部意义。MPLS包头包含20比特的标签，3比特的EXP(通常用作Cos)，1比特的S，用于标识此标签是否为最底层标签，8比特的TTL。<br />
-More detailed infos here:<br />
-<a href="http://www.net130.com/netbass/VPN/v111301.htm">http://www.net130.com/netbass/VPN/v111301.htm</a></p>
-
-<h3 id="gre">GRE?</h3>
-
-<p>（GRE: Generic Routing Encapsulation）<br />
-通用路由封装 （GRE）定义了在任意一种网络层协议上封装任意一个其它网络层协议的协议。<br />
-More detailed info could be found here:<br />
-<a href="http://baike.baidu.com/view/3871502.htm">http://baike.baidu.com/view/3871502.htm</a></p>
-
-<h4 id="mpls-over-gre">MPLS Over GRE?</h4>
-
-<p>MPLS是多协议标签交换的简称，它用短而定长的标签来封装网络层分组。MPLS最初是为提高路由器的转发速度而提出一个协议。<br />
-GRE协议是对某些网络层协议的数据报进行封装，使这些被封装的数据报能够在另一个网络层协议中传输。GRE是VPN的第三层隧道协议，在协议层之间采用了一种被称之为Tunnel的技术。<br />
-MPLS在VPN中的应用，用MPLS为转发通道运行私网流量，使一个运营商的网络可以同时支撑多个不同客户的IP VPN，这样就要求运营商的网络全程支持MPLS转发。但是在实际运用中，有时由于网络规划的原因，运营商网络的中间设备并不支持MPLS功能，而基本的BGP/MPLS VPN是要求所用到的运营商设备全程支持MPLS功能才可以，这样采用基本的BGP/MPLS VPN方法就行不通了，此时GRE的应用很好的解决了这个问题，只需要运营商边缘设备支持MPLS转发就能实现功能。而且GRE只需要保证两端网络类型相同，中间可以穿越其他类型的网络，也降低了对运营商网络的要求。</p>
-
-<p>More detailed info could be found here:<br />
-<a href="http://blog.sina.com.cn/s/blog_6dc951ef01015bpm.html">http://blog.sina.com.cn/s/blog_6dc951ef01015bpm.html</a></p>
-
-<h3 id="l3-vpn">L3 VPN?</h3>
-
-<p>Layer 3, or VPRN (virtual private routed network), utilizes layer 3 VRF (VPN/virtual routing and forwarding) to segment routing tables for each “customer” utilizing the service. The customer peers with the service provider router and the two exchange routes, which are placed into a routing table specific to the customer. Multiprotocol BGP (MP-BGP) is required in the cloud to utilize the service, which increases complexity of design and implementation. L3 VPNs are typically not deployed on utility networks due to their complexity; however, a L3 VPN could be used to route traffic between corporate or datacenter locations.</p>
-
-<p><a href="http://en.wikipedia.org/wiki/MPLS_VPN#Layer_3_VPN_.28VPRN.29">http://en.wikipedia.org/wiki/MPLS_VPN#Layer_3<em>VPN</em>.28VPRN.29</a></p>
-
-<p><a href="http://www.doc88.com/p-0903761953194.html">http://www.doc88.com/p-0903761953194.html</a></p>
-
-<h3 id="evpn">EVPN?</h3>
-
-<p>Fuck,</p>
-
-<h3 id="vxlan">VXLAN?</h3>
-
-<p>vxlan(virtual Extensible LAN)虚拟可扩展局域网，是一种overlay的网络技术，使用MAC in UDP的方法进 行封装，共50字节的封装报文头。具体的报文格式如下：<br />
-<img src="/images/vxlan.png" alt="/images/vxlan.png" /><br />
-More detailed info could be found here:<br />
-<a href="http://www.huawei.com/ecommunity/bbs/10239835.html">http://www.huawei.com/ecommunity/bbs/10239835.html</a></p>
-
-<h3 id="mpls-over-udp">MPLS Over UDP?</h3>
-
-<h3 id="mpls-over-udp-l2-l3-overlay">MPLS Over UDP(L2/L3 OverLay)?</h3>
-
-<h3 id="l3-unicast">L3 Unicast?</h3>
-
-<h3 id="l2-unicast">L2 Unicast?</h3>
-
-<h3 id="l2-multicaset">L2 Multicaset?</h3>
-
-<h3 id="multicast-tree">Multicast Tree?</h3>
-
-<h3 id="bum-traffic">BUM Traffic?</h3>
-
-<h3 id="overlay-vs-underlay">Overlay vs UnderLay?</h3>
-
-<p>Answer comes here:<br />
-SDN究竟要不要管物理交换机？<br />
-<a href="http://www.jianshu.com/p/4c2448e201a2">http://www.jianshu.com/p/4c2448e201a2</a></p>
 
       
     </div>

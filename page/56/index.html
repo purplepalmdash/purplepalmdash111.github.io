@@ -105,6 +105,115 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/07/10/wh-worktips-9/">WH Worktips(9)</a>
+      </h1>
+      <span class="post-date">Jul 10, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="cobbler-in-non-dhcp-server-networking">Cobbler In Non-DHCP Server Networking</h3>
+
+<p>Sometimes you want to deploy system with cobbler server,  in some restricted network which dhcp service is not allowed(considering broadcasting storm, security, etc.) Following are the steps of how-to:<br />
+Change Cobbler server setting:</p>
+
+<pre><code>$ sudo vim /etc/cobbler/settings
+manage_dhcp: 0
+$ sudo cobbler sync
+$ sudo service dhcpd stop
+</code></pre>
+
+<p>Add the node definition in cobbler(useless):</p>
+
+<pre><code># cobbler system add --name=node2 --profile=CentOS6.5-x86_64 --mac=52:54:00:71:59:64 --interface=eth0 --static=1 --ip-address=10.47.58.3 --dns-name=node2 --gateway=10.47.58.1
+</code></pre>
+
+<p>Now bootup your newly added computer with PXE, hit <code>ctrl+B</code> once you see the bios hint.</p>
+
+<pre><code>iPXE&gt; config net0
+</code></pre>
+
+<p>hit <code>ctrl+B</code> should be like in following image:<br />
+<img src="/images/2015_07_10_20_31_15_761x354.jpg" alt="/images/2015_07_10_20_31_15_761x354.jpg" /></p>
+
+<p><img src="/images/2015_07_10_20_26_29_656x381.jpg" alt="/images/2015_07_10_20_26_29_656x381.jpg" /><br />
+Setting like following:<br />
+<img src="/images/2015_07_10_20_33_15_676x453.jpg" alt="/images/2015_07_10_20_33_15_676x453.jpg" /><br />
+Hit <code>Ctrl+x</code> for saving the settings and continue to set:</p>
+
+<pre><code>iPXE&gt; imgfetch -n img tftp://10.47.58.2/pxelinux.0
+iPXE&gt; imgload img
+iPXE&gt; boot
+</code></pre>
+
+<p>Now begin to install, you will met nework configuration fail issue:<br />
+<img src="/images/2015_07_10_20_39_30_580x240.jpg" alt="/images/2015_07_10_20_39_30_580x240.jpg" /></p>
+
+<p>Hit Cancel, manually set up the network, first select installation method:<br />
+<img src="/images/2015_07_10_20_41_12_323x273.jpg" alt="/images/2015_07_10_20_41_12_323x273.jpg" /></p>
+
+<p>Configure TCP/IP:<br />
+<img src="/images/2015_07_10_20_42_14_430x286.jpg" alt="/images/2015_07_10_20_42_14_430x286.jpg" /><br />
+Configure IP address/gateway/dns/netmask:<br />
+<img src="/images/2015_07_10_20_43_08_600x280.jpg" alt="/images/2015_07_10_20_43_08_600x280.jpg" /><br />
+Now configure the installation setting, you could find it in your own ks configuration file:<br />
+<img src="/images/2015_07_10_20_44_22_585x334.jpg" alt="/images/2015_07_10_20_44_22_585x334.jpg" /></p>
+
+<p>Continue to install, they are the same as you did before.</p>
+
+<h3 id="cobbler-in-the-existing-dhcp-enabled-network">Cobbler in the existing DHCP enabled Network</h3>
+
+<p>Since the dhcp server is available in the network, simply press <code>ctrl+B</code> to enter the pxe boot menu and set the <code>next_server</code> to <code>10.47.58.2</code>, then:</p>
+
+<pre><code>iPXE&gt; imgfetch -n img tftp://10.47.58.2/pxelinux.0
+iPXE&gt; imgload img
+iPXE&gt; boot
+</code></pre>
+
+<p>Now select whichever you want to deploy, your configuration will be deployed ASAP.</p>
+
+<h3 id="cobbler-server-image-to-new-network">Cobbler Server Image To New Network</h3>
+
+<p>You have to change following items:<br />
+1. IP address.<br />
+2. dhcp templates
+3. Next Server Name.</p>
+
+<pre><code>$ sudo vim /etc/cobbler/settings
+next_server: 172.16.10.2
+server: 172.16.10.2
+$ sudo vim /etc/cobbler/dhcp.templates
+subnet 172.16.10.0 netmask 255.255.255.0 {
+     option routers             172.16.10.1; 
+     range dynamic-bootp        172.16.10.3 172.16.10.254;
+     option domain-name-servers 114.114.114.114, 180.76.76.76;     
+     option subnet-mask         255.255.255.0;         
+     filename                   &quot;/pxelinux.0&quot;;       
+     default-lease-time         21600;           
+     max-lease-time             43200;      
+     next-server                $next_server; 
+     class &quot;pxeclients&quot; {
+
+//..................
+$ sudo vim /etc/default/isc-dhcp-server
+INTERFACES=&quot;eth0&quot;
+</code></pre>
+
+<p>Notice the IP address should be in the same ip address range.</p>
+
+<p>After modification, simply use <code>cobbler sync</code> for syncing your changes, now restart the cobbler server, your operation should be the same as the above situations.</p>
+
+<p>Also if you have playbooks of ansible which uses the static IP address, you also have to replace the IP related settings.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/07/07/wh-worktips-7/">WH Worktips(7)</a>
       </h1>
       <span class="post-date">Jul 7, 2015 
@@ -581,52 +690,6 @@ Then :
 sudo update-grub
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/29/insert-public-key-into-cobbler-deployed-system/">Insert public key into Cobbler Deployed System</a>
-      </h1>
-      <span class="post-date">Jun 29, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      <p>First edit your kickstart file, add following line before the end of your kickstart:</p>
-
-<pre><code>[root@z_WHServer kickstarts]# pwd
-/var/lib/cobbler/kickstarts
-[root@z_WHServer kickstarts]# cat sample_end.ks
-# Start final steps
-+ $SNIPPET('publickey_root')
-$SNIPPET('kickstart_done')
-# End final steps
-%end
-</code></pre>
-
-<p>And the <code>publickey_root</code> should be edited as following:</p>
-
-<pre><code>[root@z_WHServer snippets]# pwd
-/var/lib/cobbler/snippets
-[root@z_WHServer snippets]# cat publickey_root
-# Install CobblerServer's(10.47.58.2) public key for root user
-cd /root
-mkdir --mode=700 .ssh
-cat &gt;&gt; .ssh/authorized_keys &lt;&lt; &quot;PUBLIC_KEY&quot;
-ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA3B3GtGuKY0l2Ak9+WSkorY7R+Cx5/u3RMua/7GrvP05IPywQdkR+mqwdRydNjyhB96nHlYZtr8Fbfn5iwqn0j8dz8wmTZicBNeRqIdbe/YUje5NjXxDXjYda63VfDhpgzJ53KICTx6pBhGaeOKS/U5HqCpDbF7ODP8siU7bRhk1LkIQ6VwZYUg7b0oR+Sw6XJ31Z7gs4CWF6zfjfQQoF7EoMA+dnqvt2K4PQPXNSBJQx3qb9jyXIXvo333PcfIX6mD1TW1wDAIXLm4qz4mi7C8Ax9h+T/D98r08WX360vC5Tzr8feXMs6H4il4s4Ftq7RVoqCNKmG3AB1LTp4AQAzw== root@z_WHServer
-PUBLIC_KEY
-chmod 600 .ssh/authorized_keys
-cat &gt;&gt; .ssh/config &lt;&lt;EOF
-StrictHostKeyChecking no
-UserKnownHostsFile /dev/null
-EOF
-</code></pre>
-
-<p>Better you run <code>cobber sync</code> after updating your kickstart file.</p>
 
       
     </div>

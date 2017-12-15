@@ -105,6 +105,116 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/10/26/wireless-on-pogoplug/">Wireless on PogoPlug</a>
+      </h1>
+      <span class="post-date">Oct 26, 2013 
+      </span>
+      
+      <p>###Hardware Preparation
+Insert the usb wireless card and view the dmesg information:</p>
+
+<pre><code>	$ dmesg | tail
+	[911884.740000] usb 1-1.3: USB disconnect, device number 4
+	[911897.530000] usb 1-1.4: new high speed USB device number 5 using oxnas-ehci
+	[911897.640000] usb 1-1.4: New USB device found, idVendor=0bda, idProduct=8179
+	[911897.640000] usb 1-1.4: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+	[911897.650000] usb 1-1.4: Product: 802.11n NIC
+	[911897.650000] usb 1-1.4: Manufacturer: Realtek
+	[911897.660000] usb 1-1.4: SerialNumber: 00E04C0001
+The model is Mercury FW150US, See details of the lsusb
+	$ lsusb -v -d 0bda:8179
+	Bus 001 Device 005: ID 0bda:8179 Realtek Semiconductor Corp. 
+	......
+</code></pre>
+
+<p>But the output didn&rsquo;t show its information, we google it, knows:<br />
+只是一个8176和8179之分，后来才知道原来这款瑞昱的芯片有两个版本，8176对应的是rtl8192cu，8179对应的是rtl8188eu。<br />
+8179 is the rtl8188eu, so we need to find rtl8188eu device driver.<br />
+###Driver Preparation
+Prepare the cross-compiler, download &ldquo;gcc-linaro-arm-linux-gnueabi-2012.02-20120222_linux.tar.bz2&rdquo;, uncompress it and add it into your system path.<br />
+Prepare the Linux source code, named &ldquo;linux-3.1.10.pogoplug.tar.bz2&rdquo;, uncompress it.<br />
+How do we get the cross-compiler version?</p>
+
+<pre><code>	$ cat /proc/version
+	Linux version 3.1.10 (lintel@lintel-ThinkPad-T430) (gcc version 4.6.3 20120201 (prerelease) (Linaro GCC 4.6-2012.02) ) #10 SMP PREEMPT Fri Jun 7 19:14:08 CST 2013
+</code></pre>
+
+<p>From the result, we know the cross-compiler is 4.6.3 version.<br />
+Download the corresponding cross-compiler and add it to the sytem path. Then we download the PogoPlug Linux Source, uncompress it and also get the rtl8188eu from <a href="https://github.com/Red54/linux-shumeipai2/tree/sunxi-3.0/drivers/net/wireless/rtl8188eu" title="GitHub Driver Download">https://github.com/Red54/linux-shumeipai2/tree/sunxi-3.0/drivers/net/wireless/rtl8188eu</a>, copy the rtl8188eu&rsquo;s driver under driver/net/wireless, then modify the Kconfig file:</p>
+
+<pre><code>	\+source &quot;drivers/net/wireless/rtl8192cu/Kconfig&quot;
+	source &quot;drivers/net/wireless/rtl8188eu/Kconfig&quot;
+</code></pre>
+
+<p>and also the Makefile:</p>
+
+<pre><code>	obj-$(CONFIG_RTL8192CU)  += rtl8192cu/
+	\+obj-$(CONFIG_RTL8188EU)  += rtl8188eu/
+	obj-$(CONFIG_IPW2100) += ipw2x00/
+	obj-$(CONFIG_IPW2200) += ipw2x00/
+</code></pre>
+
+<p>Then, we get the running kernel&rsquo;s configuration file via:</p>
+
+<pre><code>	cat /proc/config.gz | gunzip &gt;running.config
+</code></pre>
+
+<p>upload the configuration file to the directory of the kernel source, then</p>
+
+<pre><code>	$ export ARCH=arm
+	$ export CROSS_COMPILE=arm-linux-gnueabi-
+	$ make  ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- menuconfig
+	in menuconfig, load the running.config, then navigate to driver-&gt;net-&gt;wireless, choose rtl8188eu's driver, compile it to kernel
+	$ make  ARCH=arm CROSS_COMPILE=arm-linux-gnueabi-
+	$ sudo yaourt mkimage
+	Install mkimage, then go to arch/arm/boot
+	$ mkimage -n 'linux-3.1.10' -A arm -O linux -T kernel -C none -a 0x60008000 -e 0x60008000 -d zImage uImage
+</code></pre>
+
+<p>upload the generated uImage to pogoplug, then we have to update the kernel image into our own image</p>
+
+<pre><code>	# Install mtd-utils first
+	$ apt-get install mtd-utils
+	# Erase the mtd partition which contains existing kernel
+	$ /usr/sbin/flash_erase /dev/mtd1 0xB00000 22
+	# Write newly generated uImage into the mtd partition
+	$ /usr/sbin/nandwrite -p -s 0xB00000 /dev/mtd1 /root/uImage	
+</code></pre>
+
+<p>Reboot the pogoplug.
+###Wireless Configuration
+On pogoplug, install following software:</p>
+
+<pre><code>	$ apt-get install iw wireless-tools 
+</code></pre>
+
+<p>Use wpa_supplicant to generate the configuraiton file and generate the password</p>
+
+<pre><code>	wpa_supplicant -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf
+	wpa_passphrase NETGEAR79 xxxxxx &gt; /etc/wpa_supplicant/NETGEAR79.conf
+</code></pre>
+
+<p>With the generated file we can directly connect to the exisint wireless network.<br />
+Then we have to update the network configration file,</p>
+
+<pre><code>	$ vim /etc/network/interfaces
+	auto lo eth0
+	iface lo inet loopback
+	iface eth0 inet dhcp
+	
+	auto wlan0
+	allow-hotplug wlan0
+	iface wlan0 inet dhcp
+	wpa-conf /etc/wpa_supplicant/NETGEAR79.conf
+</code></pre>
+
+<p>After everything is done, we can remove the wired connection, and change the wired-bind ip address to wireless binded ip address, everything will be the same as before. But the bootup may be 1 or 2 seconds than the wired connection.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/10/25/use-xapian-for-creating-a-local-search-engine/">Use Xapian for creating a local search engine</a>
       </h1>
       <span class="post-date">Oct 25, 2013 
@@ -335,71 +445,6 @@ Select the Graph template and then click Create.</p>
 <p>After some minutes, you will see the newly captured data and the images under graphs-&gt; Arch-&gt; Host:ArchLinux. Maybe Your graphs trees are not the same as mine, you got found your own location.</p>
 
 <p><img src="/images/cacti_image.jpg" alt="cacti_image" title="cacti_image.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/10/23/cacti-and-snmpd/">Cacti and snmpd</a>
-      </h1>
-      <span class="post-date">Oct 23, 2013 
-      </span>
-      
-      
-
-<p>On the machine being monitored, check the snmpd configuration file, you will find some items like following:</p>
-
-<pre><code>	$ cat /etc/snmp/snmpd.conf
-	rocommunity public 
-	rwcommunity admin
-	agentaddress tcp:161
-	If you want to enable Location and contact, add:
-	syslocation Bat. C2
-	syscontact someone@somewhere.org
-</code></pre>
-
-<p>On the monitor PC, we can use following command to view the monitored machine&rsquo;s status:</p>
-
-<pre><code>	$ snmpwalk -c Trusty -v 2c 10.0.0.221:661
-	or
-	$ snmpwalk -c Trusty -v 2c 10.0.0.221
-</code></pre>
-
-<h3 id="how-to-configure-cacti">How to configure cacti</h3>
-
-<p>Add a new device for monitoring: Console-&gt; Management-&gt;Devices, add new, the configuration should like following:</p>
-
-<p><img src="/images/cacti_configure.jpg" alt="Alt text" title="cacti configuration" /></p>
-
-<p>After save, you should view the result displayed like:</p>
-
-<pre><code>	ArchLinux (10.0.0.221) 
-	 SNMP Information
-	System:Linux DashArch 3.11.6-1-ARCH #1 SMP PREEMPT Fri Oct 18 23:22:36 CEST
-	 2013 x86_64
-	Uptime: 1137 (0 days, 0 hours, 0 minutes)
-	Hostname: DashArch
-	Location: Unknown
-	Contact: root@localhost
-</code></pre>
-
-<h3 id="draw-disks">Draw disks</h3>
-
-<p>Add following line into snmpd.conf</p>
-
-<pre><code>	includeAllDisks
-</code></pre>
-
-<p>But I failed, later will change.
-###Add Graphs
-Click &ldquo;Create Graphs for this Host&rdquo;, then you will asked to add the graphs.<br />
-After you add the graphs, add a new graph trees. Then add a Tree Items, Parent -&gt; [root] Tree Item Type &ndash;&gt; Host, Host &ndash;&gt; ArchLinux(10.0.0.221), then save.<br />
-Now click on graphs, you can get your tree and view all of the images.<br />
-###Add Device for Winxp
-Install the snmp service under control pannel.<br />
-enable the snmp service in Administration tools -&gt; Service.<br />
-In cacti, add a new equipment,  host templates choose &ldquo;Windows 2000/XP host&rdquo; , Downed Device Detection choose &ldquo;SNMP uptime&rdquo; , then add your own data source and graphics.</p>
 
       
     </div>

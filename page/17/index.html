@@ -105,6 +105,64 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/01/03/%E8%BF%90%E8%A1%8Ck8s%E4%BE%8B%E7%A8%8B/">运行K8S例程</a>
+      </h1>
+      <span class="post-date">Jan 3, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="guestbook">GuestBook</h3>
+
+<p>注意修改imagePullPolicy为<code>IfNotPresent</code>, 创建服务的步骤分别为:</p>
+
+<pre><code>$ kubectl create -f redis-master-deployment.yaml
+$ kubectl create -f redis-master-service.yaml
+$ kubectl create -f frontend-deployment.yaml
+$ kubectl create -f frontend-service.yaml
+</code></pre>
+
+<p>现在得到其运行状态:</p>
+
+<pre><code>$ kubectl get pod
+NAME                            READY     STATUS    RESTARTS   AGE
+frontend-88237173-02dvl         1/1       Running   0          2h
+frontend-88237173-r7g3v         1/1       Running   0          2h
+frontend-88237173-vjbv5         1/1       Running   0          2h
+redis-master-4154998525-f186t   1/1       Running   0          2h
+redis-slave-132015689-3qh7b     1/1       Running   0          2h
+redis-slave-132015689-hpw88     1/1       Running   0          2h
+</code></pre>
+
+<p>可以用proxy-forward直接访问某个pod中暴露出来的frontend服务:</p>
+
+<pre><code>$ kubectl port-forward frontend-88237173-02dvl 9081:80
+</code></pre>
+
+<p>上述命令的意思是，将pod <code>frontend-88237173-02dvl</code>80端口的流量转发到
+本地的9081端口，则可以通过访问<code>http://127.0.0.1:9081</code>来访问frontend.</p>
+
+<p>或者，我们可以在service文件中指定服务类型为<code>NodePort</code>, 定义文件修改如下:</p>
+
+<pre><code>spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 31080
+</code></pre>
+
+<p>服务创建以后，访问<code>http://CoreOS1IP:31080</code>则可访问到guestbook前端页面，三个CoreOS
+节点的31080端口均可提供前端页面访问。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/01/03/myreadingbooks/">MyReadingBooks</a>
       </h1>
       <span class="post-date">Jan 3, 2017 
@@ -1482,352 +1540,6 @@ https://172.17.8.221/api/v1/proxy/namespaces/kube-system/services/kube-dns
 <p><img src="/images/2016_12_26_19_26_07_800x271.jpg" alt="/images/2016_12_26_19_26_07_800x271.jpg" /></p>
 
 <p><img src="/images/2016_12_26_19_29_23_941x475.jpg" alt="/images/2016_12_26_19_29_23_941x475.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/23/loadbalancingincoreos/">LoadBalancingInCoreOS</a>
-      </h1>
-      <span class="post-date">Dec 23, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>这几天一直在把玩CoreOS，
-主要参考的是DigitalOcean上的tutorial以及《CoreOS实践之路》这本书，
-奈何文章离如今年代已经久远，一直搭建不成功. 几经周折后终于在一篇guideline
-的指导下把负载均衡的服务跑通，这里是搭建该服务的步骤和心得。</p>
-
-<p>参考网址:</p>
-
-<p><a href="http://blog.dixo.net/2015/02/load-balancing-with-coreos/">http://blog.dixo.net/2015/02/load-balancing-with-coreos/</a></p>
-
-<h3 id="架构图">架构图</h3>
-
-<p>该网址中列举的的架构图如下:</p>
-
-<p><img src="/images/2016_12_23_19_10_52_1450x1029.jpg" alt="/images/2016_12_23_19_10_52_1450x1029.jpg" /></p>
-
-<p>刚开始看到这个图是有点发蒙的，这里简单说一下操作步骤，与图中一一对应.</p>
-
-<ol>
-<li><code>CoreOS Machine B</code>和<code>Core Machine C</code>是两个CoreOS系统节点，位于其上分别
-运行了两个apache容器，B上的容器监听8001端口，C上的容器监听8002端口。<br /></li>
-<li>两个apache容器将自身的IP和端口发布到etcd服务(etcd.service).<br /></li>
-<li><code>CoreOS Machine
-A</code>上运行了三个单元，分别是nginx服务、confdata服务、confd服务.
-其中nginx服务在配置好的负载均衡后端上分发http请求。confdata服务主要用于
-为nginx配置文件共享数据卷。confd服务查看etcd中元数据的变化，根据这些变化
-在共享数据卷中写入新的配置文件.<br /></li>
-<li>详细说明一下confd的作用，A. 发现coreos集群中可用的apache容器. B. 实时生成
-nginx.conf文件，并将此文件写入到共享存储. C. 写入完成后，通知docker给nginx发送
-一个HUP信号. D. Docker发送HUP信号给nginx容器后，容器将重新加载其配置文件。<br /></li>
-</ol>
-
-<p>以上就是我对架构图的解读。接下来将一步步来实现这个负载均衡。</p>
-
-<h3 id="先决条件">先决条件</h3>
-
-<p>一个3节点的CoreOS集群<br />
-有效的/etc/environment文件(有时候需要手动生成)
-相关的容器(制作流程见后)</p>
-
-<h3 id="容器镜像制作">容器镜像制作</h3>
-
-<h4 id="apache容器">Apache容器</h4>
-
-<p>在某台安装好Docker的机器上，或者直接在CoreOS节点机上，运行:</p>
-
-<pre><code>$ docker run -i -t ubuntu:14.04 /bin/bash
-# apt-get update
-# apt-get install apache2
-# sudo bash
-# echo &quot;&lt;h1&gt;Running from Docker on CoreOS&lt;/h1&gt;&quot; &gt; /var/www/html/index.html
-# exit
-</code></pre>
-
-<p>现在开始打包容器:</p>
-
-<pre><code>$ docker ps -l
-$ docker commit  container_ID dash/apache
-$ docker save dash/apache&gt;myapache.tar
-</code></pre>
-
-<p>将生成的tar文件分发到所有CoreOS节点上，使用<code>docker load&lt;./myapache.tar</code>加载之.</p>
-
-<h4 id="nginx容器">nginx容器</h4>
-
-<p>直接使用官方的nginx:latest即可</p>
-
-<h4 id="nginx-lb容器">nginx-lb容器</h4>
-
-<p>使用Dockerfile生成:</p>
-
-<pre><code>$ vim Dockerfile
-FROM ubuntu:14.04
-
-RUN apt-get update &amp;&amp; \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install curl &amp;&amp; \
-    curl -o /usr/bin/confd -L https://github.com/kelseyhightower/confd/releases/download/v0.7.1/confd-0.7.1-linux-amd64 &amp;&amp; \
-    chmod 755 /usr/bin/confd  &amp;&amp; curl -sSL http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/internet | sh -
-
-ADD etc/confd/ /etc/confd
-
-CMD /usr/bin/confd -interval=60 -node=http://$COREOS_PRIVATE_IPV4:4001
-</code></pre>
-
-<p>编译方法为<code>sudo docker build -t myconfd .</code></p>
-
-<p>而后的打包和解包方法同上。奇怪的是，我制作的镜像到最后居然无法启动，所以直接pull
-了作者制作的镜像:</p>
-
-<pre><code>$ sudo docker pull lordelph/confd-demo
-</code></pre>
-
-<h3 id="创建apache服务">创建apache服务</h3>
-
-<p>创建apache.service配置文件如下:</p>
-
-<pre><code>$ vim apache.service 
-[Unit]
-Description=Basic web service port %i
-After=docker.service
-Requires=docker.service
-
-[Service]
-EnvironmentFile=/etc/environment
-ExecStartPre=-/usr/bin/docker kill apache-%i
-ExecStartPre=-/usr/bin/docker rm apache-%i
-ExecStartPre=/usr/bin/etcdctl set /test/apache-%i ${COREOS_PRIVATE_IPV4}:%i
-ExecStart=/usr/bin/docker run --rm --name apache-%i -p ${COREOS_PRIVATE_IPV4}:%i:80 dash/apache  /usr/sbin/apache2ctl -D FOREGROUND
-ExecStop=/usr/bin/etcdctl rm /test/apache-%i
-ExecStop=/usr/bin/docker stop -t 3 apache-%i
-</code></pre>
-
-<p>这里要说明的几点是: 在创建该服务前将清空该节点上所有的同名容器运行历史，并在etcd中设置
-一个键值为<code>/test/apache-%i</code>的数据条目。关闭该服务则停止容器的运行，并删除该键值.</p>
-
-<p><code>COREOS_PRIVATE_IPV4</code>这个值由<code>/etc/environment</code>中给出，因而事先需要
-在每个节点上核查是否存在该值:</p>
-
-<pre><code>core@coreos1 ~/lb $ cat /etc/environment 
-COREOS_PUBLIC_IPV4=172.17.8.201
-COREOS_PRIVATE_IPV4=172.17.8.201
-</code></pre>
-
-<p><code>apache-%i</code>里的端口参数可以在启动时给定, %i占位符将被@后的值所代替。创建服务步骤如下:</p>
-
-<pre><code>$ ln -s apache.service apache@8001.service 
-$ ln -s apache.service apache@8002.service 
-$ fleetctl start apache@8001.service
-$ fleetctl start apache@8002.service
-</code></pre>
-
-<p>查看运行的服务单元:</p>
-
-<pre><code>$ fleetctl list-units
-UNIT			MACHINE				ACTIVE	SUB
-apache@8001.service	bea5741d.../172.17.8.203	active	running
-apache@8002.service	dd464e69.../172.17.8.202	active	running
-</code></pre>
-
-<p>检查etcd中新添加的值:</p>
-
-<pre><code>$ etcdctl ls /test
-/test/apache-8001
-/test/apache-8002
-</code></pre>
-
-<p>key对应的value:</p>
-
-<pre><code>$ etcdctl get /test/apache-8001
-172.17.8.203:8001
-</code></pre>
-
-<h3 id="confd数据卷">confd数据卷</h3>
-
-<p>用于创建confd数据卷的service定义文件如下:</p>
-
-<pre><code>$ vim confdata.service 
-[Unit]
-Description=Configuration Data Volume Service
-After=docker.service
-Requires=docker.service
-
-[Service]
-EnvironmentFile=/etc/environment
-
-#we aren't a normal service, we just need to ensure that a data volume
-#exists, and create one if it doesn't
-Type=oneshot
-RemainAfterExit=yes
-
-ExecStartPre=-/usr/bin/docker rm conf-data
-ExecStart=/usr/bin/docker run -v /etc/nginx --name conf-data nginx echo &quot;created new data container&quot;
-</code></pre>
-
-<p>这里的技巧在于<code>oneshot</code>属性，它告知systemd我们只希望该服务运行且只运行一次。<code>RemainAfterExit</code>告诉
-服务正常退出，因而我们可以在正常推出的服务上使用它创建的数据卷。</p>
-
-<p>运行该服务:</p>
-
-<pre><code>$ fleetctl start confdata.service
-$ fleetctl list-units
-UNIT			MACHINE				ACTIVE	SUB
-apache@8001.service	bea5741d.../172.17.8.203	active	running
-apache@8002.service	dd464e69.../172.17.8.202	active	running
-confdata.service	f22aee5d.../172.17.8.201	active	exited
-</code></pre>
-
-<p>可以使用以下一系列命令检查我们生成的数据卷, 注意要使用root才能看到该卷里的实际内容:</p>
-
-<pre><code>$ docker volume ls
-DRIVER              VOLUME NAME
-local               c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f
-core@coreos1 ~/lb $ docker volume inspect c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f
-[
-    {
-        &quot;Name&quot;: &quot;c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f&quot;,
-        &quot;Driver&quot;: &quot;local&quot;,
-        &quot;Mountpoint&quot;: &quot;/var/lib/docker/volumes/c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f/_data&quot;,
-        &quot;Labels&quot;: null
-    }
-]
-core@coreos1 ~/lb $ sudo bash
-coreos1 lb # cd /var/lib/docker/volumes/c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f/_data
-coreos1 _data # ls
-conf.d  fastcgi_params  koi-utf  koi-win  mime.types  modules  nginx.conf  scgi_params  uwsgi_params  win-utf
-</code></pre>
-
-<h3 id="confd服务">confd服务</h3>
-
-<p>confd.service文件定义如下:</p>
-
-<pre><code>$ vim confd.service 
-[Unit]
-Description=Configuration Service
-
-#our data volume must be ready
-After=confdata.service
-Requires=confdata.service
-
-
-[Service]
-EnvironmentFile=/etc/environment
-
-
-#kill any existing confd
-ExecStartPre=-/usr/bin/docker kill %n
-ExecStartPre=-/usr/bin/docker rm %n
-
-#preload container...this ensures we fail if our registry is down and we can't
-#obtain the build we're expecting
-
-#we need to provide our confd container with the IP it can reach etcd
-#on, the docker socket so it send HUP signals to nginx, and our data volume
-ExecStart=/usr/bin/docker run --rm \
-  -e COREOS_PRIVATE_IPV4=${COREOS_PRIVATE_IPV4} \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  --volumes-from=conf-data \
-  --name %n \
-  lordelph/confd-demo
-
-ExecStop=/usr/bin/docker stop -t 3 %n
-Restart=on-failure
-
-[X-Fleet]
-#we need to be on the same machine as confdata.service
-MachineOf=confdata.service
-</code></pre>
-
-<p>注意，我们这里直接使用了网页中作者制作的镜像，指定了<code>conf-data</code>数据卷(<code>--volumes-from=conf-data</code>).</p>
-
-<pre><code>$ fleetctl list-units
-UNIT			MACHINE				ACTIVE	SUB
-apache@8001.service	bea5741d.../172.17.8.203	active	running
-apache@8002.service	dd464e69.../172.17.8.202	active	running
-confd.service		f22aee5d.../172.17.8.201	active	running
-confdata.service	f22aee5d.../172.17.8.201	active	exited
-</code></pre>
-
-<p>检查配置文件是否被更新:</p>
-
-<pre><code>coreos1 _data # grep -A6 'upstream backend' ./nginx.conf 
-    upstream backend {
-        
-            server 172.17.8.202:8002;
-        
-            server 172.17.8.203:8001;
-        
-    }
-coreos1 _data # pwd
-/var/lib/docker/volumes/c19a35d3db97340272f5d191b166710f6fbb1d717225d9762417fa51c7a56b1f/_data
-</code></pre>
-
-<p>或者直接进入容器检查:</p>
-
-<pre><code># docker run --rm -ti --volumes-from=conf-data nginx \
-# grep -A6 'upstream backend' /etc/nginx/nginx.conf
-    upstream backend {
-        
-            server 172.17.8.101:8001;
-        
-            server 172.17.8.102:8002;
-        
-    }
-</code></pre>
-
-<h3 id="nginx服务">nginx服务</h3>
-
-<p>这个服务很简单，定义文件如下:</p>
-
-<pre><code>$ vim nginx.service 
-[Unit]
-Description=Nginx Service
-After=confd.service
-
-#we won't want it to require the service - that would stop us restarting
-#it, which is safe
-#Requires=confd.service
-
-[Service]
-EnvironmentFile=/etc/environment
-ExecStartPre=-/usr/bin/docker kill %n
-ExecStartPre=-/usr/bin/docker rm %n
-#ExecStartPre=/usr/bin/docker pull nginx
-ExecStart=/usr/bin/docker run --name %n -p 80:80 --volumes-from=conf-data nginx
-ExecStop=/usr/bin/docker stop -t 3 %n
-Restart=on-failure
-
-[X-Fleet]
-#we need to be on the same machine as confdata
-MachineOf=confdata.service
-</code></pre>
-
-<p>这个服务被定义为只能在运行了confdata.service的机器上运行，实际上因为我们为了使用
-<code>conf-data</code>数据卷。<br />
-启动并检查服务:</p>
-
-<pre><code>$ fleetctl start nginx.service
-$ fleetctl list-units
-UNIT			MACHINE				ACTIVE	SUB
-apache@8001.service	bea5741d.../172.17.8.203	active	running
-apache@8002.service	dd464e69.../172.17.8.202	active	running
-confd.service		f22aee5d.../172.17.8.201	active	running
-confdata.service	f22aee5d.../172.17.8.201	active	exited
-nginx.service		f22aee5d.../172.17.8.201	active	running
-</code></pre>
-
-<h3 id="测试">测试</h3>
-
-<p>打开浏览器，访问<code>172.17.8.201</code>，即可看到apache服务的页面。<br />
-可以使用tcpdump来查看流量走向，然而需要安装toolbox: <code>/usr/bin/toolbox</code>.</p>
 
       
     </div>
