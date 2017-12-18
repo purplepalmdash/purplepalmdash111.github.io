@@ -170,3 +170,16 @@ $ sudo bash
 # echo 1 > /proc/sys/net/ipv4/ip_forward
 ```
 Now you should be able to access the network.    
+
+### Trouble-Shooting
+If you use virtualbox's redirect usb. you will encounter several problems. Try
+to change from virtualbox to virt-manager:    
+
+```
+# VBoxManage clonehd --format RAW UbuntuServer.vdi UbuntuServer.img
+# qemu-img convert -f raw UbuntuServer.img -O qcow2 UbuntuServer.qcow2
+```
+Now create a new virtual machine in virt-manager, you will find your wifi
+sharing become stable.    
+
+Redirect the usb device via spice driver.    
