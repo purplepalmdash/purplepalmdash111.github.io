@@ -105,6 +105,143 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/02/15/libvirt-network-configuration/">Libvirt Network Configuration</a>
+      </h1>
+      <span class="post-date">Feb 15, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Since I want to use bridge network in libvirt, while the standard bridge networking is not available for me to use, so following tips is for creating and managing the networking.</p>
+
+<h3 id="enable-bridge">Enable Bridge</h3>
+
+<p>In host machine(OpenSuse), create bridge via:</p>
+
+<pre><code>$ sudo brctl addbr br0
+$ sudo brctl addif br0 eth0 
+
+</code></pre>
+
+<p>This will add eth0 to bridge 0, while in startup file of OpenSuse we will do following:</p>
+
+<pre><code># pwd
+/etc/sysconfig/network
+# cat ifcfg-eth0 
+BOOTPROTO='static'
+STARTMODE='ifplugd'
+IFPLUGD_PRIORITY='1'
+NAME='RTL8111/8168B PCI Express Gigabit Ethernet controller'
+USERCONTROL='no' 
+# cat ifcfg-br0 
+BOOTPROTO='static'
+STARTMODE='auto'
+IPADDR='192.168.0.xxx/24'
+NAME='Bridge For Virtualization'
+BRIDGE='yes'
+BRIDGE_PORTS='eth0'
+BRIDGE_FORWARDDELAY='0'
+
+</code></pre>
+
+<p>So next time reboot you will see br0 hold the address of <code>192.168.0.xxx</code>, this is the bridge port we have.</p>
+
+<h3 id="virtual-machine-configuration">Virtual Machine Configuration</h3>
+
+<p>First list all of the virtual machine we have</p>
+
+<pre><code>$ sudo virsh list --all
+ Id    Name                           State
+----------------------------------------------------
+ 2     Ubuntu12043                    running
+ -     OpenContrail                   shut off
+
+</code></pre>
+
+<p>Edit the one we want to edit via:</p>
+
+<pre><code>$ sudo virsh edit Ubuntu12043
+    &lt;interface type='bridge'&gt;
+      &lt;mac address='24:42:53:21:52:49'/&gt;
+      &lt;source bridge='br0'/&gt;
+      &lt;model type='virtio'/&gt;
+      &lt;address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/&gt;
+    &lt;/interface&gt;
+
+</code></pre>
+
+<p>So next time when you boot-up the machine, it will have the physical network which connecting to br0.</p>
+
+<h3 id="configure-route">Configure route</h3>
+
+<p>In virtual machine, give the fixed ip address via:</p>
+
+<pre><code>$ sudo ifconfig eth0 192.168.188.188
+$ sudo ip route add 192.168.0.0/24 dev eth0
+$ sudo route add default gw 192.168.0.xxx
+$ sudo route -n
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface                                                                 
+0.0.0.0         192.168.0.119   0.0.0.0         UG    0      0        0 eth0                                                                  
+192.168.0.0     0.0.0.0         255.255.255.0   U     0      0        0 eth0                                                                  
+192.168.188.0   0.0.0.0         255.255.255.0   U     0      0        0 eth0   
+
+</code></pre>
+
+<p>We want make it permanent via:<br />
+First make the permanent ip address:</p>
+
+<pre><code># cat /etc/network/interfaces 
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+        address 192.168.188.188
+        netmask 255.255.255.0
+
+</code></pre>
+
+<p>Second we want to configure the route:</p>
+
+<pre><code>$ tail  /etc/rc.local
+ip route add 192.168.0.0/24 dev eth0
+route add default gw 192.168.0.xxx
+echo &quot;nameserver 114.114.114.114&quot;&gt;&gt;/etc/resolv.conf
+
+</code></pre>
+
+<p>This will set the route and the default gateway of your device, also the nameserver will be set.<br />
+But while in the host machine, you will add following iptables rules:</p>
+
+<pre><code># ip route add 192.168.188.0/24 dev br0
+# iptables -t nat -A POSTROUTING -s 192.168.188.0/24 -j SNAT --to 192.168.0.xxx
+# iptables -A FORWARD -s 192.168.188.188 -j ACCEPT
+
+</code></pre>
+
+<p>The iptables rules should be saved via <code>iptables-save</code>, while the route rules should be added into following file:</p>
+
+<pre><code>$  cat /etc/rc.d/after.local 
+ip route add 192.168.188.0/24 dev br0                
+
+</code></pre>
+
+<p>Now reboot the host machine, you route configuration will be saved.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/02/13/libvirt-on-opensuse/">Libvirt On OpenSuse</a>
       </h1>
       <span class="post-date">Feb 13, 2015 
@@ -423,92 +560,6 @@ $  sudo apt-get install libboost-system-dev libboost-regex-dev libboost-python-d
 </code></pre>
 
 <p>Then <code>make -f packages.make</code> you could get the generated deb files.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/02/07/play-docker-5/">Play Docker(5)</a>
-      </h1>
-      <span class="post-date">Feb 7, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Since I enabled OpenSuse, later all of the docker related operation could be operated on OpenSuse13.2.</p>
-
-<h3 id="installation">Installation</h3>
-
-<p>Install docker via:</p>
-
-<pre><code>$ sudo zypper in docker
-$ which docker
-/usr/bin/docker
-
-</code></pre>
-
-<h3 id="specify-storage-location">Specify Storage Location</h3>
-
-<p>The /var directory has the limitation, thus we have to specify the storage locateion in /etc/sysconfig/docker:</p>
-
-<pre><code>$ pwd
-/etc/sysconfig
-$  cat docker 
-
-## Path           : System/Management
-## Description    : Extra cli switches for docker daemon
-## Type           : string
-## Default        : &quot;&quot;
-## ServiceRestart : docker
-#
-DOCKER_OPTS=&quot;-g /home/xxxxxx/Code/Virtualization/Docker/docker/&quot;
-
-
-</code></pre>
-
-<p>Now we could use the nearly 2T Size /home partition for storing docker images..</p>
-
-<h3 id="use-china-resources">Use China Resources</h3>
-
-<p>The default dockhub is banned by GFW, so we have to use replacement repository in China.<br />
-Add the options to /ec/sysconfig/docker:</p>
-
-<pre><code>DOCKER_OPTS=&quot;-g /home/clouder/Code/Virtualization/Docker/docker/ --insecure-registry dl.dockerpool.com:5000&quot;
-
-</code></pre>
-
-<p>Then restart the docker via <code>systemctl restart docker</code>, after them we could use following command for pull back images:</p>
-
-<pre><code>$ sudo docker pull dl.dockerpool.com:5000/ubuntu:14.04
-
-</code></pre>
-
-<p>After pull back ,check the name of our fetched back ubuntu:14.04 is:</p>
-
-<pre><code>$ sudo docker images
-dl.dockerpool.com:5000/ubuntu            14.04               5506de2b643b        3 months ago        197.8 MB
-dl.dockerpool.com:5000/ubuntu            latest              5506de2b643b        3 months ago        197.8 MB
-
-</code></pre>
-
-<p>Change to a differenet tag name:</p>
-
-<pre><code>$ sudo docker tag dl.dockerpool.com:5000/ubuntu:14.04 ubuntu:14.04
-
-</code></pre>
-
-<p>Now check again and you will find the long and hard-to-remember name has been changed to <code>ubuntu:14.04</code>.<br />
-Our version of docker runs on OpenSuse is:</p>
-
-<pre><code>$ docker --version
-Docker version 1.4.1, build 5bc2ff8
-
-</code></pre>
 
       
     </div>

@@ -105,6 +105,156 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/08/use-tunnel-for-acrossing-something/">Use Tunnel For Acrossing Something</a>
+      </h1>
+      <span class="post-date">May 8, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/network">Network</a>
+        
+      </span>
+      
+      
+
+<h3 id="network-envorinment-introduction">Network Envorinment Introduction</h3>
+
+<p>The network envoriment in daily working envoriment is very bad, thus I have to think for a solution, which could improve my network speed.<br />
+Following picture describes the network topology of the daily working.<br />
+<img src="/images/CompanyNetwork1.jpg" alt="/images/CompanyNetwork1.jpg" /></p>
+
+<p>From the picture we can see, several users shared a very narrow path, and this path have to go through chinese firewall, this firewall is ghastly, because it will filter some sensitive website which is not welcomed by CN gov.</p>
+
+<h3 id="our-vpn-introduction">Our VPN Introduction</h3>
+
+<p>There are very wide VPN(Virtual Private Network) between CN and US, the US networking don&rsquo;t have to pass through the firewall.<br />
+Another big surprise is created by the time difference, when chinese are working, lots of american people are out of office.<br />
+<img src="/images/CompanyNetwork2.jpg" alt="/images/CompanyNetwork2.jpg" /></p>
+
+<p>Surely we can make full use of our whole company&rsquo;s network condition.</p>
+
+<h3 id="solution-1-ssh-forwarding">Solution 1: SSH Forwarding</h3>
+
+<p>First we will find a server which could forward ssh, just like in the picture.<br />
+<img src="/images/CompanyNetwork3.jpg" alt="/images/CompanyNetwork3.jpg" /></p>
+
+<p>Then we can use following command for setup a ssh tunnel, which could forwarding our network flow to us proxy:</p>
+
+<pre><code>$ ssh -C  -L YourMachine:Port:USProxy:USProxy_Port YouAccount@ForwardingServer
+
+</code></pre>
+
+<p>Then in your browser or your application, use <a href="http://YourMachine:Port">http://YourMachine:Port</a> as a proxy.</p>
+
+<h3 id="solution-2-tcp-tunnel-forwarding">Solution 2: TCP Tunnel Forwarding</h3>
+
+<p>Not every server can open ssh forwarding for you. For example, in following server, tcp forwarding is forbidden:</p>
+
+<pre><code>$ cat /etc/ssh/sshd_config
+# Port forwarding
+AllowTcpForwarding no
+
+</code></pre>
+
+<p>Thus we have to setup our own tcp tunnel manually.</p>
+
+<h4 id="netcat-way">Netcat Way</h4>
+
+<p>Use following way you can use netcat for creating a very simple tunnel, which could forwarding all of your flow to US proxy, these operation have to be done on server:</p>
+
+<pre><code>$ mkdir /tmp/fifo
+$ nc -lvvp -k 2323 0&lt;/tmp/fifo | nc -k USproxy USProxy_Port 1&gt;fifo
+
+</code></pre>
+
+<p>Then set the local proxy to <a href="http://server_ip:2323">http://server_ip:2323</a>, then you can reached the proxy.</p>
+
+<h4 id="tunnel-way">Tunnel Way</h4>
+
+<p>Netcat way is OK, but the netcat version is very old on US Server, it can&rsquo;t support &lsquo;-k&rsquo; option, for &lsquo;-k&rsquo; option is only supported by openbsd-netcat, and because the server is too old(It&rsquo;s Sun OS 5.10, or solaris? ), so we have to find other ways.<br />
+Luckily I find a small tool, which could fit for our requirement.</p>
+
+<pre><code>$ wget http://www.cri.ensmp.fr/~coelho/tunnel.c
+$ gcc -o tunnel tunnel.c -lsocket
+
+</code></pre>
+
+<p>This compiling will complain &lsquo;herror&rsquo; is not supported, thus we have to comment them, or change them from &lsquo;herror&rsquo; to &lsquo;printf&rsquo;, anyway, the error happens seldomly.<br />
+Use following command for setting up a tunnel in server:</p>
+
+<pre><code>$ ./tunnel -Lr server_ip:1080 proxy:80
+
+</code></pre>
+
+<p>Then in your own PC, set proxy to <a href="http://server_ip:1080">http://server_ip:1080</a>, you can reach the internet through your own tunnel, which will guide your traffic from VPN to US, then to Internet.</p>
+
+<h3 id="make-tunnel-invisible">Make Tunnel Invisible</h3>
+
+<p>Normally system administrator won&rsquo;t like tunnel on server, maybe they will scan the server and find out the port occupation. So we have to do some modification to tunnel.c.<br />
+First, change the name of the executable file:</p>
+
+<pre><code>$ mv tunnel.c autrace.c
+$ gcc -o autrace autrace.c -lsocket
+
+</code></pre>
+
+<p>So now, you can run your tunnel program via &lsquo;./autrace -Lr localhost:1080 proxy:80&rsquo;.</p>
+
+<p>But this is not so safe, administrator will also find the port, then they will track this port, and find your tricks, so we have to hidden the port words.<br />
+In autrace.c, do following changes in corresponding lines:</p>
+
+<pre><code>//  Around line 128, change the ip/port into your own. 
+
+/* default connexion. */
+#define LHOST &quot;138.138.138.138&quot; /* this really means 127.0.0.1, thus no network! */
+#define LPORT &quot;4444&quot;
+/* DHOST: &lt;same as chosen LHOST&gt; */
+//#define DPORT &quot;23&quot;        /* telnet port */
+#define DHOST &quot;139.139.139.139&quot;
+#define DPORT &quot;8888&quot;
+
+// Around line 1023, this is actually a bug.  
+ dhosts = getenv(&quot;DHOST&quot;); 1023
+
+</code></pre>
+
+<p>Now you can run command like:</p>
+
+<pre><code>$ ./autracce -s
+
+</code></pre>
+
+<h3 id="make-tunnel-only-serve-for-you">Make Tunnel Only Serve for you</h3>
+
+<p>We have to forbidden other user use our tunnel, because <a href="http://server_ip:port">http://server_ip:port</a> is open to all of the person in VPN.<br />
+We add following ACL rule in the autrace.c:</p>
+
+<pre><code>// in main(), around line 935
+  /* Initialize the parameter for ACL(Access Control List) */
+  struct sockaddr_in sa;
+  inet_pton(AF_INET, &quot;Your_IP_Address&quot;, &amp;(sa.sin_addr));
+  allow_address = ntohl(sa.sin_addr.s_addr);
+
+// in main(), around line 1187
+      /* In here, we will do filter, filter specified ip address */
+      /* Compare the allowed ip address with the incomming's ip address */
+      if( allow_address != (ntohl(client_addr.sin_addr.s_addr)))
+      {
+        fprintf(stderr, &quot;Sorry, you are not welcomed!\n&quot;);
+        /* No more receive/send any data */
+        shutdown(client_socket, 2);
+      }
+
+</code></pre>
+
+<p>The code will check the incoming client&rsquo;s ip address, and comparing it to our pre-defined ip address(Your_IP_Address), if they are not equal, our server will directly close the socket, so the client will receive refuse information.</p>
+
+<p>Now you have a very safe and reliable path will will let you reach the internet via wide VPN and swift US network, enjoy it.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/05/08/wake-on-lan/">Wake On LAN</a>
       </h1>
       <span class="post-date">May 8, 2014 
@@ -397,60 +547,6 @@ You can use following command for zipping the image file, in order to saving the
 </code></pre>
 
 <p>First command will remove the origin image file, while the second one will remain the origin image.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/04/30/customize-awesome/">Customize Awesome</a>
-      </h1>
-      <span class="post-date">Apr 30, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/awesome">awesome</a>
-        
-      </span>
-      
-      <p>###Wallpaper Setting
-When switching to big display in awesome, the desktop background will not fill the whole screen, thus we need to automatically set the background when we execute the ./singleview script, ./singleview script is a script which I wrote for switching to big display. Listed as following:</p>
-
-<pre><code>killall conky
-xrandr --output LVDS1 --off
-xrandr --newmode $(gtf 1680 1050 60 | grep Modeline | sed s/Modeline\ // | tr -d '&quot;')
-xrandr --addmode VGA1 1680x1050_60.00
-xrandr --output VGA1 --mode 1680x1050_60.00 
-xscreensaver -nosplash &amp;
-xset -b
-xmodmap -e &quot;pointer = 3 2 1&quot;
-fcitx &amp;
-sleep 4
-###Add bluetooth
-pactl load-module module-alsa-sink device=btheadset 
-pacmd load_module module-bluetooth-discover
-###Set Background
-feh --bg-scale /home/Trusty/document/water.jpg
-
-</code></pre>
-
-<p>The last line is the newly-added one which is used for re-setting the background wallpaper.<br />
-###Conky Background Setting
-But when you set the background, your conky will become ugly, just like following picture:<br />
-<img src="/images/nobg.jpg" alt="/images/nobg.jpg" /></p>
-
-<p>So you need to set the ~/.conky.rc, add following lines:</p>
-
-<pre><code>own_window yes
-own_window_colour 41A834
-TEXT
-......
-${image  /home/Trusty/document/greenleaf2.jpg  -p 0,0 -s 300x540}
-
-</code></pre>
-
-<p>The &ldquo;own_window yes&rdquo; could be commented.<br />
-So now you got conky looks like following:<br />
-<img src="/images/goodbg.jpg" alt="/images/goodbg.jpg" /></p>
 
       
     </div>

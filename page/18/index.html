@@ -105,6 +105,1112 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/26/%E7%A6%BB%E7%BA%BF%E5%AE%89%E8%A3%85coreos%E4%B8%8A%E7%9A%84kubernetes/">离线安装CoreOS上的Kubernetes</a>
+      </h1>
+      <span class="post-date">Dec 26, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="先决条件">先决条件</h3>
+
+<p>CoreOS安装iso: <code>coreos_production_iso_image.iso</code>.<br />
+<a href="https://coreos.com/os/docs/latest/booting-with-iso.html">https://coreos.com/os/docs/latest/booting-with-iso.html</a></p>
+
+<p>VirtualBox.<br />
+<a href="https://www.virtualbox.org/wiki/Downloads">https://www.virtualbox.org/wiki/Downloads</a></p>
+
+<p>硬盘安装介质, 放置于某web服务器根目录下(这里的根目录是<code>/var/download</code>):</p>
+
+<pre><code>$ pwd
+/var/download/1185.5.0
+$ ls
+coreos_production_image.bin.bz2  coreos_production_image.bin.bz2.sig
+</code></pre>
+
+<p>准备硬盘安装介质，需要通过<code>coreos-baremetal</code>项目，从<code>./examples/assets</code>下拷贝相应文件到web服务器根目录下:</p>
+
+<pre><code> $ git clone https://github.com/coreos/coreos-baremetal
+# Make a copy of example files
+$ cp -R coreos-baremetal/examples .
+# Download the CoreOS image assets referenced in the target profile.
+$ ./coreos-baremetal/scripts/get-coreos stable 1185.5.0 ./examples/assets
+</code></pre>
+
+<h3 id="网络配置">网络配置</h3>
+
+<p>三个CoreOS节点IP配置</p>
+
+<pre><code>coreos1: 172.17.8.221
+coreos2: 172.17.8.222
+coreos3: 172.17.8.223
+</code></pre>
+
+<p>etcd discovery Server IP: <code>172.17.8.1</code>.</p>
+
+<p>Virtualbox网络配置如下:<br />
+<img src="/images/2016_12_26_10_40_28_432x316.jpg" alt="/images/2016_12_26_10_40_28_432x316.jpg" /><br />
+第一块网卡接入到NAT网络，第二块网卡接入到Host-only网络，这也就是在下面的Cloudinit文件中
+需要定义的<code>Name=enp0s8</code>字段。</p>
+
+<h3 id="discovery-server配置">Discovery Server配置</h3>
+
+<p>实际上这个Server是运行etcd2的一个物理机，接入<code>172.17.8.0/24</code>网络，为简单起见我们使用运行VirtualBox
+的Linux主机(运行ArchLinux).</p>
+
+<p>具体的步骤可以参考:<br />
+<a href="http://purplepalmdash.github.io/blog/2016/12/21/trycoreos2/">http://purplepalmdash.github.io/blog/2016/12/21/trycoreos2/</a></p>
+
+<h3 id="cloudinit文件">Cloudinit文件</h3>
+
+<p>YAML(Yet Another Markup Language).<br />
+用coreos1的cloudinit文件为例:</p>
+
+<pre><code>#cloud-config
+hostname: coreos1 
+coreos:
+  etcd2:
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
+    # specify the initial size of your cluster with ?size=X
+    discovery: http://172.17.8.1:4001/v2/keys/1cce733b-3e02-4855-8df0-52fdd6ec635a
+    advertise-client-urls: http://172.17.8.221:2379,http://172.17.8.221:4001
+    initial-advertise-peer-urls: http://172.17.8.221:2380
+    # listen on both the official ports and the legacy ports
+    # legacy ports can be omitted if your application doesn't depend on them
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    listen-peer-urls: http://172.17.8.221:2380,http://172.17.8.221:7001
+  fleet:
+    public-ip: &quot;172.17.8.221&quot;
+  units:
+    - name: etcd2.service
+      command: start
+    - name: fleet.service
+      command: start
+    - name: static.network
+      content: |
+        [Match]
+        Name=enp0s8
+        [Network]
+        Address=172.17.8.221/24
+        Gateway=172.17.8.1
+        DNS=172.17.8.1
+    - name: docker-tcp.socket
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+  
+        [Socket]
+        ListenStream=2375
+        Service=docker.service
+        BindIPv6Only=both
+  
+        [Install]
+        WantedBy=sockets.target
+users:  
+  - name: core
+    ssh-authorized-keys: 
+      - ssh-rsa &quot;ADD ME&quot;
+  - groups:
+      - sudo
+      - docker
+</code></pre>
+
+<p>对coreos2和coreos3节点，只需要替换对应的IP地址定义，如:coreos2只需要把IP从<code>172.17.8.221</code>换成<code>172.17.8.222</code>.<br />
+ssh-rsa部分是需要预注入的ssh key, 可以通过<code>ssh-keygen</code>生成.</p>
+
+<h3 id="coreos安装">CoreOS安装</h3>
+
+<p>用光盘启动三台虚拟机，默认将进入到shell，在coreos1节点上，通过以下命令安装CoreOS:</p>
+
+<pre><code>$ coreos-install -d /dev/sda -b http://YourWebServer -c ./cloud-init1.yaml -v
+</code></pre>
+
+<p>同样安装其他两个节点, 因为预置了ssh-key，可以在该节点上直接登入三台CoreOS机器。<br />
+安装好的机器上，默认启动了etcd和docker, 可以通过<code>etcdctl cluster-health</code>来验证etcd正常运行。</p>
+
+<h3 id="kubernetes配置选项">Kubernetes配置选项</h3>
+
+<p>这里参考<a href="https://coreos.com/kubernetes/docs/latest/getting-started.html">https://coreos.com/kubernetes/docs/latest/getting-started.html</a></p>
+
+<pre><code>MASTER_HOST=no default
+ETCD_ENDPOINTS=no default
+POD_NETWORK=10.2.0.0/16
+SERVICE_IP_RANGE=10.3.0.0/24
+K8S_SERVICE_IP=10.3.0.1
+DNS_SERVICE_IP=10.3.0.10
+
+########################################
+FLANNELD_IFACE=${ADVERTISE_IP}
+FLANNELD_ETCD_ENDPOINTS=${ETCD_ENDPOINTS}
+
+Example: 172.17.8.221
+FLANNELD_IFACE=172.17.8.221
+FLANNELD_ETCD_ENDPOINTS=http://172.17.8.221:2379
+
+ETCD_SERVER
+http://172.17.8.221:2379
+</code></pre>
+
+<h3 id="etcd2配置">etcd2配置</h3>
+
+<p>在所有节点上，更改etcd2监听地址:<br />
+<code>/etc/systemd/system/etcd2.service.d/40-listen-address.conf</code></p>
+
+<pre><code>[Service]
+Environment=ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+Environment=ETCD_ADVERTISE_CLIENT_URLS=http://${PUBLIC_IP}:2379
+</code></pre>
+
+<h3 id="生成kubernetes-tls">生成Kubernetes TLS</h3>
+
+<p>使用下列命令生成Kubernetes master节点和worker节点上所需使用的签名:</p>
+
+<pre><code>$ mkdir openssl
+$ cd openssl
+$ openssl genrsa -out ca-key.pem 2048
+$ openssl req -x509 -new -nodes -key ca-key.pem -days 10000 -out ca.pem -subj &quot;/CN=kube-ca&quot;
+$ openssl genrsa -out apiserver-key.pem 2048
+$ openssl req -new -key apiserver-key.pem -out apiserver.csr -subj &quot;/CN=kube-apiserver&quot; -config openssl.cnf
+$ openssl x509 -req -in apiserver.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out apiserver.pem -days 365 -extensions v3_req -extfile openssl.cnf
+$ openssl genrsa -out coreos2-worker-key.pem 2048
+$ openssl genrsa -out coreos3-worker-key.pem 2048
+$ openssl req -new -key coreos3-worker-key.pem -out coreos3-worker.csr -subj &quot;/CN=coreos3&quot; -config coreos3-worker-openssl.cnf 
+$ openssl req -new -key coreos2-worker-key.pem -out coreos2-worker.csr -subj &quot;/CN=coreos2&quot; -config coreos2-worker-openssl.cnf 
+$ openssl x509 -req -in coreos2-worker.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out coreos2-worker.pem -days 365 -extensions v3_req -extfile coreos2-worker-openssl.cnf 
+$ openssl x509 -req -in coreos3-worker.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out coreos3-worker.pem -days 365 -extensions v3_req -extfile coreos3-worker-openssl.cnf 
+$ openssl genrsa -out admin-key.pem 2048
+$ openssl req -new -key admin-key.pem -out admin.csr -subj &quot;/CN=kube-admin&quot;
+$ openssl x509 -req -in admin.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out admin.pem -days 365
+</code></pre>
+
+<p>其中，master上使用的<code>openssl.cnf</code>文件定义如下:</p>
+
+<pre><code>[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = kubernetes
+DNS.2 = kubernetes.default
+DNS.3 = kubernetes.default.svc
+DNS.4 = kubernetes.default.svc.cluster.local
+IP.1 = 10.3.0.1
+IP.2 = 172.17.8.221
+</code></pre>
+
+<p>wokernode1， 即coreos2上使用的定义文件，<code>coreos2-worker-openssl.cnf</code>:</p>
+
+<pre><code>[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+IP.1 = 172.17.8.222
+</code></pre>
+
+<p>coreos3与coreos2定义文件的唯一区别在于:</p>
+
+<pre><code>- IP.1 = 172.17.8.222
++ IP.1 = 172.17.8.223
+</code></pre>
+
+<h3 id="kubernetes-master节点">Kubernetes Master节点</h3>
+
+<h4 id="tls配置">TLS配置</h4>
+
+<p>拷贝生成的openssl目录到每个节点，在master节点(coreos1)上，拷贝master相关的鉴权文件到<code>/etc/kubernetes/ssl</code>目录下:</p>
+
+<pre><code># mkdir -p /etc/kubernetes/ssl
+# cd /etc/kubernetes/ssl
+# cp /home/core/openssl/ca.pem  ./
+# cp /home/core/openssl/apiserver.pem ./
+# cp /home/core/openssl/apiserver-key.pem ./
+# chmod 600 *
+# chown root:root *
+</code></pre>
+
+<h4 id="flannel网络配置">Flannel网络配置</h4>
+
+<p>Flannel提供了一个软件定义的overlay网络，用于转发流量到pods,或从pods转发流量到外部网络.</p>
+
+<pre><code># mkdir -p /etc/flannel/
+# vim /etc/flannel/options.env
+FLANNELD_IFACE=172.17.8.221
+FLANNELD_ETCD_ENDPOINTS=http://172.17.8.221:2379
+# mkdir -p /etc/systemd/system/flanneld.service.d/
+# vim /etc/systemd/system/flanneld.service.d/40-ExecStartPre-symlink.conf
+[Service]
+ExecStartPre=/usr/bin/ln -sf /etc/flannel/options.env /run/flannel/options.env
+# mkdir -p /etc/systemd/system/docker.service.d/
+# vim /etc/systemd/system/docker.service.d/40-flannel.conf
+[Unit]
+Requires=flanneld.service
+After=flanneld.service
+[Service]
+EnvironmentFile=/etc/kubernetes/cni/docker_opts_cni.env
+# mkdir -p /etc/kubernetes/cni/
+# vim /etc/kubernetes/cni/docker_opts_cni.env
+DOCKER_OPT_BIP=&quot;&quot;
+DOCKER_OPT_IPMASQ=&quot;&quot;
+# mkdir -p /etc/kubernetes/cni/net.d/10-flannel.conf
+# vim /etc/kubernetes/cni/net.d/10-flannel.conf
+{
+    &quot;name&quot;: &quot;podnet&quot;,
+    &quot;type&quot;: &quot;flannel&quot;,
+    &quot;delegate&quot;: {
+        &quot;isDefaultGateway&quot;: true
+    }
+}
+</code></pre>
+
+<h4 id="创建kubelet单元">创建kubelet单元</h4>
+
+<p>服务文件定义如下:</p>
+
+<p><code>/etc/systemd/system/kubelet.service</code></p>
+
+<pre><code>[Service]
+Environment=KUBELET_VERSION=v1.5.1_coreos.0
+Environment=&quot;RKT_OPTS=--uuid-file-save=/var/run/kubelet-pod.uuid \
+  --volume var-log,kind=host,source=/var/log \
+  --mount volume=var-log,target=/var/log \
+  --volume dns,kind=host,source=/etc/resolv.conf \
+  --mount volume=dns,target=/etc/resolv.conf&quot;
+ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
+ExecStartPre=/usr/bin/mkdir -p /var/log/containers
+ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kubelet-pod.uuid
+ExecStart=/usr/lib/coreos/kubelet-wrapper \
+  --api-servers=http://127.0.0.1:8080 \
+  --register-schedulable=false \
+  --cni-conf-dir=/etc/kubernetes/cni/net.d \
+  --network-plugin=cni \
+  --container-runtime=docker \
+  --allow-privileged=true \
+  --pod-manifest-path=/etc/kubernetes/manifests \
+  --hostname-override=172.17.8.221 \
+  --cluster_dns=10.3.0.10 \
+  --cluster_domain=cluster.local
+ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kubelet-pod.uuid
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<h4 id="创建kube-apiserver-pod">创建kube-apiserver Pod</h4>
+
+<p>定义文件如下:</p>
+
+<pre><code># mkdir -p /etc/kubernetes/manifests/
+# vim /etc/kubernetes/manifests/kube-apiserver.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  containers:
+  - name: kube-apiserver
+    image: quay.io/coreos/hyperkube:v1.5.1_coreos.0
+    command:
+    - /hyperkube
+    - apiserver
+    - --bind-address=0.0.0.0
+    - --etcd-servers=http://172.17.8.221:2379
+    - --allow-privileged=true
+    - --service-cluster-ip-range=10.3.0.0/24
+    - --secure-port=443
+    - --advertise-address=172.17.8.221
+    - --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota
+    - --tls-cert-file=/etc/kubernetes/ssl/apiserver.pem
+    - --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+    - --client-ca-file=/etc/kubernetes/ssl/ca.pem
+    - --service-account-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+    - --runtime-config=extensions/v1beta1/networkpolicies=true
+    - --anonymous-auth=false
+    livenessProbe:
+      httpGet:
+        host: 127.0.0.1
+        port: 8080
+        path: /healthz
+      initialDelaySeconds: 15
+      timeoutSeconds: 15
+    ports:
+    - containerPort: 443
+      hostPort: 443
+      name: https
+    - containerPort: 8080
+      hostPort: 8080
+      name: local
+    volumeMounts:
+    - mountPath: /etc/kubernetes/ssl
+      name: ssl-certs-kubernetes
+      readOnly: true
+    - mountPath: /etc/ssl/certs
+      name: ssl-certs-host
+      readOnly: true
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/ssl
+    name: ssl-certs-kubernetes
+  - hostPath:
+      path: /usr/share/ca-certificates
+    name: ssl-certs-host
+</code></pre>
+
+<h4 id="创建kube-proxy-pod">创建kube-proxy Pod</h4>
+
+<p>定义文件如下:</p>
+
+<pre><code># vim /etc/kubernetes/manifests/kube-proxy.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-proxy
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  containers:
+  - name: kube-proxy
+    image: quay.io/coreos/hyperkube:v1.5.1_coreos.0
+    command:
+    - /hyperkube
+    - proxy
+    - --master=http://127.0.0.1:8080
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /etc/ssl/certs
+      name: ssl-certs-host
+      readOnly: true
+  volumes:
+  - hostPath:
+      path: /usr/share/ca-certificates
+    name: ssl-certs-host
+</code></pre>
+
+<h4 id="创建kube-controller-manager-pod">创建kube-controller-manager Pod</h4>
+
+<p>定义文件如下:</p>
+
+<pre><code># vim /etc/kubernetes/manifests/kube-controller-manager.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-controller-manager
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  containers:
+  - name: kube-controller-manager
+    image: quay.io/coreos/hyperkube:v1.5.1_coreos.0
+    command:
+    - /hyperkube
+    - controller-manager
+    - --master=http://127.0.0.1:8080
+    - --leader-elect=true
+    - --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+    - --root-ca-file=/etc/kubernetes/ssl/ca.pem
+    resources:
+      requests:
+        cpu: 200m
+    livenessProbe:
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10252
+      initialDelaySeconds: 15
+      timeoutSeconds: 15
+    volumeMounts:
+    - mountPath: /etc/kubernetes/ssl
+      name: ssl-certs-kubernetes
+      readOnly: true
+    - mountPath: /etc/ssl/certs
+      name: ssl-certs-host
+      readOnly: true
+  hostNetwork: true
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/ssl
+    name: ssl-certs-kubernetes
+  - hostPath:
+      path: /usr/share/ca-certificates
+    name: ssl-certs-host
+</code></pre>
+
+<h4 id="创建kube-scheduler-pod">创建kube-scheduler Pod</h4>
+
+<p>定义文件如下:</p>
+
+<pre><code># vim /etc/kubernetes/manifests/kube-scheduler.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-scheduler
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  containers:
+  - name: kube-scheduler
+    image: quay.io/coreos/hyperkube:v1.5.1_coreos.0
+    command:
+    - /hyperkube
+    - scheduler
+    - --master=http://127.0.0.1:8080
+    - --leader-elect=true
+    resources:
+      requests:
+        cpu: 100m
+    livenessProbe:
+      httpGet:
+        host: 127.0.0.1
+        path: /healthz
+        port: 10251
+      initialDelaySeconds: 15
+      timeoutSeconds: 15
+</code></pre>
+
+<h4 id="启动服务">启动服务</h4>
+
+<p>通过以下命令来启动master节点上的服务:</p>
+
+<pre><code># systemctl daemon-reload
+# curl -X PUT -d &quot;value={\&quot;Network\&quot;:\&quot;10.2.0.0/16\&quot;,\&quot;Backend\&quot;:{\&quot;Type\&quot;:\&quot;vxlan\&quot;}}&quot; &quot;http://172.17.8.221:2379/v2/keys/coreos.com/network/config&quot;
+# systemctl start flanneld
+# systemctl enable flanneld
+# systemctl start kubelet
+# systemctl enable kubelet
+</code></pre>
+
+<h4 id="创建namespace">创建namespace</h4>
+
+<p>首先确保Kubernetes API可用:</p>
+
+<pre><code>$ curl http://127.0.0.1:8080/version
+{
+  &quot;major&quot;: &quot;1&quot;,
+  &quot;minor&quot;: &quot;5&quot;,
+  &quot;gitVersion&quot;: &quot;v1.5.1+coreos.0&quot;,
+  &quot;gitCommit&quot;: &quot;cc65f5321f9230bf9a3fa171155c1213d6e3480e&quot;,
+  &quot;gitTreeState&quot;: &quot;clean&quot;,
+  &quot;buildDate&quot;: &quot;2016-12-14T04:08:28Z&quot;,
+  &quot;goVersion&quot;: &quot;go1.7.4&quot;,
+  &quot;compiler&quot;: &quot;gc&quot;,
+  &quot;platform&quot;: &quot;linux/amd64&quot;
+}
+</code></pre>
+
+<p>使用以下命令创建命名空间:</p>
+
+<pre><code># curl -H &quot;Content-Type: application/json&quot; -XPOST -d'{&quot;apiVersion&quot;:&quot;v1&quot;,&quot;kind&quot;:&quot;Namespace&quot;,&quot;metadata&quot;:{&quot;name&quot;:&quot;kube-system&quot;}}' &quot;http://127.0.0.1:8080/api/v1/namespaces&quot;
+# curl -s localhost:10255/pods | jq -r '.items[].metadata.name'
+kube-apiserver-172.17.8.221
+kube-controller-manager-172.17.8.221
+kube-proxy-172.17.8.221
+kube-scheduler-172.17.8.221
+</code></pre>
+
+<h3 id="kubernetes-worker节点">Kubernetes Worker节点</h3>
+
+<h4 id="tls配置-1">TLS配置</h4>
+
+<p>以coreos2为例：</p>
+
+<pre><code># mkdir -p /etc/kubernetes/ssl
+# cd /etc/kubernetes/ssl
+# cp /home/core/openssl/ca.pem  ./
+# cp /home/core/openssl/coreos2-worker.pem ./
+# cp /home/core/openssl/coreos2-worker-key.pem ./
+# chmod 600 *
+# chown root:root *
+# ln -s coreos2-worker.pem worker.pem
+# ln -s coreos2-worker-key.pem worker-key.pem
+</code></pre>
+
+<h4 id="flannel配置">Flannel配置</h4>
+
+<p>配置如下:</p>
+
+<pre><code># mkdir -p /etc/flannel/
+# vim /etc/flannel/options.env
+FLANNELD_IFACE=172.17.8.222
+FLANNELD_ETCD_ENDPOINTS=http://172.17.8.222:2379
+# mkdir -p /etc/systemd/system/flanneld.service.d/
+# vim /etc/systemd/system/flanneld.service.d/40-ExecStartPre-symlink.conf
+[Service]
+ExecStartPre=/usr/bin/ln -sf /etc/flannel/options.env /run/flannel/options.env
+# mkdir -p /etc/systemd/system/docker.service.d/
+# vim /etc/systemd/system/docker.service.d/40-flannel.conf
+[Unit]
+Requires=flanneld.service
+After=flanneld.service
+[Service]
+EnvironmentFile=/etc/kubernetes/cni/docker_opts_cni.env
+# mkdir -p /etc/kubernetes/cni/
+# vim /etc/kubernetes/cni/docker_opts_cni.env
+DOCKER_OPT_BIP=&quot;&quot;
+DOCKER_OPT_IPMASQ=&quot;&quot;
+# mkdir -p /etc/kubernetes/cni/net.d/10-flannel.conf
+# vim /etc/kubernetes/cni/net.d/10-flannel.conf
+{
+    &quot;name&quot;: &quot;podnet&quot;,
+    &quot;type&quot;: &quot;flannel&quot;,
+    &quot;delegate&quot;: {
+        &quot;isDefaultGateway&quot;: true
+    }
+}
+</code></pre>
+
+<h4 id="kubelet单元">Kubelet单元</h4>
+
+<p>配置文件如下:</p>
+
+<pre><code># vim /etc/systemd/system/kubelet.service
+[Service]
+Environment=KUBELET_VERSION=v1.5.1_coreos.0
+Environment=&quot;RKT_OPTS=--uuid-file-save=/var/run/kubelet-pod.uuid \
+  --volume dns,kind=host,source=/etc/resolv.conf \
+  --mount volume=dns,target=/etc/resolv.conf \
+  --volume var-log,kind=host,source=/var/log \
+  --mount volume=var-log,target=/var/log&quot;
+ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
+ExecStartPre=/usr/bin/mkdir -p /var/log/containers
+ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/run/kubelet-pod.uuid
+ExecStart=/usr/lib/coreos/kubelet-wrapper \
+  --api-servers=https://172.17.8.221:443 \
+  --cni-conf-dir=/etc/kubernetes/cni/net.d \
+  --network-plugin=cni \
+  --container-runtime=docker \
+  --register-node=true \
+  --allow-privileged=true \
+  --pod-manifest-path=/etc/kubernetes/manifests \
+  --hostname-override=172.17.8.222 \
+  --cluster_dns=10.3.0.10 \
+  --cluster_domain=cluster.local \
+  --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
+  --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
+  --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem
+ExecStop=-/usr/bin/rkt stop --uuid-file=/var/run/kubelet-pod.uuid
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<h4 id="kube-proxy-pod">kube-proxy Pod</h4>
+
+<p>配置文件如下:</p>
+
+<pre><code># vim /etc/kubernetes/manifests/kube-proxy.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-proxy
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  containers:
+  - name: kube-proxy
+    image: quay.io/coreos/hyperkube:v1.5.1_coreos.0
+    command:
+    - /hyperkube
+    - proxy
+    - --master=https://172.17.8.221:443
+    - --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /etc/ssl/certs
+      name: &quot;ssl-certs&quot;
+    - mountPath: /etc/kubernetes/worker-kubeconfig.yaml
+      name: &quot;kubeconfig&quot;
+      readOnly: true
+    - mountPath: /etc/kubernetes/ssl
+      name: &quot;etc-kube-ssl&quot;
+      readOnly: true
+  volumes:
+  - name: &quot;ssl-certs&quot;
+    hostPath:
+      path: &quot;/usr/share/ca-certificates&quot;
+  - name: &quot;kubeconfig&quot;
+    hostPath:
+      path: &quot;/etc/kubernetes/worker-kubeconfig.yaml&quot;
+  - name: &quot;etc-kube-ssl&quot;
+    hostPath:
+      path: &quot;/etc/kubernetes/ssl&quot;
+</code></pre>
+
+<h4 id="kubeconfig">kubeconfig</h4>
+
+<p>配置文件如下:</p>
+
+<pre><code># vim /etc/kubernetes/worker-kubeconfig.yaml
+apiVersion: v1
+kind: Config
+clusters:
+- name: local
+  cluster:
+    certificate-authority: /etc/kubernetes/ssl/ca.pem
+users:
+- name: kubelet
+  user:
+    client-certificate: /etc/kubernetes/ssl/worker.pem
+    client-key: /etc/kubernetes/ssl/worker-key.pem
+contexts:
+- context:
+    cluster: local
+    user: kubelet
+  name: kubelet-context
+current-context: kubelet-context
+</code></pre>
+
+<h4 id="启动服务-1">启动服务</h4>
+
+<p>通过以下命令启动服务:</p>
+
+<pre><code># systemctl daemon-reload
+# systemctl start flanneld
+# systemctl start kubelet
+# systemctl enable flanneld
+# systemctl enable kubelet
+</code></pre>
+
+<p>检查服务状态:</p>
+
+<pre><code># systemctl status kubelet.service
+</code></pre>
+
+<h3 id="kubectl配置">kubectl配置</h3>
+
+<p>首先下载最新的kubectl程序:</p>
+
+<pre><code># curl -O https://storage.googleapis.com/kubernetes-release/release/v1.5.1/bin/linux/amd64/kubectl
+# chmod +x kubectl
+# mv kubectl /usr/local/bin/kubectl
+</code></pre>
+
+<p>配置命令如下:</p>
+
+<pre><code># cd YourDir/openssl/
+# kubectl config set-cluster default-cluster --server=https://172.17.8.221 --certificate-authority=./ca.pem
+# kubectl config set-credentials default-admin --certificate-authority=./ca.pem --client-key=./admin-key.pem --client-certificate=./admin.pem
+# kubectl config set-context default-system --cluster=default-cluster --user=default-admin
+# kubectl config use-context default-system
+</code></pre>
+
+<p>验证:</p>
+
+<pre><code># kubectl get nodes
+NAME           STATUS                     AGE
+172.17.8.221   Ready,SchedulingDisabled   1d
+172.17.8.222   Ready                      1d
+172.17.8.223   Ready                      1d
+# kubectl get pods --all-namespaces
+</code></pre>
+
+<h3 id="插件安装">插件安装</h3>
+
+<h4 id="dns插件">DNS插件</h4>
+
+<p><code>dns-addon.yml</code>文件定义如下:</p>
+
+<pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: kube-dns
+  namespace: kube-system
+  labels:
+    k8s-app: kube-dns
+    kubernetes.io/cluster-service: &quot;true&quot;
+    kubernetes.io/name: &quot;KubeDNS&quot;
+spec:
+  selector:
+    k8s-app: kube-dns
+  clusterIP: 10.3.0.10
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+
+
+---
+
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: kube-dns-v20
+  namespace: kube-system
+  labels:
+    k8s-app: kube-dns
+    version: v20
+    kubernetes.io/cluster-service: &quot;true&quot;
+spec:
+  replicas: 1
+  selector:
+    k8s-app: kube-dns
+    version: v20
+  template:
+    metadata:
+      labels:
+        k8s-app: kube-dns
+        version: v20
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+        scheduler.alpha.kubernetes.io/tolerations:
+'[{&quot;key&quot;:&quot;CriticalAddonsOnly&quot;, &quot;operator&quot;:&quot;Exists&quot;}]'
+    spec:
+      containers:
+      - name: kubedns
+        image: gcr.io/google_containers/kubedns-amd64:1.8
+        resources:
+          limits:
+            memory: 170Mi
+          requests:
+            cpu: 100m
+            memory: 70Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz-kubedns
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 3
+          timeoutSeconds: 5
+        args:
+        - --domain=cluster.local.
+        - --dns-port=10053
+        ports:
+        - containerPort: 10053
+          name: dns-local
+          protocol: UDP
+        - containerPort: 10053
+          name: dns-tcp-local
+          protocol: TCP
+      - name: dnsmasq
+        image: gcr.io/google_containers/kube-dnsmasq-amd64:1.4
+        livenessProbe:
+          httpGet:
+            path: /healthz-dnsmasq
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+        args:
+        - --cache-size=1000
+        - --no-resolv
+        - --server=127.0.0.1#10053
+        - --log-facility=-
+        ports:
+        - containerPort: 53
+          name: dns
+          protocol: UDP
+        - containerPort: 53
+          name: dns-tcp
+          protocol: TCP
+      - name: healthz
+        image: gcr.io/google_containers/exechealthz-amd64:1.2
+        resources:
+          limits:
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 50Mi
+        args:
+        - --cmd=nslookup kubernetes.default.svc.cluster.local 127.0.0.1
+          &gt;/dev/null
+        - --url=/healthz-dnsmasq
+        - --cmd=nslookup kubernetes.default.svc.cluster.local 127.0.0.1:10053
+          &gt;/dev/null
+        - --url=/healthz-kubedns
+        - --port=8080
+        - --quiet
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+      dnsPolicy: Default
+</code></pre>
+
+<p>启动该插件:</p>
+
+<pre><code>$ kubectl create -f dns-addon.yml
+$ kubectl get pods --namespace=kube-system | grep kube-dns-v20
+</code></pre>
+
+<p>测试dns是否工作？</p>
+
+<p>创建一个临时的Pod，在里面进行一次DNS查询，Pod描述文件如下:</p>
+
+<pre><code>$ vim busybox.yaml
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: busybox
+  namespace: default
+spec:
+  containers:
+  - image: busybox
+    command:
+      - sleep
+      - &quot;3600&quot;
+    imagePullPolicy: IfNotPresent
+    name: busybox
+  restartPolicy: Always
+</code></pre>
+
+<p>创建该服务:</p>
+
+<pre><code>$ kubectl create -f busybox.yaml
+pod &quot;busybox&quot; created
+$ kubectl exec busybox -- nslookup kubernetes
+Server:    10.3.0.10
+Address 1: 10.3.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      kubernetes
+Address 1: 10.3.0.1 kubernetes.default.svc.cluster.local
+$ kubectl get pods
+NAME      READY     STATUS    RESTARTS   AGE
+busybox   1/1       Running   0          &lt;invalid&gt;
+</code></pre>
+
+<p>由此得知该dns正常工作。</p>
+
+<h4 id="dashboard">dashboard</h4>
+
+<p>配置文件有两个，一个是rc定义文件<code>kube-dashboard-rc.yaml</code>:</p>
+
+<pre><code>apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: kubernetes-dashboard-v1.4.1
+  namespace: kube-system
+  labels:
+    k8s-app: kubernetes-dashboard
+    version: v1.4.1
+    kubernetes.io/cluster-service: &quot;true&quot;
+spec:
+  replicas: 1
+  selector:
+    k8s-app: kubernetes-dashboard
+  template:
+    metadata:
+      labels:
+        k8s-app: kubernetes-dashboard
+        version: v1.4.1
+        kubernetes.io/cluster-service: &quot;true&quot;
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+        scheduler.alpha.kubernetes.io/tolerations:
+'[{&quot;key&quot;:&quot;CriticalAddonsOnly&quot;, &quot;operator&quot;:&quot;Exists&quot;}]'
+    spec:
+      containers:
+      - name: kubernetes-dashboard
+        image: gcr.io/google_containers/kubernetes-dashboard-amd64:v1.4.1
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+          requests:
+            cpu: 100m
+            memory: 50Mi
+        ports:
+        - containerPort: 9090
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+</code></pre>
+
+<p>另一个是service定义文件<code>kube-dashboard-svc.yaml</code>:</p>
+
+<pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: kubernetes-dashboard
+  namespace: kube-system
+  labels:
+    k8s-app: kubernetes-dashboard
+    kubernetes.io/cluster-service: &quot;true&quot;
+spec:
+  selector:
+    k8s-app: kubernetes-dashboard
+  ports:
+  - port: 80
+    targetPort: 9090
+</code></pre>
+
+<p>创建rc和service:</p>
+
+<pre><code>$ kubectl create -f kube-dashbard-rc.yaml
+$ kubectl create -f kube-dashbard-svc.yaml
+</code></pre>
+
+<p>建立一个转发，从而可以在本地访问kubernetes dashboard:</p>
+
+<pre><code>$ kubectl get pods --namespace=kube-system
+$ kubectl port-forward kubernetes-dashboard-v1.4.1-SOME-ID 9090
+--namespace=kube-system
+</code></pre>
+
+<p>现在访问<code>http://127.0.0.1:9090</code>则可以直接访问到kubernetes dashboard.</p>
+
+<p>或者，转发到特定端口：</p>
+
+<pre><code>$ kubectl port-forward kubernetes-dashboard-xxxxx 9081:9090
+</code></pre>
+
+<p>则访问<code>http://127.0.0.1:9081</code>即可访问到kube-ui.</p>
+
+<h3 id="heapster监控">heapster监控</h3>
+
+<p>heapster controller的定义文件如下:</p>
+
+<pre><code>apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: heapster-v1.2.0
+  namespace: kube-system
+  labels:
+    k8s-app: heapster
+    kubernetes.io/cluster-service: &quot;true&quot;
+    version: v1.2.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: heapster
+      version: v1.2.0
+  template:
+    metadata:
+      labels:
+        k8s-app: heapster
+        version: v1.2.0
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+        scheduler.alpha.kubernetes.io/tolerations:
+'[{&quot;key&quot;:&quot;CriticalAddonsOnly&quot;, &quot;operator&quot;:&quot;Exists&quot;}]'
+    spec:
+      containers:
+        - image: gcr.io/google_containers/heapster:v1.2.0
+          name: heapster
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 180
+            timeoutSeconds: 5
+          command:
+            - /heapster
+            - --source=kubernetes.summary_api:''
+        - image: gcr.io/google_containers/addon-resizer:1.6
+          name: heapster-nanny
+          resources:
+            limits:
+              cpu: 50m
+              memory: 92160Ki
+            requests:
+              cpu: 50m
+              memory: 92160Ki
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          command:
+            - /pod_nanny
+            - --cpu=80m
+            - --extra-cpu=0.5m
+            - --memory=140Mi
+            - --extra-memory=4Mi
+            - --threshold=5
+            - --deployment=heapster-v1.2.0
+            - --container=heapster
+            - --poll-period=300000
+            - --estimator=exponential
+</code></pre>
+
+<p>heapster-service的定义文件如下:</p>
+
+<pre><code>kind: Service
+apiVersion: v1
+metadata: 
+  name: heapster
+  namespace: kube-system
+  labels: 
+    kubernetes.io/cluster-service: &quot;true&quot;
+    kubernetes.io/name: &quot;Heapster&quot;
+spec: 
+  ports: 
+    - port: 80
+      targetPort: 8082
+  selector: 
+    k8s-app: heapster
+</code></pre>
+
+<p>创建controller及暴露服务:</p>
+
+<pre><code>$ kubectl create -f heapster-controller.yaml
+$ kubectl create -f heapster-service.yaml
+</code></pre>
+
+<p>查看集群信息:</p>
+
+<pre><code>$ kubectl cluster-info
+Kubernetes master is running at https://172.17.8.221
+Heapster is running at
+https://172.17.8.221/api/v1/proxy/namespaces/kube-system/services/heapster
+KubeDNS is running at
+https://172.17.8.221/api/v1/proxy/namespaces/kube-system/services/kube-dns
+</code></pre>
+
+<p>可以看到Heapster已经启动，而在kubernetes dashboard上此刻就可以看到监控信息了.</p>
+
+<p><img src="/images/2016_12_26_19_26_07_800x271.jpg" alt="/images/2016_12_26_19_26_07_800x271.jpg" /></p>
+
+<p><img src="/images/2016_12_26_19_29_23_941x475.jpg" alt="/images/2016_12_26_19_29_23_941x475.jpg" /></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/12/23/loadbalancingincoreos/">LoadBalancingInCoreOS</a>
       </h1>
       <span class="post-date">Dec 23, 2016 
@@ -837,165 +1943,6 @@ $ sudo reboot
 </code></pre>
 
 <p>Then your etcd2 will be re-initialized.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/20/trycoreos/">TryCoreOS</a>
-      </h1>
-      <span class="post-date">Dec 20, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="preparation">Preparation</h3>
-
-<p>Create image file via:</p>
-
-<pre><code>$ sudo mkdir corecluster
-$ cd corecluster
-$ qemu-img create -f qcow2 coreos1.qcow2 30G
-$ qemu-img create -f qcow2 coreos2.qcow2 30G
-$ qemu-img create -f qcow2 coreos3.qcow2 30G
-</code></pre>
-
-<p>Create a network named <code>172.17.8.1/24</code>, dhcp disabled.</p>
-
-<p>Since the vnet interface is occupied via virtualbox, switches to virtualbox
-installation.</p>
-
-<p>Two Ethernet cards:</p>
-
-<p><img src="/images/2016_12_20_17_36_44_697x413.jpg" alt="/images/2016_12_20_17_36_44_697x413.jpg" /></p>
-
-<p>Start from CD:</p>
-
-<p><img src="/images/2016_12_20_17_37_26_678x304.jpg" alt="/images/2016_12_20_17_37_26_678x304.jpg" /></p>
-
-<h3 id="installation-file-preparation">Installation File Preparation</h3>
-
-<p>For saving time, we use local installation repository, download the
-installation images via:</p>
-
-<pre><code>$ $ git clone https://github.com/coreos/coreos-baremetal
-# Make a copy of example files
-$ cp -R coreos-baremetal/examples .
-# Download the CoreOS image assets referenced in the target profile.
-$ ./coreos-baremetal/scripts/get-coreos stable 1185.5.0 ./examples/assets
-</code></pre>
-
-<p>Then Copy installation image and sig file into the webserver:</p>
-
-<pre><code>$ cd /YourWebServerDirectory/1185.5.0 
-$ ls
-coreos_production_image.bin.bz2  coreos_production_image.bin.bz2.sig
-</code></pre>
-
-<h3 id="yaml-definition">YAML Definition</h3>
-
-<p>Refers to <code>coreos-vagrant</code> project:</p>
-
-<pre><code>$ git clone https://github.com/coreos/coreos-vagrant.git`
-$ cat user-data
-</code></pre>
-
-<p>The configuration of the yaml is listed as following:</p>
-
-<p>First get the token via:</p>
-
-<pre><code>$ curl https://discovery.etcd.io/new?size=3
-https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxxxxxxxx
-</code></pre>
-
-<pre><code>#cloud-config
-hostname: coreos1 
-coreos:
-  etcd2:
-    # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
-    # specify the initial size of your cluster with ?size=X
-    discovery: https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxx
-    advertise-client-urls: http://172.17.8.201:2379,http://172.17.8.201:4001
-    initial-advertise-peer-urls: http://172.17.8.201:2380
-    # listen on both the official ports and the legacy ports
-    # legacy ports can be omitted if your application doesn't depend on them
-    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
-    listen-peer-urls: http://172.17.8.201:2380,http://172.17.8.201:7001
-  fleet:
-    public-ip: &quot;172.17.8.201&quot;
-  flannel:
-    interface: &quot;172.17.8.201&quot;
-  units:
-    - name: etcd2.service
-      command: start
-    - name: fleet.service
-      command: start
-    - name: flanneld.service
-      drop-ins:
-      - name: 50-network-config.conf
-        content: |
-          [Service]
-          ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{ &quot;Network&quot;: &quot;10.1.0.0/16&quot; }'
-      command: start
-    - name: static.network
-      content: |
-        [Match]
-        Name=enp0s8
-        [Network]
-        Address=172.17.8.201/24
-        Gateway=172.17.8.1
-        DNS=172.17.8.1
-    - name: docker-tcp.socket
-      command: start
-      enable: true
-      content: |
-        [Unit]
-        Description=Docker Socket for the API
-  
-        [Socket]
-        ListenStream=2375
-        Service=docker.service
-        BindIPv6Only=both
-  
-        [Install]
-        WantedBy=sockets.target
-users:  
-  - name: core
-    ssh-authorized-keys: 
-      - ssh-rsa &quot;ADD ME&quot;
-  - groups:
-      - sudo
-      - docker
-</code></pre>
-
-<p>For coreos2 node, simply replace the ip address from <code>172.17.8.201</code> to <code>172.17.8.202</code>, etc.</p>
-
-<h3 id="installation">Installation</h3>
-
-<p>Install it via:</p>
-
-<pre><code># coreos-install -d /dev/sda -b http://YourWebServer -c ./YourYamlFile.yaml -v
-</code></pre>
-
-<p>After a while, the installation will finish.</p>
-
-<p>Repeat this step in 3 nodes.</p>
-
-<h3 id="verification">Verification</h3>
-
-<p>Login into any of the core machine in cluster:</p>
-
-<pre><code>core@coreos1 ~ $ etcdctl cluster-health
-member f934a5ba1eca1ea is healthy: got healthy result from http://172.17.8.201:2379
-member 23798f79754d53b7 is healthy: got healthy result from http://172.17.8.203:2379
-member 5acdd34e67ade1d7 is healthy: got healthy result from http://172.17.8.202:2379
-cluster is healthy
-</code></pre>
 
       
     </div>

@@ -105,6 +105,397 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/29/spilian-jie-raspberrypihe-arduino/">SPI连接raspberryPI和Arduino</a>
+      </h1>
+      <span class="post-date">Dec 29, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/arduino">Arduino</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/raspberrypi">RaspberryPI</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      <p>下面是使用SPI在RaspberryPI和Arduino Nano w之间进行双机通信的一个例子。借助它可以很好的理解SPI的工作原理。<br />
+###背景知识
+RaspberryPI GPIO布局图：<br />
+<img src="/images/GPIOs.png" alt="/images/GPIOs.png" /><br />
+从图中我们可以看到，RaspberryPI上与SPI通信相关的主要是GPIO 10（MOSI), GPIO 9(MISO)和GPIO 11(SCLK).<br />
+Arduino布局图：<br />
+SPI: 10 (SS), 11 (MOSI), 12 (MISO), 13 (SCK). These pins support SPI communication using the SPI library. SS代表Slava Select.<br />
+事实上我们要使用的仅仅是11/12/13三个口而已。<br />
+###连线图
+如下图进行连线，简单来说，R(10 MOSI)-&gt;A(12 MISO), R(9, MISO)-&gt;A(11, MOSI), R(11, SCLK) -&gt;A(13, SCK)：<br />
+<img src="/images/spiconnector.jpg" alt="/images/spiconnector.jpg" />
+###Arduino端程序</p>
+
+<pre><code>// Written by Nick Gammon
+// February 2011
+/**
+ * Send arbitrary number of bits at whatever clock rate (tested at 500 KHZ and 500 HZ).
+ * This script will capture the SPI bytes, when a '\n' is recieved it will then output
+ * the captured byte stream via the serial.
+ */
+ 
+#include &lt;SPI.h&gt;
+ 
+char buf [100];
+volatile byte pos;
+volatile boolean process_it;
+ 
+void setup (void)
+{
+  Serial.begin (115200);   // debugging
+ 
+  // have to send on master in, *slave out*
+  pinMode(MISO, OUTPUT);
+  
+  // turn on SPI in slave mode
+  SPCR |= _BV(SPE);
+  //SPCR is  Arduino SPI Control Register
+  // __BV's definition is like : #define _BV(bit) (1 &lt;&lt; (bit))
+  // SPE is the register of the SPI Enable
+  
+  // get ready for an interrupt 
+  pos = 0;   // buffer empty
+  process_it = false;
+ 
+  // now turn on interrupts
+  SPI.attachInterrupt();
+ 
+}  // end of setup
+ 
+ 
+// SPI interrupt routine
+ISR (SPI_STC_vect)
+{
+byte c = SPDR;  // grab byte from SPI Data Register
+  
+  // add to buffer if room
+  if (pos &lt; sizeof buf)
+    {
+    buf [pos++] = c;
+    
+    // example: newline means time to process buffer
+    if (c == '\n')
+      process_it = true;
+      
+    }  // end of room available
+}  // end of interrupt routine SPI_STC_vect
+ 
+// main loop - wait for flag set in interrupt routine
+void loop (void)
+{
+  if (process_it)
+    {
+    buf [pos] = 0;  
+    Serial.println (buf);
+    pos = 0;
+    process_it = false;
+    }  // end of flag set
+    
+}  // end of loop
+
+</code></pre>
+
+<p>Code Walking through:<br />
+Arduino SPI Control Register (SPCR), set it to</p>
+
+<pre><code>	SPCR |= _BV(SPE);
+
+</code></pre>
+
+<p>SPI Data Register (SPDR), SPI数据寄存器。 中断程序中，每次从SPDR中取回一个byte 并存储在c中。</p>
+
+<pre><code>	if (c == '\n')
+		process_it = true;
+
+</code></pre>
+
+<p>这里通过设置全局变量process_it来影响loop中对接收数据的处理，在loop()中有如下代码段：</p>
+
+<pre><code>	if (process_it)
+	{
+		//.....
+	}
+
+</code></pre>
+
+<p>从上面看到，如果process_it为0,则loop中一直在空循环，只有当所有的数据全部接收完毕后，才会一次性打印出所有的数据。在打印完数据后，程序将自动将buf清0, 清0是通过将pos简单置0而实现的，实际的数据其实还在。
+###RaspberryPI 端程序</p>
+
+<pre><code>/*
+ * SPI testing utility (using spidev driver)
+ *
+ * Copyright (c) 2007  MontaVista Software, Inc.
+ * Copyright (c) 2007  Anton Vorontsov &lt;avorontsov@ru.mvista.com&gt;
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License.
+ *
+ * Cross-compile with cross-gcc -I/path/to/cross-kernel/include
+ */
+ 
+#include &lt;stdint.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;getopt.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include &lt;linux/types.h&gt;
+#include &lt;linux/spi/spidev.h&gt;
+ 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+ 
+static void pabort(const char *s)
+{
+	perror(s);
+	abort();
+}
+ 
+static const char *device = &quot;/dev/spidev0.0&quot;;
+static uint8_t mode;
+static uint8_t bits = 8;
+static uint32_t speed = 500000;
+static uint16_t delay;
+ 
+static void transfer(int fd)
+{
+	int ret;
+	uint8_t tx[] = {
+        0x48, 0x45, 0x4C, 0x4C, 0x4F,
+        0x20, 
+        0x57, 0x4F, 0x52, 0x4C, 0x44,
+        0x0A 
+	};
+	uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+	struct spi_ioc_transfer tr = {
+		.tx_buf = (unsigned long)tx,
+		.rx_buf = (unsigned long)rx,
+		.len = ARRAY_SIZE(tx),
+		.delay_usecs = delay,
+		.speed_hz = speed,
+		.bits_per_word = bits,
+	};
+ 
+	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+	if (ret &lt; 1)
+		pabort(&quot;can't send spi message&quot;);
+ 
+    /*
+	for (ret = 0; ret &lt; ARRAY_SIZE(tx); ret++) {
+		if (!(ret % 6))
+			puts(&quot;&quot;);
+		printf(&quot;%.2X &quot;, rx[ret]);
+	}
+	puts(&quot;&quot;);
+    */
+}
+ 
+static void print_usage(const char *prog)
+{
+	printf(&quot;Usage: %s [-DsbdlHOLC3]\n&quot;, prog);
+	puts(&quot;  -D --device   device to use (default /dev/spidev1.1)\n&quot;
+	     &quot;  -s --speed    max speed (Hz)\n&quot;
+	     &quot;  -d --delay    delay (usec)\n&quot;
+	     &quot;  -b --bpw      bits per word \n&quot;
+	     &quot;  -l --loop     loopback\n&quot;
+	     &quot;  -H --cpha     clock phase\n&quot;
+	     &quot;  -O --cpol     clock polarity\n&quot;
+	     &quot;  -L --lsb      least significant bit first\n&quot;
+	     &quot;  -C --cs-high  chip select active high\n&quot;
+	     &quot;  -3 --3wire    SI/SO signals shared\n&quot;);
+	exit(1);
+}
+ 
+static void parse_opts(int argc, char *argv[])
+{
+	while (1) {
+		static const struct option lopts[] = {
+			{ &quot;device&quot;,  1, 0, 'D' },
+			{ &quot;speed&quot;,   1, 0, 's' },
+			{ &quot;delay&quot;,   1, 0, 'd' },
+			{ &quot;bpw&quot;,     1, 0, 'b' },
+			{ &quot;loop&quot;,    0, 0, 'l' },
+			{ &quot;cpha&quot;,    0, 0, 'H' },
+			{ &quot;cpol&quot;,    0, 0, 'O' },
+			{ &quot;lsb&quot;,     0, 0, 'L' },
+			{ &quot;cs-high&quot;, 0, 0, 'C' },
+			{ &quot;3wire&quot;,   0, 0, '3' },
+			{ &quot;no-cs&quot;,   0, 0, 'N' },
+			{ &quot;ready&quot;,   0, 0, 'R' },
+			{ NULL, 0, 0, 0 },
+		};
+		int c;
+ 
+		c = getopt_long(argc, argv, &quot;D:s:d:b:lHOLC3NR&quot;, lopts, NULL);
+ 
+		if (c == -1)
+			break;
+ 
+		switch (c) {
+		case 'D':
+			device = optarg;
+			break;
+		case 's':
+			speed = atoi(optarg);
+			break;
+		case 'd':
+			delay = atoi(optarg);
+			break;
+		case 'b':
+			bits = atoi(optarg);
+			break;
+		case 'l':
+			mode |= SPI_LOOP;
+			break;
+		case 'H':
+			mode |= SPI_CPHA;
+			break;
+		case 'O':
+			mode |= SPI_CPOL;
+			break;
+		case 'L':
+			mode |= SPI_LSB_FIRST;
+			break;
+		case 'C':
+			mode |= SPI_CS_HIGH;
+			break;
+		case '3':
+			mode |= SPI_3WIRE;
+			break;
+		case 'N':
+			mode |= SPI_NO_CS;
+			break;
+		case 'R':
+			mode |= SPI_READY;
+			break;
+		default:
+			print_usage(argv[0]);
+			break;
+		}
+	}
+}
+ 
+int main(int argc, char *argv[])
+{
+	int ret = 0;
+	int fd;
+ 
+	parse_opts(argc, argv);
+ 
+	fd = open(device, O_RDWR);
+	if (fd &lt; 0)
+		pabort(&quot;can't open device&quot;);
+ 
+	/*
+	 * spi mode
+	 */
+	ret = ioctl(fd, SPI_IOC_WR_MODE, &amp;mode);
+	if (ret == -1)
+		pabort(&quot;can't set spi mode&quot;);
+ 
+	ret = ioctl(fd, SPI_IOC_RD_MODE, &amp;mode);
+	if (ret == -1)
+		pabort(&quot;can't get spi mode&quot;);
+ 
+	/*
+	 * bits per word
+	 */
+	ret = ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &amp;bits);
+	if (ret == -1)
+		pabort(&quot;can't set bits per word&quot;);
+ 
+	ret = ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &amp;bits);
+	if (ret == -1)
+		pabort(&quot;can't get bits per word&quot;);
+ 
+	/*
+	 * max speed hz
+	 */
+	ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &amp;speed);
+	if (ret == -1)
+		pabort(&quot;can't set max speed hz&quot;);
+ 
+	ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &amp;speed);
+	if (ret == -1)
+		pabort(&quot;can't get max speed hz&quot;);
+ 
+	printf(&quot;spi mode: %d\n&quot;, mode);
+	printf(&quot;bits per word: %d\n&quot;, bits);
+	printf(&quot;max speed: %d Hz (%d KHz)\n&quot;, speed, speed/1000);
+ 
+	transfer(fd);
+ 
+	close(fd);
+ 
+	return ret;
+}
+
+</code></pre>
+
+<p>解析： 在main()函数中，设置完spi总线的相关参数后，调用transfer(fd)来传递参数。<br />
+transfer()函数的实现如下:</p>
+
+<pre><code>static void transfer(int fd)
+{
+	int ret;
+	uint8_t tx[] = {
+        0x48, 0x45, 0x4C, 0x4C, 0x4F,
+        0x20, 
+        0x57, 0x4F, 0x52, 0x4C, 0x44,
+        0x0A 
+	};
+	uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+	struct spi_ioc_transfer tr = {
+		.tx_buf = (unsigned long)tx,
+		.rx_buf = (unsigned long)rx,
+		.len = ARRAY_SIZE(tx),
+		.delay_usecs = delay,
+		.speed_hz = speed,
+		.bits_per_word = bits,
+	};
+ 
+	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+	if (ret &lt; 1)
+		pabort(&quot;can't send spi message&quot;);
+ 
+    /*
+	for (ret = 0; ret &lt; ARRAY_SIZE(tx); ret++) {
+		if (!(ret % 6))
+			puts(&quot;&quot;);
+		printf(&quot;%.2X &quot;, rx[ret]);
+	}
+	puts(&quot;&quot;);
+    */
+}
+
+</code></pre>
+
+<p>tx即为字符串，&rsquo;H&rsquo;=0x48, &lsquo;E&rsquo;=0x45, &lsquo;L&rsquo;=0x4c, &lsquo;L&rsquo;=0x4c, &lsquo;O&rsquo;=0x4f, &lsquo; &lsquo;=0x20, &lsquo;W&rsquo;=0x57, &lsquo;O&rsquo;=0x4f, &lsquo;R&rsquo;=0x52, &lsquo;L&rsquo;=0x4c, &rsquo;D&rsquo;=0x44, &lsquo;\n&rsquo;=0x0a.<br />
+实际传送则是调用：
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &amp;tr);
+有关它的解释如下：</p>
+
+<pre><code>	SPI_IOC_MESSAGE gives userspace the equivalent of kernel spi_sync().
+	  72 * Pass it an array of related transfers, they'll execute together.
+	  73 * Each transfer may be half duplex (either direction) or full duplex.
+	  74 *
+	  75 *      struct spi_ioc_transfer mesg[4];
+	  76 *      ...
+	  77 *      status = ioctl(fd, SPI_IOC_MESSAGE(4), mesg);
+
+	#define SPI_IOC_MESSAGE(N) _IOW(SPI_IOC_MAGIC, 0, char[SPI_MSGSIZE(N)])
+
+</code></pre>
+
+<p>调用完transfer()函数后，调用close()来关闭文件描述符。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/12/28/tsc3200-on-arduino/">TSC3200 on Arduino</a>
       </h1>
       <span class="post-date">Dec 28, 2013 
@@ -562,66 +953,6 @@ ColorScheme=Linux
 
 <pre><code># vim $HOME/.local/share/konsole/Shell.profile
 + Font=YaHei Consolas Hybrid,11,-1,5,50,0,0,0,0,0
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/12/23/setup-wordpress-on-ubuntu/">Setup Wordpress on Ubuntu</a>
-      </h1>
-      <span class="post-date">Dec 23, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/web">Web</a>
-        
-      </span>
-      
-      <p>###Material
-Just some items on how to setup a wordpress website on Ubuntu12.04 and Ubuntu13.04.<br />
-The tutorial for setting up wordpress on Ubuntu12.04 is located at:<br />
-<a href="https://www.digitalocean.com/community/articles/how-to-install-wordpress-on-ubuntu-12-04">https://www.digitalocean.com/community/articles/how-to-install-wordpress-on-ubuntu-12-04</a></p>
-
-<p>And a tutorial for setting up LAMP server on Ubuntu12.04 is located at:<br />
-<a href="https://www.digitalocean.com/community/articles/how-to-install-linux-apache-mysql-php-lamp-stack-on-ubuntu">https://www.digitalocean.com/community/articles/how-to-install-linux-apache-mysql-php-lamp-stack-on-ubuntu</a></p>
-
-<p>###TroubleShotting
-I encountered some problem during setup. Following is the solutions for them.<br />
-####Delete the previous installed wordpress</p>
-
-<pre><code>	# mysqladmin -uXXXX -pXXXXXXXX drop wordpress
-	Do you really want to drop the 'wordpress' database [y/N] y
-
-</code></pre>
-
-<p>Then you can Re-Create the database.<br />
-####Upload file size limitation<br />
-Edit the file limitation via:</p>
-
-<pre><code>	# vim /etc/php5/apache2/php.ini
-		post_max_size = 64M
-		upload_max_filesize = 64M
-	# /etc/init.d/apache2 restart
-
-</code></pre>
-
-<p>####Reset the default webserver
-Change from default nginx to apache2 server:</p>
-
-<pre><code>	$ update-rc.d -f nginx disable 
-	$ update-rc.d -f apache2 enable 
-
-</code></pre>
-
-<p>####Fresh Re-install of apach2
-Sometimes you have to re-set the configuration of apache, following steps will let you freshly re-install it.</p>
-
-<pre><code>	$ apt-get remove --purge apache2 apache2-utils php5-cgi php5-fpm libapache2-mod-php5filter libapache2-mod-php5  apache2.2-common
-	$ apt-get install  apache2 apache2-utils php5-cgi php5-fpm  apache2.2-common
-	$ apt-get install libapache2-mod-php5filter
-	$ apt-get install libapache2-mod-php5
-
 </code></pre>
 
       

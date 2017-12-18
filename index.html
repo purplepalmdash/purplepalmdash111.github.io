@@ -105,6 +105,195 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/12/18/workingtipsoninternetsharing/">WorkingTipsOnInternetSharing</a>
+      </h1>
+      <span class="post-date">Dec 18, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="aim">AIM</h3>
+
+<p>To set up an free wireless solution working for WebDuino.</p>
+
+<p>Because I located in china mainland, while our internet were forbidden by
+government(Fuck GFW!), so I have to find another way for accross the firewall
+and let WebDuino fetch back its updates.</p>
+
+<h3 id="hardware-environment">Hardware Environment</h3>
+
+<p>Laptop.<br />
+Wireless dongle(Fast)</p>
+
+<pre><code>Bus 001 Device 002: ID 0bda:8179 Realtek Semiconductor Corp. RTL8188EUS 802.11n Wireless Network Adapter
+</code></pre>
+
+<h3 id="virtualmachine">VirtualMachine</h3>
+
+<p>I set a virtual machine which runs in virtualbox. First I thought
+configuration via gui would be easier, but later I found it&rsquo;s even inpossible
+to use the gui configuration tools to let my usb wireless card acts as an ap.</p>
+
+<p>Later I will use an ubuntu 32-bit server(i386) for setting up this wireless
+ap.</p>
+
+<p>To specify usb wireless dongle to virtualbox&rsquo;s vm(Ubuntu16.04), do following:</p>
+
+<p><img src="/images/2017_12_18_15_15_58_749x283.jpg" alt="/images/2017_12_18_15_15_58_749x283.jpg" /></p>
+
+<p>Then in your vm you will see the attached usb dongle.</p>
+
+<h3 id="system-configuration">System Configuration</h3>
+
+<h4 id="enable-naming">Enable naming</h4>
+
+<p>If you didn&rsquo;t specify the naming, Ubuntu16.04(or later than Ubuntu12.04) won&rsquo;t
+recognize your ethernet card or wireless card as &ldquo;eth0&rdquo; or &ldquo;wlan0&rdquo;, so you
+have to changint then in grub parameters:</p>
+
+<p>If you don&rsquo;t do this step, your wireless card will be recognized as something
+like &ldquo;wlx000e8e22xxxxxx&rdquo;, this will makes your configuration a little bit
+confusing.</p>
+
+<pre><code># vim /etc/default/grub
+GRUB_CMDLINE_LINUX=&quot;net.ifnames=0 biosdevname=0&quot;
+# sudo update-grub
+# sudo reboot
+</code></pre>
+
+<p>After rebooting, your wireless card will be recoginzed as &ldquo;wlan0&rdquo;.</p>
+
+<p>Don&rsquo;t forget to update your <code>/etc/network/interface</code>, change from &ldquo;enp0s&rdquo; to
+&ldquo;eth&rdquo;.</p>
+
+<h4 id="8188eu-hostapd">8188eu hostapd</h4>
+
+<p>The system&rsquo;s default hostapd won&rsquo;t be used, we have to use 8188eu&rsquo;s own
+hostapd for working, the steps are listed as following:</p>
+
+<pre><code>$ sudo apt-get autoremove hostapd
+$ wget https://github.com/jenssegers/RTL8188-hostapd/archive/v2.0.tar.gz
+$ tar -zxvf v2.0.tar.gz
+$ cd RTL8188-hostapd-2.0/hostapd
+$ sudo make
+$ sudo make install
+$ sudo systemctl enable hostapd
+$ sudo service hostapd restart
+</code></pre>
+
+<p>If you didn&rsquo;t see your hostapd working, simply reboot your machine, and check
+again.</p>
+
+<h4 id="hostapd-configuration">hostapd configuration</h4>
+
+<p>Your hostapd configuration file is located in <code>/etc/hostapd/hostapd.conf</code>,
+following are the configuration example:</p>
+
+<pre><code>interface=wlan0
+ssid=sosowifi
+channel=1
+#bridge=br0
+
+# WPA and WPA2 configuration
+
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=3
+wpa_passphrase=XXXXXXXXXXXXXXXXX
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+
+# Hardware configuration
+
+driver=rtl871xdrv
+ieee80211n=1
+hw_mode=g
+device_name=RTL8192CU
+manufacturer=Realtek
+</code></pre>
+
+<p>Check the status via:</p>
+
+<pre><code>$ sudo systemctl status hostapd
+● hostapd.service - LSB: Advanced IEEE 802.11 management daemon
+   Loaded: loaded (/etc/init.d/hostapd; bad; vendor preset: enabled)
+   Active: active (running) since 一 2017-12-18 15:00:02 CST; 27min ago
+     Docs: man:systemd-sysv-generator(8)
+  Process: 1502 ExecStart=/etc/init.d/hostapd start (code=exited, status=0/SUCCESS)
+    Tasks: 1 (limit: 512)
+   CGroup: /system.slice/hostapd.service
+           └─1525 /usr/local/bin/hostapd -B -P /var/run/hostapd.pid /etc/hostapd/hostapd.conf
+</code></pre>
+
+<h4 id="wlan0-configuration">wlan0 configuration</h4>
+
+<p>Setup the wlan0 ip address via following:</p>
+
+<pre><code># vim /etc/network/interface
+	# wireless wlan0
+	allow-hotplug wlan0
+	iface wlan0 inet static
+	address 10.0.70.1
+	netmask 255.255.255.0
+</code></pre>
+
+<p>We set wlan0&rsquo;s ip address as the gateway for our wifi-network.</p>
+
+<h4 id="dhcpcd">dhcpcd</h4>
+
+<p>We have to use dhcpd for assiging the ip address to connected.</p>
+
+<pre><code>$ sudo  apt-get install  isc-dhcp-server
+$ sudo vim /etc/dhcp/dhcpd.conf
+ddns-update-style none;
+ignore client-updates;
+authoritative;
+option local-wpad code 252 = text;
+ 
+subnet 10.0.70.0 netmask 255.255.255.0 {
+# --- default gateway
+option routers 10.0.70.1;
+# --- Netmask
+option subnet-mask 255.255.255.0;
+# --- Broadcast Address
+option broadcast-address 10.0.70.255;
+# --- Domain name servers, tells the clients which DNS servers to use.
+option domain-name-servers
+10.0.70.1, 8.8.8.8, 8.8.4.4;
+option time-offset 0;
+range 10.0.70.3 10.0.70.13;
+default-lease-time 1209600;
+max-lease-time 1814400;
+}
+</code></pre>
+
+<p>We won&rsquo;t add dhcpd for auto-startup, because we don&rsquo;t want person to connect
+to our ap at the very beginning time.</p>
+
+<h4 id="ip-forwarding">IP Forwarding</h4>
+
+<p>We enable the ip forwarding of the kernel and setup the postrouting for
+iptables:</p>
+
+<pre><code>$ sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE
+$ sudo dhcpd wlan0
+$ sudo bash
+# echo 1 &gt; /proc/sys/net/ipv4/ip_forward
+</code></pre>
+
+<p>Now you should be able to access the network.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/12/14/vmwarebasedesxiworkingtips/">VmwareBasedESXiWorkingTips</a>
       </h1>
       <span class="post-date">Dec 14, 2017 
@@ -342,40 +531,6 @@ User=username:password
 
 <pre><code>graphic = abcdefg
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/11/20/thinkingonssdtesting/">ThinkingOnSSDTesting</a>
-      </h1>
-      <span class="post-date">Nov 20, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="benchmark">benchmark</h3>
-
-<p>SATA 3: 6Gbps/SATA 2: 3Gbps/SATA 1: 1.5GBps</p>
-
-<p>ATTO Disk Benchmark.<br />
-CPU-Z<br />
-CrystalDiskMark<br />
-随机写入/随机读出/顺序写入/顺序读出<br />
-iometer<br />
-P/E Cycle.<br />
-HD Tune Pro<br />
-AS SSD Benchmark<br />
-PCMark<br />
-PCMark Vantage
-PCMark 7(SSD)</p>
-
-<p>RAMDISK for win: dataram</p>
 
       
     </div>

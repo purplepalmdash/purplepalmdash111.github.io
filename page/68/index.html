@@ -105,6 +105,318 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-2/">安装Icehouse@Ubuntu14.04(2)</a>
+      </h1>
+      <span class="post-date">Apr 13, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="安装identity服务">安装Identity服务</h3>
+
+<p>首先创建keystone所需数据库:</p>
+
+<pre><code>root@JunoController:~# mysql -u root -p
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 28
+Server version: 5.5.41-MariaDB-1ubuntu0.14.04.1 (Ubuntu)
+
+Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]&gt; CREATE DATABASE keystone;
+Query OK, 1 row affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY 'KEYSTONE_PASS';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'KEYSTONE_PASS';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]&gt; exit;
+Bye
+
+</code></pre>
+
+<p>安装keystone相关套件:</p>
+
+<pre><code>root@JunoController:~# apt-get -y install keystone python-keystoneclient
+
+</code></pre>
+
+<p>创建一个admin token用于做初始化配置:</p>
+
+<pre><code>root@JunoController:~# openssl rand -hex 10
+5c3b5cd66a7dfa8e33e5
+
+</code></pre>
+
+<p>使用上面取得的admin token和mysql设置用于更新/etc/keystone.conf文件，更改如下:</p>
+
+<pre><code>root@JunoController:~# vim /etc/keystone/keystone.conf 
+[DEFAULT]
+admin_token=5c3b5cd66a7dfa8e33e5
+verbose=True
+log_dir = /var/log/keystone
+
+[database]
+connection=mysql://keystone:KEYSTONE_DBPASS@10.17.17.211/keystone
+
+
+
+</code></pre>
+
+<p>部署数据库并重新启动Keystone服务:</p>
+
+<pre><code>root@JunoController:~# su -s /bin/sh -c &quot;keystone-manage db_sync&quot; keystone
+root@JunoController:~# service keystone restart
+
+</code></pre>
+
+<p>删除不需要的sqlite数据库, 并设定crontab任务:</p>
+
+<pre><code>root@JunoController:~# rm -f /var/lib/keystone/keystone.db
+root@JunoController:~# (crontab -l -u keystone 2&gt;&amp;1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush &gt;/var/log/keystone/keystone-tokenflush.log 2&gt;&amp;1' &gt;&gt; /var/spool/cron/crontabs/keystone
+
+</code></pre>
+
+<h3 id="建立-user-role-tenant">建立 user / role / tenant</h3>
+
+<p>环境变量设置:</p>
+
+<pre><code>root@JunoController:~# export OS_SERVICE_TOKEN=5c3b5cd66a7dfa8e33e5
+root@JunoController:~# export OS_SERVICE_ENDPOINT=http://10.17.17.211:35357/v2.0
+
+</code></pre>
+
+<h4 id="tenant创建">tenant创建</h4>
+
+<p>创建admin tenant:</p>
+
+<pre><code>root@JunoController:~#  keystone tenant-create --name admin --description &quot;Admin Tenant&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Admin Tenant           |
+|   enabled   |               True               |
+|      id     | ea1f0a6b15dc4796958f087c38756ed1 |
+|     name    |              admin               |
++-------------+----------------------------------+
+
+</code></pre>
+
+<p>创建demo tenant:</p>
+
+<pre><code>root@JunoController:~# keystone tenant-create --name demo --description &quot;Demo Tenant&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Demo Tenant            |
+|   enabled   |               True               |
+|      id     | 2ac9cae777014d3d94458f521b013e94 |
+|     name    |               demo               |
++-------------+----------------------------------+
+
+</code></pre>
+
+<h4 id="建立user">建立user</h4>
+
+<p>建立admin用户:</p>
+
+<pre><code>root@JunoController:~# keystone user-create --name admin --pass xxxx --email kkkttt@gmail.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |        kkkttt@gmail.com        |
+| enabled  |               True               |
+|    id    | 055dd9b7b1564df5bf9e9c511f32978b |
+|   name   |              admin               |
+| username |              admin               |
++----------+----------------------------------+
+
+</code></pre>
+
+<p>在demo tenant下建立demo用户:</p>
+
+<pre><code>root@JunoController:~# keystone user-create --name demo --tenant demo --pass engine --email kkkttt@gmail.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |        kkkttt@gmail.com        |
+| enabled  |               True               |
+|    id    | e8f2c2bdaee34f3895147f26a924e010 |
+|   name   |               demo               |
+| tenantId | 2ac9cae777014d3d94458f521b013e94 |
+| username |               demo               |
++----------+----------------------------------+
+
+</code></pre>
+
+<h4 id="admin-role">admin role</h4>
+
+<p>建立admin role:</p>
+
+<pre><code>root@JunoController:~# keystone role-create --name admin
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|    id    | 4af914913e154a599deb1b78a0751c1a |
+|   name   |              admin               |
++----------+----------------------------------+
+
+</code></pre>
+
+<h4 id="链接user-role-tenant">链接user/role/tenant</h4>
+
+<pre><code>root@JunoController:~# keystone user-role-add --user admin --tenant admin --role admin
+
+</code></pre>
+
+<h4 id="创建一个service-tenant">创建一个Service Tenant</h4>
+
+<p>先建立Service Tenant:</p>
+
+<pre><code>root@JunoController:~# keystone tenant-create --name service --description &quot;Service Tenant&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |          Service Tenant          |
+|   enabled   |               True               |
+|      id     | 4b22bf4e6a68419aa91da6e0ffaca2dc |
+|     name    |             service              |
++-------------+----------------------------------+
+
+</code></pre>
+
+<h4 id="定义services-api-服务挂载点">定义services &amp; API 服务挂载点</h4>
+
+<p>所有安装好的服务都需要向Identity Service注册，甚至是Identity Service本身，都需要先注册上才可以被使用:<br />
+首先注册Identity Service:</p>
+
+<pre><code>root@JunoController:~# keystone service-create --name keystone --type identity --description &quot;OpenStack Identity&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |        OpenStack Identity        |
+|   enabled   |               True               |
+|      id     | 27bf7f70deac429d8d28623d99939ae6 |
+|     name    |             keystone             |
+|     type    |             identity             |
++-------------+----------------------------------+
+
+</code></pre>
+
+<p>而后，设定Identity Service的服务端点:</p>
+
+<pre><code>root@JunoController:~# keystone endpoint-create --service-id $(keystone service-list | awk '/ identity / {print $2}') --publicurl http://10.17.17.211:5000/v2.0 --internalurl http://10.17.17.211:5000/v2.0 --adminurl http://10.17.17.211:35357/v2.0 --region regionOne                      
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |  http://10.17.17.211:35357/v2.0  |
+|      id     | fb4c17d5c1414a7e852c6f7db552dd89 |
+| internalurl |  http://10.17.17.211:5000/v2.0   |
+|  publicurl  |  http://10.17.17.211:5000/v2.0   |
+|    region   |            regionOne             |
+|  service_id | 27bf7f70deac429d8d28623d99939ae6 |
++-------------+----------------------------------+
+
+</code></pre>
+
+<p>验证Identity服务是否安装成功,首先，unset环境变量:</p>
+
+<pre><code>root@JunoController:~# unset OS_SERVICE_TOKEN OS_SERVICE_ENDPOINT
+
+</code></pre>
+
+<p>以 tenant(admin) &amp; user(admin) 的身份取得 token:</p>
+
+<pre><code>keystone --os-tenant-name admin --os-username admin --os-password ADMIN_PASS --os-auth-url http://10.17.17.211:35357/v2.0 token-get
+
+</code></pre>
+
+<p>以 tenant(admin) &amp; user(admin) 的身分查詢 tenant 清單:</p>
+
+<pre><code># keystone --os-tenant-name admin --os-username admin --os-password  xxxxxx --os-auth-url http://10.17.17.211:35357/v2.0 tenant-list
++----------------------------------+---------+---------+
+|                id                |   name  | enabled |
++----------------------------------+---------+---------+
+| ea1f0a6b15dc4796958f087c38756ed1 |  admin  |   True  |
+| 2ac9cae777014d3d94458f521b013e94 |   demo  |   True  |
+| 4b22bf4e6a68419aa91da6e0ffaca2dc | service |   True  |
++----------------------------------+---------+---------+
+
+</code></pre>
+
+<p>查询user清单：</p>
+
+<pre><code>root@JunoController:~# keystone --os-tenant-name admin --os-username admin --os-password xxxx --os-auth-url http://10.17.17.211:35357/v2.0 user-list
++----------------------------------+-------+---------+--------------------+
+|                id                |  name | enabled |       email        |
++----------------------------------+-------+---------+--------------------+
+| 055dd9b7b1564df5bf9e9c511f32978b | admin |   True  | kkkttt@gmail.com |
+| e8f2c2bdaee34f3895147f26a924e010 |  demo |   True  | kkkttt@gmail.com |
++----------------------------------+-------+---------+--------------------+
+
+</code></pre>
+
+<p>查询role清单:</p>
+
+<pre><code>root@JunoController:~# keystone --os-tenant-name admin --os-username admin --os-password xxxx --os-auth-url http://10.17.17.211:35357/v2.0 role-list
++----------------------------------+----------+
+|                id                |   name   |
++----------------------------------+----------+
+| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
+| 4af914913e154a599deb1b78a0751c1a |  admin   |
++----------------------------------+----------+
+
+</code></pre>
+
+<p>以demo用户身份去的token</p>
+
+<pre><code>root@controller:~# keystone --os-tenant-name demo --os-username demo --os-password DEMO_PASS --os-auth-url http://10.17.17.211:35357/v2.0 token-get
+
+</code></pre>
+
+<p>以demo身份取得用户清单会被提示权限不足:</p>
+
+<pre><code>root@JunoController:~# keystone --os-tenant-name demo --os-username demo --os-password xxxx --os-auth-url http://10.17.17.211:35357/v2.0 user-list
+You are not authorized to perform the requested action, admin_required. (HTTP 403)
+
+</code></pre>
+
+<p>现在keystone服务已经挂载完毕了，接下来就是逐个挂载组件。</p>
+
+<h3 id="快速切换脚本">快速切换脚本</h3>
+
+<p>快速切换脚本如下，记得加上执行权限:</p>
+
+<pre><code>root@JunoController:~# cat openstack/admin-openrc.sh
+export OS_TENANT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=xxxx
+export OS_AUTH_URL=http://10.17.17.211:35357/v2.0
+root@JunoController:~# cat openstack/demo-openrc.sh 
+export OS_TENANT_NAME=demo
+export OS_USERNAME=demo
+export OS_PASSWORD=xxxx
+export OS_AUTH_URL=http://10.17.17.211:5000/v2.0
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/04/13/an-zhuang-icehouse-at-ubuntu14-dot-04-3/">安装Icehouse@Ubuntu14.04(3)</a>
       </h1>
       <span class="post-date">Apr 13, 2015 
@@ -1499,50 +1811,6 @@ container_formats = ami,ari,aki,bare,ovf,docker
 
 <pre><code>$ docker pull ubuntu
 $ docker save ubuntu | glance image-create --is-public=True --container-format=docker --disk-format=raw --name ubuntu_container
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/04/01/build-qemu-for-supporting-glustfs/">Build qemu for supporting glustfs</a>
-      </h1>
-      <span class="post-date">Apr 1, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      <p>Following is the build procedure.</p>
-
-<pre><code>$ sudo apt-get build-dep qemu
-$ sudo apt-get install libvde-dev libvdeplug2-dev libcap-ng-dev libattr1-dev
-$ wget http://wiki.qemu-project.org/download/qemu-2.0.2.tar.bz2
-$ tar xjvf qemu-2.0.2.tar.bz2
-$ cd qemu-2.0.2/
-$ mkdir -p bin/debug/native
-$ cd bin/debug/native
-$ sudo apt-get install libjpeg-turbo8-dev
-$ sudo apt-get install glusterfs-common
- ../../../configure --enable-sdl --audio-drv-list=alsa,oss --enable-curses --enable-vnc-jpeg --enable-curl --enable-fdt --enable-kvm --enable-tcg-interpreter --enable-system --enable-user \\n --enable-linux-user --enable-guest-base --enable-pie --enable-uuid --enable-vde --enable-linux-aio --enable-cap-ng --enable-attr --enable-docs --enable-vhost-net --enable-rbd \\n --enable-guest-agent --enable-glusterfs --target-list=x86_64-softmmu,i386-softmmu
- ./qemu-img -h
- $ make -j2
-
-</code></pre>
-
-<p>Before, Found qemu-img:</p>
-
-<pre><code>$ qemu-img -h
-Supported formats: vvfat vpc vmdk vhdx vdi sheepdog sheepdog sheepdog rbd raw host_cdrom host_floppy host_device file qed qcow2 qcow parallels nbd nbd nbd dmg tftp ftps ftp https http cow cloop bochs blkverify blkdebug
-
-</code></pre>
-
-<p>After, qemu-img:</p>
-
-<pre><code>Supported formats: vvfat vpc vmdk vhdx vdi sheepdog sheepdog sheepdog rbd raw host_cdrom host_floppy host_device file qed qcow2 qcow parallels nbd nbd nbd gluster gluster gluster gluster dmg tftp ftps ftp https http cow cloop bochs blkverify blkdebug
 
 </code></pre>
 

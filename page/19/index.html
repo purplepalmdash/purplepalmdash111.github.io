@@ -105,6 +105,165 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/12/20/trycoreos/">TryCoreOS</a>
+      </h1>
+      <span class="post-date">Dec 20, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="preparation">Preparation</h3>
+
+<p>Create image file via:</p>
+
+<pre><code>$ sudo mkdir corecluster
+$ cd corecluster
+$ qemu-img create -f qcow2 coreos1.qcow2 30G
+$ qemu-img create -f qcow2 coreos2.qcow2 30G
+$ qemu-img create -f qcow2 coreos3.qcow2 30G
+</code></pre>
+
+<p>Create a network named <code>172.17.8.1/24</code>, dhcp disabled.</p>
+
+<p>Since the vnet interface is occupied via virtualbox, switches to virtualbox
+installation.</p>
+
+<p>Two Ethernet cards:</p>
+
+<p><img src="/images/2016_12_20_17_36_44_697x413.jpg" alt="/images/2016_12_20_17_36_44_697x413.jpg" /></p>
+
+<p>Start from CD:</p>
+
+<p><img src="/images/2016_12_20_17_37_26_678x304.jpg" alt="/images/2016_12_20_17_37_26_678x304.jpg" /></p>
+
+<h3 id="installation-file-preparation">Installation File Preparation</h3>
+
+<p>For saving time, we use local installation repository, download the
+installation images via:</p>
+
+<pre><code>$ $ git clone https://github.com/coreos/coreos-baremetal
+# Make a copy of example files
+$ cp -R coreos-baremetal/examples .
+# Download the CoreOS image assets referenced in the target profile.
+$ ./coreos-baremetal/scripts/get-coreos stable 1185.5.0 ./examples/assets
+</code></pre>
+
+<p>Then Copy installation image and sig file into the webserver:</p>
+
+<pre><code>$ cd /YourWebServerDirectory/1185.5.0 
+$ ls
+coreos_production_image.bin.bz2  coreos_production_image.bin.bz2.sig
+</code></pre>
+
+<h3 id="yaml-definition">YAML Definition</h3>
+
+<p>Refers to <code>coreos-vagrant</code> project:</p>
+
+<pre><code>$ git clone https://github.com/coreos/coreos-vagrant.git`
+$ cat user-data
+</code></pre>
+
+<p>The configuration of the yaml is listed as following:</p>
+
+<p>First get the token via:</p>
+
+<pre><code>$ curl https://discovery.etcd.io/new?size=3
+https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxxxxxxxx
+</code></pre>
+
+<pre><code>#cloud-config
+hostname: coreos1 
+coreos:
+  etcd2:
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
+    # specify the initial size of your cluster with ?size=X
+    discovery: https://discovery.etcd.io/xxxxxxxxxxxxxxxxxxx
+    advertise-client-urls: http://172.17.8.201:2379,http://172.17.8.201:4001
+    initial-advertise-peer-urls: http://172.17.8.201:2380
+    # listen on both the official ports and the legacy ports
+    # legacy ports can be omitted if your application doesn't depend on them
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    listen-peer-urls: http://172.17.8.201:2380,http://172.17.8.201:7001
+  fleet:
+    public-ip: &quot;172.17.8.201&quot;
+  flannel:
+    interface: &quot;172.17.8.201&quot;
+  units:
+    - name: etcd2.service
+      command: start
+    - name: fleet.service
+      command: start
+    - name: flanneld.service
+      drop-ins:
+      - name: 50-network-config.conf
+        content: |
+          [Service]
+          ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{ &quot;Network&quot;: &quot;10.1.0.0/16&quot; }'
+      command: start
+    - name: static.network
+      content: |
+        [Match]
+        Name=enp0s8
+        [Network]
+        Address=172.17.8.201/24
+        Gateway=172.17.8.1
+        DNS=172.17.8.1
+    - name: docker-tcp.socket
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+  
+        [Socket]
+        ListenStream=2375
+        Service=docker.service
+        BindIPv6Only=both
+  
+        [Install]
+        WantedBy=sockets.target
+users:  
+  - name: core
+    ssh-authorized-keys: 
+      - ssh-rsa &quot;ADD ME&quot;
+  - groups:
+      - sudo
+      - docker
+</code></pre>
+
+<p>For coreos2 node, simply replace the ip address from <code>172.17.8.201</code> to <code>172.17.8.202</code>, etc.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>Install it via:</p>
+
+<pre><code># coreos-install -d /dev/sda -b http://YourWebServer -c ./YourYamlFile.yaml -v
+</code></pre>
+
+<p>After a while, the installation will finish.</p>
+
+<p>Repeat this step in 3 nodes.</p>
+
+<h3 id="verification">Verification</h3>
+
+<p>Login into any of the core machine in cluster:</p>
+
+<pre><code>core@coreos1 ~ $ etcdctl cluster-health
+member f934a5ba1eca1ea is healthy: got healthy result from http://172.17.8.201:2379
+member 23798f79754d53b7 is healthy: got healthy result from http://172.17.8.203:2379
+member 5acdd34e67ade1d7 is healthy: got healthy result from http://172.17.8.202:2379
+cluster is healthy
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/12/15/usemesosforci/">UseMesosForCI</a>
       </h1>
       <span class="post-date">Dec 15, 2016 
@@ -596,126 +755,6 @@ CentOS72Kubernetes                    (virtualbox, 0)
 <p>Now you got the vagrant-libvirt working again.</p>
 
 <p><strong>Notice</strong>: This would be happend in vagrant-1.9.1</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/12/07/downloadxenserver62patches/">DownloadXenServer62Patches</a>
-      </h1>
-      <span class="post-date">Dec 7, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>The script is listed as following, use python2 for running it:</p>
-
-<pre><code>from bs4 import BeautifulSoup
-import urllib2
-import re
-
-## Pages contains the download page url
-url_list = [
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=10&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=20&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=30&quot;,
-]
-
-for url in url_list:
-  #response = urllib2.urlopen('https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0')
-  response = urllib2.urlopen(url)
-  
-  ### Fetch the urllib2 result.
-  html = response.read()
-  # print len(html)
-  
-  ### Make soup of the html.
-  soup = BeautifulSoup(html, 'html.parser')
-  # print soup.prettify()
-  
-  ### Get all of the download page link:
-  for i in soup.findAll('h4'):
-    for a in i.findAll('a'):
-      #print a['href']
-      page_response = urllib2.urlopen(a['href'])
-      page_html = page_response.read()
-      page_soup = BeautifulSoup(page_html, 'html.parser')
-      for elem in page_soup(text=re.compile(r&quot;window.location.href&quot;)):
-        prefix = elem.string.find(&quot;supportkc&quot;)
-        #print prefix
-        url_begin_pos = elem.string.find(&quot;window.location.href&quot;) + 24
-        url_end_pos = elem.string.find(&quot;zip&quot;) + 3
-        if prefix &gt; 0:
-          print &quot;https://support.citrix.com&quot;+elem.string[url_begin_pos:url_end_pos]
-        else:
-          print elem.string[url_begin_pos:url_end_pos]
-</code></pre>
-
-<p>The total patches are around 2G size.</p>
-
-<p>The correct version:</p>
-
-<pre><code>from bs4 import BeautifulSoup
-import urllib2
-import re
-
-## Pages contains the download page url
-url_list = [
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=0&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=10&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=20&quot;,
-&quot;https://support.citrix.com/search?searchQuery=%3F&amp;lang=en&amp;sort=cr_date_desc&amp;ct=Hotfixes&amp;ctcf=Recommended&amp;prod=XenServer&amp;pver=XenServer+6.2.0&amp;st=30&quot;,
-]
-
-for url in url_list:
-  response = urllib2.urlopen(url)
-  
-  ### Fetch the urllib2 result.
-  html = response.read()
-  # print len(html)
-  
-  ### Make soup of the html.
-  soup = BeautifulSoup(html, 'html.parser')
-  # print soup.prettify()
-  
-  ### Get all of the download page link:
-  for i in soup.findAll('h4'):
-    for a in i.findAll('a'):
-      print a['href']
-      print a.text
-      page_response = urllib2.urlopen(a['href'])
-      page_html = page_response.read()
-      page_soup = BeautifulSoup(page_html, 'html.parser')
-      try:
-        print page_soup.findAll('blockquote')[1].text
-      except:
-        pass
-      else:
-        pass
-      try:
-        print page_soup.find_all('span',attrs={'class':'block-quote'})[1].text
-      except:
-        pass
-      else:
-        pass
-      for elem in page_soup(text=re.compile(r&quot;window.location.href&quot;)):
-        prefix = elem.string.find(&quot;supportkc&quot;)
-        #print prefix
-        url_begin_pos = elem.string.find(&quot;window.location.href&quot;) + 24
-        url_end_pos = elem.string.find(&quot;zip&quot;) + 3
-        if prefix &gt; 0:
-          print &quot;https://support.citrix.com&quot;+elem.string[url_begin_pos:url_end_pos]
-        else:
-          print elem.string[url_begin_pos:url_end_pos]
-</code></pre>
-
-<p>Manually get the result, and this time we get the uuid.</p>
-
-<p>a tip for reverse the output is using <code>tac</code> rather than <code>cat</code>.</p>
 
       
     </div>

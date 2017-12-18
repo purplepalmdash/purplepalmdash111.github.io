@@ -105,6 +105,187 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/11/05/%E4%B8%BAblog%E6%B7%BB%E5%8A%A0%E4%BF%9D%E5%AD%98%E4%B8%BA%E5%9B%BE%E7%89%87%E5%8A%9F%E8%83%BD/">为Blog添加保存为图片功能</a>
+      </h1>
+      <span class="post-date">Nov 5, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="背景">背景</h3>
+
+<p>众所周知疼讯其实一直是一个很封闭傻逼的企业，早年QZONE的代码就层层加密，
+惟恐互联网爬虫爬到它上面取内容。进入到移动互联网时代，就更加变本加厉，盆友
+圈里的诸多内容，恐怕诸位都是没办法弄出来的。</p>
+
+<p>早年曾在Blog上添加过<code>分享到朋友圈</code>或<code>分享到微信好友</code>按钮，由于<code>github.io</code>未
+被疼讯认可，共享出来的链接通常只有自己能看到，这又是一个拿用户当SB的典型
+案例。</p>
+
+<p>还好，对于用户上传图片，疼讯是没法限制的。所以有了以下的开发。</p>
+
+<h3 id="功能参考">功能参考</h3>
+
+<p>在博文里添加按钮<code>一键保存为图片</code>,即可将该篇文章生成为长图片。</p>
+
+<p><img src="/images/2016_11_05_18_38_31_637x390.jpg" alt="/images/2016_11_05_18_38_31_637x390.jpg" /></p>
+
+<p>参考设计： 锤子便签。顺便吐槽一下锤子便签，添加了关键词过滤，关键词嘛，这也是
+党国拿来折腾屁民的一个傻逼玩意，例如有一首歌是这么唱的:</p>
+
+<pre><code>我爱北京关键词，
+关键词上太阳升。。
+伟大得领袖关键词，
+带领我们向前进…
+</code></pre>
+
+<p>╮〔╯ε╰〕╭   &mdash;太多的关键词，容易让写博文的人心情不好。</p>
+
+<h3 id="可选方案">可选方案</h3>
+
+<p>A. wkhtmltoimage.<br />
+这个转换起来是全屏转换，所以最初想到的是对网页做再加工，抠取出其中含有内容的一部分。
+好处是，真的是所见即所得。</p>
+
+<pre><code>$ wkhtmltoimage http://www.google.com google.jpg
+</code></pre>
+
+<p>B. html2canvas.<br />
+这种方案直接在html页面上做文章，添加按钮后直接用画布来生成对象。缺点是有些格式显示出来
+有少量阴影。</p>
+
+<p>暂时基于方案B实现。</p>
+
+<h3 id="code">Code</h3>
+
+<p>参考资料:<br />
+<a href="https://www.youtube.com/watch?v=-d2FeFiBvEo">https://www.youtube.com/watch?v=-d2FeFiBvEo</a><br />
+<a href="https://html2canvas.hertzen.com/">https://html2canvas.hertzen.com/</a></p>
+
+<p>因为本博客基于hugo构建，直接修改hugo使用的主题即可添加html2canvas。</p>
+
+<p>目录结构:</p>
+
+<pre><code>$ ls  
+config.toml  content  id_rsa.enc  scripts  static  themes
+$ themes/hyde-a
+$ ls
+archetypes  images  layouts  LICENSE  README.md  static  theme.toml
+</code></pre>
+
+<p>下载<code>html2canvas.js</code>到主题的<code>static/js</code>目录:</p>
+
+<pre><code>$ cd static/js
+$ wget
+https://github.com/niklasvh/html2canvas/releases/download/0.4.1/html2canvas.js
+</code></pre>
+
+<p>在主题的<code>./layouts/partials/head.html</code>文件中添加所需要的js文件及javascript代码
+, (+代表新添加代码):</p>
+
+<pre><code class="language-javascript">  &lt;link rel=&quot;stylesheet&quot; href=&quot;https://cdnjs.cloudflare.com/ajax/libs/highlight.js/8.5/styles/docco.min.css&quot;&gt;
++  &lt;script type=&quot;text/javascript&quot; src=&quot;//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js&quot;&gt;&lt;/script&gt;
++  &lt;script type=&quot;text/javascript&quot; src=&quot;/js/html2canvas.js&quot;&gt;&lt;/script&gt;
++  &lt;script type='text/javascript'&gt;//&lt;![CDATA[
++  function genPostShot() { 
++          var rightNow = new Date();
++          var imageName = rightNow.toISOString().slice(0,16).replace(/(-)|(:)|(T)/g,&quot;&quot;);
++          imageName += '.jpg'
++          html2canvas(document.getElementsByClassName('post'), {
++              onrendered: function(canvas) {
++  		// Click them for download
++          	$('#test').attr('href', canvas.toDataURL(&quot;image/jpeg&quot;));
++          	$('#test').attr('download',imageName);
++          	$('#test')[0].click();
++              }
++          });
++  }; 
++  //]]&gt;
++  &lt;/script&gt;
+  &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/highlight.js/8.5/highlight.min.js&quot;&gt;&lt;/script&gt;
+</code></pre>
+
+<p>简单解释一下这几行代码：<br />
+1. 取当时UTC时间作为下载jpg文件名。<br />
+2. 在当前页面中根据div的class名称找到<code>post</code>字段，构建一个画布。<br />
+3. 将画布内容输出为jpeg文件，触发浏览器的一个下载动作。</p>
+
+<p><strong>注意</strong>: <code>#test</code>为在html文件中添加的一个不可见链接.</p>
+
+<p>接下来修改每个博文用到的模板文件(layourts/post/single.html):</p>
+
+<pre><code>{{ partial &quot;head.html&quot; . }}
+&lt;div class=&quot;content container&quot;&gt;
+  &lt;div class=&quot;post&quot;&gt;
+    &lt;h1&gt;{{ .Title }}&lt;/h1&gt;
++    &lt;p align=&quot;right&quot;&gt;
++    &lt;a href=&quot;javascript:genPostShot()&quot;&gt;
++	    TurnToJPG --&gt; &lt;i class=&quot;fa fa-camera-retro fa-2x&quot;&gt;&lt;/i&gt;
++    &lt;/a&gt;
++    &lt;a id=&quot;test&quot;&gt;&lt;/a&gt;
++    &lt;/p&gt;
++    &lt;hr&gt;
+    &lt;span class=&quot;post-date&quot;&gt;{{ .Date.Format &quot;Jan 2, 2006&quot; }} {{ if .Site.DisqusShortname }} &amp;middot; &lt;a href=&quot;{{ .Permalink }}#disqus_thread&quot;&gt;Comments&lt;/a&gt;{{ end }}
+</code></pre>
+
+<p>简单解释一下上述添加的代码:</p>
+
+<p>添加一个超链接，指向上文定义的javascript函数<code>genPostShot()</code>.</p>
+
+<p>保存修改，提交到上游仓库，重新生成整个静态网站，现在每个博文里都含有保存图片按钮。</p>
+
+<h3 id="效果">效果</h3>
+
+<p>譬如，点击<a href="http://purplepalmdash.github.io/2013/11/17/run-in-winter/">http://purplepalmdash.github.io/2013/11/17/run-in-winter/</a></p>
+
+<p>效果如下:</p>
+
+<p><img src="/images/2016_11_05_18_56_04_638x402.jpg" alt="/images/2016_11_05_18_56_04_638x402.jpg" /></p>
+
+<p>点击按钮，下载为文件201611051057.jpg(当前UTC时间戳），效果如下:</p>
+
+<p><img src="/images/2016_11_05_18_58_11_250x375.jpg" alt="/images/2016_11_05_18_58_11_250x375.jpg" /></p>
+
+<p>打完，收工，以后在盆友圈想怎么咆哮就可以怎么咆哮了。</p>
+
+<h3 id="trouble-shooting">Trouble-Shooting</h3>
+
+<p>之所以加这么个条目是因为，在未定义背景的网页里，有时候截出来的图是黑色背景的，修正：</p>
+
+<p>修改<code>./static/js/html2canvas.js</code>文件:</p>
+
+<pre><code>sTransparent = function(backgroundColor) {
+  return (backgroundColor === &quot;transparent&quot; || backgroundColor === &quot;rgba(0, 0,
+0, 0)&quot;);
+};
+</code></pre>
+
+<p>改为:</p>
+
+<pre><code>_html2canvas.Util.isTransparent = function(backgroundColor) {
+  return (backgroundColor === &quot;transparent&quot; || backgroundColor === &quot;rgba(0, 0,
+0, 0)&quot; || backgroundColor === undefined);
+};
+</code></pre>
+
+<p>之后我们在<code>./layouts/partials/head.html</code>中，添加这一行:</p>
+
+<pre><code>          html2canvas(document.getElementsByClassName('post'), {
++              background :'#FFFFFF',
+              onrendered: function(canvas) {
+</code></pre>
+
+<p>现在生成的图片背景就是白色的了。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/11/04/setuparegistryproxycachefordocker/">SetupARegistryProxyCacheForDocker</a>
       </h1>
       <span class="post-date">Nov 4, 2016 
@@ -1532,598 +1713,6 @@ file.close()
 <h3 id="86-remote-controlling-for-rpi">86. Remote controlling for rpi</h3>
 
 <p>Using dataplicity</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/10/09/leetcodetips1/">LeetCodeTips1</a>
-      </h1>
-      <span class="post-date">Oct 9, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/programming">Programming</a>
-        
-      </span>
-      
-      
-
-<p>又到了一年一度的跳Cao准备期间了，来刷刷LeetCode，提升一下编程技巧，准备可能的鄙视或者是
-被鄙视。</p>
-
-<h3 id="1-two-sum">1. Two Sum</h3>
-
-<p>问题:<br />
-给定一个整型数组，编写一函数，返回值为两个数组的下标，两个下标所在的数组元素相加的和为
-给定的数值。例如:</p>
-
-<pre><code>给定 nums = [2,7,11,15], targe = 9,     
-因为nums[0] + nums[1] = 2 + 7 = 9,
-返回的数组应为[0, 1].
-</code></pre>
-
-<h4 id="c语言版">C语言版</h4>
-
-<p>用C语言我的解决方案如下:</p>
-
-<pre><code class="language-c">/* Given nums = [2, 7, 11, 15], target = 9,
- *
- * Because nums[0] + nums[1] = 2 + 7 = 9,
- * return [0, 1].
- */
-
-#include &lt;stdio.h&gt;
-#include &lt;stdlib.h&gt;
-
-/**
- * Note: The returned array must be malloced, assume caller calls free().
- */
-
-int* twoSum(int* nums, int numsSize, int target) {
-	int i, j;
-
-	for (i = 0; i &lt; numsSize; i++)
-	{
-		for(j = i+1; j &lt; numsSize; j++)
-		{
-			if(nums[i] + nums[j] == target)
-			{
-				// Call malloc() for return value.
-				int* returnArray = malloc(2*sizeof(int));
-				returnArray[0] = i;
-				returnArray[1] = j;
-				return returnArray;
-			}
-		}
-	}
-	// Not found, comes here.
-	return NULL;
-}
-
-int main(void)
-{
-	int nums[4] = {2, 7, 11, 15};
-
-	int *result = twoSum(nums, 4, 9);
-	if(result != NULL)
-	{
-	        printf(&quot;result is %d, %d \n&quot;, result[0], result[1]);
-	}
-
-	// Call malloc in function twoSum(), so now will call free()
-	if(result != NULL)
-	{
-	        free(result);
-	}
-        return 0;
-}
-
-</code></pre>
-
-<p>心得1: malloc()/free()的调用需要在不同函数体中进行，因而可能存在内存泄漏的风险，使用
-valgrind来检测可以看到，有两次请求两次释放动作，并没有内存泄漏:</p>
-
-<pre><code>$ valgrind -v --leak-check=full ./TwoSum
-......
-==3283== HEAP SUMMARY:
-==3283==     in use at exit: 0 bytes in 0 blocks
-==3283==   total heap usage: 2 allocs, 2 frees, 1,032 bytes allocated
-==3283== 
-==3283== All heap blocks were freed -- no leaks are possible
-==3283== 
-==3283== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
-==3283== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
-</code></pre>
-
-<p>心得2: 算法复杂度为O(n^2)， 因为有嵌套的for()循环. 官方给出的有通过哈希来做的，在C语言
-中内建数据类型并不包括map，因而在后面用python来实现。</p>
-
-<p>心得3: 对函数的返回值需要检测，如free()掉一个NULL的地址。StackOverFlow上关于free(NULL)
-的讨论如下：<br />
-<a href="http://stackoverflow.com/questions/1938735/does-freeptr-where-ptr-is-null-corrupt-memory">http://stackoverflow.com/questions/1938735/does-freeptr-where-ptr-is-null-corrupt-memory</a></p>
-
-<p>看起来也不会有什么严重的后果。</p>
-
-<h4 id="python版">Python版</h4>
-
-<p>自己写的Python版本实现如下:</p>
-
-<pre><code class="language-python">class Solution(object):
-    def twoSum(self, nums, target):
-        &quot;&quot;&quot;
-        :type nums: List[int]
-        :type target: int
-        :rtype: List[int]
-        &quot;&quot;&quot;
-        returnvalue = []
-        for num in nums:
-            for left in nums[nums.index(num)+1:]:
-                if (num + left == target):
-                    returnvalue.append(nums.index(num))
-                    returnvalue.append(nums.index(left))
-        return returnvalue
-
-print (Solution().twoSum([5, 4, 11, 17], 9))
-</code></pre>
-
-<p>心得1: 类(class)的用法.<br />
-心得2: 数组的一点点小小的使用。</p>
-
-<p>基本逻辑和C语言实现的差不多，算法复杂度也一样。</p>
-
-<h4 id="引入的bug">引入的bug</h4>
-
-<p>设置的test case中，我们的代码在遇到[0,4,3,0]这样的输入时，会报错。原因在于nums.index(0)
-总是返回第一个0所在的下标(0)，而不是第二个0所在的下标(3)，修改后的代码如下:</p>
-
-<pre><code>class Solution(object):
-    def twoSum(self, nums, target):
-        &quot;&quot;&quot;
-        :type nums: List[int]
-        :type target: int
-        :rtype: List[int]
-        &quot;&quot;&quot;
-        returnvalue = []
-        index = 0
-        for num in nums:
-            index += 1
-            for left in nums[index:]:
-                if (num + left == target):
-                    returnvalue.append(nums.index(num))
-                    returnvalue.append(nums[index:].index(left)+index)
-        return returnvalue
-
-print (Solution().twoSum([0,4,3,0], 0))
-</code></pre>
-
-<p>运行后的结果，不是那么理想，只击败了34%左右的提交结果:</p>
-
-<p><img src="/images/2016_10_10_16_34_33_1195x858.jpg" alt="/images/2016_10_10_16_34_33_1195x858.jpg" /></p>
-
-<h4 id="python-hash">Python Hash</h4>
-
-<p>经过几番修改以后的代码如下，只循环一次，因而算法复杂度为O(n):</p>
-
-<pre><code class="language-python">class Solution(object):
-    def twoSum(self, nums, target):
-        &quot;&quot;&quot;
-        :type nums: List[int]
-        :type target: int
-        :rtype: List[int]
-        &quot;&quot;&quot;
-        # Use a dictionary for holding nums
-        num_dic = {}
-        for i in range(len(nums)):
-            if target - nums[i] in num_dic.keys():
-                return [num_dic[target - nums[i]],i]
-            else:
-                # directly put it into the num_dic
-                num_dic[nums[i]] = i
-        return []
-
-print (Solution().twoSum([0,4,3,0], 0))
-print (Solution().twoSum([3, 4, 2], 6))
-</code></pre>
-
-<p>速度稍微提升了一些:</p>
-
-<p><img src="/images/2016_10_10_20_05_31_508x380.jpg" alt="/images/2016_10_10_20_05_31_508x380.jpg" /></p>
-
-<p>更好的方案，优化:</p>
-
-<pre><code>class Solution(object):
-    def twoSum(self, nums, target):
-        &quot;&quot;&quot;
-        :type nums: List[int]
-        :type target: int
-        :rtype: List[int]
-        &quot;&quot;&quot;
-        # Use a dictionary for holding nums
-        num_dic = {}
-        for i,v in enumerate(nums):
-            if v in num_dic.keys():
-                return [num_dic[v],i]
-            num_dic[target-v] = i
-
-print (Solution().twoSum([0,4,3,0], 0))
-print (Solution().twoSum([3, 4, 2], 6))
-</code></pre>
-
-<p>这个代码大概能跑到击败80%左右的提交答案。</p>
-
-<p>思考1： enumerate()函数调用减少了时间。<br />
-思考2： 原代码中有两次减法，而修改后的代码中，只是在写入hash的时候，有一次target-v的减法操作。<br />
-思考3： 去掉了一次不必要的return操作。</p>
-
-<p>总结：<br />
-Python里对于这个问题的优化大概就到这里了。可以看到，简单的问题也是需要认真思考了，认认真真的来
-做leetcode吧。</p>
-
-<h3 id="2-add-two-numbers">2. Add Two Numbers</h3>
-
-<p>题目说明:</p>
-
-<pre><code>给定两个用链表表示的非负数。数字存储是reverse order， 每个节点存有一个数字。将节点上的数字
-相加，以得到一个新的链表
-Input: (2 -&gt; 4 -&gt; 3) + (5 -&gt; 6 -&gt; 4)
-Output: 7 -&gt; 0 -&gt; 8
-</code></pre>
-
-<p>Oct10晚上的测试框架写成这样：</p>
-
-<pre><code class="language-c">/**
- * Definition for singly-linked list.
- * struct ListNode {
- *     int val;
- *     struct ListNode *next;
- * };
- */
-
-#include &lt;stdio.h&gt;
-#include &lt;stdlib.h&gt;
-
-
-// Definition of the ListNode
-struct ListNode {
-    int val;
-    struct ListNode *next;
-};
-
-// create_list()
-struct ListNode* create_list(int val)
-{
-	printf(&quot;\n Creating list with headnode as [%d]\n&quot;, val);
-	struct ListNode *ptr = (struct ListNode*)malloc(sizeof(struct ListNode));
-	if(NULL == ptr)
-	{
-		printf(&quot;\n Node creation failed \n&quot;);
-		return NULL;
-	}
-	ptr-&gt;val = val;
-	ptr-&gt;next = NULL;
-
-	return ptr;
-}
-
-// print the list
-void print_list(struct ListNode* head)
-{
-	struct ListNode*  current = head;
-
-	while(current != NULL)
-	{
-		printf(&quot;%d -&gt;&quot;, current-&gt;val);
-		current = current-&gt;next;
-	}
-	printf(&quot;NULL\n&quot;);
-}
-
-int shiftnumber = 0;
-
-struct ListNode* addTwoNumbers(struct ListNode* l1, struct ListNode* l2) {
-	printf(&quot;\nJust Called this function!\n&quot;);
-	
-	struct ListNode* currentl1 = l1;
-	struct ListNode* currentl2 = l2;
-	// Holding the return value
-	struct ListNode* ptr = (struct ListNode*)malloc(sizeof(struct ListNode));
-	struct ListNode* head = ptr;
-	ptr-&gt;next = NULL;
-	shiftnumber = 0;
-
-
-	// First calculate the longest Linked List
-	int lenl1 = 0;
-	int lenl2 = 0;
-
-	while(currentl1 != NULL)
-	{
-		lenl1++;
-		currentl1 = currentl1-&gt;next;
-	}
-	while(currentl2 != NULL)
-	{
-		lenl2++;
-		currentl2 = currentl2-&gt;next;
-	}
-	printf(&quot;len1 is %d, len2 is %d\n&quot;, lenl1, lenl2);
-
-	currentl1 = l1;
-	currentl2 = l2;
-
-	// Get the largest length, thus we could do some tricks. 
-	//
-	//
-	//
-	//
-	//
-	while((currentl1 != NULL) &amp;&amp; (currentl2 != NULL))
-	{
-		ptr-&gt;val = (currentl1-&gt;val + currentl2-&gt;val)%10+shiftnumber;
-		shiftnumber = 0;
-		if((currentl1-&gt;val + currentl2-&gt;val)&gt;=10)
-		{
-		    shiftnumber = (currentl1-&gt;val + currentl2-&gt;val)/10;
-		}
-		//ptr-&gt;val = (currentl1-&gt;val + currentl2-&gt;val)%10;
-		if(currentl1-&gt;next != NULL)
-		{
-		    ptr-&gt;next = (struct ListNode*)malloc(sizeof(struct ListNode));
-		    ptr-&gt;next-&gt;next = NULL;
-		    ptr = ptr-&gt;next;
-		}
-		// shiftnumber exists, so you should assign shiftnumber to the
-		// newnode
-		else
-		{
-			// Only check shiftnumber
-			if(shiftnumber != 0)
-			{
-		          ptr-&gt;next = (struct ListNode*)malloc(sizeof(struct ListNode));
-		          ptr-&gt;next-&gt;next = NULL;
-			  ptr-&gt;next-&gt;val = shiftnumber;
-			}
-
-		}
-		currentl1 = currentl1-&gt;next;
-		currentl2 = currentl2-&gt;next;
-	}
-	return head;
-}
-
-
-
-int main(void)
-{
-	struct ListNode test1, test1_2, test1_3;
-	struct ListNode* p = &amp;test1;
-	p-&gt;val = 2;
-	p-&gt;next = &amp;test1_2;
-	p-&gt;next-&gt;val = 4;
-	p-&gt;next-&gt;next = &amp;test1_3;
-	p-&gt;next-&gt;next-&gt;val = 4;
-	p-&gt;next-&gt;next-&gt;next = NULL;
-	printf(&quot;### List l1!\n&quot;);
-	print_list(p);
-	
-	struct ListNode test2, test2_2, test2_3;
-	struct ListNode* q = &amp;test2;
-	q-&gt;val = 5;
-	q-&gt;next = &amp;test2_2;
-	q-&gt;next-&gt;val = 6;
-	q-&gt;next-&gt;next = &amp;test2_3;
-	q-&gt;next-&gt;next-&gt;val = 7;
-	q-&gt;next-&gt;next-&gt;next = NULL;
-	printf(&quot;### List l2!\n&quot;);
-	print_list(q);
-
-	printf(&quot;\n *** Start testing addTwoNumbers! *** \n&quot;);
-	struct ListNode* r = addTwoNumbers(p, q);
-	print_list(r);
-	// Remember to free memory here
-	//while(r-&gt;next != NULL);
-	//{
-	//	printf(&quot;See if you could get the money?\n&quot;);
-	//	r = r-&gt;next;
-	//}
-
-	printf(&quot;\n *** Finished testing addTwoNumbers! *** \n&quot;);
-
-	return 0;
-}
-</code></pre>
-
-<p>一塌糊涂啊！！！明天继续写。</p>
-
-<p>最后独立写出的答案如下，非常难看。</p>
-
-<pre><code class="language-c">int shiftnumber = 0;
-
-struct ListNode* addTwoNumbers(struct ListNode* l1, struct ListNode* l2) {
-	struct ListNode* currentl1 = l1;
-	struct ListNode* currentl2 = l2;
-	// Holding the return value
-	struct ListNode* ptr = (struct ListNode*)malloc(sizeof(struct ListNode));
-	struct ListNode* head = ptr;
-	ptr-&gt;next = NULL;
-	shiftnumber = 0;
-
-
-	// First calculate the longest Linked List
-	int lenl1 = 0;
-	int lenl2 = 0;
-
-	while(currentl1 != NULL)
-	{
-		lenl1++;
-		currentl1 = currentl1-&gt;next;
-	}
-	while(currentl2 != NULL)
-	{
-		lenl2++;
-		currentl2 = currentl2-&gt;next;
-	}
-
-	currentl1 = l1;
-	currentl2 = l2;
-
-	// Get the largest length, thus we could use this number for controlling the
-	// return value. 
-	int LinkedListLen = lenl1&gt;lenl2?lenl1:lenl2;
-	while(LinkedListLen &gt; 0)
-	{
-		LinkedListLen--;
-		int ValOfL1, ValOfL2 = 0;
-		ValOfL1 = (currentl1 == NULL)?0:currentl1-&gt;val;
-		ValOfL2 = (currentl2 == NULL)?0:currentl2-&gt;val;
-		ptr-&gt;val = ((ValOfL1 + ValOfL2)%10 + shiftnumber)%10;
-		if(((ValOfL1 + ValOfL2)%10 + shiftnumber) == 10)
-		{
-		    shiftnumber = 1;
-		}
-		else{
-		shiftnumber = 0;
-		    if((ValOfL1 + ValOfL2)&gt;=10)
-		    {
-		        shiftnumber = (ValOfL1 + ValOfL2)/10;
-		    }
-		}
-		// Allocate memory for new node. Only allocate (LinkedListLen - 1) times
-		if(LinkedListLen &gt; 0)
-		{
-		    ptr-&gt;next = (struct ListNode*)malloc(sizeof(struct ListNode));
-		    ptr-&gt;next-&gt;next = NULL;
-		    ptr = ptr-&gt;next;
-		}
-		// Switch to next node.
-		if(currentl1 != NULL)
-		{
-		    currentl1 = currentl1-&gt;next;
-		}
-		if(currentl2 != NULL)
-		{
-		    currentl2 = currentl2-&gt;next;
-		}
-	}
-	// If shiftnumber &gt; 0, allocate a new node for holding it
-	if(shiftnumber != 0)
-	{
-		ptr-&gt;next = (struct ListNode*)malloc(sizeof(struct ListNode));
-		ptr-&gt;next-&gt;next = NULL;
-		ptr-&gt;next-&gt;val = shiftnumber;
-	}
-	
-	return head;
-}
-</code></pre>
-
-<p>我的思路:</p>
-
-<p>1，考虑到两个输入的链表长度可能不一样，因而先得到最长的链表长度，用这个最长的长度来做递归。<br />
-2, 是否有进位通过一个全局表两shiftnumber来hold. 如果相加到最后依然有进位，则在循环外开辟一块空间来存放这个进位。<br />
-3, 两个链表中的任何一个一旦走到了NULL指针，则其值用0来代替。<br />
-4, 三目运算符的使用。<br />
-5, <code>ptr-&gt;val = ((ValOfL1 + ValOfL2)%10 + shiftnumber)%10;</code>，这个是考虑到test case:</p>
-
-<pre><code>[9]
-[1, 9]
-</code></pre>
-
-<p>如果不做的话，则得出结果会是[0,10], 进位和该位数字的和为10的时候需要单独考虑。</p>
-
-<p>反思:<br />
-1, 对指针的使用要非常小心。<br />
-2, 就是凭直觉写出来的，算法很差, 代码可读性也很差。</p>
-
-<h3 id="longest-substr">Longest substr</h3>
-
-<p>The sample code is listed, while to be optimized:</p>
-
-<pre><code>#include &lt;stdio.h&gt;
-#include &lt;stdlib.h&gt;
-#include &lt;string.h&gt;
-
-#define MAXN 50000
-
-// q should be longer than p
-int comlen(char* p, char* q)
-{
-    int i = 0;
-    while (*q &amp;&amp; (*p++ == *q++))
-    {
-        i++;
-    }
-    return i;
-}
-
-int cstring_cmp(const void *a, const void *b)
-{
-    const char **ia = (const char **)a;
-    const char **ib = (const char **)b;
-    return strcmp(*ia, *ib);
-}
-
-
-int lengthOfLongestSubstring(char* s) {
-      char c[MAXN];
-      char* a[MAXN];
-     
-
-      // Create a new array which hold char *s
-      // Remove all of the duplicated items in array
-      // no_duplicated[]
- 
-      char ch;
-      int n = 0;
-      for(n = 0; n &lt; strlen(s); n++)
-      {
-          printf(&quot;%c &quot;,s[n]);
-          a[n] = &amp;c[n];
-          c[n] = s[n];
-      }
-      a[n] = 0;
-
-      qsort(a, n, sizeof(char*), cstring_cmp);
-
-      int maxlen = 0;
-      int len = 0;
-      int maxi = 0;
-      for (int i = 0; i &lt; n - 1; i++)
-      {
-          len = comlen(a[i], a[i + 1]);
-	  printf(&quot;len is %d\n&quot;, len);
-          if (len &gt; maxlen)
-          {
-              maxlen = len;
-              maxi = i;
-          }
-      }
-
-      printf(&quot;maxlen:%d\tmax string:\t&quot;, maxlen);
-      char ch_tmp;
-      for (int i = 0; i &lt; maxlen; i++)
-      {
-          ch_tmp = *(a[maxi] + i);
-          printf(&quot;%c&quot;, ch_tmp);
-      }
-      printf(&quot;\n&quot;);
-
-      return maxlen;
-}
-
-int main(void)
-{
-	char s[100] = &quot;abcabcccc&quot;;
-	char t[100] = &quot;bbbbbbbbbbbb&quot;;
-	char k[100] = &quot;pwwkew&quot;;
-	lengthOfLongestSubstring(s);
-	lengthOfLongestSubstring(t);
-	lengthOfLongestSubstring(k);
-	return 0;
-}
-
-</code></pre>
 
       
     </div>

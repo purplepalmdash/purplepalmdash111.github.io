@@ -105,6 +105,87 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-8/">Deploy MAAS(8)</a>
+      </h1>
+      <span class="post-date">Mar 17, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>This part is for deploying OpenStack using Juju and let it run in single node.</p>
+
+<h3 id="environment-preparation">Environment Preparation</h3>
+
+<p>2 virtual machines created using virt-manager, each of them has 2 core, 3Gigabyte Memory, around 60G Disk space.</p>
+
+<h3 id="deploy">Deploy</h3>
+
+<p>The most of the nodes are deployed in container.</p>
+
+<pre><code>$ juju deploy --to 0 juju-gui
+$ juju deploy --to lxc:0 mysql
+$ juju deploy --to lxc:0 keystone
+$ juju deploy --to lxc:0 nova-cloud-controller
+$ juju deploy --to lxc:0 glance
+$ juju deploy --to lxc:0 rabbitmq-server
+$ juju deploy --to lxc:0 openstack-Trustyboard
+$ juju deploy --to lxc:0 cinder 
+
+</code></pre>
+
+<p>The compute node is deployed in a machine which enable the nested virtualization.</p>
+
+<pre><code>$ juju deploy nova-compute
+
+</code></pre>
+
+<p>Add each other&rsquo;s relationship:</p>
+
+<pre><code>$ juju add-relation mysql keystone
+$ juju add-relation nova-cloud-controller mysql
+$ juju add-relation nova-cloud-controller rabbitmq-server
+$ juju add-relation nova-cloud-controller glance
+$ juju add-relation nova-cloud-controller keystone
+$ juju add-relation nova-compute nova-cloud-controller
+$ juju add-relation nova-compute mysql
+$ juju add-relation nova-compute rabbitmq-server:amqp
+$ juju add-relation nova-compute glance
+$ juju add-relation glance mysql
+$ juju add-relation glance keystone
+$ juju add-relation glance cinder
+$ juju add-relation mysql cinder
+$ juju add-relation cinder rabbitmq-server
+$ juju add-relation cinder nova-cloud-controller
+$ juju add-relation cinder keystone
+$ juju add-relation openstack-Trustyboard keystone
+
+</code></pre>
+
+<p>Then change the password of keystone via:</p>
+
+<pre><code>$ juju set keystone admin-password=&quot;helloworld&quot;
+
+</code></pre>
+
+<p>Detect the ipaddress of the openstack-Trustyboards via:</p>
+
+<pre><code>$ juju status openstack-Trustyboard
+$ http://ip_address_of_Trustyboard/horizon
+
+</code></pre>
+
+<p>The final result is listed like:<br />
+<img src="/images/2015_03_17_14_35_25_1037x646.jpg" alt="/images/2015_03_17_14_35_25_1037x646.jpg" /></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-9/">Deploy MAAS(9)</a>
       </h1>
       <span class="post-date">Mar 17, 2015 
@@ -386,76 +467,6 @@ Now the ssh-key has been added into your MAAS system.</p>
 Mine is:   <code>ntQBr8QTPgeTyfYuMq:HGKFChwM65QXtABNS4:SK7bnuGNDN7fLB9k7HNspYLch4kc6RLs</code></p>
 
 <p>Now the maas controller is ready, next step is create the virtual machine and let it be managed by controller.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/12/maas-deploy-3/">MAAS Deploy(3)</a>
-      </h1>
-      <span class="post-date">Mar 12, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Following is the steps for creating virtual nodes and let it be administrated by MAAS Cluster.</p>
-
-<h3 id="node-creation">Node Creation</h3>
-
-<p>First create a null iso via <code>touch none.iso</code>, later we will use this iso for booting the node.<br />
-Create a new virtual machine -&gt; select &ldquo;Local installation media(ISO images or CDROM) -&gt; Use Local Iso image(/home/Trusty/none.iso) -&gt; Memory 512MB, CPU 1 Core -&gt; Disk 20 GB -&gt;  name: MASSTestNode0 -&gt; Customize configuration before install -&gt; Finish.</p>
-
-<p>Customization:<br />
-Boot Option, select NIC and Disk1.<br />
-Disk1 Option, select advanced -&gt; virtio.<br />
-NIC Option, select &ldquo;virtualization network maasisotest NAT&rdquo;, virtio.<br />
-Click &ldquo;Begin Installation&rdquo;, start installation, and quickly shut it off.</p>
-
-<p>Clone it to 3 nodes. Then click start and let it startup via ipxe. After a while they will be powered off.</p>
-
-<h3 id="maas-network-configuration">MAAS Network Configuration</h3>
-
-<p>We want to make MAAS controller be the pxe server in this isolated network, so we visit following webpage and do configuration:<br />
-&ldquo;Edit Cluster Controller&rdquo; -&gt; Edit Interface eth0 -&gt; Mangement(DNS and DHCP)<br />
-Router IP: 10.17.17.1<br />
-DHCP dynamic IP range low value: 10.17.17.101<br />
-DHCP dynamic IP range high value: 10.17.17.199<br />
-Then &ldquo;Save Interface&rdquo; and let this MASS controller serves all of the created nodes.</p>
-
-<h3 id="maas-node-configuration">MAAS Node Configuration</h3>
-
-<p>Now after bootup the newly created nodes, your nodes page will be looks like following:<br />
-<img src="/images/2015_03_12_20_22_33_974x371.jpg" alt="/images/2015_03_12_20_22_33_974x371.jpg" /><br />
-Click them and edit like following steps:<br />
-First in your host machine run <code>sudo virsh list --all</code> to get the corresponding virtual machines.<br />
-Then use <code>sudo virsh dumpxml xxxx | grep mac</code> to get the corresponding mac address, then fill the contents.<br />
-For example:</p>
-
-<pre><code>$ sudo virsh dumpxml MASSTestNode0 | grep mac
-    &lt;type arch='x86_64' machine='pc-i440fx-2.2'&gt;hvm&lt;/type&gt;
-      &lt;mac address='52:54:00:2f:68:e3'/&gt;
-
-</code></pre>
-
-<p>Then the configuration images is like following:<br />
-<img src="/images/2015_03_12_20_33_05_479x466.jpg" alt="/images/2015_03_12_20_33_05_479x466.jpg" /><br />
-Also you should login as user maas and do following command to let you access remote&rsquo;s qemu:</p>
-
-<pre><code>$ sudo apt-get install libvirt-bin
-$ ssh-copy-id Trusty@10.17.17.1
-$ virsh -c qemu+ssh://Trusty@10.17.17.1/system list --all
-
-</code></pre>
-
-<p>Then save node, and select it, in bulk actions, select &ldquo;Commision Selected Nodes&rdquo;, it will start commision, and after its successful, it will be looked like &ldquo;ready&rdquo; state. Remember its previous state is &ldquo;New&rdquo;.<br />
-Also comission the other 2 nodes.</p>
-
-<p>The next step we will let Juju runs on MAAS, and build more fantanstic applications.</p>
 
       
     </div>

@@ -105,6 +105,137 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/19/using-harddisk-for-booting-raspberrypi/">Using HardDisk For Booting RaspberryPI</a>
+      </h1>
+      <span class="post-date">May 19, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="准备">准备</h3>
+
+<p>RaspberryPI, SD卡（4G以上), 移动硬盘，操作系统镜像文件，最好有一个外接供电带电路隔离的USB HUB。 鼠标、键盘等。</p>
+
+<h3 id="用sd卡启动">用SD卡启动</h3>
+
+<p>将SD卡插入电脑，将镜像文件写入到SD卡后，将写好的SD卡插入RaspberryPI，加电开机。各种配置（譬如显存大小，是否启动到X等等）完成之后，进入到Linux桌面。</p>
+
+<h3 id="准备硬盘">准备硬盘</h3>
+
+<p>将硬盘插入USB口，如果之前有分好区的，可以略过这一节，直接到<code>拷贝至硬盘</code>一节。<br />
+在RaspberryPI系统里(wheezy or archLinux)，搜索gparted, 这个工具可以在图形化界面下对硬盘进行分区。<br />
+命令行下你可以通过下列命令查看已挂载的存储设备信息：</p>
+
+<pre><code>[root@alarmpi ~]# fdisk -l
+
+Disk /dev/mmcblk0: 7.3 GiB, 7822376960 bytes, 15278080 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0x00047c7a
+
+Device         Boot     Start       End  Blocks  Id System
+/dev/mmcblk0p1           8192    122879   57344   c W95 FAT32 (LBA)
+/dev/mmcblk0p2         122880  15278079 7577600  83 Linux
+
+
+Disk /dev/sda: 465.8 GiB, 500105740288 bytes, 976769024 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0x0004f23a
+
+Device    Boot     Start       End    Blocks  Id System
+/dev/sda1           2048   1050623    524288  82 Linux swap / Solaris
+/dev/sda2        1050624 126879743  62914560  83 Linux
+/dev/sda3      126879744 546310143 209715200   7 HPFS/NTFS/exFAT
+/dev/sda4      546310144 976769023 215229440   5 Extended
+/dev/sda5      546312192 588255231  20971520  83 Linux
+/dev/sda6      588257280 976769023 194255872  83 Linux
+
+</code></pre>
+
+<p>上面的代码中可以看到，我的RaspberryPI上挂载的硬盘大小是500G。分成了若干个区。</p>
+
+<h3 id="拷贝文件系统到硬盘分区">拷贝文件系统到硬盘分区</h3>
+
+<p>分区决定于你自己，用gparted或者别的分区工具都可以分好，记得选择Linux ext4为文件系统。<br />
+这里我选择<code>/dev/sda5</code>作为我的根分区，所以在终端上，执行下列命令：</p>
+
+<pre><code>$ mkfs.ext4 /dev/sda5
+$ sudo mount /dev/sda5 /mnt
+$ cd /mnt
+$ tar cjvf /mnt/rootfs.tar.bz2 /
+
+</code></pre>
+
+<p>备份完毕后，解压：</p>
+
+<pre><code>$ tar xjvf /mnt/rootfs.tar.bz2 -C /mnt/
+
+</code></pre>
+
+<p>这里用tar备份文件系统时主要是为了防止系统中某些可能的链接/设备文件的丢失，干脆先压缩后再解压，一劳永逸，代价是时间会花多一点。用rsync是既保险又快速的方法，如果你系统上安装了rsync，试下下面的命令：</p>
+
+<pre><code>rsync -rv --exclude=/mnt / /mnt
+
+</code></pre>
+
+<p>总之，这一步的目的是把SD卡上的文件系统完整复制到硬盘分区上。</p>
+
+<h3 id="修改启动选项">修改启动选项</h3>
+
+<p>修改SD的boot分区上内容，文件<code>cmdline.txt</code>以使得其适配硬盘启动：</p>
+
+<pre><code>$ cd /boot
+$ cp cmdline.txt cmdline.txt.SD
+$ &gt;cmdline.txt
+$ echo &quot;smsc95xx.turbo_mode=N dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/sda5 rootfstype=ext4 elevator=noop rootwait&quot;&gt;cmdline.txt
+
+</code></pre>
+
+<p>上面命令的作用是把<code>root=</code>参数从<code>root=/dev/mmcblk0p2</code>换到<code>root=/dev/sda5</code>，你的硬盘分区可能不是sda5，这取决于你在上两步中采用了哪块分区。例如sda(1?2?3?4?)，这里的数值和你在上两步中应该保持一致。<br />
+如果你的移动硬盘上创建了交换分区，即swap分区，记得在<code>/etc/fstab</code>文件中加入相应的条目，下面是的系统上，用sda1作为swap分区时的配置</p>
+
+<pre><code># cat /etc/fstab
+# 
+# /etc/fstab: static file system information
+#
+# &lt;file system&gt;	&lt;dir&gt;	&lt;type&gt;	&lt;options&gt;	&lt;dump&gt;	&lt;pass&gt;
+/dev/mmcblk0p1  /boot           vfat    defaults        0       0
+/dev/sda1  	none		swap 	defaults        0       0
+
+</code></pre>
+
+<p>为了确保写入成功，在操作的最后，麻烦运行一下:</p>
+
+<pre><code>$ sudo sync
+
+</code></pre>
+
+<p>这可以保证所有的外接设备上的数据被安全写入。</p>
+
+<p>没有问题的话，现在重新启动RaspberryPI，你的文件系统就应该跑在硬盘上了。</p>
+
+<p>如果有失败的话，把SD卡插入电脑，把cmdline.txt文件恢复成cmdline.txt.SD文件即可。</p>
+
+<h3 id="特别强调">特别强调</h3>
+
+<p>特别强调的一点，彻底从硬盘启动是不可能的！！！也就是说，你依然需要插入一张SD卡在RaspberryPI的槽中。因为RaspberryPI每次都是从固定地址读取启动代码的。<br />
+上述做法的好处是避免了频繁读写SD卡，延长了SD卡的使用寿命。<br />
+缺点是： USB硬盘的速度，最多也就是USB2.0的极速。 SD卡，CLASS10的速度可能要超过USB2.0的速度。某些时候会慢一点，但是秒杀CLASS4的卡是没问题的。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/05/14/node-dot-js-quick-start/">Node.js Quick Start</a>
       </h1>
       <span class="post-date">May 14, 2014 
@@ -513,172 +644,6 @@ def generateOneDay():
 <p>There are lots to be finalize and optimized, but currently It could be ful-fill our requirements which retriving the data and generate the flot.<br />
 The next series I will try to write some ruby or node.js programs which did the same functionalities, to compare the differencies between app developement.<br />
 Also to write a web-proxy is a work full of challenge, this will be took as next consideration of developing apps on heroku .</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/05/12/write-python-weather-app-on-heroku-9/">Write Python Weather APP on Heroku(9)</a>
-      </h1>
-      <span class="post-date">May 12, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
-        
-      </span>
-      
-      
-
-<h3 id="understanding-the-flask-and-jinja">Understanding the flask and Jinja</h3>
-
-<h4 id="flask-example">Flask Example</h4>
-
-<p>hello1.py is listed as following:</p>
-
-<pre><code>from flask import Flask
-app = Flask(__name__)
-
-@app.route(&quot;/&quot;)
-def index():
-    return 'Index Page'
-
-@app.route('/hello')
-def hello():
-    return &quot;Hello World!&quot;
-
-@app.route('/hello1')
-def hello1():
-    return &quot;Hello World 1!&quot;
-
-if __name__ == &quot;__main__&quot;:
-    app.run()
-
-</code></pre>
-
-<p>Run this via:</p>
-
-<pre><code>$ python hello1.py
-
-</code></pre>
-
-<p>Then use your browser for visiting <a href="http://localhost:5000">http://localhost:5000</a>, <a href="http://localhost:5000/hello">http://localhost:5000/hello</a>, <a href="http://localhost:5000/hello1">http://localhost:5000/hello1</a>. You will view different output result.</p>
-
-<h4 id="jinja-example">Jinja Example</h4>
-
-<p>The sample.py is listed as following:</p>
-
-<pre><code># Load the jinja library's namespace into the current module.
-import jinja2
-
-# In this case, we will load templates off the filesystem.
-# This means we must construct a FileSystemLoader object.
-# 
-# The search path can be used to make finding templates by
-#   relative paths much easier.  In this case, we are using
-#   absolute paths and thus set it to the filesystem root.
-templateLoader = jinja2.FileSystemLoader( searchpath=&quot;/&quot; )
-
-# An environment provides the data necessary to read and
-#   parse our templates.  We pass in the loader object here.
-templateEnv = jinja2.Environment( loader=templateLoader )
-
-# This constant string specifies the template file we will use.
-TEMPLATE_FILE = &quot;//home/Trusty/code/python/heroku/Jinja2/example1.jinja&quot;
-
-# Read the template file using the environment object.
-# This also constructs our Template object.
-template = templateEnv.get_template( TEMPLATE_FILE )
-
-# Specify any input variables to the template as a dictionary.
-templateVars = { &quot;title&quot; : &quot;Test Example&quot;,
-                 &quot;description&quot; : &quot;A simple inquiry of function.&quot; }
-
-# Finally, process the template to produce our final text.
-outputText = template.render( templateVars )
-print outputText
-
-</code></pre>
-
-<p>Create the example1.jinja at the corresponding directory, contains following content:</p>
-
-<pre><code>&lt;!doctype html&gt;
-&lt;html lang=&quot;en&quot;&gt;
-&lt;head&gt;
-  &lt;meta charset=&quot;UTF-8&quot; /&gt;
-
-  &lt;title&gt;{{ title }}&lt;/title&gt;
-  &lt;meta name=&quot;description&quot; content=&quot;{{ description }}&quot; /&gt;
-&lt;/head&gt;
-
-&lt;body&gt;
-
-&lt;div id=&quot;content&quot;&gt;
-  &lt;p&gt;Why, hello there!&lt;/p&gt;
-&lt;/div&gt;
-
-&lt;/body&gt;
-&lt;/html&gt;
-
-</code></pre>
-
-<p>Then the result will viewed as following:</p>
-
-<pre><code>&lt;!doctype html&gt;
-&lt;html lang=&quot;en&quot;&gt;
-&lt;head&gt;
-  &lt;meta charset=&quot;UTF-8&quot; /&gt;
-
-  &lt;title&gt;Test Example&lt;/title&gt;
-  &lt;meta name=&quot;description&quot; content=&quot;A simple inquiry of function.&quot; /&gt;
-&lt;/head&gt;
-
-&lt;body&gt;
-
-&lt;div id=&quot;content&quot;&gt;
-  &lt;p&gt;Why, hello there!&lt;/p&gt;
-&lt;/div&gt;
-
-&lt;/body&gt;
-&lt;/html&gt;
-
-</code></pre>
-
-<h3 id="rendering-template-returning">Rendering Template Returning</h3>
-
-<p>First create the template file under the directory &lsquo;templates&rsquo;, this is the default position for flask for searching the template files:</p>
-
-<pre><code>$ mkdir templates
-$ cat layout.html
-&lt;style type=&quot;text/css&quot;&gt;
-.metanav
-{
-    background-color: yellow;
-}
-&lt;/style&gt;
-&lt;div class=&quot;page&quot;&gt;
-  &lt;h1&gt;Flaskr&lt;/h1&gt;
-  &lt;div class=&quot;metanav&quot;&gt;
-  {{ a_random_string }}
-  {{ a_random_list[3] }}
-  &lt;/div&gt;
-&lt;/div&gt;
-
-</code></pre>
-
-<p>Then in the genhtml.py, we add the following lines for let the template system to rendering our pages:</p>
-
-<pre><code>from flask import render_template
-@app.route('/index')
-# Generate the index page, for debugging now
-def index():
-    # Use template for rendering the content
-    rand_list= [0, 1, 2, 3, 4, 5]
-    return render_template('layout.html', a_random_string=&quot;Heey, what's up!&quot;, a_random_list=rand_list)
-
-</code></pre>
-
-<p>Now browser you <a href="http://localhost:5000/index">http://localhost:5000/index</a>, you can see the template rendered result.</p>
 
       
     </div>

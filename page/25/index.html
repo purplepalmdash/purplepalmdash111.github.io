@@ -105,6 +105,44 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/09/05/rhel-working-tips/">RHEL Working Tips</a>
+      </h1>
+      <span class="post-date">Sep 5, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="subscrition-manager">Subscrition Manager</h3>
+
+<p>After install RHEL7, we could register it first:</p>
+
+<pre><code># subscription-manager register
+</code></pre>
+
+<p>List and register with the available pools:</p>
+
+<pre><code># subscription-manager list --available --all
+# subscription-manager subscribe --pool=XXXXXXXXX
+</code></pre>
+
+<p>After registration, we could see all of the registered repos:</p>
+
+<pre><code>$ subscription-manager repos --list
+</code></pre>
+
+<h3 id="syncing-repos">Syncing Repos</h3>
+
+<p>Because the openstack repo is the paid channel, skip for other options.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/08/31/worktipsonopenstackdeployment/">WorkTipsOnOpenStackDeployment</a>
       </h1>
       <span class="post-date">Aug 31, 2016 
@@ -327,253 +365,6 @@ https://hooks.slack.com/services/xxxxxxxxxxxxxxxxxxxxxxxxx
 
 <pre><code>$ command1; sendSlack 'fcuk...'
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/07/28/using-packer-for-building-vm-templates/">Using Packer For Building VM Templates</a>
-      </h1>
-      <span class="post-date">Jul 28, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="background">Background</h3>
-
-<p>Recently I am playing the jenkins and VM Templates, so I want to setup the CI(Continous
-Integration) environment which could automatically finish the template building,
-following are the tips on how to setup these environment and let everything working
-together.</p>
-
-<h3 id="using-makefile">Using Makefile</h3>
-
-<p>boxcutter <a href="https://github.com/boxcutter">https://github.com/boxcutter</a> has lots of
-projects for packering the templates, directly clone them to local and run them, you
-could get the standard vagrant box, which could be used via virtualbox/vmware/paralles.</p>
-
-<p>But what I wanna is the qemu images, or vhd files, which could be used under CloudStack/OpenStack, so I have to modify the Makefile and box system.</p>
-
-<p>Only build virtualbox, because we don&rsquo;t have vmware/parallels hypervisor:</p>
-
-<pre><code>#BUILDER_TYPES ?= vmware virtualbox parallels
-BUILDER_TYPES := virtualbox
-</code></pre>
-
-<p>Add libvirt box definition:</p>
-
-<pre><code>PARALLELS_BOX_FILES := $(foreach box_filename, $(PARALLELS_BOX_FILENAMES), $(PARALLELS_BOX_DIR)/$(box_filename))
-LIBVIRT_BOX_DIR ?= box/libvirt
-LIBVIRT_TEMPLATE_FILENAMES = $(TEMPLATE_FILENAMES)
-LIBVIRT_BOX_FILENAMES := $(LIBVIRT_TEMPLATE_FILENAMES:.json=$(BOX_SUFFIX))
-LIBVIRT_BOX_FILES := $(foreach box_filename, $(LIBVIRT_BOX_FILENAMES), $(LIBVIRT_BOX_DIR)/$(box_filename))
-BOX_FILES := $(LIBVIRT_BOX_FILES)
-</code></pre>
-
-<p>Using qemu for building the templates:</p>
-
-<pre><code>#box/virtualbox/%$(BOX_SUFFIX): %.json http/preseed.cfg
-box/libvirt/%$(BOX_SUFFIX): %.json http/preseed.cfg
-	bin/box build $&lt; qemu
-</code></pre>
-
-<p>Build options:</p>
-
-<pre><code>#all: build assure deliver
-all: build
-
-build: $(BOX_FILES)
-</code></pre>
-
-<p>Now by <code>make</code> you could make out the vagrant libvirt box.</p>
-
-<h3 id="json-preseeding-and-scripts">JSON, Preseeding and Scripts</h3>
-
-<p>Just some tips under this chapter during building.</p>
-
-<h4 id="using-custom-mirror">Using Custom Mirror</h4>
-
-<p>Following use <code>mirrors.aliyun.com/ubuntu</code> for installation and use a apt-mirror proxy.</p>
-
-<pre><code>#Use mirror
-d-i apt-setup/use_mirror boolean true
-d-i     mirror/country          string manual
-d-i mirror/protocol	string http
-d-i mirror/http/hostname	string mirrors.aliyun.com
-d-i mirror/http/directory	string /ubuntu
-choose-mirror-bin mirror/http/proxy string http://192.168.1.69:3142/
-</code></pre>
-
-<h4 id="partition-one-partition">Partition(One Partition)</h4>
-
-<p>Only one partition which includes all of the filesystem(no swap partition):</p>
-
-<pre><code># Partition
-d-i partman-auto/disk string /dev/vda
-d-i partman-auto/method string regular
-d-i partman-basicfilesystems/no_swap boolean false
-d-i partman-auto/expert_recipe string root :: 1000 50 -1 ext4 \
-     $primary{ } $bootable{ } method{ format } \
-     format{ } use_filesystem{ } filesystem{ ext4 } \
-     mountpoint{ / } \
-    .
-d-i partman-auto/choose_recipe select root
-d-i partman/choose_partition select Finish partitioning and write changes to disk
-d-i partman/confirm boolean true
-d-i partman/confirm_write_new_label boolean true
-d-i partman/choose_partition select finish
-d-i partman/confirm boolean true
-d-i partman/confirm_nooverwrite boolean true
-</code></pre>
-
-<h4 id="permit-root-login-in">Permit Root Login In</h4>
-
-<p>Change the default configuration of <code>/etc/ssh/sshd_config</code> via:</p>
-
-<pre><code>d-i preseed/late_command string \
-in-target sed -i 's/PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
-</code></pre>
-
-<h4 id="root-password">Root Password</h4>
-
-<p>We can set the encrypted password or plain secret for root:</p>
-
-<pre><code># Root password, either in clear text
-#d-i passwd/root-password password engine
-#d-i passwd/root-password-again password engine
-# or encrypted using an MD5 hash.
-d-i passwd/root-password-crypted password gowguowueogahwehoehjwouweouhow
-d-i user-setup/allow-password-weak boolean true
-d-i passwd/make-user boolean true  #Set true so we could make oridinary user. 
-</code></pre>
-
-<p>While the encryted password could be generated via:</p>
-
-<pre><code>using openssl passwd:
-$ openssl passwd -1 &quot;password here&quot;
-Using grub-crypt (you will be prompted to enter a password after running the command):
-$ grub-crypt --md5
-</code></pre>
-
-<h3 id="packer-s-json-configuration">Packer&rsquo;s json configuration</h3>
-
-<p>The json configuration for importing qemu:</p>
-
-<pre><code>    {
-      &quot;boot_command&quot;: [
-        &quot;{{ user `boot_command_prefix` }}&quot;,
-        &quot;/install/vmlinuz noapic &quot;,
-        &quot;initrd=/install/initrd.gz &quot;,
-        &quot;file=/floppy/{{ user `preseed` }} &quot;,
-        &quot;debian-installer=en_US auto locale=en_US kbd-chooser/method=us &quot;,
-        &quot;hostname={{ user `hostname` }} &quot;,
-        &quot;grub-installer/bootdev=/dev/vda&lt;wait&gt; &quot;,
-        &quot;fb=false debconf/frontend=noninteractive &quot;,
-        &quot;keyboard-configuration/modelcode=SKIP keyboard-configuration/layout=USA &quot;,
-        &quot;keyboard-configuration/variant=USA console-setup/ask_detect=false &quot;,
-        &quot;passwd/user-fullname={{ user `ssh_fullname` }} &quot;,
-        &quot;passwd/user-password={{ user `ssh_password` }} &quot;,
-        &quot;passwd/user-password-again={{ user `ssh_password` }} &quot;,
-        &quot;passwd/username={{ user `ssh_username` }} &quot;,
-        &quot;-- &lt;enter&gt;&quot;
-      ],
-      &quot;disk_size&quot;: &quot;{{ user `disk_size` }}&quot;,
-      &quot;floppy_files&quot;: [
-        &quot;http/{{ user `preseed` }}&quot;
-      ],
-      &quot;boot_wait&quot;: &quot;10s&quot;,
-      &quot;headless&quot;: &quot;{{ user `headless` }}&quot;,
-      &quot;iso_checksum&quot;: &quot;{{ user `iso_checksum` }}&quot;,
-      &quot;iso_checksum_type&quot;: &quot;{{ user `iso_checksum_type` }}&quot;,
-      &quot;iso_urls&quot;: [
-        &quot;{{ user `iso_path` }}/{{ user `iso_name` }}&quot;,
-        &quot;{{ user `iso_url` }}&quot;
-      ],
-      &quot;output_directory&quot;: &quot;output-{{ user `vm_name` }}-qemu-iso&quot;,
-      &quot;shutdown_command&quot;: &quot;echo '{{ user `ssh_password` }}'|sudo -S shutdown -P now&quot;,
-      &quot;ssh_password&quot;: &quot;{{ user `ssh_password` }}&quot;,
-      &quot;ssh_username&quot;: &quot;{{ user `ssh_username` }}&quot;,
-      &quot;ssh_wait_timeout&quot;: &quot;10000s&quot;,
-      &quot;type&quot;: &quot;qemu&quot;,
-      &quot;format&quot;: &quot;qcow2&quot;,
-      &quot;disk_interface&quot;: &quot;virtio&quot;,
-      &quot;accelerator&quot;: &quot;kvm&quot;,
-      &quot;vm_name&quot;: &quot;{{user `vm_name`}}&quot;
-    },
-</code></pre>
-
-<p>Post-processors for generating vhd:</p>
-
-<pre><code>  &quot;post-processors&quot;: [
-    {
-      &quot;output&quot;: &quot;box/vhd/{{user `vm_name`}}-{{user `cm`}}{{user `cm_version`}}-{{user `version`}}&quot;,
-      &quot;type&quot;: &quot;vhd&quot;
-    }
-</code></pre>
-
-<p>Post-postcessors for generating box file:</p>
-
-<pre><code>  &quot;post-processors&quot;: [
-    {
-      &quot;keep_input_artifact&quot;: false,
-      &quot;output&quot;: &quot;box/{{.Provider}}/{{user `vm_name`}}-{{user `cm`}}{{user `cm_version`}}-{{user `version`}}.box&quot;,
-      &quot;type&quot;: &quot;vagrant&quot;,
-      &quot;vagrantfile_template&quot;: &quot;{{ user `vagrantfile_template` }}&quot;
-    }
-  ],
-</code></pre>
-
-<p>In some system which have lower memory, packer building will fail, because it will generating large
-file under <code>/tmp</code> directory, so we have to change the default PAKCER TMP via:</p>
-
-<pre><code>$ mkdir ./tmp
-$ export PACKER_TMP=./tmp
-</code></pre>
-
-<p>By setting up the TMP file we could do building without any error.</p>
-
-<h3 id="scripts">scripts</h3>
-
-<h4 id="network-manager-start-manually">Network Manager Start Manually</h4>
-
-<p>By setting following commands:</p>
-
-<pre><code>$ sudo echo &quot;manual&quot; | sudo tee /etc/init/network-manager.override
-$ sudo /bin/sed -i &quot;\$i sudo start network-manager&quot; /etc/rc.local
-</code></pre>
-
-<h4 id="upgrade">Upgrade</h4>
-
-<p>For avoiding signature error, do following:</p>
-
-<pre><code># avoiding hashchecksum error. 
-rm -rf /var/lib/apt/lists/*
-
-# apt-get update does not actually perform updates, it just downloads and indexes the list of packages
-apt-get -y update
-apt-get -y upgrade
-</code></pre>
-
-<h4 id="hvc0-terminal">hvc0 terminal</h4>
-
-<p>XenServer use hvc0 for tty, so we have to manually configure its login:</p>
-
-<pre><code># Fix bug, no hvc0, then you won't get tty1 working under vnc
-    echo 'start on stopped rc RUNLEVEL=[2345] and (' &gt; /etc/init/hvc0.conf
-    echo 'not-container or' &gt;&gt; /etc/init/hvc0.conf
-    echo 'container CONTAINER=lxc or' &gt;&gt; /etc/init/hvc0.conf
-    echo 'container CONTAINER=lxc-libvirt)' &gt;&gt; /etc/init/hvc0.conf
-    echo 'stop on runlevel [!2345]' &gt;&gt; /etc/init/hvc0.conf
-    echo 'respawn' &gt;&gt; /etc/init/hvc0.conf
-    echo 'exec /sbin/getty -L hvc0 9600 linux' &gt;&gt; /etc/init/hvc0.conf
-</code></pre>
-
-<p>After these modifications, now we could generate vhd file or vagrant-libvirt box files using Makefile.</p>
 
       
     </div>

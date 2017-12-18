@@ -105,6 +105,76 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/12/maas-deploy-3/">MAAS Deploy(3)</a>
+      </h1>
+      <span class="post-date">Mar 12, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Following is the steps for creating virtual nodes and let it be administrated by MAAS Cluster.</p>
+
+<h3 id="node-creation">Node Creation</h3>
+
+<p>First create a null iso via <code>touch none.iso</code>, later we will use this iso for booting the node.<br />
+Create a new virtual machine -&gt; select &ldquo;Local installation media(ISO images or CDROM) -&gt; Use Local Iso image(/home/Trusty/none.iso) -&gt; Memory 512MB, CPU 1 Core -&gt; Disk 20 GB -&gt;  name: MASSTestNode0 -&gt; Customize configuration before install -&gt; Finish.</p>
+
+<p>Customization:<br />
+Boot Option, select NIC and Disk1.<br />
+Disk1 Option, select advanced -&gt; virtio.<br />
+NIC Option, select &ldquo;virtualization network maasisotest NAT&rdquo;, virtio.<br />
+Click &ldquo;Begin Installation&rdquo;, start installation, and quickly shut it off.</p>
+
+<p>Clone it to 3 nodes. Then click start and let it startup via ipxe. After a while they will be powered off.</p>
+
+<h3 id="maas-network-configuration">MAAS Network Configuration</h3>
+
+<p>We want to make MAAS controller be the pxe server in this isolated network, so we visit following webpage and do configuration:<br />
+&ldquo;Edit Cluster Controller&rdquo; -&gt; Edit Interface eth0 -&gt; Mangement(DNS and DHCP)<br />
+Router IP: 10.17.17.1<br />
+DHCP dynamic IP range low value: 10.17.17.101<br />
+DHCP dynamic IP range high value: 10.17.17.199<br />
+Then &ldquo;Save Interface&rdquo; and let this MASS controller serves all of the created nodes.</p>
+
+<h3 id="maas-node-configuration">MAAS Node Configuration</h3>
+
+<p>Now after bootup the newly created nodes, your nodes page will be looks like following:<br />
+<img src="/images/2015_03_12_20_22_33_974x371.jpg" alt="/images/2015_03_12_20_22_33_974x371.jpg" /><br />
+Click them and edit like following steps:<br />
+First in your host machine run <code>sudo virsh list --all</code> to get the corresponding virtual machines.<br />
+Then use <code>sudo virsh dumpxml xxxx | grep mac</code> to get the corresponding mac address, then fill the contents.<br />
+For example:</p>
+
+<pre><code>$ sudo virsh dumpxml MASSTestNode0 | grep mac
+    &lt;type arch='x86_64' machine='pc-i440fx-2.2'&gt;hvm&lt;/type&gt;
+      &lt;mac address='52:54:00:2f:68:e3'/&gt;
+
+</code></pre>
+
+<p>Then the configuration images is like following:<br />
+<img src="/images/2015_03_12_20_33_05_479x466.jpg" alt="/images/2015_03_12_20_33_05_479x466.jpg" /><br />
+Also you should login as user maas and do following command to let you access remote&rsquo;s qemu:</p>
+
+<pre><code>$ sudo apt-get install libvirt-bin
+$ ssh-copy-id Trusty@10.17.17.1
+$ virsh -c qemu+ssh://Trusty@10.17.17.1/system list --all
+
+</code></pre>
+
+<p>Then save node, and select it, in bulk actions, select &ldquo;Commision Selected Nodes&rdquo;, it will start commision, and after its successful, it will be looked like &ldquo;ready&rdquo; state. Remember its previous state is &ldquo;New&rdquo;.<br />
+Also comission the other 2 nodes.</p>
+
+<p>The next step we will let Juju runs on MAAS, and build more fantanstic applications.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/03/12/maas-deploy-4/">MAAS Deploy(4)</a>
       </h1>
       <span class="post-date">Mar 12, 2015 
@@ -478,140 +548,6 @@ $ sudo apt-get install blueman
 <p>Then setup the bluetooth headset in blueman&rsquo;s graphical interface.<br />
 The more detailed steps are available at:<br />
 <a href="http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/">http://kkkttt.github.io/blog/2013/12/19/bluetooth-headset-on-archlinux/</a></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/06/establish-ubuntu-virt-node/">Establish Ubuntu Virt Node</a>
-      </h1>
-      <span class="post-date">Mar 6, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Just some tips on how to establish an Ubuntu Virt Node from existing installed system.</p>
-
-<h3 id="re-partition">Re-Partition</h3>
-
-<p>2T Disk has been allocated to opensuse, thus I have first umount the mounted /home/ partition and use partition from yast for adjust the partition size, I got 1.9 T size of disk for installing new system.<br />
-Umount the mounted /home/ partition is via edit /etc/fstab file.</p>
-
-<h3 id="install-ubuntu">Install Ubuntu</h3>
-
-<p>Download the iso file of ubuntu x86_64 version, then enable kvm via:</p>
-
-<pre><code>$ sudo modprobe kvm
-$ sudo modprobe kvm-intel
-
-</code></pre>
-
-<p>Install the system via following commands:</p>
-
-<pre><code>$ qemu-system-x86_64 -hda /dev/sda -m 1024 -boot d -cdrom ./install_media.iso
-
-</code></pre>
-
-<p>The above command is for installing the system into the real harddisk. It will automatically install the system onto the harddisk and over-write the MBR. Ubuntu will automatically detect the installed opensuse and generate the system description line.<br />
-In grub, the default system will be the installed ubuntu.</p>
-
-<h3 id="system-preparation">System Preparation</h3>
-
-<p>Install following packages:</p>
-
-<pre><code>$ sudo apt-get install openssh-server vim-gtk bridge-utils virt-manager git subversion sysfsutils virtualbox awesome firefox chromium-browser xinit libreoffice build-essential pidgin konsole meld  fcitx fcitx-googlepinyin git subversion wqy* zsh rox-filer smplayer cmake scrot thunderbird midori gpicview docker.io  qemu qemu-kvm bridge-utils
-
-</code></pre>
-
-<p>Configure the network via following command:</p>
-
-<pre><code>$ sudo brctl addif br0 eth0
-$ cat /etc/network/interfaces
-# This file describes the network interfaces available on your system
-# and how to activate them. For more information, see interfaces(5).
-
-# The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet manual
-# If you want to enable the static, uncomment following
-# iface eth0 inet static
-#       address 192.168.0.119
-#       netmask 255.255.255.0
-
-
-# Add Bridge Interface
-iface br0 inet static
-address 192.168.0.119
-netmask 255.255.255.0
-gateway 192.168.0.236
-dns-nameservers 114.114.114.114
-bridge_ports eth0
-bridge_stp off
-auto br0
-
-</code></pre>
-
-<p>Restart computer and now you got br0 enabled.</p>
-
-<p>Install QQ:</p>
-
-<pre><code>$ sudo vim /etc/apt/sources.list
-deb http://ppa.launchpad.net/lainme/pidgin-lwqq/ubuntu trusty main 
-deb-src http://ppa.launchpad.net/lainme/pidgin-lwqq/ubuntu trusty main
-$ sudo apt-get update &amp;&amp; sudo apt-get upgrade
-$ sudo apt-get install pidgin-lwqq
-
-</code></pre>
-
-<p>Now you could use pidgin for chatting.</p>
-
-<p>Install xlockmore for using xlock locking screen:</p>
-
-<pre><code>$ wget http://packages.ubuntu.com/precise/amd64/xlockmore/download/*xxxx.deb
-$ sudo dpkg -i xlockmore_package.deb
-
-</code></pre>
-
-<p>Disable UTC time via:</p>
-
-<pre><code>$ sudo vim /etc/default/rcS
-# assume that the BIOS clock is set to UTC time (recommended)
-UTC=no
-
-</code></pre>
-
-<p>Configure ZSH:</p>
-
-<pre><code>$ sudo vim ~/.zshrc
-# For setting zsh history
-HISTFILE=$HOME/.zsh_history
-setopt INC_APPEND_HISTORY
-setopt SHARE_HISTORY
-HISTSIZE=5000
-SAVEHIST=5000
-
-</code></pre>
-
-<p>Now the history file has been created and you could navigate between command history.</p>
-
-<p>Quick setup for capturing picture:</p>
-
-<pre><code>$ cat /usr/bin/mycapscr 
-scrot -s '%Y_%m_%d_%H_%M_%S_$wx$h.jpg' -e 'mv $f ~/capscr/'
-$ mkdir -p ~/capscr
-
-</code></pre>
-
-<p>Now we got the standard development environment ready.</p>
 
       
     </div>

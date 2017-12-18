@@ -105,6 +105,318 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/11/26/workingtipsonkubernetes/">WorkingTipsOnKubernetes</a>
+      </h1>
+      <span class="post-date">Nov 26, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="先决条件">先决条件</h3>
+
+<p>CentOS 7.2 1511, Vagrant for kvm.<br />
+关闭selinux, 关闭firewalld, 使用以下命令安装docker最新版:</p>
+
+<pre><code>$ curl -sSL \
+http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/internet |
+\ sh -
+</code></pre>
+
+<p>IP地址配置:</p>
+
+<pre><code>master	192.168.0.223
+node1	192.168.0.224
+</code></pre>
+
+<p>配置无密码登录，master到master, master到node1.</p>
+
+<pre><code># ssh-copy-id root@192.168.0.223
+# ssh-copy-id root@192.168.0.224
+</code></pre>
+
+<h3 id="安装kubernetes">安装kubernetes</h3>
+
+<p>修改配置文件如下:</p>
+
+<pre><code>$ cat kubernetes/cluster/centos/config-default.sh 
+
+# Master配置
+export MASTER=${MASTER:-&quot;root@192.168.0.223&quot;}
+export MASTER_IP=${MASTER#*@}
+
+# Minion节点配置
+export NODES=${NODES:-&quot;root@192.168.0.223 root@192.168.0.224&quot;}
+
+# Cluster中含有的节点数
+export NUM_NODES=${NUM_NODES:-2}
+
+# service cluster配置的IP地址范围
+export SERVICE_CLUSTER_IP_RANGE=${SERVICE_CLUSTER_IP_RANGE:-&quot;192.168.22.0/24&quot;}
+
+# flannel的overlay网络IP地址范围, 不能和上面定义的SERVICE_CLUSTER_IP_RANGE地址范围冲突
+export FLANNEL_NET=${FLANNEL_NET:-&quot;172.20.0.0/16&quot;}
+
+# Docker参数，这里我们开启daocloud加速模式
+export DOCKER_OPTS=${DOCKER_OPTS:-&quot;--cluster-store=etcd://$MASTER_IP:2379, --registry-mirror=http://1a653205.m.daocloud.io&quot;}
+</code></pre>
+
+<p>开始部署kubernetes集群:</p>
+
+<pre><code>$ KUBERNETES_PROVIDER=centos ./kube-up.sh
+</code></pre>
+
+<p>安装完毕后，运行以下脚本，重新加载docker的配置后，重启两台机器:</p>
+
+<pre><code>$ sudo systemctl stop docker
+$ sudo systemctl daemon-reload
+$ sudo systemctl start docker
+</code></pre>
+
+<p>重启完毕后，运行以下命令查看节点状态:</p>
+
+<pre><code># kubectl get nodes
+NAME            STATUS    AGE
+192.168.0.223   Ready     10h
+192.168.0.224   Ready     10h
+</code></pre>
+
+<p>加载两个docker镜像:</p>
+
+<pre><code># docker images
+gcr.io/google_containers/kubernetes-dashboard-amd64   v1.4.0  
+gcr.io/google_containers/pause-amd64                  3.0     
+</code></pre>
+
+<p>添加kubectl到系统路径中:</p>
+
+<pre><code># cp cluster/centos/binaries/kubectl /opt/kubernetes/bin/
+# vim ~/.bashrc
+export PATH=$PATH:/opt/kubernetes/bin/
+</code></pre>
+
+<h3 id="启动kubernetes-ui">启动kubernetes UI</h3>
+
+<p>启动dashboard-controller服务和dashboard-service服务:</p>
+
+<pre><code># cd ./cluster/gce/coreos/kube-manifests/addons/dashboard
+# kubectl create -f dashboard-controller.yaml 
+# kubectl create -f dashboard-service.yaml 
+</code></pre>
+
+<p>在node1上可以查看docker运行状态:</p>
+
+<pre><code># docker ps
+b22047f30d55        gcr.io/google_containers/kubernetes-dashboard-amd64:v1.4.0   &quot;/dashboard --port=90&quot;
+8979b7b1db14        gcr.io/google_containers/pause-amd64:3.0                     &quot;/pause&quot;
+</code></pre>
+
+<p>查看<code>http://192.168.0.223:8080/ui</code>，得到dashboard的网页.</p>
+
+<p><img src="/images/2016_11_26_22_01_29_891x497.jpg" alt="/images/2016_11_26_22_01_29_891x497.jpg" /></p>
+
+<p>service截图:</p>
+
+<p><img src="/images/2016_11_26_22_03_57_758x176.jpg" alt="/images/2016_11_26_22_03_57_758x176.jpg" /></p>
+
+<h3 id="nginx服务">nginx服务</h3>
+
+<p>配置nginx-rc.yaml文件用于启动nginx服务:</p>
+
+<pre><code>$ vim nginx-rc.yaml 
+apiVersion: v1 
+kind: ReplicationController 
+metadata: 
+  name: nginx-controller 
+spec: 
+  replicas: 2 
+  selector: 
+    name: nginx 
+  template: 
+    metadata: 
+      labels: 
+        name: nginx 
+    spec: 
+      containers: 
+        - name: nginx
+          image: nginx
+          ports: 
+            - containerPort: 80
+</code></pre>
+
+<p>启动服务:</p>
+
+<pre><code>$ kubectl -s http://192.168.0.223:8080 create -f nginx-rc.yaml
+</code></pre>
+
+<p>检查创建的pods情况:</p>
+
+<pre><code># kubectl get pods
+NAME                     READY     STATUS              RESTARTS   AGE
+nginx-controller-1bx6j   0/1       ContainerCreating   0          13s
+nginx-controller-attgh   0/1       ContainerCreating   0          13s
+</code></pre>
+
+<p>得到pod的运行情况:</p>
+
+<pre><code># kubectl describe pod nginx-controller-1bx6j
+Name:		nginx-controller-1bx6j
+Namespace:	default
+Node:		192.168.0.224/192.168.0.224
+Start Time:	Sat, 26 Nov 2016 14:08:33 +0000
+Labels:		name=nginx
+Status:		Running
+IP:		172.20.99.3
+Controllers:	ReplicationController/nginx-controller
+......
+</code></pre>
+
+<p>此刻可以在对应的节点上看到nginx的运行情况: <code>curl 172.20.99.3</code>在master节点上。</p>
+
+<h3 id="节点内可访问的nginx-service">节点内可访问的nginx service</h3>
+
+<p>Service的type有ClusterIP和NodePort之分，缺省是ClusterIP，这种类型的Service
+只能在集群内部访问。配置文件如下：</p>
+
+<pre><code>$ vim nginx-service-clusterip.yaml 
+apiVersion: v1 
+kind: Service 
+metadata: 
+  name: nginx-service-clusterip 
+spec: 
+  ports: 
+    - port: 8001 
+      targetPort: 80 
+      protocol: TCP 
+  selector: 
+    name: nginx
+</code></pre>
+
+<p>创建服务:</p>
+
+<pre><code># kubectl create -f nginx-service-clusterip.yaml
+</code></pre>
+
+<p>查看创建出的service情况:</p>
+
+<pre><code># kubectl get service
+NAME                      CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+kubernetes                192.168.22.1     &lt;none&gt;        443/TCP    34m
+nginx-service-clusterip   192.168.22.189   &lt;none&gt;        8001/TCP   27s
+</code></pre>
+
+<p>访问节点内可访问的nginx service, 在master和node1上都可以访问到:</p>
+
+<pre><code>$ curl 192.168.22.189:8001
+</code></pre>
+
+<h3 id="外部可访问的nginx服务">外部可访问的nginx服务</h3>
+
+<p>type为NodePort的为外部可访问的nginx服务，定义文件如下:</p>
+
+<pre><code>$ vim nginx-service-nodeport.yaml 
+apiVersion: v1 
+kind: Service 
+metadata: 
+  name: nginx-service-nodeport 
+spec: 
+  ports: 
+    - port: 8000
+      targetPort: 80 
+      protocol: TCP 
+  type: NodePort
+  selector: 
+    name: nginx
+</code></pre>
+
+<p>运行<code>kubectl create -f nginx-service-nodeport.yaml</code>, 得到服务如下:</p>
+
+<pre><code># kubectl get service
+NAME                      CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+kubernetes                192.168.22.1     &lt;none&gt;        443/TCP    58m
+nginx-service-clusterip   192.168.22.189   &lt;none&gt;        8001/TCP   23m
+nginx-service-nodeport    192.168.22.209   &lt;nodes&gt;       8000/TCP   2m
+</code></pre>
+
+<p>可以看到，新增加了一个<code>nginx-service-nodeport</code>的服务.</p>
+
+<p>查看其端口，30923为其映射的端口号:</p>
+
+<pre><code># kubectl describe service nginx-service-nodeport
+Name:			nginx-service-nodeport
+Namespace:		default
+Labels:			&lt;none&gt;
+Selector:		name=nginx
+Type:			NodePort
+IP:			192.168.22.209
+Port:			&lt;unset&gt;	8000/TCP
+NodePort:		&lt;unset&gt;	30923/TCP
+Endpoints:		172.20.62.2:80,172.20.99.3:80
+Session Affinity:	None
+</code></pre>
+
+<p>从外部(192.168.0.220)验证nginx服务:</p>
+
+<pre><code># curl http://192.168.0.223:30923
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+</code></pre>
+
+<h3 id="删除服务">删除服务</h3>
+
+<p>删除我们上面创建的基于nodeport的服务:</p>
+
+<pre><code># kubectl delete -f ./nginx-service-nodeport.yaml
+</code></pre>
+
+<p>删除以后，检查service情况:</p>
+
+<pre><code># kubectl get service
+NAME                      CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+kubernetes                192.168.22.1     &lt;none&gt;        443/TCP    1h
+nginx-service-clusterip   192.168.22.189   &lt;none&gt;        8001/TCP   55m
+</code></pre>
+
+<p>可以看到<code>nginx-service-nodeport</code>服务已经被删除。</p>
+
+<h3 id="指定端口">指定端口</h3>
+
+<p>创建配置文件如下:</p>
+
+<pre><code>$ vim specifynode.yaml 
+apiVersion: v1 
+kind: Service 
+metadata: 
+  name: nginx-service-nodeport 
+spec: 
+  ports: 
+    - port: 80
+      nodePort: 30080 
+      protocol: TCP 
+  type: NodePort
+  selector: 
+    name: nginx
+</code></pre>
+
+<p>创建服务:</p>
+
+<pre><code>$ kubectl create -f ./specifynode.yaml
+</code></pre>
+
+<p>现在访问<code>http://192.168.0.223:30080</code>即可访问到nginx服务.</p>
+
+<p>注: 端口需要绑定在<code>30000-32767</code>.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/11/24/xenserveranddocker/">XenServerAndDocker</a>
       </h1>
       <span class="post-date">Nov 24, 2016 
@@ -496,122 +808,6 @@ ansible_ssh_pass=vagrant
 [defaults]
 host_key_checking = False
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/11/15/%E7%AC%AC%E4%B8%89%E7%A7%8D%E7%AC%A8%E9%B8%9F/">第三种笨鸟</a>
-      </h1>
-      <span class="post-date">Nov 15, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/life">Life</a>
-        
-      </span>
-      
-      
-
-<p><img src="/images/71b3e9acjw1f9sr30k5s9j21kw23u7oh.jpg" alt="/images/71b3e9acjw1f9sr30k5s9j21kw23u7oh.jpg" /></p>
-
-<p><code>配图:章诒和书法</code></p>
-
-<p>首先说一个段子&mdash;-&ldquo;孩子因成绩不好，被家长骂笨鸟，孩子不服气的说，世上笨鸟有三种，
-一种是先飞的，一种是嫌累不飞的，家长问:那第三种呢？孩子说：这种最讨厌，自己飞不起来，
-就在窝里下个蛋，要下一代使劲飞。&rdquo;</p>
-
-<p>有时候生活里的现状比段子里还要夸张，来说说今天下午泳池里见到的一件事吧。</p>
-
-<p>下午泳池中水温尚可，属于那种刚下水还OK，但如果不动体温将快速下降，瞬间就会哆嗦的那种。</p>
-
-<p>一个看上去大概五六岁的小朋友，独自下水开始游起了蛙泳，姿势还挺标准。做娘的
-一身横肉，在岸上看着，间或瞅瞅手机。</p>
-
-<p>水温确实凉，小朋友游了30分钟后扛不住，到泳池边央求妈妈上岸。他娘不肯，
-赶下去继续游。游过我身边的时候看到他动作显然变形了，换气有点难，一够到泳池边
-就得大口喘气的那种。按理说少儿游泳到这个运动量就够了，慢慢练呗来日方长嘛。</p>
-
-<p>然而当娘的太狠心，站在泳池边死活不让孩子上来。小朋友就只能边游水边抽泣，委屈得不行了。
-终于在某次游回泳池边后开始大声号哭，声贯全场。一位大哥看不下去，游过去抱住小朋友柔声安慰，说来吧我
-带你慢慢游。然后又回过头帮小朋友和家长谈判。<br />
-做娘的就是一副今天你不游满全场就不要走的派头，死活不松口。小朋友在岸上跟大哥
-调整了一下，又低声抽泣下水，一直游到了终场铃响。</p>
-
-<p>讲真，这事看得旁人也挺心酸的。</p>
-
-<p>中国有很多家长都摆出来一副&rdquo;我这是为你好&rdquo;的派头，对孩子严加要求。然而换个角度看呢？家长自己啥也做不到，
-却要求孩子啥都做到、而且要做好。孩子投胎到你家来，真是倒了八辈子血霉了。私下以为
-不顾及孩子感受提出的苛刻要求，根本就不是真正的为孩子好，而是一种另类的自私(抑或是残忍)。</p>
-
-<p>说起今天下午那位母亲，倘若她自己肯下水试一试，那身横肉还真未必能扛过30分钟。自己晒着太阳暖暖和和
-的呆在岸上，却要孩子游上一小时，这不是&rdquo;自己飞不起来，下个蛋要下一代使劲飞&rdquo;的典型吗？</p>
-
-<p>回来以后我在想，如果将来我遇到这种情况，会怎么做？接下来是我的几点思考:</p>
-
-<p>1、自己做不到的事情，不要苛求别人做到。</p>
-
-<p>不出意外的话，今天下午泳池边这种情况估计在我今后的生活
-里出现概率会很小。首先本人玩心太重兴趣广泛精力充沛，可能唯一要担心的是下一代会不会被我带到太野。
-退一万步说，万一孩子TA娘铁了心要当虎妈，小孩被虎妈逼迫学各种技能什么的，那当爹的也只能跟着去受罪了。交一份钱，两
-人一起学，虎妈, 这买卖不亏呀！</p>
-
-<p>国内对子女教育的一个很大的误区就是认为&rdquo;自己花了很多钱就OK了&rdquo;&mdash;-然而在我看来，这是属于暴发户的玩法。</p>
-
-<p>典型的暴发户的玩法是什么呢？是中国足球。请来金牌教练来教自己不成器的孩子妄想称霸全宇宙实现刁某某的足球
-梦。歇歇吧足协, 足球不是这么玩的。</p>
-
-<p>教育也是。</p>
-
-<p>花了钱是远远不够的，最关键是你得自个儿也花点心思上去.
-譬如学钢琴，很多琴童家长就自个在那儿玩着手机，对着自己裤裆傻笑。拜托！琴行里那么多琴，你们怎么就不自个儿体验一把呢？
-只有你体验到这项技能学习过程里所可能遇到的挑战，你才能感同身受，进而在孩子遇到瓶颈的时候和TA一起越过障碍。</p>
-
-<p>很多少儿技能的学习会步入这样的误区： 当学习已经没有乐趣的时候，投资就等同于打水漂：家长在持续砸钱，钱花出去，
-孩子却越来越不愿意去了。当然那帮笨蛋父母从来不会反思自己的不是，他们只会简单的一拍脑袋，马上得出&rdquo;孩子不争气&rdquo;或者
-&ldquo;孩子不是这块料&rdquo;的反馈。这对孩子的成长而言实在不是一件好事。</p>
-
-<p>别问我为啥知道这么多，教书匠的孩子出生时都会附送教书属性这事我会到处乱说？</p>
-
-<p>2、 面对挑战，激励应该是&rdquo;做加法&rdquo;而不是&rdquo;做减法&rdquo;。</p>
-
-<p>回到今天下午的场景: 如果我家小朋友不想游泳了我怎么办呢？</p>
-
-<p>很简单，那你就不游了吧，自个上岸呆着去。当爹的继续到泳池里玩花样了哈，边游还要边刺激TA““哎呀真的好过瘾啊，来嘛
-下来玩嘛”</p>
-
-<p>如果还不下来你就可以逐渐提升筹码了，比如说&rdquo;下来游两圈，一会散场了带你去吃冰淇淋？&rdquo;&ldquo;多游两百米今晚多一个小时IPAD
-游戏时间？&rdquo;。诱惑有得是，就看你扛不扛得住。</p>
-
-<p>如果这么诱惑都不下来，那确实是人家不想游了，自由这两个字是用来尊重的。这个时候你应该感激TA肯自个呆在岸上等着你
-游完了。</p>
-
-<p>因而在我看来今天下午那位做娘的就是在做减法，最后搞得有点两败俱伤。不过是一两个冰淇淋做诱惑的事情，母子之间相互
-做做加法，这事绝逼好过在公众场合搞得孩子哭声满场进而塑造出自己&rdquo;六亲不认&rdquo;的&rdquo;虎妈&rdquo;残酷形象吧。当然这位母亲应该感谢
-这是天朝而不是美帝，在美帝这可能构成了某种程度上的虐待。</p>
-
-<p>做加法优于做减法这事不仅仅适用于家庭教育，譬如说某公司号称在公众区域发现员工杯子要罚款,这得是多傻逼的人
-才想得出来这种做减法的招式啊？
-最后的结果可能是：既达不到想要的效果，又给自己贴上了&rdquo;管得太宽&rdquo;的标签。不出意外，这项一拍脑袋想出来的规定过几天自己都忘了。</p>
-
-<p>3、技能的最高境界是&rdquo;玩&rdquo;。</p>
-
-<p>港真，没有比&rdquo;玩&rdquo;更能带动个体在某个领域造诣的手段。因为你在玩游泳，所以你不觉得累，不觉得冷。兴趣是学习某
-项技能最好的老师，那位虎妈轻而易举的扼杀掉了兴趣这位最好的老师，把原本在&rdquo;泳池里玩&rdquo;的活动闹成
-了&rdquo;在泳池里受冻受罪&rdquo;的活动，这当娘的跟自家孩子到底是有多大仇啊。</p>
-
-<p>或者，根本就没有什么技能一说。常人眼中的技能，在该领域的高手眼中，只是手头的玩物罢了。因为他们玩得炫，所以
-旁人信以为真，却不知自古都有知音一说，到最终到达该领域的终极状态的一定会是彼此之间有着诸多默契的大玩家们。</p>
-
-<h3 id="后记">后记</h3>
-
-<p>只是在池边发现的一只&rdquo;第三种笨鸟&rdquo;，引发了上面的一段文字。事实上生活里充满了太多这样的笨鸟，从对待子女教育
-的方式，很容易衍生到工作、生活的方方面面里。我们可以想象&mdash;-如果这位母亲是单位里的某个小头目，对下属会不会也
-时常采用&rdquo;做减法&rdquo;的策略呢？讲到这里你能体会为什么职场上那么多人说难难难了吧，为什么那么多人说生活难难难了吧，
-那么多人说做人难了吧？因为生活里永远有那么多自己不会飞却指望你飞给它看的笨鸟们啊。但其实如同
-章诒和老师所说： &ldquo;天下断无易处之境遇, 人间那有空闲的光阴&rdquo;。难了就对了，因为：</p>
-
-<p>你在做人，TA在做鸟啊.</p>
 
       
     </div>

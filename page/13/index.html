@@ -105,6 +105,87 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/03/02/migration-docker-based-wordpress/">Migration Docker Based WordPress</a>
+      </h1>
+      <span class="post-date">Mar 2, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="aim">AIM</h3>
+
+<p>For last 3 days I was busy designing the website for a company, I run
+everything in docker, and finish the design very fast. Now I want to migrate
+it from the old vps to a new vps, following records all of the steps.</p>
+
+<h3 id="data-volume-migration">Data Volume Migration</h3>
+
+<p>Examine the data volume via following commands:</p>
+
+<pre><code># docker volume ls | grep db
+local               makeclean_db_data
+# docker volume ls | grep html
+local               makeclean_html
+</code></pre>
+
+<p>Get the volume mount point:</p>
+
+<pre><code># docker volume inspect makeclean_html | grep -i mountpoint
+        &quot;Mountpoint&quot;: &quot;/var/lib/docker/volumes/makeclean_html/_data&quot;,
+# docker volume inspect makeclean_db_data | grep -i mountpoint
+        &quot;Mountpoint&quot;: &quot;/var/lib/docker/volumes/makeclean_db_data/_data&quot;,
+</code></pre>
+
+<p>Now zip all of the data volume:</p>
+
+<pre><code># tar czf db_data.tar.gz /var/lib/docker/volumes/makeclean_db_data/_data
+# tar czf html.tar.gz /var/lib/docker/volumes/makeclean_html/_data
+</code></pre>
+
+<p>Copy the 2 gz files to your new vps.</p>
+
+<h3 id="adjust">Adjust</h3>
+
+<p>Start the docker-compose like the steps in last article, then manually stop
+the docker instance, replace the data volume using the 2 gz files, start the
+docker instance again.</p>
+
+<p>Now you will be leading the old domain name, we need to change the options of
+wordpress database, we create a new mysql docker instance for changing the
+wordpress database:</p>
+
+<pre><code># docker run -it --link wordpress_db_1:mysql --net wordpress_default mysql:5.7 /bin/bash
+root@95f633180461:/#
+</code></pre>
+
+<p>In this newly created docker instance you could use mysql client tools for
+changing wordpress options(<code>172.19.0.2</code> is your mysql server):</p>
+
+<pre><code># mysql -h172.19.0.2 -P3306 -uroot -pwordpress
+</code></pre>
+
+<p>Mysql adjust commands ls listed as following:</p>
+
+<pre><code>use wordpress;
+UPDATE wp_options SET option_value = replace(option_value, 'xxx.xxx.222.222:8000','localhost:8000') ;
+UPDATE wp_posts SET post_content = replace(post_content, 'xxx.xxx.222.222:8000','localhost:8000') ;
+UPDATE wp_comments SET comment_content = replace(comment_content, 'xxx.xxx.222.222:8000', 'localhost:8000') ;
+UPDATE wp_comments SET comment_author_url = replace(comment_author_url, 'xxx.xxx.222.222:8000', 'localhost:8000') ;
+\q
+</code></pre>
+
+<p>Now restart the docker instance, you will get the wordpress running in new
+vps.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/02/27/dockerizedwordpressquickstart/">DockerizedWordpressQuickStart</a>
       </h1>
       <span class="post-date">Feb 27, 2017 
@@ -778,60 +859,6 @@ date &gt; /etc/disk_added_date
 </code></pre>
 
 <p>This script will automatically expand your root disk from the original 2.5G to 12.5G, you could adjust the size in Vagrantfile.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/02/17/configuraiton-for-vagrant/">Configuraiton For Vagrant</a>
-      </h1>
-      <span class="post-date">Feb 17, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="vagrantfile">Vagrantfile</h3>
-
-<p>Configuration for setting Ubuntu14.04, bridged networking, and setting its
-routing to specified node.</p>
-
-<pre><code># -*- mode: ruby -*-
-# vi: set ft=ruby :
-Vagrant.configure(&quot;2&quot;) do |config|
-  config.vm.box = &quot;minimum/ubuntu-trusty64-docker&quot;
-
-  # Networking
-  config.vm.network &quot;public_network&quot;, ip:&quot;192.168.10.217&quot;, netmask: &quot;16&quot;,bridge:&quot;xenbr0&quot;
-  # default router
-  config.vm.provision &quot;shell&quot;,
-    run: &quot;always&quot;,
-    inline: &quot;route add default gw 192.168.0.176&quot;
-
-  # delete default gw on eth0
-  config.vm.provision &quot;shell&quot;,
-    run: &quot;always&quot;,
-    inline: &quot;eval `route -n | awk '{ if ($8 ==\&quot;eth0\&quot; &amp;&amp; $2 != \&quot;0.0.0.0\&quot;) print \&quot;route del default gw \&quot; $2; }'`&quot;
-  
-  # Hostname
-  config.vm.hostname = &quot;CSMgmt&quot;
-
-  # Memory and CPU Configuration
-  config.vm.provider &quot;virtualbox&quot; do |vb|
-    # Display the VirtualBox GUI when booting the machine
-    # vb.gui = true
-  
-    # Customize the amount of memory on the VM:
-    vb.memory = &quot;4096&quot;
-    vb.cpus = 2
-  end
-
-end
-</code></pre>
 
       
     </div>

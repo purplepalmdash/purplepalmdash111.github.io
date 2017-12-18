@@ -105,6 +105,122 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/06/30/workingtipsonansiblepull/">WorkingTipsOnAnsiblePull</a>
+      </h1>
+      <span class="post-date">Jun 30, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="背景">背景</h3>
+
+<p>在生产环境中经常面临大量卸载或迁移服务器的操作，这时候必须手动重建配置，这是一项繁琐且容易出错的工作。</p>
+
+<p>部署人员可能会尝试DevOps方式(&ldquo;基础设施作为代码&rdquo;)管理底层设备，在迁移过程中也会尝试像Chef或Puppet这样的流行工具，但是发现它们对于简单的案例来说也是非常复杂的。</p>
+
+<p>本文将介绍一个强大但简单的配置管理工具Ansible, 基于Ansible和GitLab建立出的工作流，我们可以快速对环境进行集中化部署/管理。在实际的生产环境中，基于此工作流将使运维变得更加简单、高效、可靠。</p>
+
+<h3 id="概观">概观</h3>
+
+<h4 id="ansible">Ansible</h4>
+
+<p>Ansible是一个用Python编写的自动化和编排工具。它通过SSH连接工作，不需要在主机上安装代理。</p>
+
+<p>如果读者不了解使用公钥的无密码连接，可以参考:</p>
+
+<p>Ansible的配置文件以YAML文档编写，称为&rdquo;Playbook&rdquo;, Playbook中可以包括用户自定义的任务和事件处理程序。举例说，在一个用于配置服务器的Playbook中，我们定义一系列用于更新配置文件的数据库服务器，而事件处理程序则在这些任务完成之后负责重新启动数据库服务。</p>
+
+<h4 id="基于推送的ansible">基于推送的Ansible</h4>
+
+<p>Ansible用于推送的架构:</p>
+
+<p><img src="/images/2017_06_30_09_12_05_632x643.jpg" alt="/images/2017_06_30_09_12_05_632x643.jpg" /></p>
+
+<p>Control Host: 通常是用于管理的节点(本机)，在主机上手动运行需要运行的任务，也可以基于crontab定时来做。<br />
+Ansible使用<code>inventory</code>文件来包含需配置的机器列表，在上图中，我们包含了两个组:
+数据库服务器组和Web服务器组。<code>inventory</code>文件中包含了这些服务器组中的节点IP。<br />
+<code>inventory</code>文件也可以是动态生成的，Ansible同样提供了对动态生成的支持。<br />
+每个Playbook从inventory文件中选取一个或多个组进行配置。在上一个例子中，我们定义了一个Playbook配置和编排数据库服务器，另一个则作用于Web服务器。Playbook也可以被抽象成更高层次，因此可以将两者中比较共同的任务配置成一个作用于all节点的任务。</p>
+
+<h4 id="基于拉取的ansible">基于拉取的Ansible</h4>
+
+<p>使用<code>ansible-pull</code>命令可以开启Ansible的拉取工作方式，ansible-pull命令的执行流程如下:</p>
+
+<ol>
+<li>每个主机都安装了Ansible，</li>
+<li>该配置存储在Git仓库中，</li>
+<li>ansible-pull检出配置库在给定的分支或标记（提示：prod，staging等），</li>
+<li>ansible-pull 执行指定的playbook，</li>
+<li>使用cronjob自动化ansible-pull进程</li>
+<li>最后，针对每次配置的修改，您所要做的就是将配置更改推送到Git仓库。</li>
+</ol>
+
+<p><img src="/images/2017_06_30_09_24_08_676x633.jpg" alt="/images/2017_06_30_09_24_08_676x633.jpg" /></p>
+
+<h4 id="gitlab">GitLab</h4>
+
+<p>GitLab是一个利用 Ruby on Rails 开发的开源应用程序，实现一个自托管的Git项目仓库，可通过Web界面进行访问公开的或者私人项目。它拥有与Github类似的功能，能够浏览源代码，管理缺陷和注释。可以管理团队对仓库的访问，它非常易于浏览提交过的版本并提供一个文件历史库。它还提供一个代码片段收集功能可以轻松实现代码复用，便于日后有需要的时候进行查找。</p>
+
+<p>GitLab可以与诸多CI(持续集成)工具协同工作，且提供了原生的GitLabCI用于持续CI和CD。</p>
+
+<p>GitLab提供完整的单机/集群解决方案。</p>
+
+<h3 id="工作流讲解">工作流讲解</h3>
+
+<h4 id="环境配置">环境配置</h4>
+
+<p>本工作流示例环境包括如下机器:</p>
+
+<p>192.168.33.2, GitLab VM, 2Core 2G.<br />
+192.168.33.10,  mgmt VM, 256 M内存。<br />
+192.168.33.11,  lb VM, 256 M内存。<br />
+192.168.33.21,  web1 VM, 256 M内存。<br />
+192.168.33.22,  web2 VM, 256 M内存。</p>
+
+<h4 id="首次部署-推送">首次部署(推送)</h4>
+
+<p>作用范畴如下:</p>
+
+<p><img src="/images/46-ansible-playbook-haproxy-nginx.gif" alt="/images/46-ansible-playbook-haproxy-nginx.gif" /></p>
+
+<p>环境部署后，load balance引导的网站访问流如下:</p>
+
+<p><img src="/images/46-vagrant-forwarded-port.gif" alt="/images/46-vagrant-forwarded-port.gif" /></p>
+
+<p>此工作流基于传统的推送，因而在这里不做太多的阐述。</p>
+
+<h4 id="配置更新-拉取">配置更新(拉取)</h4>
+
+<p><img src="/images/2017_06_30_09_58_43_1050x503.jpg" alt="/images/2017_06_30_09_58_43_1050x503.jpg" /></p>
+
+<p>在配置好的lb, web1, web2机器上启用ansible-pull模式的指令如下:</p>
+
+<pre><code>$ ansible-pull -i /var/lib/ansible/local/inventory.ini -d /var/lib/ansible/local -U http://root@192.168.33.2/root/centraladmin_lb.git
+</code></pre>
+
+<p>我们可以将它安装到crontab任务中，每次定时执行：</p>
+
+<pre><code>*/3 * * * * root ansible-pull -i /var/lib/ansible/local/inventory.ini -d /var/lib/ansible/local -U http://root@192.168.33.2/root/centraladmin_lb.git -o &gt;&gt;/var/log/ansible-pull.log 2&gt;&amp;1
+</code></pre>
+
+<p>代码库维护, 举<code>centraladmin_web</code>为例,
+创建该仓库时，我们需要制定其类型为<code>Public</code>才可，否则ansible-pull无法直接取回代码:</p>
+
+<p><img src="/images/2017_06_30_10_07_34_645x619.jpg" alt="/images/2017_06_30_10_07_34_645x619.jpg" /></p>
+
+<p>代码中，可以指定需要运行的<code>local.yml</code>, 在其中添加需要定制化的配置。</p>
+
+<h3 id="示例">示例</h3>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/06/28/workingtipsonansiblepull/">WorkingTipsOnAnsiblePull</a>
       </h1>
       <span class="post-date">Jun 28, 2017 
@@ -552,307 +668,6 @@ GRUB_CMDLINE_LINUX=&quot;net.ifnames=0 biosdevname=0&quot;
 
 <p>if you have make vagrant to be the member of <code>%wheel</code>, be sure to add
 nopassword for this group.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/06/14/workingtipsongitlabci/">WorkingTipsOnGitLabCI</a>
-      </h1>
-      <span class="post-date">Jun 14, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="背景">背景</h3>
-
-<p>设置GitLabCI的流程。</p>
-
-<p>使用两台虚拟机节点来实现GitLab服务器/GitLabCI节点, CI工作节点。</p>
-
-<p>硬件配置:<br />
-GitLab服务器及CI节点: 2核3G内存。<br />
-CI工作节点: 2核2G内存。</p>
-
-<p>运行系统: CentOS 7.3 X86_64</p>
-
-<h3 id="gitlab节点配置">GitLab节点配置</h3>
-
-<h4 id="gitlab-ce">gitlab-ce</h4>
-
-<p>配置gitlab-ce库及安装gitlab-ce:</p>
-
-<pre><code># vim /etc/yum.repos.d/gitlab-ce.repo
-[gitlab-ce] 
-name=gitlab-ce 
-baseurl=http://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el7 
-repo_gpgcheck=0 
-gpgcheck=0 
-enabled=1 
-gpgkey=https://packages.gitlab.com/gpg.key
-# yum makecache &amp;&amp; yum install -y gitlab-ce
-</code></pre>
-
-<p>配置gitlab-ce并使能服务:</p>
-
-<pre><code># gitlab-ctl reconfigure
-# firewall-cmd --permanent --add-service=http
-</code></pre>
-
-<p>如果你的机器没有开启firewalld, 则firewalld这条命令则无需键入。</p>
-
-<h4 id="gitlab-ci-multi-runner">gitlab-ci-multi-runner</h4>
-
-<p>配置gitlab-ci-multi-runner库:</p>
-
-<pre><code># vim /etc/yum.repos.d/gitlab-ce.repo
-[gitlab-ci-multi-runner]
-name=gitlab-ci-multi-runner
-baseurl=http://mirrors.tuna.tsinghua.edu.cn/gitlab-ci-multi-runner/yum/el7
-repo_gpgcheck=0
-gpgcheck=0
-enabled=1
-gpgkey=https://packages.gitlab.com/gpg.key
-</code></pre>
-
-<p>安装gitlab-ci：</p>
-
-<pre><code># yum makecache &amp;&amp; yum install -y gitlab-ci-multi-runner
-</code></pre>
-
-<p>现在访问<code>http://192.168.33.2</code>，则可进入到gitlab的配置页面，设置root及用户密码.</p>
-
-<h3 id="gitlab-ci-runner节点">GitLab Ci Runner节点</h3>
-
-<p>安装上面的<code>gitlab-ci-multi-runner</code>即可</p>
-
-<p>安装完以后，配置如下:</p>
-
-<pre><code># gitlab-ci-multi-runner register
-</code></pre>
-
-<p>配置例子如下:</p>
-
-<pre><code># cat /etc/gitlab-runner/config.toml
-concurrent = 4
-check_interval = 0
-
-[[runners]]
-  name = &quot;shellrunner&quot;
-  url = &quot;http://192.168.33.2/ci&quot;
-  token = &quot;0e39a08e63d4c4355e9dae4e3784ab&quot;
-  executor = &quot;shell&quot;
-  [runners.cache]
-
-[[runners]]
-  name = &quot;ourtester&quot;
-  url = &quot;http://192.168.33.2/ci&quot;
-  token = &quot;605a6900c4805efa1e52629391ac32&quot;
-  executor = &quot;shell&quot;
-  [runners.cache]
-
-[[runners]]
-  name = &quot;dockerrunner&quot;
-  url = &quot;http://192.168.33.2/ci&quot;
-  token = &quot;f8f6de41ddfe4a2dcf1e792df6c1c4&quot;
-  executor = &quot;docker&quot;
-  [runners.docker]
-    tls_verify = false
-    image = &quot;node:4.5.0&quot;
-    privileged = false
-    disable_cache = false
-    volumes = [&quot;/cache&quot;,&quot;/root/m2:/root/.m2&quot;]
-    pull_policy = &quot;if-not-present&quot;
-    shm_size = 0
-  [runners.cache]
-</code></pre>
-
-<p>因为我们需要使用docker,所以在该节点上要安装最新版的docker:</p>
-
-<pre><code># curl -sSL http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/internet | sh -
-# docker version
-Client:
- Version:      17.05.0-ce
-......
-</code></pre>
-
-<h3 id="配置">配置</h3>
-
-<p>在project下可以找到的runner配置信息如下:</p>
-
-<p><img src="/images/2017_06_15_21_50_49_1045x642.jpg" alt="/images/2017_06_15_21_50_49_1045x642.jpg" /></p>
-
-<p>注意 <code>Specify the following URL during the Runner setup: http://192.168.33.2/ci</code>
-和<code>Use the following registration token during setup: 2DpeAyEAeNxg1fmxVezv</code></p>
-
-<p>这两个和我们在上面注册runner的时候所需要填的是一样的。</p>
-
-<p>创建完Project <code>firstproject</code>后，可以使用以下命令拷贝到本地:</p>
-
-<pre><code># git clone git@192.168.33.2:root/firstproject.git
-</code></pre>
-
-<h3 id="项目配置">项目配置</h3>
-
-<p>创建一个<code>.gitlab-cimyml</code>文件于<code>firstproject</code>的目录下:</p>
-
-<pre><code>image: &quot;my3dlib:latest&quot;
-stages:
-  - dependencies
-  - build
-  - test
-  - deploy
-
-ceres-build:
-  stage: dependencies
-  script:
-    - export I3D_CERES_VERSION=1.11.0
-    - wget --quiet http://192.168.33.1/ceres-solver-1.11.0.tar.gz
-    - mkdir ceres-source ceres-build ceres-install
-    - tar xvfz ceres-solver-1.11.0.tar.gz -C ceres-source --strip-components=1
-    - cmake -Bceres-build -Hceres-source
-    - make -j$(nproc) -C ceres-build
-    - make -C ceres-build install DESTDIR=../ceres-install
-    - bash .gitlab_build_files/build_ceres_debian_pkg.sh
-  artifacts:
-    paths:
-    - i3d-ceres_*_amd64.deb
-  tags:
-    - dockerrunner
-    #- linux,debian-jessie
-cores-test:
-  stage: test
-  script:
-    - cat /proc/cpuinfo &amp;&amp; df -h
-cores-deploy:
-  stage: deploy
-  script:
-    - ssh-keyscan -H 192.168.33.1 &gt;&gt; ~/.ssh/known_hosts
-    - sshpass -p xxxxx scp -P 22 i3d-ceres_*_amd64.deb dash@192.168.33.1:/tmp/
-</code></pre>
-
-<p>我们在这里还使用到了<code>build_ceres_debian_pkg.sh</code>文件，这个文件是用于编译deb包的，内容如下:</p>
-
-<pre><code># mkdir -p .gitlab_build_files
-# vim .gitlab_build_files/build_ceres_debian_pkg.sh
-#! /usr/bin/env bash
-
-fpm \
--t deb \
--s dir \
--C ceres-install \
---name &quot;i3d-ceres&quot; \
---version 1.11.0 \
---license &quot;BSD&quot; \
---vendor &quot;ICG TU Graz&quot; \
---category &quot;devel&quot; \
---architecture &quot;amd64&quot; \
---maintainer &quot;Aerial Vision Group &lt;aerial@icg.tugraz.at&gt;&quot; \
---url &quot;https://aerial.icg.tugraz.at/&quot; \
---description &quot;Compiled Ceres solver for i3d library&quot; \
---depends cmake \
---depends libatlas-dev \
---depends libatlas-base-dev \
---depends libblas-dev \
---depends libeigen3-dev \
---depends libgoogle-glog-dev \
---depends liblapack-dev \
---depends libsuitesparse-dev \
---verbose \
-.
-</code></pre>
-
-<p>现在，每一次提交的更改，都将触发自动编译过程。</p>
-
-<p><img src="/images/2017_06_15_21_59_09_1275x453.jpg" alt="/images/2017_06_15_21_59_09_1275x453.jpg" /></p>
-
-<h3 id="docker镜像制作">docker镜像制作</h3>
-
-<p>这里我们使用了my3dlib这个名称的docker镜像，镜像的制作过程如下:</p>
-
-<pre><code># vim Dockerfile
-FROM buildpack-deps:jessie
-MAINTAINER Alexander Skiba &lt;alexander.skiba@icg.tugraz.at&gt;
-
-ENV DEBIAN_FRONTEND noninteractive
-
-RUN echo &quot;deb http://mirrors.163.com/debian/ jessie main non-free contrib&quot; &gt; /etc/apt/sources.list &amp;&amp; echo &quot;deb http://mirrors.163.com/debian/ jessie-updates main non-free contrib&quot; &gt;&gt; /etc/apt/sources.list &amp;&amp; echo &quot;deb http://mirrors.163.com/debian/ jessie-backports main non-free contrib&quot; &gt;&gt; /etc/apt/sources.list &amp;&amp; echo &quot;deb http://mirrors.163.com/debian-security/ jessie/updates main non-free contrib&quot; &gt;&gt; /etc/apt/sources.list
-
-RUN sleep 10
-
-RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    freeglut3 \
-    freeglut3-dev \
-    gcc \
-    git \
-    g++ \
-    libatlas-dev \
-    libatlas-base-dev \
-    libboost-all-dev \
-    libblas-dev \
-    libcgal-dev \
-    libdevil-dev \
-    libeigen3-dev \
-    libexiv2-dev \
-    libglew-dev \
-    libgoogle-glog-dev \
-    liblapack-dev \
-    liblas-dev \
-    liblas-c-dev \
-    libpcl-dev \
-    libproj-dev \
-    libprotobuf-dev \
-    libqglviewer-dev \
-    libsuitesparse-dev \
-    libtclap-dev \
-    libtinyxml-dev \
-    mlocate \
-    ruby \
-    ruby-dev \
-    unzip \
-    wget \
-    sshpass \
-  &amp;&amp; apt-get clean \
-  &amp;&amp; rm -rf /var/lib/apt/lists/* \
-  &amp;&amp; gem install --no-rdoc --no-ri fpm
-# docker build -t my3dlib .
-</code></pre>
-
-<p>经过编译以后，我们将得到my3dlib这个镜像，用于编译我们后面所需要的deb文件。</p>
-
-<h3 id="artifacts">artifacts</h3>
-
-<p><code>artifacts</code>记录了每次我们自动编译所生成的内容:</p>
-
-<p><img src="/images/2017_06_15_22_02_18_1293x452.jpg" alt="/images/2017_06_15_22_02_18_1293x452.jpg" /></p>
-
-<p>解压后即可得到deb文件。</p>
-
-<h3 id="external-url">external_url</h3>
-
-<p>这里记载了如果不配置实际IP地址将导致的错误.</p>
-
-<p>You should configure the <code>external_url</code> to your specified IP address, or you
-won&rsquo;t successfully pulling codes into your working nodes:</p>
-
-<pre><code>$ vim /etc/gitlab/gitlab.rb
-external_url 'http://192.168.33.2'
-$ gitlab-ctl reconfigure
-$ gitlab-ctl restart
-</code></pre>
-
-<p>Now you could successfully pulling codes into your working nodes.</p>
-
-<h3 id="下一步">下一步</h3>
-
-<p>研究gitlab ci与kubernetes的集成。</p>
 
       
     </div>

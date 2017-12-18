@@ -105,6 +105,119 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/08/yong-qemumo-ni-arm-3/">用Qemu模拟ARM(3)</a>
+      </h1>
+      <span class="post-date">Jul 8, 2013 
+      </span>
+      
+      <p>1. 下载并交叉编译u-boot。</p>
+
+<p>新版本的u-boot我加载后总有问题，2009.11版则可以顺利通过编译和测试。</p>
+
+<pre><code>	$ wget ftp://ftp.denx.de/pub/u-boot/u-boot-2009.11.tar.bz2
+	$ tar xjvf u-boot-2009.11.tar.bz2 
+	$ cd u-boot-2009.11
+	$ make versatilepb_config arch=ARM CROSS_COMPILE=arm-none-eabi-
+	$ make all arch=ARM CROSS_COMPILE=arm-none-eabi- 
+</code></pre>
+
+<p>编译完成后会在目录下生成u-boot.bin和u-boot文件。</p>
+
+<p>2. 运行u-boot.bin:</p>
+
+<pre><code>	$ qemu-system-arm -M versatilepb -kernel u-boot.bin -nographic
+</code></pre>
+
+<p>如果采用-nographic来运行qemu-system-arm，终端将无法再响应任何系统输入譬如Ctrl+c/ctrl+d_，要终止qemu-system-arm就只能查到进程号再kill。所以我一般不带-nographic选项，启动后ctrl+alt+2去看serial0输出,保留在终端窗口直接ctrl+c杀死qemu-sytem-arm进程的权力。</p>
+
+<p>3. 用u-boot引导镜像文件:</p>
+
+<p>改动上一篇文章里用于构建启动镜像的linker.ld文件，因为u-boot.bin文件大小的缘故，我们需要把启动镜像的起始地址整体上移.</p>
+
+<pre><code>	$ ls -l -h u-boot.bin 
+	-rwxr-xr-x 1 Trusty root 85K Jul  8 15:57 u-boot.bin
+</code></pre>
+
+<p>linker.ld文件里， 0x100000，这个大小相比于85K显然已经足够。</p>
+
+<pre><code>	ENTRY(_Start)
+	SECTIONS
+	{
+	. = 0x100000;
+	startup : { startup.o(.text)}
+	.data : {*(.data)}
+	.bss : {*(.bss)}
+	. = . + 0x500;
+	sp_top = .;
+	}
+</code></pre>
+
+<p>按上一章的编译方法生成output.bin，不再重述。</p>
+
+<p>使用mkimage工具创建u-boot可识别的image文件：</p>
+
+<pre><code>	$ mkimage -A arm -C none -O linux -T kernel -d output.bin -a 0x00100000 -e 0x00100000 output.uimg
+	Image Name:   
+	Created:      Mon Jul  8 16:04:11 2013
+	Image Type:   ARM Linux Kernel Image (uncompressed)
+	Data Size:    152 Bytes = 0.15 kB = 0.00 MB
+	Load Address: 00100000
+	Entry Point:  00100000
+	
+	$ file *.uimg
+	output.uimg: u-boot legacy uImage, , Linux/ARM, OS Kernel Image (Not \
+	compressed), 152 bytes, Mon Jul  8 16:04:11 2013, Load Address: 0x00100000,\
+	Entry Point: 0x00100000, Header CRC: 0x3C62F575, Data CRC: 0x69CE9647
+</code></pre>
+
+<p>将u-boot.bin和output.uimg打包为一个文件：</p>
+
+<pre><code>	$ cat u-boot.bin output.uimg &gt;flash.bin
+</code></pre>
+
+<p>下面这条命令用于计算output.img在使用u-boot加载完flash.bin后在内存中的地址，-kernel选项告诉qemu从0x100000开始加载镜像，即65536。
+65536+u-boot.bin后的大小，即output.img在内存中的地址。printf则是用16进制的格式打印出来，以便加载.</p>
+
+<pre><code>	$ printf &quot;0x%X&quot; $(expr $(stat -c%s u-boot.bin) + 65536)
+	0x2525C
+</code></pre>
+
+<p>启动qemu-system-arm并运行自定义镜像:</p>
+
+<pre><code>	$ qemu-system-arm -M versatilepb -nographic -kernel flash.bin
+	# iminfo 0x2525c
+	
+	## Checking Image at 0002525c ...
+	   Legacy image found
+	   Image Name:   
+	   Image Type:   ARM Linux Kernel Image (uncompressed)
+	   Data Size:    152 Bytes =  0.1 kB
+	   Load Address: 00100000
+	   Entry Point:  00100000
+	   Verifying Checksum ... OK
+
+	VersatilePB # bootm 0x2525c
+	## Booting kernel from Legacy Image at 0002525c ...
+	   Image Name:   
+	   Image Type:   ARM Linux Kernel Image (uncompressed)
+	   Data Size:    152 Bytes =  0.1 kB
+	   Load Address: 00100000
+	   Entry Point:  00100000
+	   Loading Kernel Image ... OK
+	OK
+	
+	Starting kernel ...
+	
+	Hello Open World
+</code></pre>
+
+<p>u-boot可以支持的选项还有很多，包括使用NFS/TFTP启动等等，留待以后慢慢研究。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/07/07/archlinuxwang-luo-pei-zhi-wen-ti/">ArchLinux DHCP配置问题</a>
       </h1>
       <span class="post-date">Jul 7, 2013 
@@ -534,54 +647,6 @@ network. Loops are deadly to a network.
 	$ export ftp_proxy=http://ip_address:ip_port
 	$ export ftps_proxy=http://ip_address:ip_port
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/05/linuxwang-ji-mi-ma-hou-shi-yong-grubzhong-zhi-mi-ma/">Linux忘记密码后使用grub重置密码</a>
-      </h1>
-      <span class="post-date">Jul 5, 2013 
-      </span>
-      
-      <p>Linux忘记密码后，可以通过修改Grub启动参数来进行修复, 举Ubuntu13.04为例：</p>
-
-<p>出现Grub菜单时，按&rdquo;e&rdquo;键或是其他键进入Grub的编辑方式。</p>
-
-<pre><code>menuentry 'Ubuntu' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-baec278e-2b9f-4513-a6f1-e148ac6295d7' {
-recordfail
-	load_video
-	gfxmode $linux_gfx_mode
-	insmod gzio
-	insmod part_msdos
-	insmod ext2
-	set root='hd0,msdos2'
-	if [ x$feature_platform_search_hint = xy ]; then
-	  search --no-floppy --fs-uuid --set=root --hint-bios=hd0,msdos2 --hint-efi=hd0,msdos2 --hint-baremetal=ahci0,msdos2  baec278e-2b9f-4513-a6f1-e148ac6295d7
-	else
-	  search --no-floppy --fs-uuid --set=root baec278e-2b9f-4513-a6f1-e148ac6295d7
-	fi
-	linux	/boot/vmlinuz-3.8.0-19-generic root=UUID=baec278e-2b9f-4513-a6f1-e148ac6295d7 ro   
-	initrd	/boot/initrd.img-3.8.0-19-generic
-}
-</code></pre>
-
-<p>改动下面这行</p>
-
-<pre><code>linux	/boot/vmlinuz-3.8.0-19-generic root=UUID=baec278e-2b9f-4513-a6f1-e148ac6295d7 ro   
-</code></pre>
-
-<p>为</p>
-
-<pre><code>linux	/boot/vmlinuz-3.8.0-19-generic root=UUID=baec278e-2b9f-4513-a6f1-e148ac6295d7 rw init=/bin/bash  
-</code></pre>
-
-<p>init=/bin/bash将把系统启动到一个没有root密码的shell, rw则允许修改密码，否则ro的情况下无法更新密码。</p>
-
-<p>使用改动后的grub启动系统。在Grub2中一般是按F10, Grub中则是回车后按&rdquo;b&rdquo;键，具体需参考grub的帮助。</p>
-
-<p>系统启动到shell后, 输入passwd username重设自己的密码后，reboot系统即可。</p>
 
       
     </div>

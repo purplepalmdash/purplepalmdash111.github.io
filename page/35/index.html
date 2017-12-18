@@ -105,6 +105,129 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/15/shi-yong-squidhuan-cun-suo-you-rpm-slash-deban-zhuang-bao/">使用squid缓存所有rpm/deb安装包</a>
+      </h1>
+      <span class="post-date">Mar 15, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>在进行自动化部署的时候，需要频繁安装系统，鉴于工作环境的带宽有限，我需要设置一个代理服
+务器，用于缓存所有的RPM/DEB安装包，以便自动化部署可以在瞬间完成。</p>
+
+<p>以下示例运行在ArchLinux上。</p>
+
+<h3 id="squid搭建">Squid搭建</h3>
+
+<p>Squid介绍:</p>
+
+<p>Squid 是一个 Web 缓存代理，支持 HTTP, HTTPS, FTP, 以及更多。它通过缓存与重用经常请求的
+web页面，减少带宽使用同时提升了响应时间。Squid 具有可扩展的访问控制功能，同时可以使服务
+器加速。它运行在 Unix 和 Windows 中，采用 GNU GPL 协议发布。</p>
+
+<p>安装squid:</p>
+
+<pre><code>$ sudo pacman -S squid
+</code></pre>
+
+<p>我们需要配置squid以便它能适配我们的环境，我的环境里主要需要做以下几个事情：<br />
+1. 更改squid缓存目录到/home分区。<br />
+2. 更改squid缓存目录大小为30G以上。<br />
+3. 更改缓存文件大小，以便它支持大的RPM/DEB包。</p>
+
+<p>更改缓存目录， 找到以下的行，在其下添加我们自定义的缓存目录:</p>
+
+<pre><code>$ sudo vim /etc/squid/squid.conf
+# Uncomment and adjust the following to add a disk cache directory.
+#cache_dir ufs /var/cache/squid 100 16 256
+cache_dir ufs /home/dash/squid 30000 16 256
+</code></pre>
+
+<p>我们将在指定目录下创建目录， 第一层数为16, 每个文件夹下最多包含256个子文件夹。</p>
+
+<p>在配置文件的最后加入以下行，以支持更大的缓存文件:</p>
+
+<pre><code>$ sudo vim /etc/squid/squid.conf
+maximum_object_size 200 MB
+</code></pre>
+
+<p>现在开始创建缓存目录:</p>
+
+<pre><code>$ squid -z
+</code></pre>
+
+<p>启动服务后，运行检查</p>
+
+<pre><code>$ sudo systemctl restart squid
+$ sudo systemctl enable squidz
+$ sudo systemctl -k check
+</code></pre>
+
+<p>验证可以通过<code>netstat -anp | grep 3128</code>来检查squid进程是否运行。</p>
+
+<h3 id="使用squid代理">使用squid代理</h3>
+
+<h3 id="apt-cacher">apt-cacher</h3>
+
+<p>以上设置的代理仅能支持RPM包的工作，对于DEB包我们需要使用apt-cacher, 在ArchLinux上安装和配置apt-cacher:</p>
+
+<pre><code>$ yaourt apt-cacher
+$ sudo vim /etc/apt-cacher-ng/acng.conf
+CacheDir: /home/nomodify/apt-cacher
+Port: 3142
+
+</code></pre>
+
+<p>Config on Agent:</p>
+
+<pre><code>$ sudo vim /etc/apt/apt.conf.d/01proxy 
+Acquire::http::Proxy &quot;http://192.168.0.121:3142&quot;;
+</code></pre>
+
+<p>In ArchLinux, add it into startup file:</p>
+
+<p><code>sudo apt-cacher-ng</code>.</p>
+
+<h3 id="docker-way">Docker way</h3>
+
+<p>Run instance via:</p>
+
+<pre><code># docker run --name apt-cacher-ng -d --restart=always  --publish 3142:3142
+--volume /var1/aptcacher:/var/cache/apt-cacher-ng
+sameersbn/apt-cacher-ng:latest
+</code></pre>
+
+<p>Then Added a systemd service:</p>
+
+<pre><code># vim /usr/lib/systemd/system/aptcache.service
+[Unit]
+Description=aptcache container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker start -a apt-cacher-ng
+ExecStop=/usr/bin/docker stop -t 2 apt-cacher-ng
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<p>enable the service via:</p>
+
+<pre><code>$ sudo systemctl enable aptcache
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2016/03/13/yong-vagrantguan-li-libvirt/">用Vagrant管理libvirt</a>
       </h1>
       <span class="post-date">Mar 13, 2016 
@@ -556,162 +679,6 @@ max-lease-time 1814400;
 
 <p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。<br />
 如果使用普通用户，会出错， To be solved.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
-      </h1>
-      <span class="post-date">Mar 7, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<p>这一节将添加一个LED到已有的方案中. 这个LED将使用11口, 通过<code>./set-led new</code>来设
-置状态.</p>
-
-<h3 id="连线">连线</h3>
-
-<p>新加一个LED如图:</p>
-
-<p><img src="/images/2016_03_07_21_52_18_683x513.jpg" alt="/images/2016_03_07_21_52_18_683x513.jpg" /></p>
-
-<p>仅仅添加了一个LED + 220欧电阻.</p>
-
-<h3 id="代码修改">代码修改</h3>
-
-<h4 id="requests-h">requests.h</h4>
-
-<p>添加新的request定义:</p>
-
-<pre><code>diff --git a/requests.h b/requests.h
-index 90275f5..b354a73 100644
---- a/requests.h
-+++ b/requests.h
-@@ -32,4 +32,6 @@
- 
- #define CUSTOM_RQ_BLINK    3
- 
-+#define CUSTOM_RQ_NEWLED    4
-+
-</code></pre>
-
-<h4 id="hid-custom-rq-h">hid_custom_rq.h</h4>
-
-<p>添加新的管脚, 和对<code>CUSTOM_RQ_NEWLED</code>的处理代码:</p>
-
-<pre><code>diff --git a/hid_custom_rq.h b/hid_custom_rq.h
-index f5509e4..b5411cf 100644
---- a/hid_custom_rq.h
-+++ b/hid_custom_rq.h
-@@ -13,6 +13,7 @@ class hid_custom_rqDevice {
-   hid_custom_rqDevice () {
-     usbInit();
-     ledPin = 13;        // pin 13 as default ledPin
-+    newledPin = 11;    // pin 11 as newledPin
-   }
-     
-   void poll() {
-@@ -20,6 +21,7 @@ class hid_custom_rqDevice {
-   }
-   
-   unsigned int ledPin;  
-+  unsigned int newledPin;  
- };
- 
- hid_custom_rqDevice hid_custom_rq = hid_custom_rqDevice();
-@@ -99,6 +101,14 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
-             usbMsgPtr = dataBuffer;         /* tell the driver which data to
-return */
-             return 1;                       /* tell the driver to send 1 byte
-*/
-         }
-+       /* Added for newly added LED */
-+       else if(rq-&gt;bRequest == CUSTOM_RQ_NEWLED){
-+            if(rq-&gt;wValue.bytes[0] &amp; 1){    /* set new LED */
-+                digitalWrite(hid_custom_rq.newledPin, HIGH);
-+            }else{                          /* clear new LED */
-+                digitalWrite(hid_custom_rq.newledPin, LOW);
-+            }
-+       }
-     }
-</code></pre>
-
-<h4 id="set-led-c">set-led.c</h4>
-
-<p>这个文件中,添加了两条新命令,分别为<code>./set-led newledon</code>和<code>./set-led newledoff</code>用于点亮/
-熄灭新加的LED.</p>
-
-<pre><code>diff --git a/examples/hid_custom_rq_demo/commandline/set-led.c b/examples/hid_custom_rq_demo/commandline/set-led.c
-index 44d39f9..a306eca 100644
---- a/examples/hid_custom_rq_demo/commandline/set-led.c
-+++ b/examples/hid_custom_rq_demo/commandline/set-led.c
-@@ -91,12 +91,19 @@ buffer[3] = 0;
-         }else{
-             printf(&quot;LED is %s\n&quot;, buffer[0] ? &quot;on&quot; : &quot;off&quot;);
-         }
--    }else if((isOn = (strcasecmp(argv[1], &quot;on&quot;) == 0)) || strcasecmp(argv[1], &quot;off&quot;) == 0){
-+    }
-+    else if((isOn = (strcasecmp(argv[1], &quot;on&quot;) == 0)) || strcasecmp(argv[1], &quot;off&quot;) == 0){
-         cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_SET_STATUS, isOn, 0, buffer, 0, 5000);
-         if(cnt &lt; 0){
-             fprintf(stderr, &quot;USB error: %s\n&quot;, usb_strerror());
-         }
-     }
-+    else if((isOn = (strcasecmp(argv[1], &quot;newledon&quot;) == 0)) || strcasecmp(argv[1], &quot;newledoff&quot;) == 0){
-+        cnt = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, CUSTOM_RQ_NEWLED, isOn, 0, buffer, 0, 5000);
-+        if(cnt &lt; 0){
-+            fprintf(stderr, &quot;USB error: %s\n&quot;, usb_strerror());
-+        }
-+    }
- 
- else if(strcasecmp(argv[1], &quot;onoff&quot;) == 0){ /* Test custom on/off */
-</code></pre>
-
-<h4 id="hid-custom-rq-demo-ped">hid_custom_rq_demo.ped</h4>
-
-<p>因为新添加了硬件,ped文件同样需要更新.</p>
-
-<pre><code>diff --git a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-index 77e3912..6d98151 100644
---- a/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-+++ b/examples/hid_custom_rq_demo/hid_custom_rq_demo.pde
-@@ -1,10 +1,13 @@
- #include &lt;hid_custom_rq.h&gt;
- 
- const int ledPin = 13;
-+const int newledPin = 11;
- 
- void setup() {
-   hid_custom_rq.ledPin = ledPin;
-   pinMode(hid_custom_rq.ledPin, OUTPUT);
-+  hid_custom_rq.newledPin = newledPin;
-+  pinMode(hid_custom_rq.newledPin, OUTPUT);
- }
- 
- void loop() {
-</code></pre>
-
-<h3 id="验证">验证</h3>
-
-<p>写入新编译的Arduino固件, 并新编译<code>set-led</code>程序, 即可看到新增的LED被点亮/熄灭.</p>
-
-<p>效果如图:</p>
-
-<p><img src="/images/70584386.jpg" alt="/images/70584386.jpg" /></p>
-
-<h3 id="延伸">延伸</h3>
-
-<p>既然点亮了LED, 其他各种设备就不在话下了. 引入一个舵机,或者步进电机, 就可以实现
-e-buddy人偶的提醒功能.</p>
-
-<p>当然我们可以想得更妙, 例如,用蓝牙或者WIFI来替代USB传输. 这样可以做到更远距离.</p>
 
       
     </div>

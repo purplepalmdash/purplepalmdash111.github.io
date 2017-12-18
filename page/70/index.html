@@ -105,6 +105,88 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/03/23/deploy-local-service-using-juju/">Deploy Local Service Using Juju</a>
+      </h1>
+      <span class="post-date">Mar 23, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      <p>Since the OpenContrail deploy is using local deployment, that means, directly deploy to local machine. But the lab lack of the environment of the local ubuntu based machine, so I want to deploy a service to local first, then transform the whole project from local deployment to MAAS deployment.<br />
+In a Ubuntu14.04 machine, do following steps.</p>
+
+<pre><code>$ sudo add-apt-repository ppa:juju/stable 
+$ sudo vim /etc/apt/source.list
+# This is for juju
+deb http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+deb-src http://ppa.launchpad.net/juju/stable/ubuntu trusty main 
+$ sudo apt-get install juju juju-core juju-local juju-quickstart
+$ sudo apt-get install charm-tools
+$ sudo apt-get install uvtool-libvirt uvtool
+
+</code></pre>
+
+<p>Configure the juju for using local:</p>
+
+<pre><code>$ git clone https://github.com/juju/plugins.git ~/.juju-plugins
+$ vim ~/.zshrc
+# Add juju_plugins to global path
+PATH=$PATH:$HOME/.juju-plugin
+$ source ~/.zshrc
+$ juju init
+$ vim ~/.juju/environments.yaml
+local:
+ type: local
+
+ # &lt;Commented Section&gt;
+
+ # The default series to deploy the state-server and charms on.
+ #
+ default-series: precise
+ #
+ ## ** add these lines to support KVM and LXC deployment **
+ lxc-use-clone: true
+ container: kvm
+
+</code></pre>
+
+<p>Start the machine via:</p>
+
+<pre><code>$ juju bootstrap --debug
+
+</code></pre>
+
+<p>Add the machines via:</p>
+
+<pre><code>[Trusty@~]$  juju set-constraints mem=512M
+[Trusty@~]$  juju add-machine --constraints &quot;root-disk=16G mem=1G&quot;
+created machine 1
+[Trusty@~]$ juju status
+environment: local
+machines:
+  &quot;0&quot;:
+    agent-state: started
+    agent-version: 1.21.3.1
+    dns-name: localhost
+    instance-id: localhost
+    series: trusty
+    state-server-member-status: has-vote
+  &quot;1&quot;:
+    instance-id: pending
+    series: precise
+services: {}
+
+</code></pre>
+
+<p>After a long wait, it will boot a machine which have 1G and 1 Core, and let it running.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/03/23/using-juju-for-deploying-opencontrail/">Using Juju for deploying OpenContrail</a>
       </h1>
       <span class="post-date">Mar 23, 2015 
@@ -562,87 +644,6 @@ Trusty@MassController:~$ juju metadata generate-tools -d ~/.juju/metadata
 </code></pre>
 
 <p>After it success, the juju and MAAS environment is ready for use.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/17/deploy-maas-8/">Deploy MAAS(8)</a>
-      </h1>
-      <span class="post-date">Mar 17, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>This part is for deploying OpenStack using Juju and let it run in single node.</p>
-
-<h3 id="environment-preparation">Environment Preparation</h3>
-
-<p>2 virtual machines created using virt-manager, each of them has 2 core, 3Gigabyte Memory, around 60G Disk space.</p>
-
-<h3 id="deploy">Deploy</h3>
-
-<p>The most of the nodes are deployed in container.</p>
-
-<pre><code>$ juju deploy --to 0 juju-gui
-$ juju deploy --to lxc:0 mysql
-$ juju deploy --to lxc:0 keystone
-$ juju deploy --to lxc:0 nova-cloud-controller
-$ juju deploy --to lxc:0 glance
-$ juju deploy --to lxc:0 rabbitmq-server
-$ juju deploy --to lxc:0 openstack-Trustyboard
-$ juju deploy --to lxc:0 cinder 
-
-</code></pre>
-
-<p>The compute node is deployed in a machine which enable the nested virtualization.</p>
-
-<pre><code>$ juju deploy nova-compute
-
-</code></pre>
-
-<p>Add each other&rsquo;s relationship:</p>
-
-<pre><code>$ juju add-relation mysql keystone
-$ juju add-relation nova-cloud-controller mysql
-$ juju add-relation nova-cloud-controller rabbitmq-server
-$ juju add-relation nova-cloud-controller glance
-$ juju add-relation nova-cloud-controller keystone
-$ juju add-relation nova-compute nova-cloud-controller
-$ juju add-relation nova-compute mysql
-$ juju add-relation nova-compute rabbitmq-server:amqp
-$ juju add-relation nova-compute glance
-$ juju add-relation glance mysql
-$ juju add-relation glance keystone
-$ juju add-relation glance cinder
-$ juju add-relation mysql cinder
-$ juju add-relation cinder rabbitmq-server
-$ juju add-relation cinder nova-cloud-controller
-$ juju add-relation cinder keystone
-$ juju add-relation openstack-Trustyboard keystone
-
-</code></pre>
-
-<p>Then change the password of keystone via:</p>
-
-<pre><code>$ juju set keystone admin-password=&quot;helloworld&quot;
-
-</code></pre>
-
-<p>Detect the ipaddress of the openstack-Trustyboards via:</p>
-
-<pre><code>$ juju status openstack-Trustyboard
-$ http://ip_address_of_Trustyboard/horizon
-
-</code></pre>
-
-<p>The final result is listed like:<br />
-<img src="/images/2015_03_17_14_35_25_1037x646.jpg" alt="/images/2015_03_17_14_35_25_1037x646.jpg" /></p>
 
       
     </div>

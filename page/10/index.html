@@ -105,6 +105,92 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/05/22/addseconddiskforvagrant/">AddSecondDiskForVagrant</a>
+      </h1>
+      <span class="post-date">May 22, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="purpose">Purpose</h3>
+
+<p>For adding second disk to vagrant machine, while vagrant machine is running
+under virtualbox hypervisor. Following are the steps for doing this.</p>
+
+<h3 id="steps">Steps</h3>
+
+<p><code>Vagrantfile</code> definition:</p>
+
+<pre><code># -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure(&quot;2&quot;) do |config|
+
+  config.vm.provider &quot;virtualbox&quot; do |vb|
+    # Display the VirtualBox GUI when booting the machine
+    #vb.gui = true
+      unless File.exist?('./secondDisk.vdi')
+        vb.customize ['createhd', '--filename', './secondDisk.vdi', '--variant', 'Fixed', '--size', 10 * 1024]
+      end
+  
+    # Customize the amount of memory on the VM:
+    vb.memory = &quot;1024&quot;
+    vb.customize ['storageattach', :id,  '--storagectl', 'SATA', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', './secondDisk.vdi']
+
+  end
+end
+
+</code></pre>
+
+<p>The initial.sh should be run under the vagrant machine has been created:</p>
+
+<pre><code>cat initial.sh
+set -e
+set -x
+echo 'Acquire::http::Proxy &quot;http://192.168.0.121:3142&quot;;'&gt;/etc/apt/apt.conf.d/01proxy
+# Added the primary repository
+apt-get update
+apt-get -y install vim lvm2
+
+if [ -f /etc/disk_added_date ]
+then
+   echo &quot;disk already added so exiting.&quot;
+   exit 0
+fi
+
+
+sudo fdisk -u /dev/sdb &lt;&lt;EOF
+n
+p
+1
+
+
+t
+8e
+w
+EOF
+
+pvcreate /dev/sdb1
+vgextend vagrant-vg /dev/sdb1
+lvextend -l +100%FREE /dev/vagrant-vg/root
+resize2fs /dev/vagrant-vg/root
+
+date &gt; /etc/disk_added_date
+</code></pre>
+
+<h3 id="notice">!!!Notice!!!</h3>
+
+<p>You should especially notice the lvextend&rsquo;s configuration, for every vagrant box
+has the different naming mechanism.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/05/12/ansible-tips-on-register-and-so-on/">Ansible Tips on register and so on</a>
       </h1>
       <span class="post-date">May 12, 2017 
@@ -728,69 +814,6 @@ vnc_listen = &quot;0.0.0.0&quot;
 <p>Launch zone:</p>
 
 <p><img src="/images/2017_05_03_11_45_29_641x410.jpg" alt="/images/2017_05_03_11_45_29_641x410.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/04/07/%E5%BF%AB%E9%80%9F%E6%90%AD%E5%BB%BAminikube%E5%BC%80%E5%8F%91%E7%8E%AF%E5%A2%83/">快速搭建MiniKube开发环境</a>
-      </h1>
-      <span class="post-date">Apr 7, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="版本">版本</h3>
-
-<p>minikube的版本是<code>v0.17.1</code>, 运行于ArchLinux.</p>
-
-<h3 id="镜像准备">镜像准备</h3>
-
-<p>感谢万能的防火墙，我们需要手动下载docker镜像到本地:</p>
-
-<pre><code>sudo docker pull  gcr.io/google-containers/kube-addon-manager:v6.3
-sudo docker pull gcr.io/google_containers/kubedns-amd64:1.9
-sudo docker pull gcr.io/google_containers/kube-dnsmasq-amd64:1.4
-sudo docker pull gcr.io/google_containers/exechealthz-amd64:1.2
-sudo docker pull  gcr.io/google_containers/kubernetes-dashboard-amd64:v1.5.1
-sudo docker pull gcr.io/google_containers/heapster:v1.2.0
-sudo docker pull kubernetes/heapster_influxdb:v0.6
-sudo docker pull gcr.io/google_containers/heapster_grafana:v2.6.0-2
-sudo docker pull gcr.io/google_containers/pause-amd64:3.0
-</code></pre>
-
-<p>存储docker镜像并打包的命令如下, 这样一个wget就可取下来所有的镜像:</p>
-
-<pre><code>sudo docker save  gcr.io/google-containers/kube-addon-manager:v6.3 | bzip2&gt;~/serve/addonmanagerv63.tar.bz2
-sudo docker save gcr.io/google_containers/kubedns-amd64:1.9|bzip2&gt;~/serve/dns19.tar.bz2
-sudo docker save gcr.io/google_containers/kube-dnsmasq-amd64:1.4 |bzip2&gt;~/serve/dnsmasq14.tar.bz2
-sudo docker save gcr.io/google_containers/exechealthz-amd64:1.2|bzip2&gt;~/serve/exechealthz12.tar.bz2
-sudo docker save  gcr.io/google_containers/kubernetes-dashboard-amd64:v1.5.1|bzip2&gt;~/serve/dashboard151.tar.bz2
-sudo docker save gcr.io/google_containers/heapster:v1.2.0|bzip2&gt;~/serve/heapster.tar.bz2
-sudo docker save kubernetes/heapster_influxdb:v0.6|bzip2&gt;~/serve/influx.tar.bz2
-sudo docker save gcr.io/google_containers/heapster_grafana:v2.6.0-2|bzip2&gt;~/serve/grafana.tar.bz2
-sudo docker save gcr.io/google_containers/pause-amd64:3.0|bzip2&gt;~/serve/pauseamd64.tar.bz2
-sudo tar czvf ~/serve/kube.tar.gz ~/serve/*.tar.bz2
-</code></pre>
-
-<p>下载到本地后，直接用<code>sudo docker load&lt;xxxx.tar.bz2</code>即可安装这些镜像。</p>
-
-<h3 id="minikube">minikube</h3>
-
-<p>安装minikube的命令为:</p>
-
-<pre><code>$ yaourt minikube
-</code></pre>
-
-<p>启动的命令为:</p>
-
-<pre><code># minikube stop &amp;&amp; minikube start
-</code></pre>
 
       
     </div>

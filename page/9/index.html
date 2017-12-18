@@ -105,6 +105,307 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/06/14/workingtipsongitlabci/">WorkingTipsOnGitLabCI</a>
+      </h1>
+      <span class="post-date">Jun 14, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="背景">背景</h3>
+
+<p>设置GitLabCI的流程。</p>
+
+<p>使用两台虚拟机节点来实现GitLab服务器/GitLabCI节点, CI工作节点。</p>
+
+<p>硬件配置:<br />
+GitLab服务器及CI节点: 2核3G内存。<br />
+CI工作节点: 2核2G内存。</p>
+
+<p>运行系统: CentOS 7.3 X86_64</p>
+
+<h3 id="gitlab节点配置">GitLab节点配置</h3>
+
+<h4 id="gitlab-ce">gitlab-ce</h4>
+
+<p>配置gitlab-ce库及安装gitlab-ce:</p>
+
+<pre><code># vim /etc/yum.repos.d/gitlab-ce.repo
+[gitlab-ce] 
+name=gitlab-ce 
+baseurl=http://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el7 
+repo_gpgcheck=0 
+gpgcheck=0 
+enabled=1 
+gpgkey=https://packages.gitlab.com/gpg.key
+# yum makecache &amp;&amp; yum install -y gitlab-ce
+</code></pre>
+
+<p>配置gitlab-ce并使能服务:</p>
+
+<pre><code># gitlab-ctl reconfigure
+# firewall-cmd --permanent --add-service=http
+</code></pre>
+
+<p>如果你的机器没有开启firewalld, 则firewalld这条命令则无需键入。</p>
+
+<h4 id="gitlab-ci-multi-runner">gitlab-ci-multi-runner</h4>
+
+<p>配置gitlab-ci-multi-runner库:</p>
+
+<pre><code># vim /etc/yum.repos.d/gitlab-ce.repo
+[gitlab-ci-multi-runner]
+name=gitlab-ci-multi-runner
+baseurl=http://mirrors.tuna.tsinghua.edu.cn/gitlab-ci-multi-runner/yum/el7
+repo_gpgcheck=0
+gpgcheck=0
+enabled=1
+gpgkey=https://packages.gitlab.com/gpg.key
+</code></pre>
+
+<p>安装gitlab-ci：</p>
+
+<pre><code># yum makecache &amp;&amp; yum install -y gitlab-ci-multi-runner
+</code></pre>
+
+<p>现在访问<code>http://192.168.33.2</code>，则可进入到gitlab的配置页面，设置root及用户密码.</p>
+
+<h3 id="gitlab-ci-runner节点">GitLab Ci Runner节点</h3>
+
+<p>安装上面的<code>gitlab-ci-multi-runner</code>即可</p>
+
+<p>安装完以后，配置如下:</p>
+
+<pre><code># gitlab-ci-multi-runner register
+</code></pre>
+
+<p>配置例子如下:</p>
+
+<pre><code># cat /etc/gitlab-runner/config.toml
+concurrent = 4
+check_interval = 0
+
+[[runners]]
+  name = &quot;shellrunner&quot;
+  url = &quot;http://192.168.33.2/ci&quot;
+  token = &quot;0e39a08e63d4c4355e9dae4e3784ab&quot;
+  executor = &quot;shell&quot;
+  [runners.cache]
+
+[[runners]]
+  name = &quot;ourtester&quot;
+  url = &quot;http://192.168.33.2/ci&quot;
+  token = &quot;605a6900c4805efa1e52629391ac32&quot;
+  executor = &quot;shell&quot;
+  [runners.cache]
+
+[[runners]]
+  name = &quot;dockerrunner&quot;
+  url = &quot;http://192.168.33.2/ci&quot;
+  token = &quot;f8f6de41ddfe4a2dcf1e792df6c1c4&quot;
+  executor = &quot;docker&quot;
+  [runners.docker]
+    tls_verify = false
+    image = &quot;node:4.5.0&quot;
+    privileged = false
+    disable_cache = false
+    volumes = [&quot;/cache&quot;,&quot;/root/m2:/root/.m2&quot;]
+    pull_policy = &quot;if-not-present&quot;
+    shm_size = 0
+  [runners.cache]
+</code></pre>
+
+<p>因为我们需要使用docker,所以在该节点上要安装最新版的docker:</p>
+
+<pre><code># curl -sSL http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/internet | sh -
+# docker version
+Client:
+ Version:      17.05.0-ce
+......
+</code></pre>
+
+<h3 id="配置">配置</h3>
+
+<p>在project下可以找到的runner配置信息如下:</p>
+
+<p><img src="/images/2017_06_15_21_50_49_1045x642.jpg" alt="/images/2017_06_15_21_50_49_1045x642.jpg" /></p>
+
+<p>注意 <code>Specify the following URL during the Runner setup: http://192.168.33.2/ci</code>
+和<code>Use the following registration token during setup: 2DpeAyEAeNxg1fmxVezv</code></p>
+
+<p>这两个和我们在上面注册runner的时候所需要填的是一样的。</p>
+
+<p>创建完Project <code>firstproject</code>后，可以使用以下命令拷贝到本地:</p>
+
+<pre><code># git clone git@192.168.33.2:root/firstproject.git
+</code></pre>
+
+<h3 id="项目配置">项目配置</h3>
+
+<p>创建一个<code>.gitlab-cimyml</code>文件于<code>firstproject</code>的目录下:</p>
+
+<pre><code>image: &quot;my3dlib:latest&quot;
+stages:
+  - dependencies
+  - build
+  - test
+  - deploy
+
+ceres-build:
+  stage: dependencies
+  script:
+    - export I3D_CERES_VERSION=1.11.0
+    - wget --quiet http://192.168.33.1/ceres-solver-1.11.0.tar.gz
+    - mkdir ceres-source ceres-build ceres-install
+    - tar xvfz ceres-solver-1.11.0.tar.gz -C ceres-source --strip-components=1
+    - cmake -Bceres-build -Hceres-source
+    - make -j$(nproc) -C ceres-build
+    - make -C ceres-build install DESTDIR=../ceres-install
+    - bash .gitlab_build_files/build_ceres_debian_pkg.sh
+  artifacts:
+    paths:
+    - i3d-ceres_*_amd64.deb
+  tags:
+    - dockerrunner
+    #- linux,debian-jessie
+cores-test:
+  stage: test
+  script:
+    - cat /proc/cpuinfo &amp;&amp; df -h
+cores-deploy:
+  stage: deploy
+  script:
+    - ssh-keyscan -H 192.168.33.1 &gt;&gt; ~/.ssh/known_hosts
+    - sshpass -p xxxxx scp -P 22 i3d-ceres_*_amd64.deb dash@192.168.33.1:/tmp/
+</code></pre>
+
+<p>我们在这里还使用到了<code>build_ceres_debian_pkg.sh</code>文件，这个文件是用于编译deb包的，内容如下:</p>
+
+<pre><code># mkdir -p .gitlab_build_files
+# vim .gitlab_build_files/build_ceres_debian_pkg.sh
+#! /usr/bin/env bash
+
+fpm \
+-t deb \
+-s dir \
+-C ceres-install \
+--name &quot;i3d-ceres&quot; \
+--version 1.11.0 \
+--license &quot;BSD&quot; \
+--vendor &quot;ICG TU Graz&quot; \
+--category &quot;devel&quot; \
+--architecture &quot;amd64&quot; \
+--maintainer &quot;Aerial Vision Group &lt;aerial@icg.tugraz.at&gt;&quot; \
+--url &quot;https://aerial.icg.tugraz.at/&quot; \
+--description &quot;Compiled Ceres solver for i3d library&quot; \
+--depends cmake \
+--depends libatlas-dev \
+--depends libatlas-base-dev \
+--depends libblas-dev \
+--depends libeigen3-dev \
+--depends libgoogle-glog-dev \
+--depends liblapack-dev \
+--depends libsuitesparse-dev \
+--verbose \
+.
+</code></pre>
+
+<p>现在，每一次提交的更改，都将触发自动编译过程。</p>
+
+<p><img src="/images/2017_06_15_21_59_09_1275x453.jpg" alt="/images/2017_06_15_21_59_09_1275x453.jpg" /></p>
+
+<h3 id="docker镜像制作">docker镜像制作</h3>
+
+<p>这里我们使用了my3dlib这个名称的docker镜像，镜像的制作过程如下:</p>
+
+<pre><code># vim Dockerfile
+FROM buildpack-deps:jessie
+MAINTAINER Alexander Skiba &lt;alexander.skiba@icg.tugraz.at&gt;
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN echo &quot;deb http://mirrors.163.com/debian/ jessie main non-free contrib&quot; &gt; /etc/apt/sources.list &amp;&amp; echo &quot;deb http://mirrors.163.com/debian/ jessie-updates main non-free contrib&quot; &gt;&gt; /etc/apt/sources.list &amp;&amp; echo &quot;deb http://mirrors.163.com/debian/ jessie-backports main non-free contrib&quot; &gt;&gt; /etc/apt/sources.list &amp;&amp; echo &quot;deb http://mirrors.163.com/debian-security/ jessie/updates main non-free contrib&quot; &gt;&gt; /etc/apt/sources.list
+
+RUN sleep 10
+
+RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    freeglut3 \
+    freeglut3-dev \
+    gcc \
+    git \
+    g++ \
+    libatlas-dev \
+    libatlas-base-dev \
+    libboost-all-dev \
+    libblas-dev \
+    libcgal-dev \
+    libdevil-dev \
+    libeigen3-dev \
+    libexiv2-dev \
+    libglew-dev \
+    libgoogle-glog-dev \
+    liblapack-dev \
+    liblas-dev \
+    liblas-c-dev \
+    libpcl-dev \
+    libproj-dev \
+    libprotobuf-dev \
+    libqglviewer-dev \
+    libsuitesparse-dev \
+    libtclap-dev \
+    libtinyxml-dev \
+    mlocate \
+    ruby \
+    ruby-dev \
+    unzip \
+    wget \
+    sshpass \
+  &amp;&amp; apt-get clean \
+  &amp;&amp; rm -rf /var/lib/apt/lists/* \
+  &amp;&amp; gem install --no-rdoc --no-ri fpm
+# docker build -t my3dlib .
+</code></pre>
+
+<p>经过编译以后，我们将得到my3dlib这个镜像，用于编译我们后面所需要的deb文件。</p>
+
+<h3 id="artifacts">artifacts</h3>
+
+<p><code>artifacts</code>记录了每次我们自动编译所生成的内容:</p>
+
+<p><img src="/images/2017_06_15_22_02_18_1293x452.jpg" alt="/images/2017_06_15_22_02_18_1293x452.jpg" /></p>
+
+<p>解压后即可得到deb文件。</p>
+
+<h3 id="external-url">external_url</h3>
+
+<p>这里记载了如果不配置实际IP地址将导致的错误.</p>
+
+<p>You should configure the <code>external_url</code> to your specified IP address, or you
+won&rsquo;t successfully pulling codes into your working nodes:</p>
+
+<pre><code>$ vim /etc/gitlab/gitlab.rb
+external_url 'http://192.168.33.2'
+$ gitlab-ctl reconfigure
+$ gitlab-ctl restart
+</code></pre>
+
+<p>Now you could successfully pulling codes into your working nodes.</p>
+
+<h3 id="下一步">下一步</h3>
+
+<p>研究gitlab ci与kubernetes的集成。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/05/25/thinkinginoc/">ThinkingInOC</a>
       </h1>
       <span class="post-date">May 25, 2017 
@@ -529,92 +830,6 @@ vagrant-libvirt (0.0.40)
 
 <p>Please notice the plugin should also be installed after you have installed the
 vagrant-libvirt via yaourt.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/05/22/addseconddiskforvagrant/">AddSecondDiskForVagrant</a>
-      </h1>
-      <span class="post-date">May 22, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="purpose">Purpose</h3>
-
-<p>For adding second disk to vagrant machine, while vagrant machine is running
-under virtualbox hypervisor. Following are the steps for doing this.</p>
-
-<h3 id="steps">Steps</h3>
-
-<p><code>Vagrantfile</code> definition:</p>
-
-<pre><code># -*- mode: ruby -*-
-# vi: set ft=ruby :
-Vagrant.configure(&quot;2&quot;) do |config|
-
-  config.vm.provider &quot;virtualbox&quot; do |vb|
-    # Display the VirtualBox GUI when booting the machine
-    #vb.gui = true
-      unless File.exist?('./secondDisk.vdi')
-        vb.customize ['createhd', '--filename', './secondDisk.vdi', '--variant', 'Fixed', '--size', 10 * 1024]
-      end
-  
-    # Customize the amount of memory on the VM:
-    vb.memory = &quot;1024&quot;
-    vb.customize ['storageattach', :id,  '--storagectl', 'SATA', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', './secondDisk.vdi']
-
-  end
-end
-
-</code></pre>
-
-<p>The initial.sh should be run under the vagrant machine has been created:</p>
-
-<pre><code>cat initial.sh
-set -e
-set -x
-echo 'Acquire::http::Proxy &quot;http://192.168.0.121:3142&quot;;'&gt;/etc/apt/apt.conf.d/01proxy
-# Added the primary repository
-apt-get update
-apt-get -y install vim lvm2
-
-if [ -f /etc/disk_added_date ]
-then
-   echo &quot;disk already added so exiting.&quot;
-   exit 0
-fi
-
-
-sudo fdisk -u /dev/sdb &lt;&lt;EOF
-n
-p
-1
-
-
-t
-8e
-w
-EOF
-
-pvcreate /dev/sdb1
-vgextend vagrant-vg /dev/sdb1
-lvextend -l +100%FREE /dev/vagrant-vg/root
-resize2fs /dev/vagrant-vg/root
-
-date &gt; /etc/disk_added_date
-</code></pre>
-
-<h3 id="notice">!!!Notice!!!</h3>
-
-<p>You should especially notice the lvextend&rsquo;s configuration, for every vagrant box
-has the different naming mechanism.</p>
 
       
     </div>
