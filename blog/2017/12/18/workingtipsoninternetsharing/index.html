@@ -138,6 +138,9 @@
 <li><a href="#ip-forwarding">IP Forwarding</a></li>
 </ul></li>
 <li><a href="#trouble-shooting">Trouble-Shooting</a></li>
+<li><a href="#clean-dns">clean dns</a></li>
+<li><a href="#shadowsocks">shadowsocks</a></li>
+<li><a href="#redsocks">redsocks</a></li>
 </ul></li>
 </ul></li>
 </ul>
@@ -331,6 +334,356 @@ to change from virtualbox to virt-manager:</p>
 sharing become stable.</p>
 
 <p>Redirect the usb device via spice driver.</p>
+
+<h3 id="clean-dns">clean dns</h3>
+
+<p>Install dnsmasq:</p>
+
+<pre><code>$ sudo apt-get install -y dnsmasq
+</code></pre>
+
+<p>Configure dnsmasq to listen on 9053 port:</p>
+
+<pre><code>$ sudo service dnsmasq stop
+$ sudo netstat -anp |grep 53
+unix  2      [ ACC ]     STREAM     LISTENING     11653    1/init              /run/lvm/lvmpolld.socket
+unix  3      [ ]         STREAM     CONNECTED     10534    441/lvmetad         
+unix  3      [ ]         STREAM     CONNECTED     14553    977/accounts-daemon 
+unix  2      [ ]         DGRAM                    29853    5893/sudo           
+$ sudo vim /etc/dnsmasq.conf 
+port=9053
+$ sudo service dnsmasq restart
+$ sudo netstat -anp |grep 53
+tcp        0      0 0.0.0.0:9053            0.0.0.0:*               LISTEN      5943/dnsmasq    
+tcp6       0      0 :::9053                 :::*                    LISTEN      5943/dnsmasq    
+udp        0      0 0.0.0.0:9053            0.0.0.0:*                           5943/dnsmasq    
+udp6       0      0 :::9053                 :::*                                5943/dnsmasq    
+unix  2      [ ACC ]     STREAM     LISTENING     11653    1/init              /run/lvm/lvmpolld.socket
+unix  3      [ ]         STREAM     CONNECTED     10534    441/lvmetad         
+unix  3      [ ]         STREAM     CONNECTED     14553    977/accounts-daemon 
+
+</code></pre>
+
+<p>Configure resolv.conf to <code>nameserver 223.5.5.5</code> then install pdnsd:</p>
+
+<pre><code>$ sudo apt-get install -y pdnsd
+</code></pre>
+
+<p>Configure as manual:</p>
+
+<p><img src="/images/2017_12_18_22_02_59_717x447.jpg" alt="/images/2017_12_18_22_02_59_717x447.jpg" /></p>
+
+<p>Configure the pdnsd configuration as following:</p>
+
+<pre><code>// Read the pdnsd.conf(5) manpage for an explanation of the options.
+
+/* Note: this file is overriden by automatic config files when
+  /etc/default/pdnsd AUTO_MODE is set and that
+  /usr/share/pdnsd/pdnsd-$AUTO_MODE.conf exists
+*/
+
+global {
+    perm_cache=4096;
+    cache_dir=&quot;/var/cache/pdnsd&quot;;
+    run_as=&quot;pdnsd&quot;;
+    server_ip = 127.0.0.1;
+    server_port=53;
+    status_ctl = on;
+    query_method=tcp_only;
+    neg_domain_pol = off;  
+    paranoid = on;  
+    par_queries = 1;  
+    min_ttl = 6h;  
+    max_ttl = 12h;  
+    timeout = 10;  
+}
+
+/* with status_ctl=on and resolvconf installed, this will work out from the box
+  this is the recommended setup for mobile machines */
+server {  
+   label = &quot;routine&quot;;
+   ip = 223.5.5.5;
+   timeout = 5;  
+   reject = 74.125.127.102,
+       74.125.155.102,  
+       74.125.39.102,  
+       74.125.39.113,  
+       209.85.229.138,  
+       128.121.126.139,  
+       159.106.121.75,  
+       169.132.13.103,  
+       192.67.198.6,  
+       202.106.1.2,  
+       202.181.7.85,  
+       203.161.230.171,  
+       203.98.7.65,  
+       207.12.88.98,  
+       208.56.31.43,  
+       209.145.54.50,  
+       209.220.30.174,  
+       209.36.73.33,  
+       211.94.66.147,  
+       213.169.251.35,  
+       216.221.188.182,  
+       216.234.179.13,  
+       243.185.187.39,  
+       37.61.54.158,  
+       4.36.66.178,  
+       46.82.174.68,  
+       59.24.3.173,  
+       64.33.88.161,  
+       64.33.99.47,  
+       64.66.163.251,  
+       65.104.202.252,  
+       65.160.219.113,  
+       66.45.252.237,  
+       69.55.52.253,  
+       72.14.205.104,  
+       72.14.205.99,  
+       78.16.49.15,  
+       8.7.198.45,  
+       93.46.8.89,  
+       37.61.54.158,  
+       243.185.187.39,  
+       190.93.247.4,  
+       190.93.246.4,  
+       190.93.245.4,  
+       190.93.244.4,  
+       65.49.2.178,  
+       189.163.17.5,  
+       23.89.5.60,  
+       49.2.123.56,  
+       54.76.135.1,  
+       77.4.7.92,  
+       118.5.49.6,  
+       159.24.3.173,  
+       188.5.4.96,  
+       197.4.4.12,  
+       220.250.64.24,  
+       243.185.187.30,  
+       249.129.46.48,  
+       253.157.14.165;  
+   reject_policy = fail;  
+   exclude = &quot;.google.com&quot;,  
+       &quot;.cn&quot;,
+       &quot;.baidu.com&quot;,
+       &quot;.qq.com&quot;,
+       &quot;.gstatic.com&quot;,  
+       &quot;.googleusercontent.com&quot;,  
+       &quot;.googlepages.com&quot;,  
+       &quot;.googlevideo.com&quot;,  
+       &quot;.googlecode.com&quot;,  
+       &quot;.googleapis.com&quot;,  
+       &quot;.googlesource.com&quot;,  
+       &quot;.googledrive.com&quot;,  
+       &quot;.ggpht.com&quot;,  
+       &quot;.youtube.com&quot;,  
+       &quot;.youtu.be&quot;,  
+       &quot;.ytimg.com&quot;,  
+       &quot;.twitter.com&quot;,  
+       &quot;.facebook.com&quot;,  
+       &quot;.fastly.net&quot;,  
+       &quot;.akamai.net&quot;,  
+       &quot;.akamaiedge.net&quot;,  
+       &quot;.akamaihd.net&quot;,  
+       &quot;.edgesuite.net&quot;,  
+       &quot;.edgekey.net&quot;;  
+}
+
+server {  
+   # Better setup dns server(DON'T USE PORT 53) on your own vps for faster proxying  
+   label = &quot;special&quot;;
+   ip = 208.67.222.222,208.67.220.220;
+   port = 5353;  
+   proxy_only = on;  
+   timeout = 5;  
+}  
+</code></pre>
+
+<p>Configure the daemon:</p>
+
+<pre><code>$  sudo vim /etc/default/pdnsd
+.....
+START_DAEMON=yes
+.....
+$ sudo /etc/init.d/pdnsd restart
+</code></pre>
+
+<p>Examine the result of our pdnsd:</p>
+
+<pre><code># dig @127.0.0.1 -p 53 www.youtube.com
+
+; &lt;&lt;&gt;&gt; DiG 9.10.3-P4-Ubuntu &lt;&lt;&gt;&gt; @127.0.0.1 -p 53 www.youtube.com
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 33429
+;; flags: qr rd ra; QUERY: 1, ANSWER: 8, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1024
+;; QUESTION SECTION:
+;www.youtube.com.		IN	A
+
+;; ANSWER SECTION:
+www.youtube.com.	43200	IN	CNAME	youtube-ui.l.google.com.
+youtube-ui.l.google.com. 21600	IN	CNAME	youtube-ui-china.l.google.com.
+youtube-ui-china.l.google.com. 21600 IN	A	74.125.203.101
+youtube-ui-china.l.google.com. 21600 IN	A	74.125.203.102
+youtube-ui-china.l.google.com. 21600 IN	A	74.125.203.100
+youtube-ui-china.l.google.com. 21600 IN	A	74.125.203.139
+youtube-ui-china.l.google.com. 21600 IN	A	74.125.203.113
+youtube-ui-china.l.google.com. 21600 IN	A	74.125.203.138
+
+;; Query time: 280 msec
+;; SERVER: 127.0.0.1#53(127.0.0.1)
+;; WHEN: Mon Dec 18 22:10:02 CST 2017
+;; MSG SIZE  rcvd: 205
+</code></pre>
+
+<h3 id="shadowsocks">shadowsocks</h3>
+
+<p>Install and configure shadowsocks via following command:</p>
+
+<pre><code>$ sudo apt-get install -y python-pip
+$ sudo pip install shadowsocks
+$ sudo pip install --upgrade pip
+$ sudo vim /etc/shadowsocks/config.json
+xxxxxxxxxxxxxxxx
+$ sslocal -c /etc/shadowsocks/config.json
+</code></pre>
+
+<h3 id="redsocks">redsocks</h3>
+
+<p>Get the source code via:</p>
+
+<pre><code>$ git clone https://github.com/semigodking/redsocks
+$ sudo apt-get -y install libevent-dev libssl-dev
+$ cd redsocks
+$ make
+</code></pre>
+
+<p>After make, you will find the executable file named redsocks2 under the
+folder.</p>
+
+<p>Configure the redsocks(diff file listed as following):</p>
+
+<pre><code>dash@ubuntu:~/redsocks$ cp redsocks.conf.example  redsocks.conf
+dash@ubuntu:~/redsocks$ vim redsocks.conf
+dash@ubuntu:~/redsocks$ diff redsocks.conf redsocks.conf.example 
+18c18
+&lt; 	daemon = on;
+---
+&gt; 	daemon = off;
+53c53
+&lt; 	local_ip = 0.0.0.0;
+---
+&gt; 	local_ip = 127.0.0.1;
+58c58
+&lt; 	listenq = 128; // SOMAXCONN equals 128 on my Linux box.
+---
+&gt; 	// listenq = 128; // SOMAXCONN equals 128 on my Linux box.
+72c72
+&lt; 	ip = 127.0.0.1;
+---
+&gt; 	ip = example.org;
+101,147c101,147
+&lt; //redudp {
+&lt; //	// `local_ip' should not be 0.0.0.0 as it's also used for outgoing
+&lt; //	// packets that are sent as replies - and it should be fixed
+&lt; //	// if we want NAT to work properly.
+&lt; //	local_ip = 127.0.0.1;
+&lt; //	local_port = 10053;
+&lt; //
+&lt; //	// `ip' and `port' of socks5 proxy server.
+&lt; //	ip = 10.0.0.1;
+&lt; //	port = 1080;
+&lt; //	login = username;// field 'login' is reused as encryption
+&lt; //					   // method of shadowsocks
+&lt; //	password = pazzw0rd;
+&lt; //
+&lt; //	// know types: socks5, shadowsocks
+&lt; //	type = socks5;
+&lt; //
+&lt; //	// redsocks knows about two options while redirecting UDP packets at
+&lt; //	// linux: TPROXY and REDIRECT.  TPROXY requires more complex routing
+&lt; //	// configuration and fresh kernel (&gt;= 2.6.37 according to squid
+&lt; //	// developers[1]) but has hack-free way to get original destination
+&lt; //	// address, REDIRECT is easier to configure, but requires `dest_ip` and
+&lt; //	// `dest_port` to be set, limiting packet redirection to single
+&lt; //	// destination.
+&lt; //	// [1] http://wiki.squid-cache.org/Features/Tproxy4
+&lt; //	dest_ip = 8.8.8.8;
+&lt; //	dest_port = 53;
+&lt; //
+&lt; //	// Do not set it large if this section is for DNS requests. Otherwise,
+&lt; //	// you may encounter out of file descriptor problem. For DNS requests,
+&lt; //	// 10s is adequate.
+&lt; //	udp_timeout = 30;
+&lt; //	// udp_timeout_stream = 180;
+&lt; //}
+&lt; //
+&lt; //tcpdns {
+&lt; //	// Transform UDP DNS requests into TCP DNS requests.
+&lt; //	// You can also redirect connections to external TCP DNS server to
+&lt; //	// REDSOCKS transparent proxy via iptables.
+&lt; //	local_ip = 192.168.1.1; // Local server to act as DNS server
+&lt; //	local_port = 1053;      // UDP port to receive UDP DNS requests
+&lt; //	tcpdns1 = 8.8.4.4;      // DNS server that supports TCP DNS requests
+&lt; //	tcpdns1_port = 53;      // DNS server port, default 53
+&lt; //	tcpdns2 = 8.8.8.8;      // DNS server that supports TCP DNS requests
+&lt; //	tcpdns2_port = 53;      // DNS server port, default 53
+&lt; //	timeout = 4;            // Timeout value for TCP DNS requests
+&lt; //}
+---
+&gt; redudp {
+&gt; 	// `local_ip' should not be 0.0.0.0 as it's also used for outgoing
+&gt; 	// packets that are sent as replies - and it should be fixed
+&gt; 	// if we want NAT to work properly.
+&gt; 	local_ip = 127.0.0.1;
+&gt; 	local_port = 10053;
+&gt; 
+&gt; 	// `ip' and `port' of socks5 proxy server.
+&gt; 	ip = 10.0.0.1;
+&gt; 	port = 1080;
+&gt; 	login = username;// field 'login' is reused as encryption
+&gt; 					   // method of shadowsocks
+&gt; 	password = pazzw0rd;
+&gt; 
+&gt; 	// know types: socks5, shadowsocks
+&gt; 	type = socks5;
+&gt; 
+&gt; 	// redsocks knows about two options while redirecting UDP packets at
+&gt; 	// linux: TPROXY and REDIRECT.  TPROXY requires more complex routing
+&gt; 	// configuration and fresh kernel (&gt;= 2.6.37 according to squid
+&gt; 	// developers[1]) but has hack-free way to get original destination
+&gt; 	// address, REDIRECT is easier to configure, but requires `dest_ip` and
+&gt; 	// `dest_port` to be set, limiting packet redirection to single
+&gt; 	// destination.
+&gt; 	// [1] http://wiki.squid-cache.org/Features/Tproxy4
+&gt; 	dest_ip = 8.8.8.8;
+&gt; 	dest_port = 53;
+&gt; 
+&gt; 	// Do not set it large if this section is for DNS requests. Otherwise,
+&gt; 	// you may encounter out of file descriptor problem. For DNS requests,
+&gt; 	// 10s is adequate.
+&gt; 	udp_timeout = 30;
+&gt; 	// udp_timeout_stream = 180;
+&gt; }
+&gt; 
+&gt; tcpdns {
+&gt; 	// Transform UDP DNS requests into TCP DNS requests.
+&gt; 	// You can also redirect connections to external TCP DNS server to
+&gt; 	// REDSOCKS transparent proxy via iptables.
+&gt; 	local_ip = 192.168.1.1; // Local server to act as DNS server
+&gt; 	local_port = 1053;      // UDP port to receive UDP DNS requests
+&gt; 	tcpdns1 = 8.8.4.4;      // DNS server that supports TCP DNS requests
+&gt; 	tcpdns1_port = 53;      // DNS server port, default 53
+&gt; 	tcpdns2 = 8.8.8.8;      // DNS server that supports TCP DNS requests
+&gt; 	tcpdns2_port = 53;      // DNS server port, default 53
+&gt; 	timeout = 4;            // Timeout value for TCP DNS requests
+&gt; }
+</code></pre>
 
   </div>
   
