@@ -105,6 +105,166 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/07/17/iscsi-installed-debian-jessie/">ISCSI Installed Debian Jessie</a>
+      </h1>
+      <span class="post-date">Jul 17, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="freenas-installation-and-configuration">FreeNAS Installation And Configuration</h3>
+
+<p>Install Procedure ignored, because it&rsquo;s simple.<br />
+Following steps are used for adding iscsi partition.</p>
+
+<p><img src="/images/2015_07_17_14_25_57_558x549.jpg" alt="/images/2015_07_17_14_25_57_558x549.jpg" /><br />
+Manually setup the volumn and now you could add your volumn into the FreeNAS System.</p>
+
+<p>Configure iscsi:<br />
+<img src="/images/2015_07_17_14_33_57_530x370.jpg" alt="/images/2015_07_17_14_33_57_530x370.jpg" /><br />
+Add the name of <code>iqn.onecloud.iscsi</code>, next we add portal:<br />
+<img src="/images/2015_07_17_14_35_12_617x403.jpg" alt="/images/2015_07_17_14_35_12_617x403.jpg" /><br />
+Add Authorized Access Now:<br />
+<img src="/images/2015_07_17_14_37_03_491x195.jpg" alt="/images/2015_07_17_14_37_03_491x195.jpg" /><br />
+Add Initator:<br />
+<img src="/images/2015_07_17_14_39_25_498x234.jpg" alt="/images/2015_07_17_14_39_25_498x234.jpg" /><br />
+Create target:<br />
+<img src="/images/2015_07_17_14_40_30_460x487.jpg" alt="/images/2015_07_17_14_40_30_460x487.jpg" /><br />
+Add extent:<br />
+<img src="/images/2015_07_17_14_41_55_559x613.jpg" alt="/images/2015_07_17_14_41_55_559x613.jpg" /><br />
+LUM RPMs could also be spcified:<br />
+<img src="/images/2015_07_17_14_42_51_386x351.jpg" alt="/images/2015_07_17_14_42_51_386x351.jpg" /><br />
+Associate Targets:<br />
+<img src="/images/2015_07_17_14_44_09_619x310.jpg" alt="/images/2015_07_17_14_44_09_619x310.jpg" /></p>
+
+<p>Enable the iscsi service:<br />
+<img src="/images/2015_07_17_14_45_04_366x302.jpg" alt="/images/2015_07_17_14_45_04_366x302.jpg" /></p>
+
+<p>Better you change the IP Address into static IP address.</p>
+
+<h3 id="install-debian-jessie-onto-iscsi-disk">Install Debian Jessie Onto ISCSI Disk:</h3>
+
+<p>On a installed Ubuntu, I choose Ubuntu14.04, do following for connecting the exising created iscsi partition:</p>
+
+<pre><code>$ sudo apt-get install -y open-iscsi gdisk
+[root:~]# iscsiadm -m discovery -t sendtargets -p 10.47.58.40
+10.47.58.40:3260,-1 iqn.onecloud.iscsi:iscsidisk1
+</code></pre>
+
+<p>Login and listed the device :</p>
+
+<pre><code>[root:~]# iscsiadm -m node -T 'iqn.onecloud.iscsi:iscsidisk1' -p 10.47.58.40 -l
+Logging in to [iface: default, target: iqn.onecloud.iscsi:iscsidisk1, portal: 10.47.58.40,3260] (multiple)
+Login to [iface: default, target: iqn.onecloud.iscsi:iscsidisk1, portal: 10.47.58.40,3260] successful.
+[root:~]# ls -l /dev/disk/by-path
+total 0
+lrwxrwxrwx 1 root root 9 Jul 17 05:39 ip-10.47.58.40:3260-iscsi-iqn.onecloud.iscsi:iscsidisk1-lun-0 -&gt; ../../sda
+</code></pre>
+
+<p>Use gdisk for partition the /dev/sda, and creating the filesystem on them:</p>
+
+<pre><code># gdisk -l /dev/sda
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048            8191   3.0 MiB     EF02  BIOS boot partition
+   2            8192         1056767   512.0 MiB   8200  Linux swap
+   3         1056768        40959966   19.0 GiB    8300  Linux filesystem
+# mkfs.ext4 /dev/sda3
+# mkswap /dev/sda2 
+</code></pre>
+
+<p>Now install system, first mount usable systems:</p>
+
+<pre><code># mkdir /mnt/chroot
+# mount /dev/sda3 /mnt/chroot
+# debootstrap wheezy /mnt/chroot
+# debootstrap jessie /mnt/chroot http://mirrors.aliyun.com/debian/ 
+
+</code></pre>
+
+<p>chroot into the newly install jessie:</p>
+
+<pre><code>root@Ubuntu-14:~# mount -t proc none /mnt/chroot/proc
+root@Ubuntu-14:~# mount -t sysfs none /mnt/chroot/sys
+root@Ubuntu-14:~# mount --bind /dev /mnt/chroot/dev
+root@Ubuntu-14:~# chroot /mnt/chroot /bin/bash
+</code></pre>
+
+<p>Disk configuration:</p>
+
+<pre><code>root@Ubuntu-14:/# cp /proc/mounts /etc/mtab
+root@Ubuntu-14:/# sed -i '\|^/dev/sda3|,$!d' /etc/mtab
+root@Ubuntu-14:/# blkid /dev/sda2 /dev/sda3
+/dev/sda2: UUID=&quot;0c570265-543a-41ec-9edb-65bc55d677cd&quot; TYPE=&quot;swap&quot; PARTLABEL=&quot;Linux swap&quot; PARTUUID=&quot;bfb7c1b1-c6cd-4302-9cb4-d6c1de43a0ad&quot;
+/dev/sda3: UUID=&quot;c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b&quot; TYPE=&quot;ext4&quot; PARTLABEL=&quot;Linux filesystem&quot; PARTUUID=&quot;00ccaf63-b3b3-46c4-92ab-1933d31cbcb7&quot;
+root@Ubuntu-14:/# echo 'UUID=c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b / ext4 errors=remount-ro 0 1' &gt;&gt; /etc/fstab
+root@Ubuntu-14:/# echo 'UUID=0c570265-543a-41ec-9edb-65bc55d677cd none swap sw 0 0' &gt;&gt; /etc/fstab
+root@Ubuntu-14:/# cat /etc/fstab
+# UNCONFIGURED FSTAB FOR BASE SYSTEM
+UUID=c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b / ext4 errors=remount-ro 0 1
+UUID=0c570265-543a-41ec-9edb-65bc55d677cd none swap sw 0 0
+</code></pre>
+
+<p>Install some packages, be sure to make grub2 installed to /dev/sda:</p>
+
+<pre><code># apt-get install vim less openssh-server locales
+# apt-get install linux-image-amd64 grub2 initramfs-tools
+</code></pre>
+
+<p>Configure the Grub:</p>
+
+<pre><code># apt-get install open-iscsi
+# vim /etc/default/grub
+GRUB_CMDLINE_LINUX_DEFAULT=&quot;&quot;
+GRUB_CMDLINE_LINUX=&quot;&quot;ISCSI_INITIATOR=iqn.onecloud.iscsi.client:client ISCSI_TARGET_NAME=iqn.onecloud.iscsi:iscsidisk1 ISCSI_TARGET_IP=10.47.58.40 ISCSI_TARGET_PORT=3260 root=UUID=c1c5f995-e3f7-48c7-b5d5-4963a77d9b7b ip=10.47.58.176::10.47.58.1:255.255.255.0:client:eth0:off&quot;&quot;
+# touch /etc/iscsi/iscsi.initramfs
+# echo &quot;InitiatorName=iqn.onecloud.iscsi.client:client&quot; &gt; /etc/iscsi/initiatorname.iscsi
+# update-grub
+# update-initramfs -u
+# passwd
+
+</code></pre>
+
+<p>Configure the network interfaces:</p>
+
+<pre><code>root@Ubuntu-14:/etc/network# cat interfaces
+# interfaces(5) file used by ifup(8) and ifdown(8)
+# Include files from /etc/network/interfaces.d:
+#source-directory /etc/network/interfaces.d
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+auto eth0
+iface eth0 inet static
+#iface eth0 inet manual
+address 10.47.58.176
+netmask 255.255.255.0
+gateway 10.47.58.1
+dns-nameservers 114.114.114.114
+</code></pre>
+
+<p>Now exit and umount all of the mounted partitions.</p>
+
+<pre><code># exit
+# umount /mnt/chroot/{dev,proc,sys,}
+root@Ubuntu-14:~# iscsiadm -m node -T 'iqn.onecloud.iscsi:iscsidisk1' -p 10.47.58.40 -u
+# echo &quot;InitiatorName=iqn.onecloud.iscsi.client:client&quot; &gt; /etc/iscsi/initiatorname.iscsi
+#!ipxe
+set initiator-iqn iqn.2007-08.com.example.client:client
+sanboot iscsi:san.example.com:6:3260:0:iqn.2007-08.com.example.san:rootp
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/07/13/wh-worktips-11/">WH Worktips(11)</a>
       </h1>
       <span class="post-date">Jul 13, 2015 
@@ -417,91 +577,6 @@ COMMIT
 </code></pre>
 
 <p>Restart XenServer and waiting for verification.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File For Ubuntu1404 In CobblerServer</a>
-      </h1>
-      <span class="post-date">Jul 4, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="proseed-file">Proseed File</h3>
-
-<pre><code>d-i time/zone string Asia/Shanghai
-
-# Setup the installation source
-d-i mirror/country string manual
-d-i mirror/http/hostname string $http_server
-#d-i mirror/http/directory string $install_source_directory
-d-i mirror/http/directory string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
-d-i mirror/http/proxy string
-d-i apt-setup/security_host string $http_server
-d-i apt-setup/security_path string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
-</code></pre>
-
-<h3 id="local-repository">Local Repository</h3>
-
-<p>In one installed machine, do following for getting the repository of all of the installed packages:</p>
-
-<pre><code>$ sudo apt-get install dselect
-$ dpkg --get-selections | grep -v deinstall&gt;InstalledPackage.txt
-$ awk {'print $1'} InstalledPackage.txt | xargs apt-get download
-</code></pre>
-
-<p>Use nginx for sharing the repository:</p>
-
-<pre><code>$ sudo apt-get install -y nginx
-$ sudo vim /etc/nginx/site-enabled/default
-server {
-        listen 80 default_server;
-        listen [::]:80 default_server ipv6only=on;
-
-        root /var/www/html;
-        index index.html index.htm;
-
-        # Make site accessible from http://localhost/
-        server_name localhost;
-
-        location / {
-                # First attempt to serve request as file, then
-                # as directory, then fall back to displaying a 404.
-                try_files $uri $uri/ =404;
-                autoindex on;
-                # Uncomment to enable naxsi on this location
-$ sudo service nginx restart
-</code></pre>
-
-<p>Now generate the repository server:</p>
-
-<pre><code>$ mkdir -p /var/www/html/amd64
-$ mv /root/Code/*.deb /var/www/html/amd64
-$ cd /var/www/html/
-$ dpkg-scanpackages amd64/ | gzip -9c &gt; amd64/Packages.gz
-$ mv /root/Code/InstalledPackage.txt /var/www/html
-</code></pre>
-
-<h3 id="use-local-repository">Use Local Repository</h3>
-
-<p>Change the repoisoty setting:</p>
-
-<pre><code>root@Ubuntu-14:~# cat /etc/apt/sources.list
-deb http://192.168.1.111 amd64/
-root@Ubuntu-14:~# apt-get update &amp;&amp;  apt-get install -y dselect
-root@Ubuntu-14:~# dselect update
-root@Ubuntu-14:~# wget http://192.168.1.11/InstalledPackage.txt
-root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt &amp;&amp; apt-get -u dselect-upgrade 
-</code></pre>
-
-<p>After updating, you have the same system as your server.</p>
 
       
     </div>
@@ -1927,8 +2002,17 @@ root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt &amp;&amp; apt
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -1937,7 +2021,7 @@ root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt &amp;&amp; apt
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

@@ -105,6 +105,560 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/28/linux2-dot-6-32-for-utu2440-7/">Linux2.6.32 for Utu2440(7)</a>
+      </h1>
+      <span class="post-date">Oct 28, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="watchdog">Watchdog</h3>
+
+<p>Change the configuraiton of Watchdog in kernel:<br />
+<img src="/images/2440watchdog.jpg" alt="/images/2440watchdog.jpg" /></p>
+
+<p>Watchdog configuraiton in kernel:</p>
+
+<pre><code>$ grep &quot;CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME&quot; ./ -r
+./drivers/watchdog/s3c2410_wdt.c:#define CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME   (15)
+
+</code></pre>
+
+<p>Test Watchdog:</p>
+
+<pre><code>~ # dmesg | grep watchdog
+s3c2410-wdt s3c2410-wdt: watchdog inactive, reset disabled, irq enabled
+~ # 
+~ # echo 0&gt;/dev/watchdog
+
+s3c2410-wdt s3c2410-wdt: Unexpected close, not stopping watchdog
+
+</code></pre>
+
+<p>Then after 15 seconds your board will reset, disable watchdog via:</p>
+
+<pre><code>~ # echo -n V&gt;/dev/watchdog
+
+</code></pre>
+
+<h3 id="led">LED</h3>
+
+<p>The connection for LED is:<br />
+<img src="/images/2440leds.jpg" alt="/images/2440leds.jpg" /></p>
+
+<p>Saw s3c2440 chip connection:<br />
+<img src="/images/2440leds1.jpg" alt="/images/2440leds1.jpg" /></p>
+
+<p>Connection in text:</p>
+
+<pre><code>EINT4 GPF4 DL1
+EINT5 GPF5 DL2
+EINT6 GPF6 DL3
+EINT7 GPF7 DL4 
+
+</code></pre>
+
+<p>Code changes:</p>
+
+<pre><code>#include &lt;linux/miscdevice.h&gt;
+#include &lt;linux/delay.h&gt;
+#include &lt;asm/irq.h&gt;
+#include &lt;mach/regs-gpio.h&gt;
+#include &lt;mach/hardware.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;linux/module.h&gt;
+#include &lt;linux/init.h&gt;
+#include &lt;linux/mm.h&gt;
+#include &lt;linux/fs.h&gt;
+#include &lt;linux/types.h&gt;
+#include &lt;linux/delay.h&gt;
+#include &lt;linux/moduleparam.h&gt;
+#include &lt;linux/slab.h&gt;
+#include &lt;linux/errno.h&gt;
+#include &lt;linux/ioctl.h&gt;
+#include &lt;linux/cdev.h&gt;
+#include &lt;linux/string.h&gt;
+#include &lt;linux/list.h&gt;
+#include &lt;linux/pci.h&gt;
+#include &lt;linux/gpio.h&gt;
+#include &lt;asm/uaccess.h&gt;
+#include &lt;asm/atomic.h&gt;
+#include &lt;asm/unistd.h&gt;
+#define DEVICE_NAME &quot;leds&quot; //设备名(/dev/leds)
+//LED 对应的GPIO 端口列表
+static unsigned long led_table [] = {
+ S3C2410_GPF(4),
+ S3C2410_GPF(5),
+ S3C2410_GPF(6),
+ S3C2410_GPF(7),
+};
+//LED 对应端口将要输出的状态列表
+static unsigned int led_cfg_table [] = {
+ S3C2410_GPIO_OUTPUT,
+ S3C2410_GPIO_OUTPUT,
+ S3C2410_GPIO_OUTPUT,
+ S3C2410_GPIO_OUTPUT,
+};
+/*ioctl 函数的实现
+* 在应用/用户层将通过ioctl 函数向内核传递参数，以控制LED 的输出状态
+*/
+static int leds_ioctl(struct inode *inode,
+          struct file *file,
+          unsigned int cmd,
+          unsigned long arg)
+{
+ switch(cmd) {
+  case 0:
+  case 1:
+    if (arg &gt; 4) {
+     return -EINVAL;
+    }
+  //根据应用/用户层传递来的参数(取反)，通过s3c2410_gpio_setpin 函数设置LED 对应的端口寄存器
+  s3c2410_gpio_setpin(led_table[arg], !cmd);
+   return 0;
+  default:
+    return -EINVAL;
+ }
+}
+/*
+* 设备函数操作集，在此只有ioctl 函数，通常还有read, write, open, close 等，因为本LED 驱动在下面已经
+* 注册为misc 设备，因此也可以不用open/close
+*/
+static struct file_operations dev_fops = {
+ .owner = THIS_MODULE,
+ .ioctl = leds_ioctl,
+};
+/*
+* 把LED 驱动注册为MISC 设备
+*/
+static struct miscdevice misc = {
+ .minor = MISC_DYNAMIC_MINOR, //动态设备号
+ .name = DEVICE_NAME,
+ .fops = &amp;dev_fops,
+};
+/*
+* 设备初始化
+*/
+static int __init dev_init(void)
+{
+ int ret;
+ int i;
+ for (i = 0; i &lt; 4; i++) {
+  //设置LED 对应的端口寄存器为输出(OUTPUT)
+  s3c2410_gpio_cfgpin(led_table[i], led_cfg_table[i]);
+  //设置LED 对应的端口寄存器为低电平输出，在模块加载结束后，四个LED 应该是全部都是发光状态
+  s3c2410_gpio_setpin(led_table[i], 0);
+ }
+ ret = misc_register(&amp;misc); //注册设备
+
+ if(ret &lt; 0)
+ {
+        printk(DEVICE_NAME &quot;register falid!\n&quot;);
+        return ret;
+  }
+
+ printk (DEVICE_NAME &quot;\tinitialized\n&quot;); //打印初始化信息
+ return 0;
+}
+static void __exit dev_exit(void)
+{
+ misc_deregister(&amp;misc);
+}
+//模块初始化，仅当使用insmod/podprobe 命令加载时有用，如果设备不是通过模块方式加载，此处将不会被调用
+module_init(dev_init); 
+//卸载模块，当该设备通过模块方式加载后，可以通过rmmod 命令卸载，将调用此函数
+module_exit(dev_exit); 
+MODULE_LICENSE(&quot;GPL&quot;); //版权信息
+MODULE_AUTHOR(&quot;singleboy.&quot;); //开发者信息
+</code></pre>
+
+<p>Change Kconfig file:</p>
+
+<pre><code>config LEDS_SMDK2440
+ tristate &quot;LED Support for SMDK2440 GPIO LEDs&quot;
+ depends on SMDK2440_CPU2440
+ default y if SMDK2440_CPU2440
+ help
+  This option enables support for LEDs connected to GPIO lines
+  on SMDK2440 boards.
+
+</code></pre>
+
+<p>And the Makefile</p>
+
+<pre><code>obj-$(CONFIG_LEDS_SMDK2440)     += smdk2440_leds.o
+
+</code></pre>
+
+<p>Rebuild the kernel and verify.</p>
+
+<p>Test file:</p>
+
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/ioctl.h&gt;
+
+int main(int argc, char **argv)
+{
+ int on;
+ int led_no;
+ int fd;
+ if (argc != 3 || sscanf(argv[1], &quot;%d&quot;, &amp;led_no) != 1 || sscanf(argv[2],&quot;%d&quot;, &amp;on) != 1 ||
+     on &lt; 0 || on &gt; 1 || led_no &lt; 0 || led_no &gt; 3) {
+  fprintf(stderr, &quot;Usage: leds led_no 0|1\n&quot;);
+  exit(1);
+ }
+ fd = open(&quot;/dev/leds0&quot;, 0);
+ if (fd &lt; 0) {
+  fd = open(&quot;/dev/leds&quot;, 0);
+ }
+ if (fd &lt; 0) {
+  perror(&quot;open device leds&quot;);
+  exit(1);
+ }
+ ioctl(fd, on, led_no);
+ close(fd);
+ return 0;
+}
+
+</code></pre>
+
+<p>Then run test like:</p>
+
+<pre><code>/root # ./led 0 0
+/root # ./led 1 0
+/root # ./led 2 0
+/root # ./led 2 1
+/root # ./led 2 0
+/root # ./led 3 0
+
+</code></pre>
+
+<p>Write a simple script</p>
+
+<pre><code>while true
+ do
+./led 0 0
+sleep 1
+./led 0 1
+sleep 1
+./led 1 0
+sleep 1
+./led 1 1
+sleep 1
+./led 2 0
+sleep 1
+./led 2 1
+sleep 1
+./led 3 0
+sleep 1
+./led 3 1
+done
+
+</code></pre>
+
+<p>Now you could see led blinks.</p>
+
+<h3 id="keys">Keys</h3>
+
+<p>First view the schematic to find the circle connection:<br />
+<img src="/images/2440buttons.jpg" alt="/images/2440buttons.jpg" /></p>
+
+<p>Keys connection:</p>
+
+<pre><code>K1	EINT0		GPF0
+K2	EINT1		GPF1 
+K3	EINT2		GPF2
+K4	EINT3		GPF3	
+K5	EINT11		GPG3
+K6	EINT19		GPG11
+
+</code></pre>
+
+<p>The definition should be adjusted to the keys connection definition.</p>
+
+<p>Edit the drivers/misc/smdk2440_buttons.c:</p>
+
+<pre><code>#include &lt;linux/module.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;linux/fs.h&gt;
+#include &lt;linux/init.h&gt;
+#include &lt;linux/delay.h&gt;
+#include &lt;linux/poll.h&gt;
+#include &lt;linux/irq.h&gt;
+#include &lt;asm/irq.h&gt;
+#include &lt;linux/interrupt.h&gt;
+#include &lt;asm/uaccess.h&gt;
+#include &lt;mach/regs-gpio.h&gt;
+#include &lt;mach/hardware.h&gt;
+#include &lt;linux/platform_device.h&gt;
+#include &lt;linux/cdev.h&gt;
+#include &lt;linux/miscdevice.h&gt;
+#include &lt;linux/sched.h&gt;
+#include &lt;linux/gpio.h&gt;
+#define DEVICE_NAME &quot;buttons&quot; //设备名称
+/*定义中断所用的结构体*/
+struct button_irq_desc {
+ int irq; //按键对应的中断号
+ int pin; //按键所对应的GPIO 端口
+ int pin_setting; //按键对应的引脚描述，实际并未用到，保留
+ int number; //定义键值，以传递给应用层/用户态
+ char *name; //每个按键的名称
+};
+/*结构体实体定义*/
+static struct button_irq_desc button_irqs [] = {
+ {IRQ_EINT0, S3C2410_GPF(0), S3C2410_GPF0_EINT0, 0, &quot;KEY0&quot;},
+ {IRQ_EINT1, S3C2410_GPF(1), S3C2410_GPF1_EINT1, 1, &quot;KEY1&quot;},
+ {IRQ_EINT2, S3C2410_GPF(2), S3C2410_GPF2_EINT2, 2, &quot;KEY2&quot;},
+ {IRQ_EINT3, S3C2410_GPF(3), S3C2410_GPF3_EINT3, 3, &quot;KEY3&quot;},
+ {IRQ_EINT11, S3C2410_GPG(3), S3C2410_GPG3_EINT11, 4, &quot;KEY4&quot;},
+ {IRQ_EINT19, S3C2410_GPG(11), S3C2410_GPG11_EINT19, 5, &quot;KEY5&quot;},
+};
+/*开发板上按键的状态变量，注意这里是’0’，对应的ASCII 码为30*/
+static volatile char key_values [] = {'0', '0', '0', '0', '0', '0'};
+/*因为本驱动是基于中断方式的，在此创建一个等待队列，以配合中断函数使用；当有按键按下并读取到键
+值时，将会唤醒此队列，并设置中断标志，以便能通过 read 函数判断和读取键值传递到用户态；当没有按
+键按下时，系统并不会轮询按键状态，以节省时钟资源*/
+static DECLARE_WAIT_QUEUE_HEAD(button_waitq);
+/*中断标识变量，配合上面的队列使用，中断服务程序会把它设置为1，read 函数会把它清零*/
+static volatile int ev_press = 0;
+/*本按键驱动的中断服务程序*/
+static irqreturn_t buttons_interrupt(int irq, void *dev_id)
+{
+ struct button_irq_desc *button_irqs = (struct button_irq_desc *)dev_id;
+ int down;
+ // udelay(0);
+ /*获取被按下的按键状态*/
+ down = !s3c2410_gpio_getpin(button_irqs-&gt;pin);
+ /*状态改变，按键被按下，从这句可以看出，当按键没有被按下的时候，寄存器的值为1(上拉)，但按
+  键被按下的时候，寄存器对应的值为0*/
+ if (down != (key_values[button_irqs-&gt;number] &amp; 1)) { // Changed
+  /*如果key1 被按下，则key_value[0]就变为’1’，对应的ASCII 码为31*/
+  key_values[button_irqs-&gt;number] = '0' + down;
+  ev_press = 1; /*设置中断标志为1*/
+  wake_up_interruptible(&amp;button_waitq); /*唤醒等待队列*/
+ }
+ return IRQ_RETVAL(IRQ_HANDLED);
+}
+/*
+*在应用程序执行open(“/dev/buttons”,…)时会调用到此函数，在这里，它的作用主要是注册6 个按键的中断。
+*所用的中断类型是IRQ_TYPE_EDGE_BOTH，也就是双沿触发，在上升沿和下降沿均会产生中断，这样做
+是为了更加有效地判断按键状态
+*/
+static int s3c24xx_buttons_open(struct inode *inode, struct file *file)
+{
+ int i;
+ int err = 0;
+ for (i = 0; i &lt; sizeof(button_irqs)/sizeof(button_irqs[0]); i++) {
+  if (button_irqs[i].irq &lt; 0) {
+   continue;
+  }
+  /*注册中断函数*/
+  err = request_irq(button_irqs[i].irq, buttons_interrupt, IRQ_TYPE_EDGE_BOTH,
+        button_irqs[i].name, (void *)&amp;button_irqs[i]);
+  if (err)
+   break;
+ }
+ if (err) { /*如果出错，释放已经注册的中断，并返回*/
+  i--;
+  for (; i &gt;= 0; i--) {
+   if (button_irqs[i].irq &lt; 0) {
+    continue;
+   }
+   disable_irq(button_irqs[i].irq);
+   free_irq(button_irqs[i].irq, (void *)&amp;button_irqs[i]);
+  }
+  return -EBUSY;
+ }
+ /*注册成功，则中断队列标记为1，表示可以通过read 读取*/
+ ev_press = 1;
+ /*正常返回*/
+ return 0;
+}
+/*
+*此函数对应应用程序的系统调用close(fd)函数，在此，它的主要作用是当关闭设备时释放6 个按键的中断*
+处理函数
+*/
+static int s3c24xx_buttons_close(struct inode *inode, struct file *file)
+{
+ int i;
+ for (i = 0; i &lt; sizeof(button_irqs)/sizeof(button_irqs[0]); i++) {
+  if (button_irqs[i].irq &lt; 0) {
+   continue;
+  }
+  /*释放中断号，并注销中断处理函数*/
+  free_irq(button_irqs[i].irq, (void *)&amp;button_irqs[i]);
+ }
+ return 0;
+}
+/*
+*对应应用程序的read(fd,…)函数，主要用来向用户空间传递键值
+*/
+static int s3c24xx_buttons_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
+{
+ unsigned long err;
+ if (!ev_press) {
+  if (filp-&gt;f_flags &amp; O_NONBLOCK)
+   /*当中断标识为0 时，并且该设备是以非阻塞方式打开时，返回*/
+   return -EAGAIN;
+  else
+   /*当中断标识为0 时，并且该设备是以阻塞方式打开时，进入休眠状态，等待被唤醒*/
+   wait_event_interruptible(button_waitq, ev_press);
+ }
+ /*把中断标识清零*/
+ ev_press = 0;
+ /*一组键值被传递到用户空间*/
+ err = copy_to_user(buff, (const void *)key_values, min(sizeof(key_values), count));
+ return err ? -EFAULT : min(sizeof(key_values), count);
+}
+static unsigned int s3c24xx_buttons_poll( struct file *file, struct poll_table_struct *wait)
+{
+ unsigned int mask = 0;
+ /*把调用poll 或者select 的进程挂入队列，以便被驱动程序唤醒*/
+ poll_wait(file, &amp;button_waitq, wait);
+ if (ev_press)
+  mask |= POLLIN | POLLRDNORM;
+ return mask;
+}
+/*设备操作集*/
+static struct file_operations dev_fops = {
+ .owner = THIS_MODULE,
+ .open = s3c24xx_buttons_open,
+ .release = s3c24xx_buttons_close,
+ .read = s3c24xx_buttons_read,
+ .poll = s3c24xx_buttons_poll,
+};
+static struct miscdevice misc = {
+ .minor = MISC_DYNAMIC_MINOR,
+ .name = DEVICE_NAME,
+ .fops = &amp;dev_fops,
+};
+/*设备初始化，主要是注册设备*/
+static int __init dev_init(void)
+{
+ int ret;
+ /*把按键设备注册为misc 设备，其设备号是自动分配的*/
+ ret = misc_register(&amp;misc);
+
+ if(ret &lt; 0)
+  {
+        printk(DEVICE_NAME &quot;register falid!\n&quot;);
+        return ret;
+   }
+ printk (DEVICE_NAME&quot;\tinitialized\n&quot;);
+ return 0;
+}
+/*注销设备*/
+static void __exit dev_exit(void)
+{
+ misc_deregister(&amp;misc);
+}
+module_init(dev_init); //模块初始化，仅当使用insmod/podprobe 命令加载时有用，如果设备不是通过模块方式加载，此处将不会被调用
+module_exit(dev_exit); //卸载模块，当该设备通过模块方式加载后，可以通过rmmod 命令卸载，将调用此函数
+MODULE_LICENSE(&quot;GPL&quot;); //版权信息
+MODULE_AUTHOR(&quot;singleboy.&quot;); //作者名字
+
+</code></pre>
+
+<p>Edit the Kconfig file:</p>
+
+<pre><code> config SMDK2440_BUTTONS
+  tristate &quot;Buttons driver for SMDK2440 development boards&quot;
+  depends on SMDK2440_CPU2440
+  default y if SMDK2440_CPU2440
+  help
+   this is buttons driver for SMDK2440 development boards
+
+</code></pre>
+
+<p>Also change the Makefile:</p>
+
+<pre><code>obj-$(CONFIG_SMDK2440_BUTTONS)  += smdk2440_buttons.o
+
+</code></pre>
+
+<p>Make the kernel out and verify it on board.</p>
+
+<p>Test code:</p>
+
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sys/select.h&gt;
+#include &lt;sys/time.h&gt;
+#include &lt;errno.h&gt;
+
+int main(void)
+{
+ int buttons_fd;
+ char buttons[6] = {'0', '0', '0', '0', '0', '0'}; //定义按键值变量，对于驱动函数中的key_values 数组
+
+ buttons_fd = open(&quot;/dev/buttons&quot;, 0); /*打开按键设备/dev/buttons*/
+ if (buttons_fd &lt; 0) {
+  perror(&quot;open device buttons&quot;); /*打开失败则退出*/
+  exit(1);
+ }
+
+ for (;;) { /*永读按键并打印键值和状态*/
+  char current_buttons[6];
+  int count_of_changed_key;
+  int i;
+
+/*使用read 函数读取一组按键值（6 个）*/
+  if (read(buttons_fd, current_buttons, sizeof current_buttons) != sizeof current_buttons) {
+   perror(&quot;read buttons:&quot;);
+   exit(1);
+  }
+
+/*逐个分析读取到的按键值*/
+
+  for (i = 0, count_of_changed_key = 0; i &lt; sizeof buttons / sizeof buttons[0]; i++) {
+   if (buttons[i] != current_buttons[i]) {
+    buttons[i] = current_buttons[i];
+
+/*打印按键值，并标明按键按下/抬起的状态*/
+    printf(&quot;%skey %d is %s&quot;, count_of_changed_key? &quot;, &quot;: &quot;&quot;, i+1, buttons[i] == '0' ? &quot;up&quot; : &quot;down&quot;);
+    count_of_changed_key++;
+   }
+  }
+  if (count_of_changed_key) {
+   printf(&quot;\n&quot;);
+  }
+ }
+
+ close(buttons_fd); /*关闭按键设备文件*/
+ return 0;
+}
+
+</code></pre>
+
+<p>Test Result:</p>
+
+<pre><code>/root # ./buttons
+key 1 is down
+key 1 is up
+key 2 is down
+key 2 is up
+key 3 is down
+key 3 is up
+key 4 is down
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/10/27/linux2-dot-6-32-for-utu2440-6/">Linux2.6.32 for Utu2440(6)</a>
       </h1>
       <span class="post-date">Oct 27, 2014 
@@ -640,102 +1194,6 @@ dm9000 i/o: 0x18000300, id: 0x90000a46
 &gt; bootm
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/25/linux2-dot-6-39-for-utu2440-2/">Linux2.6.39 for Utu2440(2)</a>
-      </h1>
-      <span class="post-date">Oct 25, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
-        
-      </span>
-      
-      
-
-<h3 id="serial-port-support">Serial Port Support</h3>
-
-<p>Enable the Device Driver&mdash;-&gt; Character deivces &mdash;-&gt; Serial drivers &mdash;-&gt; Samsung related settings, My setting is listed as following:<br />
-<img src="/images/serialport.jpg" alt="/images/serialport.jpg" /><br />
-Then you will see serial output during kernel boot.</p>
-
-<h3 id="dm9000-support">DM9000 Support</h3>
-
-<p>Add following code into the linux/arch/arm/mach-s3c2440/mach-smdk2440.c:</p>
-
-<pre><code>#include &lt;linux/serial_core.h&gt;
-+ /* Added dm9000 support for utu2400 */
-+ #include &lt;linux/dm9000.h&gt;
-#include &lt;linux/platform_device.h&gt;
-
-#include &lt;plat/common-smdk.h&gt;
-
-+ /* DM9000 Base address for SMDK2440 */
-+ #define MACH_SMDK2440_DM9K_BASE (S3C2410_CS3 + 0x300)
-
-static struct map_desc smdk2440_iodesc[] __initdata = {
-
-+ /* Added for dm9000 */
-+ static struct resource smdk2440_dm9k_resource[] = 
-+ {
-+     [0] = 
-+      {
-+           .start = MACH_SMDK2440_DM9K_BASE,
-+           .end   = MACH_SMDK2440_DM9K_BASE + 3,
-+           .flags = IORESOURCE_MEM
-+      },
-+     [1] = 
-+      {
-+           .start = MACH_SMDK2440_DM9K_BASE + 4,
-+           .end   = MACH_SMDK2440_DM9K_BASE + 7,
-+           .flags = IORESOURCE_MEM
-+      },
-+     [2] = 
-+     {
-+         .start = IRQ_EINT9,
-+         .end   = IRQ_EINT9,
-+         .flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
-+     }
-+ };
-+ 
-+ /*
-+  * The DM9000 has no eeprom, and it's MAC address is set by
-+  * the bootloader before starting the kernel.
-+  */
-+ static struct dm9000_plat_data smdk2440_dm9k_pdata = 
-+ {
-+ 	.flags        = (DM9000_PLATF_16BITONLY | DM9000_PLATF_NO_EEPROM),
-+ };
-+ 
-+ static struct platform_device smdk2440_device_eth = 
-+ {
-+ 	.name        = &quot;dm9000&quot;,
-+ 	.id      = -1,
-+ 	.num_resources = ARRAY_SIZE(smdk2440_dm9k_resource),
-+ 	.resource  = smdk2440_dm9k_resource,
-+ 	.dev       = {
-+ 		.platform_data   = &amp;smdk2440_dm9k_pdata,
-+ 	},
-+ };
-
-static struct platform_device *smdk2440_devices[] __initdata = {
-	&amp;s3c_device_ohci,
-	&amp;s3c_device_lcd,
-	&amp;s3c_device_wdt,
-	&amp;s3c_device_i2c0,
-	&amp;s3c_device_iis,
-+  	&amp;smdk2440_device_eth,
-};
-
-</code></pre>
-
-<p>Then select the dm9000 support from:<br />
-Device Driver&mdash;-&gt; Network device support -&gt; Ethernet(10 or 100Mbit) &mdash;-&gt; DM9000 support<br />
-Now testing the kernel, you will see the kernel starts with dm9000 support, thus we could use NFS for booting the system.</p>
 
       
     </div>
@@ -2161,8 +2619,17 @@ Now testing the kernel, you will see the kernel starts with dm9000 support, thus
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2171,7 +2638,7 @@ Now testing the kernel, you will see the kernel starts with dm9000 support, thus
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

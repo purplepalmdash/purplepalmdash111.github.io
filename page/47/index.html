@@ -105,6 +105,125 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/10/15/use-openwrt-router-for-lan-forwarding/">Use OpenWRT Router For Lan Forwarding</a>
+      </h1>
+      <span class="post-date">Oct 15, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="usb-ethernet">USB Ethernet</h3>
+
+<p>Insert the USB Ethernet Dongle into the Ubuntu14.04, it will be automatically
+recognized and initialized.</p>
+
+<pre><code>$ dmesg | tail 
+    [10323.307662] asix 2-2.2:1.0 eth1: register 'asix' at usb-0000:00:1d.7-2.2, ASIX
+    AX88772B USB 2.0 Ethernet, 84:xx:xx:xx:xx
+    [10323.307704] usbcore: registered new interface driver asix
+    [10324.285425] IPv6: ADDRCONF(NETDEV_UP): eth1: link is not ready
+$ ifconfig eth1
+    eth1      Link encap:Ethernet  HWaddr 84:xx:xx:xx:
+</code></pre>
+
+<p>Be care to see the udev rules definition:</p>
+
+<pre><code>$ cat /etc/udev/rules.d/70-persistent-net.rules 
+
+# USB device 0x:0x (asix)
+SUBSYSTEM==&quot;net&quot;, ACTION==&quot;add&quot;, DRIVERS==&quot;?*&quot;, ATTR{address}==&quot;84:xx:xx:xx:xx&quot;,
+ATTR{dev_id}==&quot;0x0&quot;, ATTR{type}==&quot;1&quot;, KERNEL==&quot;eth*&quot;, NAME=&quot;eth1&quot;
+</code></pre>
+
+<h3 id="ip-configuration">IP Configuration</h3>
+
+<p>Add the following items into the network configuration file:</p>
+
+<pre><code># vim /etc/network/interfaces 
+    # usb network eth1
+    allow-hotplug eth1
+    iface eth1 inet static
+    address 10.0.80.1
+    netmask 255.255.255.0
+</code></pre>
+
+<p>Now restart the network, to see the ethernet has been enabled.</p>
+
+<h3 id="dhcpd-configuration">DHCPD Configuration</h3>
+
+<p>Add following configuration to the /etc/dhcp/dhcpd.conf:</p>
+
+<pre><code>### this is for USB NET
+
+subnet
+10.0.80.0 netmask 255.255.255.0 {
+# --- default gateway
+option routers
+10.0.80.1;
+# --- Netmask
+option subnet-mask
+255.255.255.0;
+# --- Broadcast Address
+option broadcast-address
+10.0.80.255;
+# --- Domain name servers, tells the clients which DNS servers to use.
+option domain-name-servers
+223.5.5.5,180.76.76.76;
+option time-offset 0;
+range 10.0.80.3 10.0.80.13;
+default-lease-time 1209600;
+max-lease-time 1814400;
+}
+</code></pre>
+
+<h3 id="iptables-and-dhcpd">IPtables and dhcpd</h3>
+
+<p>Add following items into the ~/.config/awesome/rc.lua</p>
+
+<pre><code>autorunApps =
+{
+--.........
+&quot;blueman-manager&quot;,
+&quot;fcitx&quot;,
+&quot;/home/dash/Downloads/what/whatpulse&quot;,
+-- &quot;pidgin&quot;,
+&quot;sudo iptables -t nat -A POSTROUTING -s 10.0.70.0/24 ! -d 10.0.70.0/24  -j MASQUERADE&quot;,
+&quot;sudo iptables -t nat -A POSTROUTING -s 10.0.80.0/24 ! -d 10.0.80.0/24 -j MASQUERADE&quot; 
+&quot;sudo dhcpd wlan0 eth1&quot;,
+</code></pre>
+
+<p>Now everytime we reboot the system, it will automatically start the dhcpd server and
+let OpenWRT as the access Point.</p>
+
+<h3 id="kernel-ipv4-forwarding">Kernel IPV4 Forwarding</h3>
+
+<p>Check the configuration:</p>
+
+<pre><code># sysctl -a | grep forward
+</code></pre>
+
+<p>Enable the forwarding manually:</p>
+
+<pre><code># sysctl net.ipv4.ip_forward=1
+</code></pre>
+
+<p>added it into system startup:</p>
+
+<pre><code># vim /etc/sysctl.d/30-ipforward.conf
+net.ipv4.ip_forward=1
+net.ipv6.conf.default.forwarding=1
+net.ipv6.conf.all.forwarding=1
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/10/14/tips-for-20151014/">Tips For 20151014</a>
       </h1>
       <span class="post-date">Oct 14, 2015 
@@ -1212,100 +1331,6 @@ Define the inventory file, and run reboot command via:
 <h3 id="87-on-building-mesos">87. On building mesos</h3>
 
 <p><a href="http://8941355.blog.51cto.com/8931355/1712426">http://8941355.blog.51cto.com/8931355/1712426</a></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/10/12/tips-on-oz/">Tips On OZ</a>
-      </h1>
-      <span class="post-date">Oct 12, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="reference">Reference</h3>
-
-<p>The reference URL is located at:<br />
-<a href="http://www.chenshake.com/oz-making-centos-mirror/">http://www.chenshake.com/oz-making-centos-mirror/</a></p>
-
-<h3 id="installation">Installation</h3>
-
-<p>On CentOS 7, install oz via:</p>
-
-<pre><code># yum install -y oz
-# rpm -qa | grep oz-
-oz-0.14.0-1.el7.noarch
-</code></pre>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>The configuration file for oz should be configured as:</p>
-
-<pre><code># vim /etc/oz/oz.cfg 
-[paths]
-output_dir = /var/lib/libvirt/images
-data_dir = /var/lib/oz
-screenshot_dir = /var/lib/oz/screenshots
-# sshprivkey = /etc/oz/id_rsa-icicle-gen
-
-[libvirt]
-uri = qemu:///system
-#image_type = raw
-image_type = qcow2
-# type = kvm
-bridge_name = virbr0
-cpus = 1
-memory = 1024
-</code></pre>
-
-<p>The configuration file for the oz should have one tdl file and one kickstart file:</p>
-
-<pre><code># cat centos66.tdl 
-&lt;template&gt;
-   &lt;name&gt;centos_66_x86_64&lt;/name&gt;
-   &lt;description&gt;CentOS 6.6 x86_64 template&lt;/description&gt;
-   &lt;os&gt;
-      &lt;name&gt;CentOS-6&lt;/name&gt;
-      &lt;version&gt;6&lt;/version&gt;
-      &lt;arch&gt;x86_64&lt;/arch&gt;
-      &lt;install type='url'&gt;
-         &lt;url&gt;http://192.168.0.79/ks_mirror/CentOS-6.6-x86_64&lt;/url&gt;
-      &lt;/install&gt;
-   &lt;/os&gt;
-&lt;/template&gt;
-</code></pre>
-
-<p>Be sure the kickstart file should have the same url installtion location:</p>
-
-<pre><code># cat centos6-oz.cfg 
-text
-skipx
-install
-url --url http://192.168.0.79/ks_mirror/CentOS-6.6-x86_64
-repo --name=updates --baseurl=http://192.168.0.79/ks_mirror/CentOS-6.6-x86_64
-lang en_US.UTF-8
-</code></pre>
-
-<h3 id="build-image">Build Image</h3>
-
-<p>Build your own images via:</p>
-
-<pre><code># oz-install -p -u -d1 -a centos6-oz.cfg centos66.tdl
-</code></pre>
-
-<p>Get the images via:</p>
-
-<pre><code>[root@pc134 images]# pwd
-/var/lib/libvirt/images
-[root@pc134 images]# ls -l -h centos_66_x86_64.qcow2
--rw-rw-rw- 1 root root 1015M Oct 12 14:48 centos_66_x86_64.qcow2
-</code></pre>
 
       
     </div>
@@ -2731,8 +2756,17 @@ lang en_US.UTF-8
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2741,7 +2775,7 @@ lang en_US.UTF-8
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

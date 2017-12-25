@@ -105,6 +105,119 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/22/move-spacewalk-server-into-a-new-network/">Move SpaceWalk Server Into A New Network</a>
+      </h1>
+      <span class="post-date">Aug 22, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="env">Env</h3>
+
+<p>Move from one isolated network to another isolated network. Experiment is done on
+virt-manager, from 10.9.10.0/24 to 10.47.58.0/24 network. Following are the steps for
+migration.</p>
+
+<h3 id="steps">Steps</h3>
+
+<p>First shutdown the machine and connect the existing network card to new network, boot
+on the computer.</p>
+
+<p>Modify the ip address(static IP Address):</p>
+
+<pre><code>$ sudo vim /etc/sysconfig/network-scripts/ifcfg-eth0
+- IPADDR=10.9.10.13
+- GATEWAY=10.9.10.1
++ IPADDR=10.47.58.3
++ GATEWAY=10.47.58.1
+</code></pre>
+
+<p>Modify the hostname:</p>
+
+<pre><code># vim /etc/hosts
+- 10.9.10.13      spacewalker
++ 10.47.58.3      spacewalker
+</code></pre>
+
+<p>Modify the dhcpd configuration:</p>
+
+<pre><code>$ sudo vim /etc/dhcp/dhcpd.conf
+#  specify network address and subnet mask
+-  subnet 10.9.10.0 netmask 255.255.255.0 {
+-      # specify the range of lease IP address
+-      range dynamic-bootp 10.9.10.200 10.9.10.254;
+-      # specify broadcast address
+-      option broadcast-address 10.9.10.255;
+-      # specify default gateway
+-      option routers 10.9.10.1;
+-      # Specify default dns server
+-      option domain-name-servers 10.9.10.13;
+-  }
+
++ subnet 10.47.58.0 netmask 255.255.255.0 {
++     # specify the range of lease IP address
++     range dynamic-bootp 10.47.58.200 10.47.58.254;
++     # specify broadcast address
++     option broadcast-address 10.47.58.255;
++     # specify default gateway
++     option routers 10.47.58.1;
++     # Specify default dns server
++     option domain-name-servers 10.47.58.3;
++     filename                   &quot;/pxelinux.0&quot;;       
++     # default-lease-time         21600;           
++     # max-lease-time             43200;      
++     next-server                10.47.58.3; 
++ 
++ }
+</code></pre>
+
+<p>DNS Server Configuration:</p>
+
+<pre><code>$ sudo vim /etc/named.conf
+
+options {
+        - listen-on port 53 { 127.0.0.1; 10.9.10.13;};
+        + listen-on port 53 { 127.0.0.1; 10.47.58.3;};
+//.................
+        
+	- allow-query     { localhost; 10.9.10.0/24;};
+        + allow-query     { localhost; 10.47.58.0/24;};
+</code></pre>
+
+<p>DNS Server DB Change:</p>
+
+<pre><code>$ sudo vim /etc/named/zones/db.spacewalker
+- spacewalker.         IN      A       10.9.10.13
++ spacewalker.         IN      A       10.47.58.3
+</code></pre>
+
+<p>Reboot and check the result:</p>
+
+<pre><code>[root@spacewalker ~]# ps -ef | grep dhcp
+dhcpd      848     1  0 17:02 ?        00:00:00 /usr/sbin/dhcpd -f -cf
+/etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
+root      2208  2186  0 17:03 pts/0    00:00:00 grep --color=auto dhcp
+[root@spacewalker ~]# ps -ef | grep name
+named     1031     1  0 17:02 ?        00:00:00 /usr/sbin/named -u named
+root      2210  2186  0 17:03 pts/0    00:00:00 grep --color=auto name
+[root@spacewalker ~]# hostname --fqdn
+spacewalker
+[root@spacewalker tftpboot]# netstat -anp | grep 69 | grep xinetd
+udp        0      0 0.0.0.0:69              0.0.0.0:*  841/xinetd  
+</code></pre>
+
+<p>Now bootup a machine and add it to the 10.47.58.0/24 network, your machine will be boot
+into pxe menu, thus you could reinstall your machine.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/08/21/mrepo-tips-for-syncing-centos-repositories/">mrepo tips for syncing CentOS repositories</a>
       </h1>
       <span class="post-date">Aug 21, 2015 
@@ -615,39 +728,6 @@ mkdir /var/spool/rhn/
 </code></pre>
 
 <p>Run the scripts then you could easily got system registed into the spacewalk server.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/13/preseed-partition-configuration/">Preseed Partition Configuration</a>
-      </h1>
-      <span class="post-date">Aug 13, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
-        
-      </span>
-      
-      
-
-<h3 id="regular-partition">Regular Partition</h3>
-
-<p>Use regular configuration of the partion:</p>
-
-<pre><code>d-i partman-auto/disk string /dev/vda
-d-i partman-auto/method string regular
-d-i partman-auto/choose_recipe \
-       select All files in one partition (recommended for new users)
-d-i partman/confirm_write_new_label boolean true
-#
-d-i partman/choose_partition \
-       select Finish partitioning and write changes to disk
-d-i partman/confirm boolean true
-d-i partman/confirm_nooverwrite boolean true
-
-</code></pre>
 
       
     </div>
@@ -2073,8 +2153,17 @@ d-i partman/confirm_nooverwrite boolean true
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2083,7 +2172,7 @@ d-i partman/confirm_nooverwrite boolean true
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

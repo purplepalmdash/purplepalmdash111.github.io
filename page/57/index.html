@@ -105,6 +105,91 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/07/04/preseed-file-for-ubuntu1404-in-cobblerserver/">Preseed File For Ubuntu1404 In CobblerServer</a>
+      </h1>
+      <span class="post-date">Jul 4, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="proseed-file">Proseed File</h3>
+
+<pre><code>d-i time/zone string Asia/Shanghai
+
+# Setup the installation source
+d-i mirror/country string manual
+d-i mirror/http/hostname string $http_server
+#d-i mirror/http/directory string $install_source_directory
+d-i mirror/http/directory string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
+d-i mirror/http/proxy string
+d-i apt-setup/security_host string $http_server
+d-i apt-setup/security_path string /cobbler/ks_mirror/Ubuntu-14.04-x86_64/ubuntu
+</code></pre>
+
+<h3 id="local-repository">Local Repository</h3>
+
+<p>In one installed machine, do following for getting the repository of all of the installed packages:</p>
+
+<pre><code>$ sudo apt-get install dselect
+$ dpkg --get-selections | grep -v deinstall&gt;InstalledPackage.txt
+$ awk {'print $1'} InstalledPackage.txt | xargs apt-get download
+</code></pre>
+
+<p>Use nginx for sharing the repository:</p>
+
+<pre><code>$ sudo apt-get install -y nginx
+$ sudo vim /etc/nginx/site-enabled/default
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server ipv6only=on;
+
+        root /var/www/html;
+        index index.html index.htm;
+
+        # Make site accessible from http://localhost/
+        server_name localhost;
+
+        location / {
+                # First attempt to serve request as file, then
+                # as directory, then fall back to displaying a 404.
+                try_files $uri $uri/ =404;
+                autoindex on;
+                # Uncomment to enable naxsi on this location
+$ sudo service nginx restart
+</code></pre>
+
+<p>Now generate the repository server:</p>
+
+<pre><code>$ mkdir -p /var/www/html/amd64
+$ mv /root/Code/*.deb /var/www/html/amd64
+$ cd /var/www/html/
+$ dpkg-scanpackages amd64/ | gzip -9c &gt; amd64/Packages.gz
+$ mv /root/Code/InstalledPackage.txt /var/www/html
+</code></pre>
+
+<h3 id="use-local-repository">Use Local Repository</h3>
+
+<p>Change the repoisoty setting:</p>
+
+<pre><code>root@Ubuntu-14:~# cat /etc/apt/sources.list
+deb http://192.168.1.111 amd64/
+root@Ubuntu-14:~# apt-get update &amp;&amp;  apt-get install -y dselect
+root@Ubuntu-14:~# dselect update
+root@Ubuntu-14:~# wget http://192.168.1.11/InstalledPackage.txt
+root@Ubuntu-14:~# dpkg --set-selections &lt; InstalledPackage.txt &amp;&amp; apt-get -u dselect-upgrade 
+</code></pre>
+
+<p>After updating, you have the same system as your server.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/07/03/try-raid0-installation-on-ubuntu/">Try raid0 installation on Ubuntu</a>
       </h1>
       <span class="post-date">Jul 3, 2015 
@@ -1515,125 +1600,6 @@ $ cobbler signature update
 <pre><code># cobbler get-loaders --force
 # cobbler sync
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/23/import-more-isos-in-cobbler/">Import More ISOs in Cobbler</a>
-      </h1>
-      <span class="post-date">Jun 23, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="ubuntu12-04">Ubuntu12.04</h3>
-
-<p>Since you have the iso files, import it via:</p>
-
-<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop /mnt/iso/ubuntu-12.04.3-server-amd64.iso /mnt1
-[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
-[root@CobblerServer iso]# cobbler profile list
-   CentOS-7-x86_64
-   Ubuntu-12.04-x86_64
-   Ubuntu14.04-x86_64
-</code></pre>
-
-<p>To make it quickly deployment, visit:<br />
-<a href="http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/">http://purplepalmdash.github.io/blog/2015/05/18/my-configuration-on-cobbler-for-deploying-ubuntu12-dot-04/</a></p>
-
-<p>Edit its profile like following:</p>
-
-<pre><code>[root@CobblerServer kickstarts]# cobbler profile edit --name=Ubuntu-12.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1204.seed 
-</code></pre>
-
-<p>Create a new virtual machine for testing.</p>
-
-<pre><code>[root@CobblerServer kickstarts]# cobbler system add --name=test1204 --profile=Ubuntu-12.04-x86_64 --mac=52:54:00:e4:2c:df --interface=eth0 --ip-address=10.3.3.33 --hostname=test1204 --gateway=10.3.3.1 --dns-name=test1204
-</code></pre>
-
-<p>Testing the tftpserver via:</p>
-
-<pre><code>[dash@~]$ tftp 10.3.3.3   
-tftp&gt; get /pxelinux.0
-tftp&gt; quit
-[dash@~]$ ls pxelinux.0 
-pxelinux.0
-</code></pre>
-
-<p>Trouble-Shooting, you should very careful on your pxelinux.0 file, make sure you have the correct ones. Recently it&rsquo;s hard to get the right pxelinux.0 from cobbler loader sync.</p>
-
-<h3 id="ubuntu15-04">Ubuntu15.04</h3>
-
-<p>Import the iso via:</p>
-
-<pre><code>[root@CobblerServer iso]# mount -t iso9660 -o loop ./ubuntu-15.04-server-amd64.iso /mnt1/
-[root@CobblerServer iso]# cobbler import --name=Ubuntu-15.04 --arch=x86_64 --path=/mnt1
-</code></pre>
-
-<p>Notice, here you will met Signature mismatch problem, do following:<br />
-First update Cobbler: ?</p>
-
-<pre><code>$ vim /etc/yum.repos.d/cobbler26.repo
-[home_libertas-ict_cobbler26]
-name=Cobbler (2.6.x) (CentOS_CentOS-6)
-type=rpm-md
-baseurl=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/
-gpgcheck=1
-gpgkey=http://download.opensuse.org/repositories/home:/libertas-ict:/cobbler26/CentOS_CentOS-6/repodata/repomd.xml.key
-enabled=1
-$ sudo yum install -y cobbler cobbler-web
-</code></pre>
-
-<p>And Trouble-Shooting for iptables(If you use redsocks):</p>
-
-<pre><code># iptables -t nat -I OUTPUT -d 10.3.3.0/24 -j RETURN
-</code></pre>
-
-<p>Then signature update will OK:</p>
-
-<pre><code>[root@CobblerServer redsocks]# cobbler signature update
-task started: 2015-06-23_144247_sigupdate
-task started (id=Updating Signatures, time=Tue Jun 23 14:42:47 2015)
-Successfully got file from http://cobbler.github.com/signatures/2.6.x/latest.json
-*** TASK COMPLETE ***
-
-</code></pre>
-
-<p>Re-import:</p>
-
-<pre><code>[root@CobblerServer iso]# cobbler import --name=Ubuntu-12.04 --arch=x86_64 --path=/mnt1/
-*** TASK COMPLETE ***
-[root@CobblerServer mnt]# cobbler profile list
-   CentOS-7-x86_64
-   Ubuntu-12.04-x86_64
-   Ubuntu-15.04-x86_64
-   Ubuntu14.04-x86_64
-</code></pre>
-
-<p>Edit the profile via:</p>
-
-<pre><code>[root@CobblerServer lib]# cd /var/lib/cobbler/kickstarts/
-[root@CobblerServer kickstarts]# ls
-default.ks    esxi5-ks.cfg      legacy.ks     sample_autoyast.xml  sample_esx4.ks   sample_esxi5.ks  sample_old.seed  ubuntu1204.seed
-esxi4-ks.cfg  install_profiles  pxerescue.ks  sample_end.ks        sample_esxi4.ks  sample.ks        sample.seed
-[root@CobblerServer kickstarts]# vim ubuntu1504.seed
-</code></pre>
-
-<p>Test it via:</p>
-
-<pre><code>$ qemu-img create -f qcow2 Cobbler1504Test.qcow2 100G
-$ cobbler profile edit --name=Ubuntu-15.04-x86_64 --kickstart=/var/lib/cobbler/kickstarts/ubuntu1504.seed
-$  cobbler system add --name=test1504 --profile=Ubuntu-15.04-x86_64 --mac=52:54:00:2e:c0:ff --interface=eth0 --ip-address=10.3.3.34 --hostname=test1504 --gateway=10.3.3.1 --dns-name=test1504
-
-</code></pre>
-
-<p>Installed failed, verify it tomorrow.</p>
 
       
     </div>
@@ -3059,8 +3025,17 @@ $  cobbler system add --name=test1504 --profile=Ubuntu-15.04-x86_64 --mac=52:54:
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -3069,7 +3044,7 @@ $  cobbler system add --name=test1504 --profile=Ubuntu-15.04-x86_64 --mac=52:54:
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

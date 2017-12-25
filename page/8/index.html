@@ -105,6 +105,185 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/07/02/workingtipsondockerdeployment/">WorkingTipsOnDockerDeployment</a>
+      </h1>
+      <span class="post-date">Jul 2, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="问题背景">问题背景</h3>
+
+<p>针对某公司现有的混乱的发布、部署流程提出的一种基于Docker的应用程序部署方案。</p>
+
+<h3 id="架构">架构</h3>
+
+<p>物理机+Docker运行环境+Docker-Compose编排+Docker镜像+Ansible自动化配置框架，达到<code>开箱即用</code>的快速部署目的。</p>
+
+<h3 id="准备">准备</h3>
+
+<h4 id="vagrantbox基础环境">Vagrantbox基础环境</h4>
+
+<p>Vagrantbox基于Ubuntu Xenial(16.04), 在其上安装了docker, docker-compose:</p>
+
+<pre><code># sudo apt-get update -y
+# curl -sSL http://acs-public-mirror.oss-cn-hangzhou.aliyuncs.com/docker-engine/test/internet | sh
+# sudo apt-get install docker-compose
+</code></pre>
+
+<p>由此构建的vagrant包含了docker运行所需要的最小条件，也就是基于最小条件，我们可以部署预定义好的docker服务。达到&rdquo;开箱即用&rdquo;的目的。</p>
+
+<p>可以通过<code>vagrant package</code>打包我们建立好的vagrant环境,
+由此生成的<code>vagrant.box</code>可以用于新建环境的分发.</p>
+
+<h4 id="测试代码">测试代码</h4>
+
+<p>基于<code>docker-haproxy-nginx</code>,
+这个工程将建立一个nginx与haproxy协同作用的web集群，haproxy在本机的8080端口创建服务，将服务分别转发到后端的nginx1/nginx2/nginx3服务器，我们基于此测试代码构建我们的服务框架:</p>
+
+<pre><code># git clone git://github.com/kakakakakku/docker-haproxy-nginx.git
+</code></pre>
+
+<p>为模拟离线部署，手动pull回对应的docker镜像并保存之:</p>
+
+<pre><code># sudo docker pull haproxy:1.6.4-alpine
+# sudo docker pull nginx:stable-alpine
+# sudo docker save haproxy:1.6.4-alpine&gt;haproxy.tar
+# sudo docker save nginx:stable-alpine&gt;nginx.tar
+</code></pre>
+
+<h4 id="ansible部署脚本">ansible部署脚本</h4>
+
+<p>ansible部署脚本用于自动执行环境配置，在准备好基础环境和测试代码、对应的docker镜像后，我们将对应撰写相应的ansible-playbook，
+用于完成一键部署。</p>
+
+<h3 id="手动部署流程">手动部署流程</h3>
+
+<p>创建基于我们前面制作好的vagrantbox的虚拟机，给定一个新的IP地址，例如<code>192.168.33.201</code>:</p>
+
+<pre><code># mkdir testdockerdeployment
+# cd testdockerdeployment
+# vagrant init Xenial64DockerCompose
+# vim Vagrantfile
+  config.vm.network &quot;private_network&quot;, ip: &quot;192.168.33.201&quot;
+# vagrant up
+# vagrant ssh
+</code></pre>
+
+<p>手动添加两个docker镜像:</p>
+
+<pre><code># docker load&lt;haproxy.tar
+# docker load&lt;nginx.tar
+</code></pre>
+
+<p>开始服务:</p>
+
+<pre><code># docker-compose up
+# ./requests.sh
+</code></pre>
+
+<h3 id="与gitlab集成">与gitlab集成</h3>
+
+<p>在gitlab中创建一个公有的仓库, 用于存放自动化配置:</p>
+
+<p><img src="/images/2017_07_02_14_54_11_689x634.jpg" alt="/images/2017_07_02_14_54_11_689x634.jpg" /></p>
+
+<p>在仓库下添加用于本地任务的<code>local.yml</code>:</p>
+
+<pre><code># vim local.yml
+---
+- hosts: 127.0.0.1
+
+  tasks:
+
+  - name: update docker compose
+    shell: echo &quot;update docker compose&quot;&gt;&gt;/tmp/docker.log
+    notify: restart docker compose
+
+  handlers:
+
+  - name: restart docker compose
+    shell: /home/vagrant/.local/bin/docker-compose -f /var/lib/ansible/local/docker-compose.yml stop &amp;&amp; /home/vagrant/.local/bin/docker-compose -f /var/lib/ansible/local/docker-compose.yml build &amp;&amp; /home/vagrant/.local/bin/docker-compose -f /var/lib/ansible/local/docker-compose.yml up -d
+</code></pre>
+
+<p>指定作用范围:</p>
+
+<pre><code>[localhost]
+127.0.0.1
+</code></pre>
+
+<p>通过ansible-pull来执行该仓库的定义如下:</p>
+
+<pre><code># root ansible-pull -i /var/lib/ansible/local/inventory.ini -d /var/lib/ansible/local -U http://root@192.168.33.2/root/centraladmin_docker.git -o
+</code></pre>
+
+<h3 id="自动化">自动化</h3>
+
+<p>自动化主要通过crontab来执行。</p>
+
+<pre><code># vim /etc/cron.d/dockercompose-startup
+@reboot /home/vagrant/.local/bin/docker-compose -f /var/lib/ansible/local/docker-compose.yml up -d
+# vim /etc/cron.d/ansible-pull
+*/3 * * * * root ansible-pull -i /var/lib/ansible/local/inventory.ini -d /var/lib/ansible/local -U http://root@192.168.33.2/root/centraladmin_docker.git -o &gt;&gt;/var/log/ansible-pull.log 2&gt;&amp;1
+
+</code></pre>
+
+<h3 id="自动配置crontab">自动配置crontab</h3>
+
+<p>通过下面的ansible task来配置:</p>
+
+<pre><code># vim local_ansible_pull.yml
+---
+
+- hosts: 127.0.0.1
+  sudo: yes
+  #remote_user: root
+
+  vars:
+
+    # schedule is fed directly to cron
+    schedule: '*/3 * * * *'
+
+    # User to run ansible-pull as from cron
+    cron_user: root
+
+    # File that ansible will use for logs
+    logfile: /var/log/ansible-pull.log
+
+    # Directory to where repository will be cloned
+    workdir: /var/lib/ansible/local
+
+    # Repository to check out -- YOU MUST CHANGE THIS
+    # repo must contain a local.yml file at top level
+    repo_url: http://root@192.168.33.2/root/centraladmin_docker.git
+
+  tasks:
+
+    - name: Install ansible
+      apt: pkg=ansible state=installed
+
+    - name: Create local directory to work from
+      file: path={{workdir}} state=directory owner=root group=root mode=0751
+
+    - name: Create crontab entry to clone/pull git repository
+      template: src=templates/etc_cron.d_ansible-pull.j2 dest=/etc/cron.d/ansible-pull owner=root group=root mode=0644
+
+    - name: Create crontab entry to start docker-compose at startup
+      template: src=templates/etc_cron.d_dockercompose.j2 dest=/etc/cron.d/dockercompose-start owner=root group=root mode=0644
+
+    - name: Create logrotate entry for ansible-pull.log
+      template: src=templates/etc_logrotate.d_ansible-pull.j2 dest=/etc/logrotate.d/ansible-pull owner=root group=root mode=0644
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/06/30/workingtipsonansiblepull/">WorkingTipsOnAnsiblePull</a>
       </h1>
       <span class="post-date">Jun 30, 2017 
@@ -533,141 +712,6 @@ rm -rf $RPM_BUILD_ROOT
 </code></pre>
 
 <p>Binary files packaging using rpm is also very easy to adapt.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/06/20/%E5%88%9B%E5%BB%BArhelvagrantbox/">创建RHELVagrantBox</a>
-      </h1>
-      <span class="post-date">Jun 20, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="背景">背景</h3>
-
-<p>调研RHEL6.5, 为了在vagrant环境中验证我们的修改，故创建该系统的vagrant box</p>
-
-<h3 id="准备">准备</h3>
-
-<p>Virtualbox 5.1.22 r115126, vagrant 1.9.1, CentOS 7.3(host机器)<br />
-创建一台虚拟机，配置如下:</p>
-
-<pre><code>内存: 512 m
-网卡: NAT, port forward: 2223 -&gt; 22
-硬盘: 40 G
-声卡: 禁用
-</code></pre>
-
-<p>用RHEL 6.5的ISO安装系统，安装完毕之后，将自动重启。</p>
-
-<h3 id="配置">配置</h3>
-
-<p>激活网络，通过配置<code>/etc/sysconfig/network-scripts/ifcfg-eth0</code>,
-设置为<code>boot=yes</code>.</p>
-
-<p>安装完毕后，依然插入RHEL 6.5 ISO, 将其挂载到/mnt目录，并配置本地安装源:</p>
-
-<pre><code># mount /dev/sr0 /mnt
-# vim /etc/yum.repos.d/local.repo
-[local]
-name=local
-baseurl=file:///mnt
-enabled=1
-gpgcheck=0
-# yum makecache&amp;&amp;yum install -y vim kernel-devel gcc bzip2
-</code></pre>
-
-<p>添加vagrant用户:</p>
-
-<pre><code># useradd -m vagrant
-# passwd vagrant
-</code></pre>
-
-<p>添加<code>vagrant</code>用户到visudo:</p>
-
-<pre><code># visudo 
-vagrant ALL=(ALL)	NOPASSWD:ALL
-Defaults:vagrant	!requiretty
-</code></pre>
-
-<p>if you have make vagrant to be the member of <code>%wheel</code>, be sure to add
-nopassword for this group.</p>
-
-<p>预置ssh-key:</p>
-
-<pre><code># mkdir -p /home/vagrant/.ssh
-# chmod 0700 /home/vagrant/.ssh
-# wget --no-check-certificate \
-    https://raw.github.com/mitchellh/vagrant/master/keys/vagrant.pub \
-    -O /home/vagrant/.ssh/authorized_keys
-# chmod 0600 /home/vagrant/.ssh/authorized_keys
-# chown -R vagrant /home/vagrant/.ssh
-</code></pre>
-
-<p>配置ssh登录:</p>
-
-<pre><code># vim /etc/ssh/sshd_config
-AuthorizedKeysFile .ssh/authorized_keys
-</code></pre>
-
-<h3 id="vboxadditional-iso">VBoxAdditional iso</h3>
-
-<p>在虚拟机的界面上点击<code>Device -&gt; Install Guest Additional CD image</code>， 而后:</p>
-
-<pre><code># mount /dev/sr0 /mnt
-# cd /mnt
-# ./VBoxLinuxAdditions.run
-</code></pre>
-
-<h3 id="压缩">压缩</h3>
-
-<p>使用dde命令清除空余空间:</p>
-
-<pre><code># dd if=/dev/zero of=/EMPTY bs=1M &amp;&amp; rm -f /EMPTY
-# shutdown -h now
-</code></pre>
-
-<p>形成rhel vagrant包:</p>
-
-<pre><code># vagrant package --base rhelbox
-</code></pre>
-
-<h3 id="测试">测试</h3>
-
-<p>安装镜像文件:</p>
-
-<pre><code># vagrant box add package.box --name &quot;rhel65&quot;
-# vagrant init rhel65
-# vagrant up
-</code></pre>
-
-<h3 id="centos7">CentOS7</h3>
-
-<p>First you have to copy <code>/etc/sysconfig/network-scripts/ifcfg-enp0sxxx</code> to
-<code>/etc/sysconfig/network-scripts/ifcfg-eth0</code>, and edit its configuration by
-replacing <code>enp0sx</code> to <code>eth0</code>, then you have to edit the grub configuration for
-naming from <code>enp0sx</code> to <code>eth0</code>:</p>
-
-<pre><code>Edit your /etc/default/grub. Change the line from
-GRUB_CMDLINE_LINUX=&quot;&quot;
-to
-GRUB_CMDLINE_LINUX=&quot;net.ifnames=0 biosdevname=0&quot;
-</code></pre>
-
-<p>Finally you make the new configuration for grub2:</p>
-
-<pre><code># grub2-mkconfig -o /boot/grub2/grub.cfg
-</code></pre>
-
-<p>if you have make vagrant to be the member of <code>%wheel</code>, be sure to add
-nopassword for this group.</p>
 
       
     </div>
@@ -2093,8 +2137,17 @@ nopassword for this group.</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2103,7 +2156,7 @@ nopassword for this group.</p>
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

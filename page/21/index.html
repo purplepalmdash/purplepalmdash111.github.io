@@ -105,6 +105,434 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/11/28/runwordpressonminikube/">RunWordPressOnMinikube</a>
+      </h1>
+      <span class="post-date">Nov 28, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="installation">Installation</h3>
+
+<p>On Ubuntu16.04, first download the deb package from</p>
+
+<p><a href="https://github.com/kubernetes/minikube/releases">https://github.com/kubernetes/minikube/releases</a></p>
+
+<p>Install virtualbox:</p>
+
+<pre><code>$ sudo apt-get install -y virtualbox
+$ sudo dpkg -i minikube_0.12-2.deb
+$ which minikube-linux-amd64 
+/usr/bin/minikube-linux-amd64
+</code></pre>
+
+<h3 id="start-cluster">Start Cluster</h3>
+
+<p>First install kubectl:</p>
+
+<pre><code>$ curl -Lo kubectl \
+https://storage.googleapis.com/kubernetes-release/release/v1.3.0/bin/linux/amd64/kubectl \
+&amp;&amp; chmod +x kubectl &amp;&amp; sudo mv kubectl /usr/local/bin/
+</code></pre>
+
+<p>Start kubernetes cluster via:</p>
+
+<pre><code>$ minikube-linux-amd64 start
+Starting local Kubernetes cluster...
+Downloading Minikube ISO
+ 36.00 MB / 36.00 MB [==============================================] 100.00%
+0s
+Kubectl is now configured to use the cluster.
+</code></pre>
+
+<p>Examine the result:</p>
+
+<pre><code>$ kubectl get pods --all-namespaces
+NAMESPACE     NAME                          READY     STATUS RESTARTS   AGE
+kube-system   kube-addon-manager-minikube   0/1       ContainerCreating   0	1m
+</code></pre>
+
+<p>Examine the status:</p>
+
+<pre><code>$ minikube-linux-amd64 status
+minikubeVM: Running
+localkube: Running
+</code></pre>
+
+<p>View add-on lists:</p>
+
+<pre><code>$ minikube addons list
+- heapster: disabled
+- ingress: disabled
+- registry-creds: disabled
+- addon-manager: enabled
+- dashboard: enabled
+- kube-dns: enabled
+</code></pre>
+
+<p>Trouble-Shooting:<br />
+When getting following error msgs, delete <code>~/.minikube</code> and run <code>minikube
+start</code> again solves the problem.</p>
+
+<pre><code>~$ minikube start
+Starting local Kubernetes cluster...
+E0224 15:08:58.755236    7977 start.go:107] Error starting host: Error getting state for host: machine does not exist.
+</code></pre>
+
+<h3 id="minikube-upgrade">minikube upgrade</h3>
+
+<p>Upgrade minikube in ubuntu by installing the newest deb package.</p>
+
+<p>Upgrade minikube in ArchLinux by <code>yaourt -S minikube</code>, then <code>minikube start</code>
+will use the newest version.</p>
+
+<h3 id="trouble-shooting-in-dashboard">Trouble-Shooting In Dashboard</h3>
+
+<p>When startup the dashboard, the minikube will complains could not find the endpoint:</p>
+
+<pre><code>$ minikube-linux-amd64 dashboard
+Could not find finalized endpoint being pointed to by kubernetes-dashboard: Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
+Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
+Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
+Temporary Error: endpoints &quot;kubernetes-dashboard&quot; not found
+</code></pre>
+
+<p>Solved:<br />
+Get all of the pods in all namespaces:</p>
+
+<pre><code>$ kubectl get pods --all-namespaces
+NAMESPACE     NAME                          READY     STATUS              RESTARTS   AGE
+default       nginx-3449338310-vna7q        0/1       ContainerCreating   0          2h
+kube-system   kube-addon-manager-minikube   0/1       ContainerCreating   0          3h
+</code></pre>
+
+<p>Get the description of the pod <code>kube-addon-manager-minikube</code>:</p>
+
+<pre><code>$ kubectl describe --namespace=kube-system po kube-addon-manager-minikube
+Name:		kube-addon-manager-minikube
+Namespace:	kube-system
+Node:		minikube/192.168.99.100
+Start Time:	Mon, 28 Nov 2016 12:17:40 +0800
+Labels:		component=kube-addon-manager
+		version=v5.1
+Status:		Pending
+IP:		192.168.99.100
+Controllers:	&lt;none&gt;
+Containers:
+  kube-addon-manager:
+    Container ID:	
+    Image:		gcr.io/google-containers/kube-addon-manager:v5.1
+    Image ID:		
+    Port:		
+    Requests:
+      cpu:			5m
+      memory:			50Mi
+    State:			Waiting
+      Reason:			ContainerCreating
+    Ready:			False
+    Restart Count:		0
+    Environment Variables:	&lt;none&gt;
+Conditions:
+  Type		Status
+  Initialized 	True 
+  Ready 	False 
+  PodScheduled 	True 
+Volumes:
+  addons:
+    Type:	HostPath (bare host directory volume)
+    Path:	/etc/kubernetes/
+QoS Tier:	Burstable
+No events.
+</code></pre>
+
+<p>Then manually download the docker images of
+<code>gcr.io/google-containers/kube-addon-manager:v5.1</code>, load it via following command:</p>
+
+<pre><code>$ eval $(minikube-linux-amd64 docker-env)
+$ docker load&lt;kubeaddonmanagerv51.tar.bz2 
+</code></pre>
+
+<p>Also the default nginx-3449338310-vna7q is failed, use the same method for manually download
+the pause image and load it into the docker system:</p>
+
+<pre><code>$ eval $(minikube-linux-amd64 docker-env)
+$ docker load&lt;kubepause30.tar.bz2
+</code></pre>
+
+<p>Also load the dns:</p>
+
+<pre><code>$ eval $(minikube-linux-amd64 docker-env)
+$ docker load&lt;kubedns18.tar.bz2
+</code></pre>
+
+<h3 id="wordpress-installation">Wordpress Installation</h3>
+
+<p>Refers to :</p>
+
+<p><a href="https://www.linux-toys.com/?p=887">https://www.linux-toys.com/?p=887</a></p>
+
+<p>Download yaml file:</p>
+
+<pre><code>$ wget https://gist.githubusercontent.com/rusher81572/ddf2e1487b609f294b21a2463a8be104/raw/1ba33c7a2dfbef9118c6043030b76babb0a80c7b/wordpress-k8s -O wordpress.yaml
+$ sudo docker pull rusher81572/phpfpm
+$ sudo docker pull rusher81572/mysql
+$ sudo docker pull rusher81572/nginx
+</code></pre>
+
+<p>Create the services from yaml file:</p>
+
+<pre><code>$ kubectl create -f wordpress.yaml
+$ minikube-linux-amd64 service nginx --url
+http://192.168.99.100:32400
+</code></pre>
+
+<p>Open the url in your browser:</p>
+
+<p><img src="/images/2016_11_28_17_24_10_527x489.jpg" alt="/images/2016_11_28_17_24_10_527x489.jpg" /></p>
+
+<p>Manually create the database named <code>wordpress</code>:</p>
+
+<pre><code>$ kubectl get pods (To find the Mysql pod name)
+$ kubectl exec -it mysql-qe900 bash
+$ mysql
+$ create database wordpress;
+</code></pre>
+
+<p>Insert the following items in webpage:</p>
+
+<pre><code>Username: root
+Password: sql
+Database Name: wordpress
+Database Host: mysql
+</code></pre>
+
+<p>After installation, now refresh the webpage you will see the installed wordpress.</p>
+
+<h3 id="echo-server">Echo Server</h3>
+
+<p>First download the image and load it into the minikube VM:</p>
+
+<pre><code>$ docker pull gcr.io/google_containers/echoserver:1.4
+$ kubectl run hello-minikube --image=gcr.io/google_containers/echoserver:1.4 \
+--hostport=8000 --port=8080 
+$ kubectl get pod
+NAME                              READY     STATUS    RESTARTS   AGE
+hello-minikube-3383150820-x72om   1/1       Running   0          1m
+</code></pre>
+
+<p>You could use <code>kubectl describe pod hellxxxx</code> for displaying the detailed
+info.</p>
+
+<p>Test echo server:</p>
+
+<pre><code># curl $(minikube service hello-minikube --url) --data &quot;param1=value1&quot;
+CLIENT VALUES:
+client_address=172.17.0.1
+command=POST
+real path=/
+query=nil
+request_version=1.1
+request_uri=http://192.168.99.101:8080/
+
+SERVER VALUES:
+server_version=nginx: 1.10.0 - lua: 10001
+
+HEADERS RECEIVED:
+accept=*/*
+content-length=13
+content-type=application/x-www-form-urlencoded
+host=192.168.99.101:32520
+user-agent=curl/7.51.0
+BODY:
+param1=value1%                                        
+</code></pre>
+
+<p>Or use nmap for scan all of the ports:</p>
+
+<pre><code>$ nmap 192.168.99.101
+
+Starting Nmap 7.31 ( https://nmap.org ) at 2016-11-28 22:09 CST
+Nmap scan report for 192.168.99.101
+Host is up (0.0043s latency).
+Not shown: 996 closed ports
+PORT      STATE SERVICE
+22/tcp    open  ssh
+8000/tcp  open  http-alt
+8443/tcp  open  https-alt
+30000/tcp open  ndmps
+</code></pre>
+
+<p>8000 port is the port listening for, testing this port:</p>
+
+<pre><code>$  curl http://192.168.99.101:8000 --data &quot;param1=value1&quot;
+CLIENT VALUES:
+client_address=192.168.99.1
+command=POST
+real path=/
+query=nil
+request_version=1.1
+request_uri=http://192.168.99.101:8080/
+
+SERVER VALUES:
+server_version=nginx: 1.10.0 - lua: 10001
+
+HEADERS RECEIVED:
+accept=*/*
+content-length=13
+content-type=application/x-www-form-urlencoded
+host=192.168.99.101:8000
+user-agent=curl/7.51.0
+BODY:
+param1=value1% 
+</code></pre>
+
+<h3 id="deployment-using-dashboard">Deployment Using dashboard</h3>
+
+<p>Specify the namespace:<br />
+<img src="/images/2016_11_29_10_35_29_283x454.jpg" alt="/images/2016_11_29_10_35_29_283x454.jpg" /></p>
+
+<p><img src="/images/2016_11_29_10_35_37_205x403.jpg" alt="/images/2016_11_29_10_35_37_205x403.jpg" /></p>
+
+<p>Create app name:</p>
+
+<pre><code>App name: hello-yang
+Container Image: gcr.io/google_containers/echoserver:1.4
+Number of pods: 5
+Service: External
+Port: 8080  Target port: 8080  Protocol: TCP
+</code></pre>
+
+<p>After deployment, examine the result via:</p>
+
+<pre><code>➜  ~ kubectl get namespace
+NAME            STATUS    AGE
+default         Active    14h
+devops-meetup   Active    13h
+kube-system     Active    14h
+➜  ~ kubectl get deployment --namespace=&quot;devops-meetup&quot;
+NAME         DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+hello-yang   5         5         5            5           24m
+</code></pre>
+
+<p>Delete the deployment via:</p>
+
+<pre><code># kubectl delete deployment hello-yang --namespace=&quot;devops-meetup&quot;
+deployment &quot;hello-yang&quot; deleted
+</code></pre>
+
+<h3 id="deployment-using-yaml">Deployment Using yaml</h3>
+
+<p>Download the yaml file:</p>
+
+<pre><code>$  wget
+https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/guestbook/all-in-one/guestbook-all-in-one.yaml
+$ vim guestbook-all-in-one.yaml
+  # type: LoadBalancer
+  type: LoadBalancer
+</code></pre>
+
+<p>Create the service via:</p>
+
+<pre><code>$ kubectl create -f guestbook-all-in-one.yaml
+</code></pre>
+
+<p>Get the service and view the result:</p>
+
+<pre><code>➜  ~ kubectl get services
+NAME           CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
+frontend       10.0.0.164   &lt;pending&gt;     80/TCP     15m
+kubernetes     10.0.0.1     &lt;none&gt;        443/TCP    15h
+redis-master   10.0.0.100   &lt;none&gt;        6379/TCP   15m
+redis-slave    10.0.0.14    &lt;none&gt;        6379/TCP   15m
+➜  ~ minikube service frontend --url
+http://192.168.99.101:30640
+</code></pre>
+
+<p>Then open the browser and view the result.</p>
+
+<p><img src="/images/2016_11_29_11_31_56_375x301.jpg" alt="/images/2016_11_29_11_31_56_375x301.jpg" /></p>
+
+<h3 id="tips">Tips</h3>
+
+<p>Login to minikube VM:</p>
+
+<pre><code>$ minikube-linux-amd64 ssh
+</code></pre>
+
+<p>View minikube dashboard URL:</p>
+
+<pre><code>$ minikube-linux-amd64 dashboard --url
+http://192.168.99.100:30000
+</code></pre>
+
+<p>View minikube service URL:</p>
+
+<pre><code>$ minikube-linux-amd64 service nginx --url
+http://192.168.99.100:32400
+</code></pre>
+
+<p>Delete pod in terminating status in force:</p>
+
+<pre><code># kubectl delete pod mypod --grace-period=0
+</code></pre>
+
+<p>Using kubectl proxy:</p>
+
+<pre><code>$ kubectl proxy --port=8001
+Starting to serve on localhost:8001
+</code></pre>
+
+<p>Now visit: <code>http://localhost:8001/ui</code> for accessing the dashboard.</p>
+
+<p>wide output:</p>
+
+<pre><code>$ kubectl get pods -o wide
+NAME       READY     STATUS    RESTARTS   AGE       IP           NODE
+hugoblog   1/1       Running   2          22h       172.17.0.4   minikube
+$ kubectl get pods        
+NAME       READY     STATUS    RESTARTS   AGE
+hugoblog   1/1       Running   2          22h
+</code></pre>
+
+<p>Create deployment command:</p>
+
+<pre><code># kubectl run my-nginx --image=nginx --replicas=2 --port=808 --expose
+</code></pre>
+
+<p>so if you want to delete all of the pods, simply delete:</p>
+
+<pre><code># kubectl delete deployments my-nginx
+</code></pre>
+
+<p>Prevent image pull in json definition files(take zookeeper.json for example):</p>
+
+<pre><code>$ cat zookeeper.json
+{
+  &quot;kind&quot;: &quot;Pod&quot;,
+  &quot;apiVersion&quot;: &quot;v1&quot;,
+  &quot;metadata&quot;: {
+    &quot;name&quot;: &quot;zookeeper&quot;,
+    &quot;labels&quot;: {
+      &quot;name&quot;: &quot;zookeeper&quot;
+    }
+  },
+  &quot;spec&quot;: {
+    &quot;containers&quot;: [
+      {
+        &quot;name&quot;: &quot;zookeeper&quot;,
+        &quot;image&quot;: &quot;mattf/zookeeper:latest&quot;,
+	&quot;imagePullPolicy&quot;: &quot;IfNotPresent&quot;,
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/11/26/workingtipsonkubernetes/">WorkingTipsOnKubernetes</a>
       </h1>
       <span class="post-date">Nov 26, 2016 
@@ -688,126 +1116,6 @@ bootloader = &quot;/usr/lib/xen-4.6/bin/pygrub&quot;
 <p><img src="/images/2016_11_20_21_14_11_927x684.jpg" alt="/images/2016_11_20_21_14_11_927x684.jpg" /></p>
 
 <p>正所谓&rdquo;一年无日不看花，四面有山皆入画&rdquo;，哈哈哈哈。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/11/19/sometipsonansible/">SomeTipsOnAnsible</a>
-      </h1>
-      <span class="post-date">Nov 19, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>In this series I will collect some of the tips in using ansible for playing
-automation deployment.</p>
-
-<h3 id="co-operation-with-vagrant-ssh">co-operation with vagrant ssh</h3>
-
-<p>Method: In inventory file, add vagrant&rsquo;s ssh key.<br />
-First you should get the ssh indentity file via:</p>
-
-<pre><code>$ vagrant ssh-config | grep IdentityFile
-# result should be your private key and not
-#   .vagrant/machines/default/virtualbox/private_key
-</code></pre>
-
-<p>Add these file definition into your inventory file:</p>
-
-<pre><code>[master]
-192.168.33.17 ansible_ssh_port=22 ansible_ssh_user=vagrant ansible_ssh_private_key_file=/var1/Nov14/test/.vagrant/machines/master/virtualbox/private_key
-
-[node1]
-192.168.33.18 ansible_ssh_port=22 ansible_ssh_user=vagrant ansible_ssh_private_key_file=/var1/Nov14/test/.vagrant/machines/node1/virtualbox/private_key
-</code></pre>
-
-<p>now you will use vagrant and its indentity file for accessing the nodes.</p>
-
-<h3 id="ignore-ssh-authenticity">Ignore ssh authenticity</h3>
-
-<p>Make a file named <code>ansible.cfg</code> under your deployment folder:</p>
-
-<pre><code>$ vim ansible.cfg
-[defaults]
-host_key_checking = False
-</code></pre>
-
-<p>Or use the environment variables for deploying:</p>
-
-<pre><code>$ ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory testall.yml
-</code></pre>
-
-<h3 id="become-method">become method</h3>
-
-<p>The usage of <code>sudo</code> is not be encouraged for using, instead we use:</p>
-
-<pre><code>- hosts: all
-  become: true
-  become_user: root
-  gather_facts: no
-  remote_user: vagrant
-</code></pre>
-
-<h3 id="touch-method">touch method</h3>
-
-<p>To make sure the file is touched, before we use <code>touch somefile</code>, now we use:</p>
-
-<pre><code>  tasks:
-    - name: touch something in the /tmp
-      file: path=/tmp/abc.txt state=touch
-</code></pre>
-
-<h3 id="specify-the-username-password">Specify the username/password</h3>
-
-<p>Edit the inventory file:</p>
-
-<pre><code>[all:vars]
-ansible_connection=ssh
-ansible_ssh_user=vagrant
-ansible_ssh_pass=vagrant
-</code></pre>
-
-<h3 id="ping-all-of-the-nodes">Ping all of the nodes</h3>
-
-<p>via:</p>
-
-<pre><code>$ ansible all -m ping -i inventory
-</code></pre>
-
-<h3 id="change-the-default-gw">Change the default gw</h3>
-
-<p>Add following scripts into the Vagrantfile:</p>
-
-<pre><code>  # default router
-  config.vm.provision &quot;shell&quot;,
-    run: &quot;always&quot;,
-    inline: &quot;route add default gw 192.168.0.176&quot;
-
-  # default router ipv6
-  #config.vm.provision &quot;shell&quot;,
-  #  run: &quot;always&quot;,
-  #  inline: &quot;route -A inet6 add default gw fc00::1 eth1&quot;
-
-  # delete default gw on eth0
-  config.vm.provision &quot;shell&quot;,
-    run: &quot;always&quot;,
-    inline: &quot;eval `route -n | awk '{ if ($8 ==\&quot;eth0\&quot; &amp;&amp; $2 != \&quot;0.0.0.0\&quot;) print \&quot;route del default gw \&quot; $2; }'`&quot;
-</code></pre>
-
-<h3 id="ignore-first-time-ssh-key-checking">Ignore first time ssh key checking</h3>
-
-<p>Edit the following options:</p>
-
-<pre><code>$ vim ansible.cfg
-[defaults]
-host_key_checking = False
-</code></pre>
 
       
     </div>
@@ -2233,8 +2541,17 @@ host_key_checking = False
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2243,7 +2560,7 @@ host_key_checking = False
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

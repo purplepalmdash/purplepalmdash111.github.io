@@ -105,6 +105,201 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/03/15/wordpress-migration-tips/">Wordpress Migration Tips</a>
+      </h1>
+      <span class="post-date">Mar 15, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="background">Background</h3>
+
+<p>Moving a friend&rsquo;s wordpress blog from DigitalOcean to a new cheap vps, here
+are all of the tips and steps.</p>
+
+<h3 id="mysql-password-recovery">MySQL Password recovery</h3>
+
+<p>I forget the mysql password, recover it via following ways(Ubuntu14.04
+Version):<br />
+Stop the mysql instance via:</p>
+
+<pre><code>$ sudo /etc/init.d/mysql stop
+</code></pre>
+
+<p>Start the mysqld daemon process use <code>--skip-grant-tables</code> options:</p>
+
+<pre><code>$ sudo /usr/sbin/mysqld --skip-grant-tables --skip-networking &amp;
+</code></pre>
+
+<p>Mysql steps are listed as:</p>
+
+<pre><code>$ mysql -u root
+&gt;   FLUSH PRIVILEGES;
+&gt;   SET PASSWORD FOR root@'localhost' = PASSWORD('password');
+&gt;   FLUSH PRIVILEGES;
+&gt;   \q
+</code></pre>
+
+<p>Now better you reboot the machine, thus you could login to the mysql using the
+newly changed passwd.</p>
+
+<h3 id="mysql-database-backup">MySQL database backup</h3>
+
+<p>Backup the existing running mysql via following command:</p>
+
+<pre><code>$ mysqldump -uroot -pxxxxxx wordpress&gt;Yourbackup.sql
+</code></pre>
+
+<p>This <code>Yourbackup.sql</code> will be used later for restoring the database to the
+newly created database instance.</p>
+
+<h3 id="docker-compose">Docker Compose</h3>
+
+<p>The docker compose file is listed as:</p>
+
+<pre><code>version: '2'
+
+services:
+
+  wordpress:
+    image: wordpress
+    volumes:
+      - ./www:/var/www/html
+    ports:
+      - 8093:80
+    environment:
+      WORDPRESS_DB_PASSWORD: Myexample250
+
+  mysql:
+    image: mariadb
+    volumes:
+      - ./mysql:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: Myexample250
+</code></pre>
+
+<p>Up/Down the service via following command:</p>
+
+<pre><code>### Up the wordpress website: 
+$ sudo docker-compose up -d
+
+### Down the wordpress
+$ sudo docker-compose down
+</code></pre>
+
+<p>Now open your browser <code>http://localhost:8093</code>, you will see the wordpress
+installation page, install it:</p>
+
+<p><img src="/images/2017_03_15_16_49_09_595x529.jpg" alt="/images/2017_03_15_16_49_09_595x529.jpg" /></p>
+
+<p>The username/password would be any characters, because we will use our dumped
+wordpress database for restoring it.</p>
+
+<h3 id="restoring-database">Restoring Database</h3>
+
+<p>Create a new maria docker instance for restoring the mysql:</p>
+
+<pre><code>$ mv Yourbackup.sql ./restore
+$ sudo docker run -it -v `pwd`/restore:/var/lib/mysql --link mariadb:mymariadb --net lili_default mariadb:latest /bin/bash
+</code></pre>
+
+<p>Now get the running mariadb&rsquo;s IP address:</p>
+
+<pre><code>$ sudo docker ps | grep mariadb
+f1233de46f3b        mariadb:latest                   &quot;docker-entrypoint.sh&quot;   About a minute ago   Up About a minute   3306/tcp                      amazing_jang
+52df3ac6298d        mariadb                          &quot;docker-entrypoint.sh&quot;   9 minutes ago        Up 9 minutes        3306/tcp                      lili_mysql_1
+$ sudo docker exec -it 52df3ac6298d /bin/bash
+root@52df3ac6298d:/# ip addr 
+....
+</code></pre>
+
+<p>Get the ip address , we know it&rsquo;s <code>172.19.0.3/16</code>.</p>
+
+<p>Now in the <code>root@f1233de46f3b</code>, do following commands:</p>
+
+<pre><code># mysql -h172.19.0.3 -P3306 -uroot -pMyexample250
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 15
+Server version: 10.1.20-MariaDB-1~jessie mariadb.org binary distribution
+
+Copyright (c) 2000, 2016, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]&gt; \q
+Bye
+root@f1233de46f3b:/# 
+</code></pre>
+
+<p>If you get the mysql shell, it hints that you could run following commands for
+restoring the database:</p>
+
+<pre><code># mysql -u root -pMyexample250 --host=172.19.0.3 wordpress&lt;Yourbackup.sql
+</code></pre>
+
+<p>Now you won&rsquo;t get any article, because the old domain name is not compatible
+for the new domain name, suppose our old domain name is <code>www.oldname.com</code>, the
+new domain name is localhost:8093`, do following command for adjust to the
+new domain name:</p>
+
+<p>Run:</p>
+
+<p><code>mysql -h172.19.0.2 -P3306 -uroot -pMyexample250</code></p>
+
+<pre><code>use wordpress;
+UPDATE wp_options SET option_value = replace(option_value, 'www.oldname.com','localhost:8093');
+UPDATE wp_posts SET post_content = replace(post_content, 'www.oldname.com','localhost:8093');
+UPDATE wp_comments SET comment_content = replace(comment_content, 'www.oldname.com','localhost:8093');
+UPDATE wp_comments SET comment_author_url = replace(comment_author_url, 'www.oldname.com','localhost:8093');
+\q
+</code></pre>
+
+<p>Now the database has been restored, you could restart the docker instance, and
+examing the result, <code>52df3ac6298d 096fdeaac08a</code> are the id for wordpress and
+mariadb.</p>
+
+<pre><code>$ sudo docker restart 52df3ac6298d 096fdeaac08a
+</code></pre>
+
+<p>Now reopen the browser,this time you will see the page has been adjusted to
+old website:</p>
+
+<p><img src="/images/2017_03_15_17_11_40_610x511.jpg" alt="/images/2017_03_15_17_11_40_610x511.jpg" /></p>
+
+<h3 id="ubuntu-env-preparation">Ubuntu Env Preparation</h3>
+
+<p>scp the whole directory to remote machine(Ubuntu16.04).</p>
+
+<p>Install docker via:</p>
+
+<pre><code>$ sudo apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    software-properties-common
+$ curl -fsSL &lt;DOCKER-EE-URL&gt;/gpg | sudo apt-key add -
+$ sudo add-apt-repository \
+   &quot;deb [arch=amd64] &lt;-DOCKER-EE-URL&gt; \
+   $(lsb_release -cs) \
+   stable-17.03&quot;
+$ sudo apt-get install docker-ce
+</code></pre>
+
+<p>Install docker-compose via:</p>
+
+<pre><code>$ sudo pip install docker-compose
+$ sudo docker-compose up -d
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/03/14/%E6%B2%A1%E6%9C%89%E7%BD%91%E7%BB%9C%E7%9A%84%E7%94%9F%E6%B4%BB/">没有网络的生活</a>
       </h1>
       <span class="post-date">Mar 14, 2017 
@@ -516,879 +711,6 @@ $ mtpfs -o allow_other ~/mnt
 
 <p>Or now if you insert the android phone, the pcmanfm will automatically mount
 the equipment&rsquo;s file system.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/03/03/linux-tips7/">Linux Tips(7)</a>
-      </h1>
-      <span class="post-date">Mar 3, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="1-cloudstack-issue">1. CloudStack Issue</h3>
-
-<p>On ubuntu1404/1604, the template should enable HVM.<br />
-Its partition size should less than the primary storage size.<br />
-Password reset issue: Ubuntu1604, failed.</p>
-
-<p>Ubuntu14.04 startup too slow, because of ntp, remove it <code>sudo update-rc.d -f ntp remove
-</code></p>
-
-<h3 id="2-ubuntu16-04-cloudstack-pass-issue">2. Ubuntu16.04 cloudstack-pass issue</h3>
-
-<p>The reset-password script is located as
-<code>/etc/init.d/cloud-set-guest-password</code>, then we could do following
-configurations:</p>
-
-<p>Remove the services via:</p>
-
-<pre><code># update-rc.d -f cloud-set-guest-password remove
-# cp /etc/init.d/cloud-setup-guest-password /usr/bin/
-# chmod 777 /usr/bin/cloud-setup-guest-password
-</code></pre>
-
-<p>Before because you set <code>update-rc.d cloud-set-guest-password defaults 98</code>, so
-first you should remove it.</p>
-
-<p>Then Create a systemd service as <code>/lib/systemd/system/cloudpassword.service</code>:</p>
-
-<pre><code>[Unit]
-Description=cloudpass container
-
-[Service]
-Type=idle
-Restart=always
-ExecStart=/usr/bin/cloud-set-guest-password
-ExecStop=/usr/bin/echo hello
-
-[Install]
-WantedBy=multi-user.target
-
-</code></pre>
-
-<p>Enable the service via:</p>
-
-<pre><code># systemctl enable cloudpassword
-</code></pre>
-
-<p>After the network is online:</p>
-
-<pre><code># systemctl enable systemd-networkd-wait-online.service
-</code></pre>
-
-<p>The steps could refers to another article.</p>
-
-<h3 id="3-xenserver-timezone">3. XenServer Timezone</h3>
-
-<p>Switch to UTC time:</p>
-
-<pre><code># cp /usr/share/zoneinfo/UTC /etc/localtime
-</code></pre>
-
-<h3 id="4-gitbook-serve-ports">4. Gitbook serve ports</h3>
-
-<p>Listening on other ports:</p>
-
-<pre><code>$ gitbook --port 14001 serve
-</code></pre>
-
-<h3 id="5-quickstart-for-shadowsocks">5. Quickstart For ShadowSocks</h3>
-
-<p>Install and configuration steps are listed as following(Ubuntu16.04):</p>
-
-<pre><code># apt-get install python-pip
-# pip install --upgrade pip
-# pip install shadowsocks
-# touch /etc/shadowsocks.json
-{
-&quot;server&quot;:&quot;1xx.xxx.xxx.xxx&quot;,
-&quot;server_port&quot;:19175,
-&quot;local_address&quot;:&quot;127.0.0.1&quot;,
-&quot;local_port&quot;:1080,
-&quot;password&quot;:&quot;XXXXXXXXXXXXXXXXXXXXXXx&quot;,
-&quot;timeout&quot;:300,
-&quot;method&quot;:&quot;aes-256-cfb&quot;,
-&quot;fast_open&quot;:false
-}
-# vim /etc/rc.local
-ssserver -c /etc/shadowsocks.json -d start
-</code></pre>
-
-<p>Now you could continue to configure your shadowsocks client side.</p>
-
-<h3 id="6-mariadb-in-docker">6. MariaDB In Docker</h3>
-
-<p>Connect to existing <code>docker-composed</code> mariadb instance via following command:</p>
-
-<pre><code>sudo docker run -it -v /var/download/sbt/lili:/var/lib/mysql --link mariadb:mymariadb --net lilimarleen_default mariadb:latest /bin/bash
-root@5d7eadc81b9e:/# mysql -h172.18.0.3 -P3306 -uroot -pexample
-Welcome to the MariaDB monitor.  Commands end with ; or \g.
-Your MariaDB connection id is 35
-Server version: 10.1.20-MariaDB-1~jessie mariadb.org binary distribution
-
-Copyright (c) 2000, 2016, Oracle, MariaDB Corporation Ab and others.
-
-Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-MariaDB [(none)]&gt; \q
-Bye
-</code></pre>
-
-<p><code>-v</code> is for using local volume for restoring aims.<br />
-<code>--link</code> is for linking to existing instance.<br />
-<code>-net</code> could be get via <code>docker net list</code>.</p>
-
-<h3 id="7-cdn-speedup">7. cdn speedup</h3>
-
-<p>For speed-up my blog, I changed the fonts/css from the template&rsquo;s default
-location to <code>http://www.bootcdn.cn/?</code>, this cdn&rsquo;s speed is pretty good, the
-speed has been greatly improved.</p>
-
-<h3 id="8-git-diff">8. git diff</h3>
-
-<p>First use <code>git log</code> for getting all of the commit history, then you could get
-the md5 for each commitment, <code>git diff md51 md52</code> you could easily get the
-differences.</p>
-
-<h3 id="9-qemu-issue">9. qemu issue</h3>
-
-<p>When meeting <code>guest has not initialize the display (yet)</code>, do following:</p>
-
-<pre><code>$ sudo qemu-system-x86_64 -net nic -net user,hostfwd=tcp::2222-:22 -hda ./test.qcow2 -boot d -cdrom /mnt/CentOS-7-x86_64-Everything-1611.iso -m 2048 --enable-kvm -vga virtio
-</code></pre>
-
-<p><code>-vga virtio</code> solves this issue.</p>
-
-<h3 id="10-bashrc-execution">10. bashrc execution</h3>
-
-<p>Run <code>bashrc</code> at ArchLinux:</p>
-
-<pre><code>$ vim ~/.bash_profile
-if [ -f ~/.bashrc ]; then
-  . ~/.bashrc
-fi
-$ vim ~/.bashrc
-</code></pre>
-
-<p>Then all of the items in <code>.bashrc</code> could be executed.</p>
-
-<h3 id="11-shared-bash-history">11. Shared bash history</h3>
-
-<p>Add following lines in to <code>~/.bashrc</code>:</p>
-
-<pre><code>HISTSIZE=9000
-HISTFILESIZE=$HISTSIZE
-HISTCONTROL=ignorespace:ignoredups
-
-history() {
-  _bash_history_sync
-  builtin history &quot;$@&quot;
-}
-
-_bash_history_sync() {
-  builtin history -a         #1
-  HISTFILESIZE=$HISTSIZE     #2
-  builtin history -c         #3
-  builtin history -r         #4
-}
-
-PROMPT_COMMAND=_bash_history_sync
-</code></pre>
-
-<h3 id="12-archlinux-virtual-network-start-failed">12. ArchLinux virtual network start failed</h3>
-
-<p>Issue:</p>
-
-<pre><code>when I start a virtual network named 'default' (created by libvirt), it occur that:
-&quot;Error starting network 'default': internal error: Failed to initialize a valid firewall backend&quot;.
-</code></pre>
-
-<p>Solution:</p>
-
-<pre><code>$ sudo pacman -S  ebtables dnsmasq
-$ sudo systemctl restart libvirtd
-</code></pre>
-
-<p>then you could get your libvirtd networking work properly.</p>
-
-<h3 id="13-network-manager-configuration">13. Network Manager Configuration</h3>
-
-<p><a href="https://fedoraproject.org/wiki/Networking/Bridging">https://fedoraproject.org/wiki/Networking/Bridging</a></p>
-
-<h3 id="14-enable-vncserver-in-firewalld">14. Enable vncserver in firewalld</h3>
-
-<p>Manually enable the vnc-server service, then you could use vncviewer for
-connecting the vnc server in ArchLinux:</p>
-
-<pre><code># firewall-cmd --zone=public --add-service=vnc-server
-</code></pre>
-
-<p>Related commands:</p>
-
-<p>List services:</p>
-
-<pre><code># firewall-cmd --zone=public --list-services
-</code></pre>
-
-<p>Get all of the listed services:</p>
-
-<pre><code># firewall-cmd --get-services
-</code></pre>
-
-<p>Get all of the zones:</p>
-
-<pre><code># firewall-cmd --get-active-zones
-# firewall-cmd --get-zones
-# firewall-cmd --get-default-zone
-</code></pre>
-
-<h3 id="15-execute-mysql-command">15. Execute mysql command</h3>
-
-<p>Execute like following:</p>
-
-<pre><code>mysql -u $user -p$passsword -Bse &quot;command1;command2;....;commandn&quot;
-</code></pre>
-
-<h3 id="16-generate-the-md5-encrypted-passwd">16. Generate the md5 encrypted passwd</h3>
-
-<p>Generate md5 encrypted passwd using passlib:</p>
-
-<pre><code>$ sudo pip2 install passlib
-$ python2 -c &quot;from passlib.hash import sha512_crypt; import getpass; print sha512_crypt.encrypt(getpass.getpass())&quot;
-</code></pre>
-
-<h3 id="17-quickly-setup-nginx">17. Quickly setup nginx</h3>
-
-<p>In archlinux, do following:</p>
-
-<pre><code>$ sudo pacman -S nginx
-$ sudo vim /etc/nginx/nginx.conf
-        location / {
-            root   /media/sdb;
-            index  index.html index.htm;
-	    autoindex on;
-        }
-$ sudo systemctl enable nginx
-$ sudo systemctl start nginx
-</code></pre>
-
-<p>Then you could see the nginx running on your server.</p>
-
-<h3 id="18-minikube-quickstart-on-archlinux">18. minikube quickstart on archlinux</h3>
-
-<p>Install and running minikube via:</p>
-
-<pre><code>$ yaourt minikube
-$ wget https://github.com/dhiltgen/docker-machine-kvm/releases/download/v0.7.0/docker-machine-driver-kvm
-$ sudo mv docker-machine-driver-kvm /usr/local/bin
-$ sudo chmod 777 /usr/local/bin/*
-$ sudo minikube start --vm-driver kvm
-$ curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.5.3/bin/linux/amd64/kubectl &amp;&amp; chmod +x kubectl &amp;&amp; sudo mv kubectl /usr/local/bin/
-</code></pre>
-
-<p>Then  you could begin using minikube.</p>
-
-<h3 id="19-golang-building">19. Golang building</h3>
-
-<p>When using hugo for building, the travis-ci complains:</p>
-
-<pre><code>enc.SetIndent undefined
-</code></pre>
-
-<p>Solved via edit the <code>.travis.yml</code> file</p>
-
-<pre><code>go:
--    - 1.6
-+    - 1.7
-</code></pre>
-
-<p>Dependency on golang 1.7 solves the problem.</p>
-
-<h3 id="20-auto-start-default-gw">20. Auto start default gw</h3>
-
-<p>Start the default network for virsh via:</p>
-
-<pre><code>$ sudo virsh net-start default
-</code></pre>
-
-<h3 id="21-archlinux-fonts">21. ArchLinux fonts</h3>
-
-<p>Install fonts via:</p>
-
-<pre><code>$ sudo  pacman -S adobe-source-han-sans-cn-fonts adobe-source-han-sans-tw-fonts
-</code></pre>
-
-<p>And mac fonts via:</p>
-
-<pre><code>$ yaourt ttf-mac-fonts
-</code></pre>
-
-<h3 id="22-detect-windows">22. Detect Windows</h3>
-
-<p>Detect Windows via:</p>
-
-<pre><code>$ sudo apt-get install os-prober
-$ sudo os-prober
-$ sudo update-grub
-</code></pre>
-
-<h3 id="23-upgrade-shadowsocks">23. Upgrade Shadowsocks</h3>
-
-<p>UPgrade the shadowsocks, so you could get more powerful tools..</p>
-
-<pre><code>$  pip install --upgrade pi
-$ sudo pip install --upgrade shadowsocks
-</code></pre>
-
-<h3 id="24-vagrant-ssh">24. vagrant ssh</h3>
-
-<p>The configuration of vagrant ssh could be viewd via:</p>
-
-<pre><code>$ vagrant ssh-config
-</code></pre>
-
-<h3 id="25-k8s-iptables-issue">25. k8s iptables issue</h3>
-
-<p>Add this service named <code>iptableslast.service</code>, enable and start the service,
-then system will run iptables once for setup the rules.</p>
-
-<pre><code>[Unit]
-Description=iptables last rule
-
-[Service]
-Type=idle
-Restart=on-failure
-ExecStart=/sbin/iptables -P FORWARD ACCEPT
-ExecStop=/usr/bin/echo hello
-
-[Install]
-WantedBy=multi-user.target
-
-</code></pre>
-
-<h3 id="26-install-vagrant-plugins-specified-version">26. Install vagrant plugins(specified version)</h3>
-
-<p>Specified the version of plugins:</p>
-
-<pre><code>vagrant plugin install --plugin-version  0.0.37 vagrant-libvirt
-</code></pre>
-
-<h3 id="27-nested-kvm-in-centos7">27. nested kvm in CentOS7</h3>
-
-<p>Enable it via following commands:</p>
-
-<pre><code>[root@dlp ~]# vi /etc/modprobe.d/kvm-nested.conf
-# create new
-options kvm_intel nested=1
-[root@dlp ~]# modprobe -r kvm_intel # unload
-[root@dlp ~]# modprobe kvm_intel # reload again
-[root@dlp ~]# cat /sys/module/kvm_intel/parameters/nested 
-Y# just enabled
-</code></pre>
-
-<h3 id="28-vagrant-libvirt-issue">28. vagrant-libvirt issue</h3>
-
-<p>The eth1 won&rsquo;t be startup, so manually execute <code>service network restart</code> in
-CentOS7.</p>
-
-<h3 id="29-save-load-docker-images">29. Save/Load Docker images</h3>
-
-<p><a href="https://gist.github.com/hydra1983/22b2bed38b4f5f56caa87c830c96378d">https://gist.github.com/hydra1983/22b2bed38b4f5f56caa87c830c96378d</a></p>
-
-<p>Commandline:</p>
-
-<pre><code>$ ./docker_images.sh save_images
-$ ./docker_images.sh load_images
-</code></pre>
-
-<h3 id="30-yum-download-src-rpms">30. yum download src rpms</h3>
-
-<p>yum download the packages src via:</p>
-
-<pre><code># yum install yum-utils
-# yumdownloader --source mypkg
-</code></pre>
-
-<h3 id="30-quickstart-vps-centos6">30. Quickstart VPS(CentOS6)</h3>
-
-<p>Lizcat, since the centos 6 won&rsquo;t support docker well, switches to Ubuntu</p>
-
-<pre><code># wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-6.repo
-# yum install -y python-pip wget
-</code></pre>
-
-<h3 id="31-downgrade-packages-in-archlinux">31, Downgrade packages in archlinux</h3>
-
-<p>via <code>yaourt downgrade</code>, then downgrade the package name.</p>
-
-<h3 id="32-issues-for-gzlib">32. Issues for Gzlib</h3>
-
-<p>clearing the cookie, then you could login, or you won&rsquo;t be logined into the
-system.</p>
-
-<h3 id="33-install-haroopad">33. Install haroopad</h3>
-
-<p>Via following steps:</p>
-
-<pre><code>解压haroopad-v0.13.1-x64.tar.gz
-cd /usr/local/src
-sudo mkdir haroopad
-sudo tar -zxvf haroopad-v0.13.1-x64.tar.gz -C haroopad
-
-之后会出现如下内容
-control.tar.gz
-data.tar.gz
-debian-binary
-
-解压 data.tar.gz，并将其子目录下边的内容拷贝到 “/” 目录下
-tar zxvf data.tar.gz
-sudo cp -r ./usr /
-
-解压control.tar.gz，并赋予755权限
-tar zxf control.tar.gz
-chmod 755 postinst
-sudo ./postinst
-</code></pre>
-
-<h3 id="34-hostname-without-restart">34. hostname without restart</h3>
-
-<p>Simply try <code>hostname YourNewHostName</code>, it could immediately change your
-hostname, without a restart.</p>
-
-<h3 id="35-make-partition-larger-than-2t">35. Make partition larger than 2T</h3>
-
-<p>Your should use parted rather than fdisk, cause parted could support gpt mode.</p>
-
-<pre><code># parted /dev/sdb     #使用parted来对GPT磁盘操作，进入交互式模式
-(parted) mklabel gpt   # 将MBR磁盘格式化为GPT
-(parted) mkpart primary ext4 0% 100%    将所有容量分为一个主分区
-(parted) p    #打印当前分区
-(parted) q    #退出
-</code></pre>
-
-<h3 id="36-oracle-db-installation-issue">36. Oracle DB Installation issue</h3>
-
-<p>On pdksh missing.</p>
-
-<pre><code>Solution
-
-Solution for 11.2.0.3 64-bit (x86-64)
-
-If you have downloaded the 11.2.0.3 media from My Oracle Support (MOS) and extracted the software to &lt;path&gt;/database, do the following:
-
-Change directory to &lt;path&gt;/database/stage/cvu/cv/admin
-Backup cvu_config cp cvu_config backup_cvu_config
-Edit cvu_config and change the following line CV_ASSUME_DISTID=OEL4 to CV_ASSUME_DISTID=OEL6
-Save the updated cvu_config file
-Install the 11.2.0.3 software using:
-&lt;path&gt;/database/runInstaller
-cd &lt;path&gt;/database
-./runInstaller
-OUI should now perform the OEL6 prerequisite checks (which are identical to the RHEL6 prerequisite checks) and no longer report that packages elfutils-libelf-devel-0.97 and pdksh-5.2.14 are missing
-</code></pre>
-
-<h3 id="37-ansible-jinja-issue">37. Ansible jinja issue</h3>
-
-<p>Changed from</p>
-
-<pre><code>  register: check_powershell5
-  when: &quot;{{ ansible_PSVersionTable.Major|int &lt; 5 }}&quot;
-  tags: win_powershell
-</code></pre>
-
-<p>to</p>
-
-<pre><code>  register: check_powershell5
-  when: ansible_PSVersionTable.Major|int &lt; 5 
-  tags: win_powershell
-</code></pre>
-
-<p>could solve the jinjia problem, <code>when statements should not include jinja2
-templating delimiters such as {{ }} or {% %}.</code></p>
-
-<h3 id="38-docker-dm-basesize">38. Docker dm.basesize</h3>
-
-<p>For building larger docker image, you have to enable <code>dm.basesize</code>, however
-the docker&rsquo;s new version have to specify more parameters, the example is
-listed as:</p>
-
-<pre><code>ExecStart=/usr/bin/dockerd -s devicemapper --storage-opt dm.basesize=50G --registry-mirror=http://1a653205.m.daocloud.io -H fd://
-</code></pre>
-
-<h3 id="39-samba-issue">39. Samba issue</h3>
-
-<p>Add samba user and set its username/passwd via:</p>
-
-<pre><code># useradd xxx
-# smbpasswd -a xxx
-</code></pre>
-
-<h3 id="40-customized-ssh-key-for-vagrant">40. Customized ssh key for vagrant</h3>
-
-<p>Add following definition into the vagrantfile:</p>
-
-<pre><code>config.ssh.private_key_path = &quot;/home/joseph/.ssh/id_rsa&quot;
-</code></pre>
-
-<h3 id="41-manually-setup-runner">41. Manually setup runner</h3>
-
-<p>When the runner is not set, do enable this manually for project:</p>
-
-<p><img src="/images/2017_06_22_14_33_16_645x420.jpg" alt="/images/2017_06_22_14_33_16_645x420.jpg" /></p>
-
-<h3 id="42-tar-without-folder-prefix">42. tar without folder prefix</h3>
-
-<p>You could do via following ways:</p>
-
-<pre><code>cd src/
-tar czf ${topdir}/SOURCES/${PKGNAME}.tar.gz $1
-cd ..
-</code></pre>
-
-<p>Or:</p>
-
-<pre><code>tar czf ${topdir}/SOURCES/${PKGNAME}.tar.gz -C src/ .
-</code></pre>
-
-<h3 id="43-7zip-split-files">43. 7zip split files</h3>
-
-<p>Using following command:</p>
-
-<pre><code># 7z a -tzip -v1024m secondnode
-</code></pre>
-
-<p>Recover:</p>
-
-<pre><code># 7z e xxx.zip.001
-</code></pre>
-
-<h3 id="44-rhel-download">44. rhel download</h3>
-
-<p><a href="http://linuxfly.org/post/659/">http://linuxfly.org/post/659/</a></p>
-
-<h3 id="45-performance">45. performance</h3>
-
-<p>hald introduction:</p>
-
-<p><a href="https://systembash.com/disabling-the-hald-addon-storage-service-on-centosredhat/">https://systembash.com/disabling-the-hald-addon-storage-service-on-centosredhat/</a></p>
-
-<pre><code>The hald – Hardware Access Layer Daemon – runs several processes in order to keep track of what hardware is installed on your system. This includes polling USB Drives and ‘hot-swap’ devices to check for changes along with a host of other tasks.
-
-You might see it running on your system as follows:
-
-2474 ? S 0:00 \_ hald-runner
-2481 ? S 0:00 \_ hald-addon-acpi: listening on acpid socket /var/run/acpid.socket
-2487 ? S 0:00 \_ hald-addon-keyboard: listening on /dev/input/event0
-2495 ? S 41:47 \_ hald-addon-storage: polling /dev/hdc
-
-If your system is static and the devices do not change, you can actually disable this service using a policy entry.
-
-Create a file in your policy directory, for example /etc/hal/fdi/policy/99-custom.fdi. Add the text:
-</code></pre>
-
-<p>Solved(completely disable hald):</p>
-
-<pre><code>https://zhuqy.wordpress.com/2011/04/07/disable-the-hald-addon-storage-completely/
-
-&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
-
-&lt;deviceinfo version=&quot;0.2&quot;&gt;
-	&lt;device&gt;
-		&lt;match key=&quot;storage.removable&quot; bool=&quot;true&quot;&gt;
-			&lt;remove key=&quot;info.addons&quot; type=&quot;strlist&quot;&gt;hald-addon-storage&lt;/remove&gt;
-		&lt;/match&gt;
-	&lt;/device&gt;
-&lt;/deviceinfo&gt;
-</code></pre>
-
-<h3 id="46-vagrant-and-ansible">46. vagrant and ansible</h3>
-
-<p>After created vagrant, use ansible the following way:</p>
-
-<pre><code>$ ansible --private-key=~/.vagrant.d/insecure_private_key -u vagrant ...
-</code></pre>
-
-<p>for testing module ping/command, etc.</p>
-
-<h3 id="47-clean-deb-pkgs">47. clean deb pkgs</h3>
-
-<p>via <code>apt-get clean</code>, then you could get the clean directory.</p>
-
-<h3 id="48-shipyard-related">48. shipyard related</h3>
-
-<p><a href="https://www.digitalocean.com/community/tutorials/how-to-deploy-wordpress-with-shipyard-on-ubuntu-14-04">https://www.digitalocean.com/community/tutorials/how-to-deploy-wordpress-with-shipyard-on-ubuntu-14-04</a></p>
-
-<p>Startup:</p>
-
-<p><a href="https://juejin.im/entry/588940fc2f301e0069b2397d">https://juejin.im/entry/588940fc2f301e0069b2397d</a></p>
-
-<h3 id="49-cowsay-fortune">49. Cowsay fortune</h3>
-
-<p>Add following items in your <code>~/.zshrc</code>, then cowsay will always say blablabla:</p>
-
-<pre><code>if [ -x /usr/bin/cowsay -a -x /usr/bin/fortune ]; then
-    fortune | cowsay
-fi
-</code></pre>
-
-<h3 id="50-edraw">50. EDRAW</h3>
-
-<p>Good software for drawing pictures.</p>
-
-<h3 id="51-graphviz">51. graphviz</h3>
-
-<p><a href="http://dockone.io/article/2495">http://dockone.io/article/2495</a></p>
-
-<h3 id="52-memory-checking">52. Memory Checking</h3>
-
-<p><a href="http://blog.csdn.net/beckdon/article/details/36174925">http://blog.csdn.net/beckdon/article/details/36174925</a></p>
-
-<p>use <code>last reboot</code> for checking the reboot reason.</p>
-
-<p>use <code>cat /var/log/messages | more</code> for knowing the detailed reason.</p>
-
-<h3 id="53-virsh-net-autostart">53. virsh net-autostart</h3>
-
-<p>Previously I found my virsh network default won&rsquo;t startup automatically, so I
-add one tips in <code>~/.config/awesome/rc.lua</code>, but yesterday I found one tip for
-adding the default network auto-start:</p>
-
-<pre><code>$ sudo virsh net-autostart default
-</code></pre>
-
-<p>So from now on my default networking for libvirt will start automatically
-every time.</p>
-
-<h3 id="54-capture-with-filename-in-xclip">54. Capture with filename in xclip</h3>
-
-<p>I changed my <code>mycapscr</code> to following, so I could save 3 seconds for each
-screenshot.</p>
-
-<pre><code>scrot -s '%Y_%m_%d_%H_%M_%S_$wx$h.jpg' -e 'mv $f ~/capscr/'
-ls -lt ~/capscr | sed -n 2p | awk {'print $9'} | xclip -r
-
-</code></pre>
-
-<h3 id="55-convert-from-vagrant-to-kvm">55. Convert from vagrant to kvm</h3>
-
-<p>First you have to find the vmdk files of vagrant, then convert it from vmdk to
-qcow2:</p>
-
-<pre><code>$ sudo qemu-img convert -f vmdk -O qcow2 box-disk001.vmdk gitlab.qcow2
-</code></pre>
-
-<p>The <code>gitlab.qcow2</code> is the one you want, enjoy it.</p>
-
-<h3 id="56-quickstart-for-dce">56. QuickStart For DCE</h3>
-
-<p>Install your own dce:</p>
-
-<pre><code># gzip -dc dce-2.6.0.tar.gz | docker load
-# bash -c &quot;$(docker run --rm daocloud.io/daocloud/dce:2.6.0 install)&quot;
-
-</code></pre>
-
-<h3 id="57-vimdiff-horizon">57. vimdiff horizon</h3>
-
-<p>Press ctrl+w, then J</p>
-
-<h3 id="58-apt-get-specify-version">58. apt-get specify version</h3>
-
-<p>First you should use <code>apt-cache policy xxxx</code> to get all of the possible
-version of this software, then, you specify the version in following command
-like:</p>
-
-<pre><code># sudo apt-get install gparted=0.16.1-1
-</code></pre>
-
-<h3 id="59-qemu-kvm-location-in-centos">59. qemu-kvm location in centos</h3>
-
-<p>In <code>/usr/libexec/qemu-kvm</code>.</p>
-
-<h3 id="60-setup-hostname">60. Setup hostname</h3>
-
-<p>via <code>nmtui</code> in centos7 you could setup the hostname in centos7.</p>
-
-<h3 id="61-libvirt-static-ip">61. libvirt static IP</h3>
-
-<p>Via <code>virsh net-dumpxml&gt;abc.xml ; vim abc.xml; virsh net-define abc.xml</code>, you
-could edit your xml like following:</p>
-
-<pre><code>&lt;ip address=&quot;192.168.122.1&quot; netmask=&quot;255.255.255.0&quot;&gt;
-  &lt;dhcp&gt;
-    &lt;range start=&quot;192.168.122.100&quot; end=&quot;192.168.122.254&quot; /&gt;
-    &lt;host mac=&quot;00:16:3e:77:e2:ed&quot; name=&quot;foo.example.com&quot; ip=&quot;192.168.122.10&quot; /&gt;
-    &lt;host mac=&quot;00:16:3e:3e:a9:1a&quot; name=&quot;bar.example.com&quot; ip=&quot;192.168.122.11&quot; /&gt;
-  &lt;/dhcp&gt;
-&lt;/ip&gt;
-</code></pre>
-
-<h3 id="62-chromium-passwd-generator">62. chromium passwd generator</h3>
-
-<p><img src="/images/2017_08_23_14_11_10_622x322.jpg" alt="/images/2017_08_23_14_11_10_622x322.jpg" /></p>
-
-<h3 id="64-rancheros-set-registry">64. rancheros set registry</h3>
-
-<p>Set the parameter of docker via following command:</p>
-
-<pre><code>$ sudo ros config get rancher.docker.insecure_registry
-$ sudo ros config set rancher.docker.insecure_registry [&quot;192.168.124.211:8088&quot;]
-</code></pre>
-
-<p>more detailed parameters could be found at:</p>
-
-<p><a href="http://rancher.com/docs/os/v1.0/en/configuration/docker/">http://rancher.com/docs/os/v1.0/en/configuration/docker/</a></p>
-
-<h3 id="65-canary-build-test">65. canary build/test</h3>
-
-<pre><code>In software testing, a canary is a push of programming code changes to a small group of end users who are unaware that they are receiving new code. Because the canary is only distributed to a small number of users, its impact is relatively small and changes can be reversed quickly should the new code prove to be buggy. Canary tests, which are often automated, are run after testing in a sandbox environment has been completed.
-</code></pre>
-
-<p>Real meaning:</p>
-
-<p>煤矿工人过去带着金丝雀下井。这种鸟对危险气体的敏感度超过人。如果金丝雀死了，矿工便知道井下有危险气体，需要撤离。」</p>
-
-<p>原来 Canary build 是这个意思</p>
-
-<h3 id="66-docker-cp">66. docker cp</h3>
-
-<p>Directly copy from container to host via:</p>
-
-<pre><code># docker cp 0a63783b716a:/root/d  /tmp/
-</code></pre>
-
-<h3 id="67-xrdp-display-error">67. xrdp display error</h3>
-
-<p>When some window displayed error, using 24-bit color.</p>
-
-<h3 id="68-e-sata-and-udev">68. e-sata and udev</h3>
-
-<p>For using e-sata and udiskie, you have to change the following for using
-properly:</p>
-
-<pre><code>➜  rules.d pwd
-/etc/udev/rules.d
-➜  rules.d cat 99-udisks2.rules
-# UDISKS_FILESYSTEM_SHARED
-# ==1: mount filesystem to a shared directory (/media/VolumeName)
-# ==0: mount filesystem to a private directory (/run/media/$USER/VolumeName)
-# See udisks(8)
-ENV{ID_FS_USAGE}==&quot;filesystem|other|crypto&quot;, ENV{UDISKS_FILESYSTEM_SHARED}=&quot;1&quot;
-</code></pre>
-
-<p>Thus your disk will be mounted under in <code>/media</code> rather than in
-<code>/run/media/xxx</code>, this means your directoy will be seemed as <code>shared</code>, so your
-libvirt daemon will access it properly.</p>
-
-<h3 id="69-dashboard-issue">69. dashboard issue</h3>
-
-<p>dashbaord v1.6.2 has a bug that you could not get heapster info.</p>
-
-<pre><code>t is solved. This is a cluster issue. In 1.6.2 dashboard was building wrong path to heapster and there was always the same error that health check to heapster was failing because dashboard could not access it.
-</code></pre>
-
-<h3 id="70-write-bat-issues">70. Write bat issues</h3>
-
-<p>Change new line from unix to windows:</p>
-
-<pre><code># unix2dos xxxx
-</code></pre>
-
-<p>Change filename from UTF-8 to GBK:</p>
-
-<pre><code># convmv -f zh_CN.UTF-8 -t  GBK -r --notest ./
-</code></pre>
-
-<p>Change file content from UTF-8 to GBK:</p>
-
-<pre><code># enca -L zh_CN -x GBK *
-</code></pre>
-
-<p>Refers to :</p>
-
-<p><a href="http://blog.csdn.net/a280606790/article/details/8504133">http://blog.csdn.net/a280606790/article/details/8504133</a></p>
-
-<h3 id="71-gitlab-change-ip">71. gitlab change ip</h3>
-
-<p>When changing ip in gitlab server, do following steps:</p>
-
-<pre><code>The correct place in an Omnibus install is:
-
-/etc/gitlab/gitlab.rb
-    external_url 'http://gitlab.example.com'
-Finally, you'll need to execute sudo gitlab-ctl reconfigure and sudo gitlab-ctl restart so the changes apply.
-</code></pre>
-
-<h3 id="72-changing-ip-using-bat">72. Changing IP using bat</h3>
-
-<p>Read from the file, and generate the bat file with each person&rsquo;s own ip
-address setting.</p>
-
-<pre><code>#!/bin/sh
-while read line
-do
-	#echo $line
-	NAME=`echo $line|awk {'print $1'}`
-#	echo $NAME
-	IP=`echo $line|awk {'print $4'}`
-#	echo $IP
-	ORG=`echo $line|awk {'print $2'}`
-#	echo $ORG
-        echo -n 'netsh interface ipv4 delete dnsservers &quot;本地连接&quot; all'&gt;${NAME}_${ORG}.bat
-	echo 'netsh interface ipv4 set address name=&quot;本地连接&quot; static 192.168.103.'${IP} '255.255.255.0 192.168.103.1'&gt;&gt;${NAME}_${ORG}.bat
-done&lt;inhuajing.txt
-</code></pre>
-
-<h3 id="73-windows-uptime">73. Windows uptime</h3>
-
-<p>View windows uptime via:</p>
-
-<p><code>systeminfo</code></p>
-
-<h3 id="74-timezone-change-in-centos">74. Timezone change in CentOS</h3>
-
-<p>Via following commands:</p>
-
-<pre><code># timedatectl set-timezone America/Chicago
-Verify new settings by typing the following two commands:
-# date
-# ls -l /etc/localtime
-</code></pre>
-
-<h3 id="75-forwarding-to-vm-traffic">75. Forwarding to vm traffic</h3>
-
-<p>In host machine, do following, then you could forwarding the traffic from host
-machine 2222 to vm(192.168.122.203)&rsquo;s 22 port.</p>
-
-<pre><code>$sudo iptables -t nat -A PREROUTING -p tcp --dport 2222 -j DNAT --to-destination 192.168.122.203:22
-$sudo iptables -t nat -A POSTROUTING -p tcp --dport 22 -d 192.168.122.203 -j SNAT --to 192.168.122.1
-</code></pre>
-
-<h3 id="76-install-htpasswd">76. Install htpasswd</h3>
-
-<p>Install htpasswd in archlinux via <code>yaourt apache-tools</code>.</p>
-
-<h3 id="77-write-back-to-write-through">77. Write back to Write Through</h3>
-
-<p>Via following command:</p>
-
-<p><img src="/images/2017_10_18_16_05_30_1283x314.jpg" alt="/images/2017_10_18_16_05_30_1283x314.jpg" /></p>
-
-<h3 id="78-archlinux-offline">78. archlinux offline</h3>
-
-<p><a href="https://bbs.archlinux.org/viewtopic.php?id=229502">https://bbs.archlinux.org/viewtopic.php?id=229502</a></p>
-
-<h3 id="79-git">79. git</h3>
-
-<p>git file too large</p>
 
       
     </div>
@@ -2814,8 +2136,17 @@ $sudo iptables -t nat -A POSTROUTING -p tcp --dport 22 -d 192.168.122.203 -j SNA
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2824,7 +2155,7 @@ $sudo iptables -t nat -A POSTROUTING -p tcp --dport 22 -d 192.168.122.203 -j SNA
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

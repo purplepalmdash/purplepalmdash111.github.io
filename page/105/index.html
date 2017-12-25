@@ -105,6 +105,206 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/06/16/archlinux-on-surface-pro/">ArchLinux On Surface Pro</a>
+      </h1>
+      <span class="post-date">Jun 16, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/surfacepro">SurfacePro</a>
+        
+      </span>
+      
+      
+
+<p>Following is the steps for installing ArchLinux on Surface Pro, from the very beginning.</p>
+
+<h3 id="prerequisite">Prerequisite</h3>
+
+<p>First you have to download the iso from <a href="http://www.archlinux.org/download">http://www.archlinux.org/download</a>, Mine is <code>2014.06.01</code>.<br />
+Also I use a USB-LAN adapter which holds the following information:   <code>ASIX Electronics Corp. AX88772B</code>.<br />
+A 8G Flash Disk, 80G USB3.0 USB HardDisk. I also use a 4-Port USB2.0 HUB which carries a AC/DC Adapter for using 3 equipemts(FlashDisk/USB Adapter/USB Disk).<br />
+Make the bootable flash disk via:</p>
+
+<pre><code># dd if=/path/to/archlinux.iso of=/dev/sdX bs=1M &amp;&amp; sync
+
+</code></pre>
+
+<p>After it finished we insert the flash disk into the USB HUB, boot-up the Surface Pro Holding both the Power Key and Volumn - Key. Shortly we will go into the archlinux installtion shell.</p>
+
+<h3 id="installation-of-archlinux">Installation Of ArchLinux</h3>
+
+<p>These steps are mainly refers to following URL:<br />
+<a href="https://bbs.archlinuxcn.org/viewtopic.php?id=1037">https://bbs.archlinuxcn.org/viewtopic.php?id=1037</a><br />
+First start-up the sshd so we can remotely login onto the terminal, thus we could easily copy-paste the commands.</p>
+
+<h4 id="make-partitions-on-disk">Make partitions on disk</h4>
+
+<p>GPT Partition:</p>
+
+<pre><code>cgdisk /dev/sdX
+
+</code></pre>
+
+<p>The Partition I made is as following:</p>
+
+<pre><code># fdisk -l /dev/sdb
+
+Disk /dev/sdb: 74.5 GiB, 80026361856 bytes, 156301488 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: CEFF8C6A-A06A-46DF-9D10-F4C593C32CA0
+
+Device           Start          End   Size Type
+/dev/sdb1         2048      1050623   512M EFI System
+/dev/sdb2      1050624      5244927     2G Linux swap
+/dev/sdb3      5244928    156301454    72G Linux filesystem
+
+</code></pre>
+
+<p>Notice we have to make a seperated EFI partition, because surface pro is UEFI enablbed. We also have a 2-Gigabyte swap partition and remains all of the reset as the root partition.<br />
+Now make the filesystems on the disk:</p>
+
+<pre><code># mkfs.ext4 /dev/sdb3
+# mkswap /dev/sdb2
+# mkfs.vfat -F32 /dev/sdb1 
+</code></pre>
+
+<p>If you are using SSD, then format the ext4 without journal will greatly extend your SSD
+lifetime.</p>
+
+<p>But this option is not OK?</p>
+
+<pre><code># mkfs.ext4 -O &quot;^has_journal&quot; /dev/sd
+# mkfs.ext4 /dev/sdb2
+# tune2fs -O ^has_journal /dev/sdb2
+# tune2fs -o discard /dev/sdb2
+</code></pre>
+
+<p>Enable the swap partion:</p>
+
+<pre><code># swapon /dev/sdb2 
+
+</code></pre>
+
+<h4 id="installation-of-basic-system">Installation Of Basic System</h4>
+
+<p>After creating the partition, mount them into the corresponding position:</p>
+
+<pre><code># mount /dev/sdb3 /mnt
+# mkdir -p /mnt/boot/EFI/
+# mount /dev/sdb1 /mnt/boot/EFI/
+
+</code></pre>
+
+<p>Install the basic system:</p>
+
+<pre><code>pacstrap -i /mnt base
+
+</code></pre>
+
+<p>Generate the fstab file:</p>
+
+<pre><code># genfstab -U -p /mnt &gt;&gt; /mnt/etc/fstab
+
+</code></pre>
+
+<p>Examine the generate the fstab:</p>
+
+<pre><code># file /mnt/etc/fstab 
+# cat /mnt/etc/fstab
+
+</code></pre>
+
+<p>Now you have the basic system installed the /dev/sdb, next step we will enter the system and configure this newly installed system.</p>
+
+<h4 id="configure-the-system">Configure The System</h4>
+
+<p>Enter the system via:</p>
+
+<pre><code># arch-chroot /mnt /bin/bash
+
+</code></pre>
+
+<p>Locale:</p>
+
+<pre><code># vim /etc/locale.gen
+# locale-gen
+
+</code></pre>
+
+<p>Default Language:</p>
+
+<pre><code>echo LANG=en_US.UTF-8&gt;/etc/locale.conf
+
+</code></pre>
+
+<p>Timezone:</p>
+
+<pre><code># ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
+</code></pre>
+
+<p>HostName:</p>
+
+<pre><code># echo SurfacePro&gt;/etc/hostname
+
+</code></pre>
+
+<p>Auto-configuring the network at startup:</p>
+
+<pre><code># systemctl start dhcpcd.service
+# systemctl enable dhcpcd.service    
+
+</code></pre>
+
+<p>Set the password for root user:</p>
+
+<pre><code># passwd
+
+</code></pre>
+
+<p>Install grub with efi support:</p>
+
+<pre><code># pacman -S grub efibootmgr
+# grub-install --target=x86_64-efi --efi-directory=/boot/EFI --bootloader-id=arch_grub --recheck
+
+</code></pre>
+
+<p>Generate the configure files:</p>
+
+<pre><code># grub-mkconfig -o /boot/grub/grub.cfg
+
+</code></pre>
+
+<h4 id="finish">Finish</h4>
+
+<p>Return to the installtion environment:</p>
+
+<pre><code>exit
+
+</code></pre>
+
+<p>Umount new partion:</p>
+
+<pre><code># umount -R /mnt
+
+</code></pre>
+
+<p>Reboot via <code>shutdown -h now</code> and next time remove the flash-disk, also press power-up and volumn-down key together, this time you will be leading the usb-disk powered system.</p>
+
+<h3 id="screenshot">ScreenShot:</h3>
+
+<p>See following picture:</p>
+
+<p><img src="/images/surfacepro1.jpg" alt="/images/surfacepro1.jpg" /></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/06/16/archlinux-on-surface-pro-1/">ArchLinux On Surface Pro(1)</a>
       </h1>
       <span class="post-date">Jun 16, 2014 
@@ -438,116 +638,6 @@ LC_TIME=&quot;en_US.UTF-8&quot;
 <p>When writing octopress based blogs, you will face .rvmrc cannot executed, then enable the terminal emulator&rsquo;s setting, change it as <code>run as login shell</code>.</p>
 
 <p>Some more tips will be added later.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/05/24/how-to-quickly-solve-python-problems/">How to quickly solve python problems</a>
-      </h1>
-      <span class="post-date">May 24, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
-        
-      </span>
-      
-      
-
-<h3 id="问题">问题</h3>
-
-<p>在txt里面打印1-10里面随机的9个数。</p>
-
-<h3 id="思路">思路</h3>
-
-<h4 id="如何生成随机数">如何生成随机数？</h4>
-
-<p>Google &ldquo;generate  random python&rdquo; , 结果如下：<br />
-<img src="/images/python1.jpg" alt="/images/python1.jpg" /></p>
-
-<p>挨个看，马上你会发现下面这个网页有答案：<br />
-<a href="http://stackoverflow.com/questions/5555712/generate-a-random-number-in-python">http://stackoverflow.com/questions/5555712/generate-a-random-number-in-python</a></p>
-
-<p>启动终端试验之：</p>
-
-<pre><code>$ python
-Python 2.7.6 (default, Feb 26 2014, 12:07:17) 
-[GCC 4.8.2 20140206 (prerelease)] on linux2
-Type &quot;help&quot;, &quot;copyright&quot;, &quot;credits&quot; or &quot;license&quot; for more information.
-&gt;&gt;&gt; from random import randint
-&gt;&gt;&gt; randint(2,9)
-3
-&gt;&gt;&gt; randint(1,10)
-9
-&gt;&gt;&gt; randint(1,10)
-4
-
-</code></pre>
-
-<h4 id="如何循环打印">如何循环打印</h4>
-
-<p>照样Google, 搜索关键字&rdquo; python loop times&rdquo;,结果如下：<br />
-<img src="/images/python2.jpg" alt="/images/python2.jpg" /><br />
-随便点点看， 发现python自己的文档里就已经有很详细的关于loop的例子了:<br />
-<a href="https://wiki.python.org/moin/ForLoop">https://wiki.python.org/moin/ForLoop</a></p>
-
-<p>试验之:</p>
-
-<pre><code>&gt;&gt;&gt; for x in range(0,3):
-...     print &quot;hello&quot;
-... 
-hello
-hello
-hello
-
-</code></pre>
-
-<h3 id="综合-得出答案">综合，得出答案</h3>
-
-<p>用for的实现:</p>
-
-<pre><code>&gt;&gt;&gt; for x in range(0,9):
-...     print random.randrange(1,10)
-... 
-2
-5
-3
-7
-9
-4
-7
-3
-1
-
-</code></pre>
-
-<p>发散到用while的实现(原代码见上面的wiki网页)</p>
-
-<pre><code>&gt;&gt;&gt; x = 1
-&gt;&gt;&gt; while x &lt; 10:
-...     print random.randrange(1,10)
-...     x += 1
-... 
-4
-4
-4
-5
-1
-9
-1
-8
-2
-
-</code></pre>
-
-<p>当然你还可以反着弄while:</p>
-
-<pre><code>&gt;&gt;&gt; x = 10
-&gt;&gt;&gt; while x &gt; 0:
-等等等等，不提示了
-
-</code></pre>
 
       
     </div>
@@ -1973,8 +2063,17 @@ hello
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -1983,7 +2082,7 @@ hello
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

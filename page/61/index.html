@@ -105,6 +105,74 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/05/25/tips-on-deleteing-neutron-subnet-and-router/">Tips on deleteing neutron subnet and router</a>
+      </h1>
+      <span class="post-date">May 25, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      <p>Get the existing subnet:</p>
+
+<pre><code>root@Controller:~# neutron subnet-list 
++--------------------------------------+-------------+----------------+--------------------------------------------------+
+| id                                   | name        | cidr           | allocation_pools                                 |
++--------------------------------------+-------------+----------------+--------------------------------------------------+
+| 98725e3a-7ee2-4e3f-83e3-eaca0236918f | demo-subnet | 192.168.1.0/24 | {&quot;start&quot;: &quot;192.168.1.2&quot;, &quot;end&quot;: &quot;192.168.1.254&quot;} |
++--------------------------------------+-------------+----------------+--------------------------------------------------+
+</code></pre>
+
+<p>Delete it via:</p>
+
+<pre><code>root@Controller:~# neutron subnet-delete --name demo-subnet
+Unable to complete operation on subnet 98725e3a-7ee2-4e3f-83e3-eaca0236918f. One or more ports have an IP allocation from this subnet. (HTTP 409) (Request-ID: req-7d729bcc-ec50-4de6-83d9-5d2b98332127)
+</code></pre>
+
+<p>Because we have the router, so we list the router via:</p>
+
+<pre><code>root@Controller:~# neutron router-list
++--------------------------------------+-------------+-----------------------+
+| id                                   | name        | external_gateway_info |
++--------------------------------------+-------------+-----------------------+
+| a745487e-8e7c-4cc2-aff7-a8423d0a6614 | demo-router | null                  |
++--------------------------------------+-------------+-----------------------+
+</code></pre>
+
+<p>Get the ports of this router:</p>
+
+<pre><code>root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
++--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+| id                                   | name | mac_address       | fixed_ips                                                                          |
++--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+| e56fe57e-e939-493b-8984-b5adfa64e2cc |      | fa:16:3e:b3:7b:e6 | {&quot;subnet_id&quot;: &quot;98725e3a-7ee2-4e3f-83e3-eaca0236918f&quot;, &quot;ip_address&quot;: &quot;192.168.1.1&quot;} |
++--------------------------------------+------+-------------------+------------------------------------------------------------------------------------+
+
+</code></pre>
+
+<p>So we remove the interface from this router via:</p>
+
+<pre><code>root@Controller:~# neutron router-interface-delete demo-router 98725e3a-7ee2-4e3f-83e3-eaca0236918f
+Removed interface from router demo-router.
+root@Controller:~# neutron router-port-list a745487e-8e7c-4cc2-aff7-a8423d0a6614
+</code></pre>
+
+<p>Now we could remove the router and the subnet:</p>
+
+<pre><code>root@Controller:~# neutron router-delete demo-router
+Deleted router: demo-router
+root@Controller:~# neutron subnet-delete demo-subnet
+Deleted subnet: demo-subnet
+</code></pre>
+
+<p>From now on ,you could create another subnet and router.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/05/25/san-jie-dian-da-jian-openstack-juno-4/">三节点搭建OpenStack Juno(4)</a>
       </h1>
       <span class="post-date">May 25, 2015 
@@ -1570,213 +1638,6 @@ notification_driver = noop
       
     </div>
     
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/05/24/san-jie-dian-da-jian-openstack-juno/">三节点搭建OpenStack Juno(1)</a>
-      </h1>
-      <span class="post-date">May 24, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="目的">目的</h3>
-
-<p>最近在研究解耦OpenStack，以及OpenStack的各种网络模型，下面是一个最简单的用于搭建OpenStack Juno的过程。</p>
-
-<h3 id="硬件及网络准备">硬件及网络准备</h3>
-
-<h4 id="物理服务器">物理服务器</h4>
-
-<p>物理服务器:  i5-4460/32G 内存，128G SSD+3T IDE，事实上这个教程跑完你也用不到这么强悍的配置，理论上在8G的物理机器上就可以运行完本文。<br />
-物理服务器操作系统: Ubuntu14.04</p>
-
-<h4 id="虚拟机">虚拟机：</h4>
-
-<p>虚拟机1, Controller: 1 processor, 2 GB memory, and 5 GB storage.<br />
-虚拟机2, Network: 1 processor, 512 MB memory, and 5 GB storage.<br />
-虚拟机3, Compute: 1 processor, 2 GB memory, and 10 GB storage.</p>
-
-<h4 id="网络规划">网络规划</h4>
-
-<p>Management: 10.55.55.0/24, 只用于管理的网络，公网无法访问。简单来说，这个网络用于OpenStack各个组件之间的相互通信。<br />
-Tunnel: 10.66.66.0/24, 用于计算节点和网络节点之间的通信。这个隧道使得虚拟机的实例可以和相互通信。<br />
-External: 192.168.1.0/24, 用于虚拟机实例的Internet访问。<br />
-当然我们可以添加额外的存储网络，这里为了简单起见我们不使用cinder服务，使用单纯的虚拟机镜像即可。</p>
-
-<h4 id="节点网络名规划">节点网络名规划</h4>
-
-<p>Controller节点:    controller.openstack.local, 10.55.55.2(管理网络), N/A, N/A.<br />
-Network节点:    Network.openstack.local, 10.55.55.3(管理网络), 10.66.66.3(隧道网络), 192.168.1.3(Internet公网).
-Compute节点:    Compute.openstack.local, 10.55.55.4(管理网络), 10.66.66.4(隧道网络).</p>
-
-<p>一个参考的例图如下:<br />
-<img src="/images/2015_05_24_14_50_37_629x551.jpg" alt="/images/2015_05_24_14_50_37_629x551.jpg" /></p>
-
-<p>按照上述的描述我们创建三台虚拟机，并进行初始化配置。</p>
-
-<h3 id="虚拟机初始化配置">虚拟机初始化配置</h3>
-
-<p>下面罗列的代码是我在本机上的创建过程，仅供参考:</p>
-
-<pre><code>$ pwd
-/media/repo/Image/3NodeOpenStack
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackController.qcow2
-Formatting 'OpenStackController.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackNetwork.qcow2
-Formatting 'OpenStackNetwork.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-$ qemu-img create -f qcow2 -b /media/repo/Image/UbuntuBase.qcow2 OpenStackCompute.qcow2
-Formatting 'OpenStackCompute.qcow2', fmt=qcow2 size=107374182400 backing_file='/media/repo/Image/UbuntuBase.qcow2' encryption=off cluster_size=65536 lazy_refcounts=off 
-
-</code></pre>
-
-<p>创建虚拟机的时候， OpenStackCompute节点需要把CPU的参数带下去，如下图所示:<br />
-<img src="/images/2015_05_24_15_00_07_517x483.jpg" alt="/images/2015_05_24_15_00_07_517x483.jpg" /></p>
-
-<p>各个节点的network定义文件如下:</p>
-
-<p>控制节点:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.2
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
-</code></pre>
-
-<p>网络节点:</p>
-
-<pre><code># The loopback network interface
-auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.3
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
-
-
-auto eth1
-iface eth1 inet static
-address 10.66.66.3
-netmask 255.255.255.0
-
-auto eth2
-iface eth2 inet static
-address 192.168.1.3
-netmask 255.255.255.0
-</code></pre>
-
-<p>计算节点:</p>
-
-<pre><code>auto lo
-iface lo inet loopback
-
-# The primary network interface
-auto eth0
-iface eth0 inet static
-address 10.55.55.4
-netmask 255.255.255.0
-gateway 10.55.55.1
-dns-nameservers 114.114.114.114
-
-auto eth1
-iface eth1 inet static
-address 10.66.66.4
-netmask 255.255.255.0
-
-</code></pre>
-
-<p>每个节点分别更改其<code>/etc/hostname</code>为对应的名字，而每台机器上的<code>/etc/hosts</code>也做对应的修改，例如Controlle节点上的例子如下:</p>
-
-<pre><code>$ cat /etc/hosts
-127.0.0.1       localhost
-127.0.1.1       Controller
-10.55.55.2      Controller
-10.55.55.3      Network
-10.55.55.4      Compute
-......
-
-$ cat /etc/hostname
-Controller
-
-</code></pre>
-
-<p>网络配置完毕后，保证可以通过<code>ping Controller</code>等命令达到互通。</p>
-
-<p>在进入到后续步骤前，更新所有节点到最新状态:</p>
-
-<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get upgrade &amp;&amp; sudo apt-get dist-upgrade &amp;&amp; sudo reboot
-</code></pre>
-
-<h3 id="ntp-服务器-客户端配置">NTP 服务器/客户端配置</h3>
-
-<p>使用NTP来保证各个节点之间的时间同步，对后续加入的各个节点，同样需要使用NTP来同步该节点时间。我们将Controller作为NTP服务器,在Controller上，安装和配置NTP服务器：</p>
-
-<h4 id="ntp服务器">NTP服务器</h4>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 修改成大陆时间
-    server 2.cn.pool.ntp.org
-    server 1.asia.pool.ntp.org
-    server 2.asia.pool.ntp.org
-    # 修改 restrict 設定
-    restrict -4 default kod notrap nomodify
-    restrict -6 default kod notrap nomodify
-# service ntp restart
-</code></pre>
-
-<h4 id="ntp客户端">NTP客户端</h4>
-
-<p>其他的节点上都需要安装NTP客户端并使用NTP服务器时间同步。</p>
-
-<pre><code># apt-get -y install ntp
-# vim /etc/ntp.conf
-    # 設定 controller 為參照的 time server
-    # 並將其他 server 開頭的設定進行註解
-    server 10.55.55.2 iburst
-# service ntp restart
-</code></pre>
-
-<p>检查结果是否正确:</p>
-
-<pre><code>root@JunoNetwork:~# ntpq -c peers
-     remote           refid      st t when poll reach   delay   offset  jitter
-==============================================================================
- Controller  59.106.180.168   3 u    1   64    1    0.239  447024.   0.049
-</code></pre>
-
-<p>接下来真正进入OpenStack的安装和配置过程。</p>
-
-<h3 id="源设定">源设定</h3>
-
-<p>Juno的源没有被包含在Ubuntu14.04的官方源中(官方源中版本为IceHouse)，所以通过下列命令添加OpenStack Juno源:<br />
-所有节点上(Controller,Network,Compute):</p>
-
-<pre><code>$ sudo apt-get install ubuntu-cloud-keyring
-$ sudo bash
-# echo &quot;deb http://ubuntu-cloud.archive.canonical.com/ubuntu&quot; &quot;trusty-updates/juno main&quot; &gt; /etc/apt/sources.list.d/cloudarchive-juno.list
-# apt-get update &amp;&amp; apt-get -y dist-upgrade
-</code></pre>
-
-<p>第一部分就先到这里。</p>
-
-      
-    </div>
-    
     
 
 <ul class="pagination">
@@ -3198,8 +3059,17 @@ $ sudo bash
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -3208,7 +3078,7 @@ $ sudo bash
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

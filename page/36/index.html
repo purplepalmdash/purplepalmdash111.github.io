@@ -105,6 +105,157 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/03/10/pei-zhi-qemude-vdewang-luo/">配置Qemu的VDE网络</a>
+      </h1>
+      <span class="post-date">Mar 10, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>为了快速验证镜像，配置出一个在本机上的tap0端口，虚拟机则通过VDE虚拟交换机连接到此端口后
+，DHCP获得IP地址，从而得到网络连接， 以下是步骤。</p>
+
+<h3 id="安装vde">安装VDE</h3>
+
+<p>ArchLinux下安装命令为<code>sudo pacman -S vde2</code>.</p>
+
+<h3 id="配置">配置</h3>
+
+<p>贴出配置文件如下, 摘录自ArchLinux的Wiki. 值得注意的是，在Systemd的配置文件中，需要先把
+tun驱动装载上，才能使得VDE启动成功。</p>
+
+<p>配置qemu网络环境配置脚本:</p>
+
+<pre><code>$ vim /etc/systemd/scripts/qemu-network-env 
+#!/bin/sh
+# QEMU/VDE network environment preparation script
+
+# The IP configuration for the tap device that will be used for
+# the virtual machine network:
+
+TAP_DEV=tap0
+TAP_IP=10.33.34.254
+TAP_MASK=24
+TAP_NETWORK=10.33.34.0
+
+# Host interface
+NIC=enp2s0
+
+case &quot;$1&quot; in
+  start)
+        echo -n &quot;Starting VDE network for QEMU: &quot;
+
+        # If you want tun kernel module to be loaded by script uncomment here
+        modprobe tun 2&gt;/dev/null
+        # Wait for the module to be loaded
+        while ! lsmod | grep -q &quot;^tun&quot;; do echo &quot;Waiting for tun device&quot;; sleep 1; done
+
+        # Start tap switch
+        vde_switch -tap &quot;$TAP_DEV&quot; -daemon -mod 660 -group users
+
+        # Bring tap interface up
+        ip address add &quot;$TAP_IP&quot;/&quot;$TAP_MASK&quot; dev &quot;$TAP_DEV&quot;
+        ip link set &quot;$TAP_DEV&quot; up
+
+        # Start IP Forwarding
+        echo &quot;1&quot; &gt; /proc/sys/net/ipv4/ip_forward
+        iptables -t nat -A POSTROUTING -s &quot;$TAP_NETWORK&quot;/&quot;$TAP_MASK&quot; -o &quot;$NIC&quot; -j MASQUERADE
+        ;;
+  stop)
+        echo -n &quot;Stopping VDE network for QEMU: &quot;
+        # Delete the NAT rules
+        iptables -t nat -D POSTROUTING &quot;$TAP_NETWORK&quot;/&quot;$TAP_MASK&quot; -o &quot;$NIC&quot; -j MASQUERADE
+
+        # Bring tap interface down
+        ip link set &quot;$TAP_DEV&quot; down
+
+        # Kill VDE switch
+        pgrep -f vde_switch | xargs kill -TERM
+        ;;
+  restart|reload)
+        $0 stop
+        sleep 1
+        $0 start
+        ;;
+  *)
+        echo &quot;Usage: $0 {start|stop|restart|reload}&quot;
+        exit 1
+esac
+exit 0
+</code></pre>
+
+<p>配置symtemd服务:</p>
+
+<pre><code>$ vim /etc/systemd/system/qemu-network-env.service
+[Unit]
+Description=Manage VDE Switch
+
+[Service]
+Type=oneshot
+ExecStart=/etc/systemd/scripts/qemu-network-env start
+ExecStop=/etc/systemd/scripts/qemu-network-env stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+
+<p>使能服务，并重新启动机器:</p>
+
+<pre><code>$ sudo systemctl enable qemu-network-env.service
+</code></pre>
+
+<h3 id="配置dhcpd">配置DHCPD</h3>
+
+<p>需要配置dhcpd以使得在<code>10.33.34.0/24</code>网段提供DHCP服务：</p>
+
+<pre><code>$ sudo vim /etc/dhcpd.conf
+
+subnet
+10.33.34.0 netmask 255.255.255.0 {
+# --- default gateway
+option routers
+10.33.34.254;
+# --- Netmask
+option subnet-mask
+255.255.255.0;
+# --- Broadcast Address
+option broadcast-address
+10.33.34.255;
+# --- Domain name servers, tells the clients which DNS servers to use.
+option domain-name-servers
+223.5.5.5,180.76.76.76;
+option time-offset 0;
+range 10.33.34.2 10.33.34.253;
+default-lease-time 1209600;
+max-lease-time 1814400;
+}
+</code></pre>
+
+<p>修改完dhcpd的配置后， 重新启动dhcpd服务:</p>
+
+<pre><code>$ sudo systemctl restart dhcpd4
+</code></pre>
+
+<h3 id="启动虚拟机">启动虚拟机</h3>
+
+<p>启动虚拟机，并使其使用我们刚才添加的vde网络:</p>
+
+<pre><code>$ sudo qemu-system-x86_64 -net nic -net vde -hda ./test1.qcow2 -m 2048 --enable-kvm
+</code></pre>
+
+<p>启动的虚拟机将获得10.33.34.2~10.33.33.253之间的地址。<br />
+如果使用普通用户，会出错， To be solved.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2016/03/07/tips-on-v-usb-and-arduino-5/">Tips on V-USB and Arduino(5)</a>
       </h1>
       <span class="post-date">Mar 7, 2016 
@@ -677,42 +828,6 @@ if __name__ == '__main__':
             loop()
     finally:
         print &quot;finally comes here!&quot;
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/03/02/conntrack-tools-usage/">conntrack-tools usage</a>
-      </h1>
-      <span class="post-date">Mar 2, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="参考">参考</h3>
-
-<p><a href="https://blogs.it.ox.ac.uk/networks/2014/09/30/linux-and-eduroam-nat-logging-perl-and-regular-expressions/">https://blogs.it.ox.ac.uk/networks/2014/09/30/linux-and-eduroam-nat-logging-perl-and-regular-expressions/</a></p>
-
-<h3 id="安装">安装</h3>
-
-<p>ArchLinux下:</p>
-
-<pre><code>$ sudo pacman -S conntrack-tools
-</code></pre>
-
-<h3 id="使用">使用</h3>
-
-<p>记录新建/销毁连接数至文件:</p>
-
-<pre><code>$ sudo touch /var/log/conntrack-data.log
-$ sudo chmod 777 /var/log/conntrack-data.log
-$ sudo conntrack -E -eNEW,DESTROY --src-nat -otimestamp,extended --buffer-size=104857600 &gt; /var/log/conntrack-data.log
 </code></pre>
 
       
@@ -2139,8 +2254,17 @@ $ sudo conntrack -E -eNEW,DESTROY --src-nat -otimestamp,extended --buffer-size=1
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2149,7 +2273,7 @@ $ sudo conntrack -E -eNEW,DESTROY --src-nat -otimestamp,extended --buffer-size=1
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

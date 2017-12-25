@@ -105,6 +105,138 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/05/enable-dhcp-slash-dns-server-for-spacewalker-server/">Enable DHCP/DNS Server For SpaceWalker Server</a>
+      </h1>
+      <span class="post-date">Aug 5, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="dhcp-server">DHCP Server</h3>
+
+<p>Install the dhcp server via:</p>
+
+<pre><code># yum install -y dhcp
+</code></pre>
+
+<p>Then edit the configuration of <code>/etc/dhcp/dhcpd.conf</code>, like following:</p>
+
+<pre><code>#
+# DHCP Server Configuration file.
+#   see /usr/share/doc/dhcp*/dhcpd.conf.example
+#   see dhcpd.conf(5) man page
+#
+# specify name server's hostname or IP address
+option domain-name-servers 10.9.10.13;
+# default lease time
+default-lease-time 600;
+# max lease time
+max-lease-time 7200;
+# this DHCP server to be declared valid
+authoritative;
+# specify network address and subnet mask
+subnet 10.9.10.0 netmask 255.255.255.0 {
+    # specify the range of lease IP address
+    range dynamic-bootp 10.9.10.200 10.9.10.254;
+    # specify broadcast address
+    option broadcast-address 10.9.10.255;
+    # specify default gateway
+    option routers 10.9.10.1;
+    # Specify default dns server
+    option domain-name-servers 10.9.10.13;
+}
+</code></pre>
+
+<p>Start the dhcpd server via:</p>
+
+<pre><code># service dhcpd start
+</code></pre>
+
+<h3 id="dns-server-bind9">DNS Server(Bind9)</h3>
+
+<p>Just serve the private network. Install the bind9 via:</p>
+
+<pre><code># yum install -y bind bind-utils
+</code></pre>
+
+<p>Our server&rsquo;s name is <code>spacewalker</code>, need to map to <code>10.9.10.13</code>, following is the
+configuration steps:<br />
+Edit the file of <code>/etc/named.conf</code>.</p>
+
+<p>Change the listen address of port 53:</p>
+
+<pre><code>options {
+        listen-on port 53 { 127.0.0.1; 10.9.10.13; };
+#        listen-on-v6 port 53 { ::1; };
+...
+</code></pre>
+
+<p>Also add the allow-query items, to let the local network nodes for querying its dns:</p>
+
+<pre><code> allow-query     { localhost; 10.9.10.0/24;};
+</code></pre>
+
+<p>Add a new zone named <code>spacewalker</code>:</p>
+
+<pre><code>zone &quot;spacewalker&quot; {
+        type master;
+        file &quot;/etc/named/zones/db.spacewalker&quot;;
+};
+</code></pre>
+
+<p>Now add the zone definition file:</p>
+
+<pre><code># vim /etc/named/zones/db.spacewalker
+$TTL 604800
+@       IN      SOA     spacewalker. root.spacewalker. (
+                                3               ;Serial
+                                604800          ;Refresh
+                                86400           ;Retry
+                                2419200         ;Expire
+                                604800 )        ;Negative Cache TTL
+;
+; name servers - NS records
+      IN      NS      spacewalker.
+
+; name servers  - A records
+spacewalker.         IN      A       10.9.10.13
+</code></pre>
+
+<p>Check the configuration file format:</p>
+
+<pre><code># sudo named-checkconf
+# sudo named-checkzone spacewalker /etc/named/zones/db.spacewalker 
+zone spacewalker/IN: loaded serial 3
+OK
+</code></pre>
+
+<p>Start bind9 service via:</p>
+
+<pre><code># systemctl start named
+</code></pre>
+
+<p>If in CentOS6, then the steps may like following:</p>
+
+<pre><code>[root@spacewalk named]# service named start
+Generating /etc/rndc.key:                                  [  OK  ]
+Starting named:                                            [  OK  ]
+[root@spacewalk named]# chkconfig --level 345 named on
+[root@spacewalk named]# chkconfig --list named
+named           0:off   1:off   2:off   3:on    4:on    5:on    6:off
+</code></pre>
+
+<p>You could verify the correctness by startup a live-cd and view its ping result of <code>ping
+spacewalker</code>.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/08/04/tips-on-using-spacewalker-for-deploying-centos7/">Tips On Using SpaceWalker For Deploying CentOS7</a>
       </h1>
       <span class="post-date">Aug 4, 2015 
@@ -662,62 +794,6 @@ exclude=cobbler*
 
 <p>Cause the spacewalk has its own cobbler packages in repository, by addeding epel&rsquo;s
 cobbler into blacklist we could continue the setup.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/07/28/worktips-on-landscape/">WorkTips On LandScape</a>
-      </h1>
-      <span class="post-date">Jul 28, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<h3 id="installation">Installation</h3>
-
-<p>Landscape is now in PPA repository, add it via:</p>
-
-<pre><code>$ sudo apt-get install software-properties-common
-$ sudo add-apt-repository ppa:landscape/15.01
-$ sudo apt-get update
-$ sudo apt-get install landscape-server-quickstart 
-</code></pre>
-
-<p>During the installation will ask you the configuration of postfix, specify local.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>First time you login into the LandScape Root machine, you have to setup your email
-address and your password.<br />
-Then you could visit <code>https://YourIPAddress</code> for the configuration page.</p>
-
-<p>Add the node into the Landscape Root Node.</p>
-
-<p>In to-be-added node, copy the root node&rsquo;s <code>/etc/ssl/certs/landscape_server_ca.crt</code> to
-<code>/etc/landscape</code>, and modify the following configuration:</p>
-
-<pre><code># vim /etc/landscape/client.conf
-ssl_public_key = /etc/landscape/landscape_server_ca.crt
-</code></pre>
-
-<p>Now register the node into the Root Node.</p>
-
-<pre><code>$ sudo apt-get install landscape-client
-$ sudo landscape-config --computer-title &quot;LSNode0&quot; --account-name standalone \
---url https://packer-ubuntu-1404-server/message-system --ping-url \
-http://packer-ubuntu-1404-server/ping
-</code></pre>
-
-<p><img src="/images/2015_07_29_11_27_27_582x380.jpg" alt="/images/2015_07_29_11_27_27_582x380.jpg" /></p>
-
-<p>The following steps is to use or configurating the landscape based cluster
-administration.</p>
 
       
     </div>
@@ -2143,8 +2219,17 @@ administration.</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2153,7 +2238,7 @@ administration.</p>
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

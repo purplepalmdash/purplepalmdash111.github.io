@@ -105,6 +105,236 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/10/write-python-weather-app-on-heroku-5/">Write Python Weather APP on Heroku(5)</a>
+      </h1>
+      <span class="post-date">May 10, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
+        
+      </span>
+      
+      
+
+<p>In fact this is a migration from sqlite3 to postgresql.</p>
+
+<h3 id="view-the-historical-sqlite3">View the historical sqlite3</h3>
+
+<p>We will refer to our own design of database. First fetch the data file, this is a sqlite3 file, so we use sqlite3 to view its structure.</p>
+
+<pre><code>$ sqlite3  
+SQLite version 3.8.4.3 2014-04-03 16:53:12
+Enter &quot;.help&quot; for usage hints.
+Connected to a transient in-memory database.
+Use &quot;.open FILENAME&quot; to reopen on a persistent database.
+sqlite&gt; .open ./weather.db
+sqlite&gt; .tables
+foo
+sqlite&gt; .schema foo
+CREATE TABLE foo (d_temper integer, d_humi integer, d_pm10 integer, d_pm25 real, d_time timestamp);
+
+</code></pre>
+
+<p>Although sqlite3 is supported on heroku, we&rsquo;d better use heroku&rsquo;s suggestion, to use postgre for storing out database.</p>
+
+<h3 id="create-database-in-postgres">Create Database In Postgres</h3>
+
+<p>####Datatime selection:<br />
+Postgres provides a very fantanstic way for handling the datatime, it supports the timezone, comparing to GAE&rsquo;s database, this feature will let us get the current time based on timezone. So we did the following tests:</p>
+
+<pre><code># CREATE TABLE my_tbl (
+mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+mylocaldb(# CHECK(EXTRACT(TIMEZONE FROM my_timestamp) = '0')
+mylocaldb(# );
+CREATE TABLE
+mylocaldb=# \dt my_tbl
+        List of relations
+ Schema |  Name  | Type  | Owner 
+--------+--------+-------+-------
+ public | my_tbl | table | Trusty
+(1 row)
+
+</code></pre>
+
+<p>When we want to insert the datatime into table &lsquo;my_tbl&rsquo;, simply do following:</p>
+
+<pre><code>mylocaldb=# SET timezone = 'UTC';
+SET
+mylocaldb=# INSERT INTO my_tbl (my_timestamp) VALUES (NOW());
+INSERT 0 1
+
+</code></pre>
+
+<p>And for querying out the inserted records, we do following:</p>
+
+<pre><code>mylocaldb=# select * from public.my_tbl
+;
+         my_timestamp          
+-------------------------------
+ 2014-05-10 01:39:52.87532+00
+ 2014-05-10 01:42:44.130269+00
+(2 rows)
+
+mylocaldb=# SET timezone='Asia/Shanghai';
+SET
+mylocaldb=# select * from public.my_tbl
+mylocaldb-# ;
+         my_timestamp          
+-------------------------------
+ 2014-05-10 09:39:52.87532+08
+ 2014-05-10 09:42:44.130269+08
+(2 rows)
+
+mylocaldb=# SET timezone='America/Los_Angeles';
+SET
+mylocaldb=# select * from public.my_tbl;
+         my_timestamp          
+-------------------------------
+ 2014-05-09 18:39:52.87532-07
+ 2014-05-09 18:42:44.130269-07
+(2 rows)
+
+</code></pre>
+
+<p>We can see the output formats depends on our &ldquo;timezone&rdquo; value.</p>
+
+<h4 id="select-other-data-formats">Select Other Data Formats</h4>
+
+<p>We listed following table for describing the Data we inserted:<br />
+Timestamp       integer     integer    integer    integer<br />
+Insert_Time     Temperature Humidity   PMTen       PMTwoFive</p>
+
+<p>Thus the sql sentense is as following:</p>
+
+<pre><code>mylocaldb=# CREATE TABLE weather (
+mylocaldb(# my_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+mylocaldb(# Temperature ^C
+mylocaldb=# CREATE TABLE weather (
+mylocaldb(# Insert_Time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+mylocaldb(# Temperature integer,
+mylocaldb(# Humidity integer,
+mylocaldb(# PMTen integer,
+mylocaldb(# PMTwoFive integer,
+mylocaldb(#  CHECK(EXTRACT(TIMEZONE FROM Insert_Time) = '0'));
+
+</code></pre>
+
+<p>Check the tables:</p>
+
+<pre><code>mylocaldb=# \dt
+        List of relations
+ Schema |  Name   | Type  | Owner 
+--------+---------+-------+-------
+ public | my_tbl  | table | Trusty
+ public | user    | table | Trusty
+ public | weather | table | Trusty
+(3 rows)
+
+</code></pre>
+
+<p>Insert one record:</p>
+
+<pre><code>mylocaldb=# INSERT INTO weather (Insert_Time, Temperature, Humidity, PMTen, PMTwoFive) VALUES(NOW(), 25, 80, 150, 75);
+INSERT 0 1
+
+</code></pre>
+
+<p>Displaying the inserted record:</p>
+
+<pre><code>mylocaldb=# SET timezone='Asia/Shanghai';
+SET
+mylocaldb=# select * from public.weather;
+          insert_time          | temperature | humidity | pmten | pmtwofive 
+-------------------------------+-------------+----------+-------+-----------
+ 2014-05-10 10:38:27.276043+08 |          25 |       80 |   150 |        75
+(1 row)
+
+</code></pre>
+
+<h4 id="database-operation">Database Operation</h4>
+
+<p>We need to create just once database, So this function should be Check_Or_Create().<br />
+We need to insert records, so Insert_Record() should be written.<br />
+Other Operation, modification or delete shouldn&rsquo;t care at the very beginning.<br />
+We will use a new file for recording all of the function.</p>
+
+<p>The code for Create and Insert record into weather table is listed as following:</p>
+
+<pre><code>from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Column, Table, ForeignKey
+from sqlalchemy import Integer, String, DateTime
+import datetime
+
+# Create the engine for connecting the local database
+# How to connect the remote engine, heroku postgres? 
+# Yes, it's possible. The DATABASE_URL environment variable provided by heroku fits perfectly as argument for create_engine. Behind the scene, it's a postgresql database, which is perfectly handled by sqlalchemy.
+# 
+# The way to do it may vary depending on the framework you use, but there shouldn't be any difficulty.
+
+engine = create_engine('postgresql+psycopg2://Trusty:@localhost:5432/mylocaldb',echo=True)
+metadata=MetaData(bind=engine)
+
+# Definition of the weather table
+weather_table=Table('weather',metadata,
+	Column('Insert_Time', DateTime(timezone=True),primary_key=True),
+	Column('Temperature', Integer),
+	Column('Humidity', Integer),
+	Column('PmTen', Integer),
+	Column('PmTwoFive', Integer),
+)
+
+# Create the table in mylocaldb
+metadata.create_all(checkfirst=True)
+
+# The actual SQL Language
+#CREATE TABLE weather (
+#	&quot;Insert_Time&quot; TIMESTAMP WITH TIME ZONE NOT NULL, 
+#	&quot;Temperature&quot; INTEGER, 
+#	&quot;Humidity&quot; INTEGER, 
+#	&quot;PmTen&quot; INTEGER, 
+#	&quot;PmTwoFive&quot; INTEGER, 
+#	PRIMARY KEY (&quot;Insert_Time&quot;)
+#)
+
+# mylocaldb=# select * from public.weather;
+#  Insert_Time | Temperature | Humidity | PmTen | PmTwoFive 
+# -------------+-------------+----------+-------+-----------
+# (0 rows)
+
+# Record Insertion
+# First generate an insertion sentense:
+ins = weather_table.insert()
+#&gt;&gt;&gt; str(ins)
+#'INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)'
+
+ins = weather_table.insert().values(Insert_Time=datetime.datetime.utcnow(), Temperature=25, Humidity=75, PmTen=100, PmTwoFive=55)
+
+#&gt;&gt;&gt; str(ins)
+#'INSERT INTO weather (&quot;Insert_Time&quot;, &quot;Temperature&quot;, &quot;Humidity&quot;, &quot;PmTen&quot;, &quot;PmTwoFive&quot;) VALUES (%(Insert_Time)s, %(Temperature)s, %(Humidity)s, %(PmTen)s, %(PmTwoFive)s)'
+#
+#&gt;&gt;&gt; ins.compile().params
+#{'PmTen': 100, 'PmTwoFive': 55, 'Temperature': 25, 'Insert_Time': datetime.datetime(2014, 5, 10, 5, 58, 21, 677234), 'Humidity': 75}
+
+# Connect to engine and execute. 
+conn = engine.connect()
+# &gt;&gt;&gt; conn
+# &lt;sqlalchemy.engine.base.Connection object at 0x2715890&gt;
+result = conn.execute(ins)
+# View result in psql
+# mylocaldb=# select * from public.weather;
+#           Insert_Time          | Temperature | Humidity | PmTen | PmTwoFive 
+# -------------------------------+-------------+----------+-------+-----------
+#  2014-05-10 05:58:21.677234+08 |          25 |       75 |   100 |        55
+
+</code></pre>
+
+<p>The critical functions has been pointed out in the above python file. Now we will consider how to run these functions at background. This will lead to next topic, &ldquo;Run multiple process in a single Heroku dyno&rdquo;.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/05/10/write-python-weather-app-on-heroku-6/">Write Python Weather APP on Heroku(6)</a>
       </h1>
       <span class="post-date">May 10, 2014 
@@ -705,85 +935,6 @@ d47ena4men35jn=&gt; SELECT * FROM public.user;
 </code></pre>
 
 <p>We can use python&rsquo;s interface for add/delete records, drop tables, etc.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/05/09/write-python-weather-app-on-heroku-4/">Write Python Weather APP on Heroku(4)</a>
-      </h1>
-      <span class="post-date">May 9, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
-        
-      </span>
-      
-      
-
-<h3 id="local-database-sync">Local Database Sync</h3>
-
-<p>First fetch the remote database to localdb via following command:</p>
-
-<pre><code>$ heroku pg:pull DATABASE_URL mylocaldb --app  python-weather-app
-
-</code></pre>
-
-<p>This command will pull down your database down and create a copy version locally. You can easily view all of the database via psql mylocaldb.</p>
-
-<p>As root, edit following files:</p>
-
-<pre><code># pwd
-/var/lib/postgres/data
-# vim postgresql.conf
-listen_addresses = 'localhost'		# what IP address(es) to listen on;
-					# comma-separated list of addresses;
-					# defaults to 'localhost'; use '*' for all
-					# (change requires restart)
-port = 5432				# (change requires restart)
-# vim pb_hba.conf
-# IPv4 local connections:
-host    all             all             127.0.0.1/32            trust
-host    all             all             127.0.0.1/32            md5
-
-</code></pre>
-
-<p>After editing, save the file and restart the postgresql service.</p>
-
-<h3 id="connecting-to-localdatabase">Connecting to LocalDatabase</h3>
-
-<p>Following shows how to add/query the records. Now your environment could be totally debugged locally.</p>
-
-<pre><code>&gt;&gt;&gt; import psycopg2
-&gt;&gt;&gt; psycopg2.connect(database=&quot;mylocaldb&quot;,user=&quot;Trusty&quot;,password=&quot;&quot;,host=&quot;127.0.0.1&quot;,port=&quot;5432&quot;)
-&lt;connection object at 0x30f0cd0; dsn: 'dbname=mylocaldb user=Trusty password=xx host=127.0.0.1 port=5432', closed: 0&gt;
-&gt;&gt;&gt; db_conn = 'postgresql+psycopg2://Trusty:@localhost/mylocaldb'
-&gt;&gt;&gt; app = Flask(__name__) 
-&gt;&gt;&gt; app.config['SQLALCHEMY_DATABASE_URI'] = db_conn
-&gt;&gt;&gt; db = SQLAlchemy(app)
-&gt;&gt;&gt; db.create_all()
-&gt;&gt;&gt; class User(db.Model):
-...     id = db.Column(db.Integer, primary_key=True)
-...     name = db.Column(db.String(80))
-...     email = db.Column(db.String(120), unique=True)
-...     def __init__(self, name, email):
-...         self.name = name
-...         self.email = email
-...     def __repr__(self):
-...         return '&lt;Name %r&gt;' % self.name
-... 
-&gt;&gt;&gt; user = User('John Doe', 'john.doe@example.com')
-&gt;&gt;&gt; all_users=User.query.all()
-&gt;&gt;&gt; print all_users
-[&lt;Name u'John Doe'&gt;]
-&gt;&gt;&gt; user1 = User('Jim Green', 'jim.green@english.com')
-&gt;&gt;&gt; db.session.add(user1)
-&gt;&gt;&gt; db.session.commit()
-
-</code></pre>
-
-<p>In genhtml.py we need to do corresponding changes in order to enable the local database.</p>
 
       
     </div>
@@ -2209,8 +2360,17 @@ host    all             all             127.0.0.1/32            md5
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2219,7 +2379,7 @@ host    all             all             127.0.0.1/32            md5
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

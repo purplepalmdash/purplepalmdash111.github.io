@@ -105,6 +105,135 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/22/enable-sshd-on-2440/">Enable sshd on 2440</a>
+      </h1>
+      <span class="post-date">Oct 22, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="package-preparation">Package Preparation</h3>
+
+<p>For openssh requires the following packages, first we have to download them all from internet.<br />
+zlib, openssl, openssh.</p>
+
+<pre><code>$ wget http://zlib.net/zlib-1.2.8.tar.gz
+$ wget https://www.openssl.org/source/openssl-0.9.8zc.tar.gz
+$ wget http://mirror.internode.on.net/pub/OpenBSD/OpenSSH/portable/openssh-6.7p1.tar.gz
+
+</code></pre>
+
+<h3 id="building">Building</h3>
+
+<h4 id="cross-compile-zlib">Cross-compile zlib</h4>
+
+<p>We have to manually change the following line in Makefile :</p>
+
+<pre><code>LDSHARED=gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+to
+LDSHARED=arm-linux-gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+
+</code></pre>
+
+<p>Then:</p>
+
+<pre><code>$ ./configure --prefix=/media/nfs/rootfs/usr/
+$ make CC=arm-linux-gcc AR=arm-linux-ar LD=arm-linux-ld
+$ make install
+
+</code></pre>
+
+<h4 id="cross-compile-openssh">Cross-compile openssh</h4>
+
+<p>Get the openssl&rsquo;s configure help menus:</p>
+
+<pre><code># ./Configure --help
+Usage: Configure [no-&lt;cipher&gt; ...] [enable-&lt;cipher&gt; ...] [experimental-&lt;cipher&gt; ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]shared] [[no-]zlib|zlib-dynamic] [enable-montasm] [no-asm] [no-dso] [no-krb5] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--with-xxx[=vvv]] [--test-sanity] os/compiler[:flags]
+
+</code></pre>
+
+<p>Then configure the building via:</p>
+
+<pre><code>$ ./Configure --prefix=/media/nfs/rootfs/usr os/compiler:/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
+$ make &amp;&amp; make install
+
+</code></pre>
+
+<h4 id="cross-compile-openssh-1">Cross-compile openssh</h4>
+
+<p>Configure the openssh via following command, the lib&rsquo;s directory should be adjust to previous installed directory:</p>
+
+<pre><code>$ /configure --host=arm-linux --with-libs --with-zlib=/media/nfs/rootfs/usr/ --with-ssl-dir=/media/nfs/rootfs/usr/ --disable-etc-default-login CC=/opt/cross/arm-linux-gcc_4.3.2/bin/arm-linux-gcc
+
+</code></pre>
+
+<p>Make but don&rsquo;t install.<br />
+Install steps:</p>
+
+<pre><code>$ cp sshd /media/nfs/rootfs/usr/local/sbin/
+$ cp scp sftp ssh ssh-add ssh-agent ssh-keygen ssh-keyscan /media/nfs/rootfs/usr/local/bin/
+$ cp sftp-server ssh-keysign /media/nfs/rootfs/usr/local/libexec/
+
+</code></pre>
+
+<p>In 2440 board, run:</p>
+
+<pre><code>[root@TrustyArch busybox-1.22.1]# mkdir -p /usr/local/etc/
+[root@TrustyArch busybox-1.22.1]# mkdir -p /var/run/
+[root@TrustyArch busybox-1.22.1]# mkdir -p /var/empty/sshd
+[root@TrustyArch busybox-1.22.1]# chmod 755 /var/empty
+
+</code></pre>
+
+<p>Generate the key files:</p>
+
+<pre><code>$ ssh-keygen -t rsa -f ssh_host_rsa_key -N &quot;&quot;
+$ ssh-keygen -t rsa1 -f ssh_host_key -N &quot;&quot;
+$ ssh-keygen -t dsa -f ssh_host_dsa_key -N &quot;&quot;
+$ cp ssh_host_dsa_key ssh_host_dsa_key.pub ssh_host_key ssh_host_key.pub ssh_host_rsa_key ssh_host_rsa_key.pub /media/nfs/rootfs/usr/local/etc/
+
+</code></pre>
+
+<p>Add lines into /etc/passwd and /etc/group in embedded system rootfs:</p>
+
+<pre><code>$ cat /etc/passwd
+sshd:*:74:74:Privilege-separated SSH:/var/empty/sshd:/sbin/nologin
+$ cat /etc/group
+sshd:*:74:
+
+</code></pre>
+
+<p>Change the sshd_config file:</p>
+
+<pre><code>$ cp sshd_config /media/nfs/rootfs/usr/local/etc/
+$ vim /media/nfs/rootfs/usr/local/etc/sshd_config
+HostKey /usr/local/etc/ssh_host_key
+HostKey /usr/local/etc/ssh_host_rsa_key
+HostKey /usr/local/etc/ssh_host_dsa_key
+PermitRootLogin yes
+PermitEmptyPasswords yes
+UsePrivilegeSeparation no
+Subsystem	sftp	/usr/local/libexec/sftp-server
+
+</code></pre>
+
+<p>Then start the sshd via:</p>
+
+<pre><code>/usr/local/sbin/sshd
+
+</code></pre>
+
+<p>Good, we get segment fault, later will investigate this issue.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/10/21/install-openvpn-in-raspberrypi/">Install OpenVPN in RaspberryPI</a>
       </h1>
       <span class="post-date">Oct 21, 2014 
@@ -650,38 +779,6 @@ Edit the /usr/share/lxc/templates/lxc-ubuntu file, add &ndash;no-check-gpg after
 </code></pre>
 
 <p>Now everything should goes OK, and you could enjoy the ubuntu installed on your lxc container.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/18/autorestart-autrace/">AutoRestart autrace</a>
-      </h1>
-      <span class="post-date">Oct 18, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>autrace is a proxy tool which I used for auto-converting the proxy for cross the firewall, it runs in remote server but sometimes it will runs into crash condition. Following is the command for auto-restart this proxy tool.</p>
-
-<pre><code>$ cat autrace.sh
-#!/bin/sh
-while true; do
-   /home/xxxxxxxx/code/autrace -s 
-done
-
-</code></pre>
-
-<p>Everytime we run autrace.sh like following:</p>
-
-<pre><code>/home/xxxxx/code/autrace.sh &amp;
-
-</code></pre>
-
-<p>thus autrace will automatically be restart if it crashes.</p>
 
       
     </div>
@@ -2107,8 +2204,17 @@ done
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2117,7 +2223,7 @@ done
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

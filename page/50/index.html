@@ -105,6 +105,50 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/08/26/use-jenkins-for-building-packer-images/">Use Jenkins For Building Packer Images</a>
+      </h1>
+      <span class="post-date">Aug 26, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/null">null</a>
+        
+      </span>
+      
+      
+
+<h3 id="installation-jenkins">Installation Jenkins</h3>
+
+<p>Refers to
+<a href="https://wiki.jenkins-ci.org/display/JENKINS/Installing+Jenkins+on+Ubuntu">https://wiki.jenkins-ci.org/display/JENKINS/Installing+Jenkins+on+Ubuntu</a></p>
+
+<pre><code>$ wget -q -O - https://jenkins-ci.org/debian/jenkins-ci.org.key | sudo apt-key add -
+$ sudo sh -c 'echo deb http://pkg.jenkins-ci.org/debian binary/ &gt; /etc/apt/sources.list.d/jenkins.list'
+$ sudo apt-get update
+$ sudo apt-get install -y jenkins
+</code></pre>
+
+<h3 id="install-packer-plugins">Install Packer Plugins</h3>
+
+<p>Manually(But failed), so finally I use the web-backed for installing.</p>
+
+<pre><code>$ wget https://ci.jenkins-ci.org/jnlpJars/jenkins-cli.jar
+$ java -jar jenkins-cli.jar -s http://localhost:8080 help
+$ java -jar jenkins-cli.jar -s http://localhost:8080 list-plugins
+$ java -jar jenkins-cli.jar -s http://localhost:8080 install-plugin \ 
+http://ftp.yz.yamagata-u.ac.jp/pub/misc/jenkins/plugins/packer/1.2/packer.hpi
+</code></pre>
+
+<p><img src="/images/2015_08_26_16_56_22_672x344.jpg" alt="/images/2015_08_26_16_56_22_672x344.jpg" /></p>
+
+<p>After installation, restart service via <code>service restart jenkins</code>.</p>
+
+<p>How to use it? later will investigate.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/08/25/enable-trusty-kickstart-for-spacewalk/">Enable Trusty KickStart For SpaceWalk</a>
       </h1>
       <span class="post-date">Aug 25, 2015 
@@ -538,119 +582,6 @@ python-hwdata
 </code></pre>
 
 <p>This xml file include all of the possible groups.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/08/22/move-spacewalk-server-into-a-new-network/">Move SpaceWalk Server Into A New Network</a>
-      </h1>
-      <span class="post-date">Aug 22, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="env">Env</h3>
-
-<p>Move from one isolated network to another isolated network. Experiment is done on
-virt-manager, from 10.9.10.0/24 to 10.47.58.0/24 network. Following are the steps for
-migration.</p>
-
-<h3 id="steps">Steps</h3>
-
-<p>First shutdown the machine and connect the existing network card to new network, boot
-on the computer.</p>
-
-<p>Modify the ip address(static IP Address):</p>
-
-<pre><code>$ sudo vim /etc/sysconfig/network-scripts/ifcfg-eth0
-- IPADDR=10.9.10.13
-- GATEWAY=10.9.10.1
-+ IPADDR=10.47.58.3
-+ GATEWAY=10.47.58.1
-</code></pre>
-
-<p>Modify the hostname:</p>
-
-<pre><code># vim /etc/hosts
-- 10.9.10.13      spacewalker
-+ 10.47.58.3      spacewalker
-</code></pre>
-
-<p>Modify the dhcpd configuration:</p>
-
-<pre><code>$ sudo vim /etc/dhcp/dhcpd.conf
-#  specify network address and subnet mask
--  subnet 10.9.10.0 netmask 255.255.255.0 {
--      # specify the range of lease IP address
--      range dynamic-bootp 10.9.10.200 10.9.10.254;
--      # specify broadcast address
--      option broadcast-address 10.9.10.255;
--      # specify default gateway
--      option routers 10.9.10.1;
--      # Specify default dns server
--      option domain-name-servers 10.9.10.13;
--  }
-
-+ subnet 10.47.58.0 netmask 255.255.255.0 {
-+     # specify the range of lease IP address
-+     range dynamic-bootp 10.47.58.200 10.47.58.254;
-+     # specify broadcast address
-+     option broadcast-address 10.47.58.255;
-+     # specify default gateway
-+     option routers 10.47.58.1;
-+     # Specify default dns server
-+     option domain-name-servers 10.47.58.3;
-+     filename                   &quot;/pxelinux.0&quot;;       
-+     # default-lease-time         21600;           
-+     # max-lease-time             43200;      
-+     next-server                10.47.58.3; 
-+ 
-+ }
-</code></pre>
-
-<p>DNS Server Configuration:</p>
-
-<pre><code>$ sudo vim /etc/named.conf
-
-options {
-        - listen-on port 53 { 127.0.0.1; 10.9.10.13;};
-        + listen-on port 53 { 127.0.0.1; 10.47.58.3;};
-//.................
-        
-	- allow-query     { localhost; 10.9.10.0/24;};
-        + allow-query     { localhost; 10.47.58.0/24;};
-</code></pre>
-
-<p>DNS Server DB Change:</p>
-
-<pre><code>$ sudo vim /etc/named/zones/db.spacewalker
-- spacewalker.         IN      A       10.9.10.13
-+ spacewalker.         IN      A       10.47.58.3
-</code></pre>
-
-<p>Reboot and check the result:</p>
-
-<pre><code>[root@spacewalker ~]# ps -ef | grep dhcp
-dhcpd      848     1  0 17:02 ?        00:00:00 /usr/sbin/dhcpd -f -cf
-/etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
-root      2208  2186  0 17:03 pts/0    00:00:00 grep --color=auto dhcp
-[root@spacewalker ~]# ps -ef | grep name
-named     1031     1  0 17:02 ?        00:00:00 /usr/sbin/named -u named
-root      2210  2186  0 17:03 pts/0    00:00:00 grep --color=auto name
-[root@spacewalker ~]# hostname --fqdn
-spacewalker
-[root@spacewalker tftpboot]# netstat -anp | grep 69 | grep xinetd
-udp        0      0 0.0.0.0:69              0.0.0.0:*  841/xinetd  
-</code></pre>
-
-<p>Now bootup a machine and add it to the 10.47.58.0/24 network, your machine will be boot
-into pxe menu, thus you could reinstall your machine.</p>
 
       
     </div>
@@ -2076,8 +2007,17 @@ into pxe menu, thus you could reinstall your machine.</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2086,7 +2026,7 @@ into pxe menu, thus you could reinstall your machine.</p>
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

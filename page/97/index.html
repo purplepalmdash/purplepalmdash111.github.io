@@ -105,6 +105,131 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/10/18/linux2-dot-6-39-for-utu2440/">Linux2.6.39 for utu2440</a>
+      </h1>
+      <span class="post-date">Oct 18, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="kernel-preparation">Kernel Preparation</h3>
+
+<p>First download the kernel source from kernel.org:</p>
+
+<pre><code>$ wget https://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.39.tar.bz2
+$ tar xjvf lnux-2.6.39.tar.bz2
+
+</code></pre>
+
+<p>Change the Makefile:</p>
+
+<pre><code>$ cat Makefile
+export KBUILD_BUILDHOST := $(SUBARCH)
+ARCH		?= $(SUBARCH)
+CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:&quot;%&quot;=%)
+
+# Added our own cross-compiler here.
+ARCH		?= arm
+CROSS_COMPILE	?= arm-linux-
+# End of added own cross-compiler. 
+
+</code></pre>
+
+<p>Change the pltf input clock:</p>
+
+<pre><code>$ vim  arch/arm/mach-s3c2440/mach-smdk2440.c
+static void __init smdk2440_map_io(void)
+{
+	s3c24xx_init_io(smdk2440_iodesc, ARRAY_SIZE(smdk2440_iodesc));
+	//s3c24xx_init_clocks(16934400);
+	// Change the input clock adjust to utu2440
+	s3c24xx_init_clocks(12000000);
+	s3c24xx_init_uarts(smdk2440_uartcfgs, ARRAY_SIZE(smdk2440_uartcfgs));
+}
+
+</code></pre>
+
+<p>Change the machine code(this code is the same as the bootloader&rsquo;s parameter, bootloader transfer 5244 to Linux Kernel.</p>
+
+<pre><code>$ vim arch/arm/tools/mach-types 
+s3c2440			ARCH_S3C2440		S3C2440			5244
+
+</code></pre>
+
+<p>Change the Nand flash partitions:</p>
+
+<pre><code>$ vim  arch/arm/plat-s3c24xx/common-smdk.c
+static struct mtd_partition smdk_default_nand_part[] = {
+	// partition for utu2440
+	[0]= {
+		.name = &quot;bootloader&quot;, 
+		.size = 0x00040000,
+		.offset = 0x00000000,
+	},
+	[1]= {
+		.name = &quot;kernel&quot;, 
+		.size = 0x00060000,
+		.offset = 0x00200000,
+	},
+	[2]= {
+		.name = &quot;root&quot;, 
+		.size = 0x00260000,
+		.offset = 0x03dac000,
+	}
+	
+
+};
+
+static struct s3c2410_platform_nand smdk_nand_info = {
+	.tacls		= 0,
+	.twrph0		= 30,
+	.twrph1		= 0,
+
+
+</code></pre>
+
+<p>Begin to configure:</p>
+
+<pre><code># export PATH=/opt/cross/arm-linux-gcc_4.3.2/bin:$PATH
+# vim Makefile
+//ARCH                 ?= $(SUBARCH)
+//CROSS_COMPILE     ?=
+ARCH                 ?= arm
+CROSS_COMPILE     ?= arm-linux-
+# make s3c2410_defconfig
+# make menuconfig
+System Type-&gt; ARM system type(Samsung S3C2410, S3C2412, ......
+S3C2410 Machines  ---&gt;    [*] SMDK2410/A9M2410
+S3C2440 AND S3C2442 Machines ---&gt; [*] SMDK2440     [*] SMDK2440 with S3C2440 CPU module 
+Kernel Features  ---&gt;   [*] Use the ARM EABI to compile the kernel
+
+</code></pre>
+
+<p>Then <code>make all V=1</code><br />
+Generate uImage:</p>
+
+<pre><code># cp arch/arm/boot/zImage ./
+[root@TrustyArch linux-2.6.39]# mkimage -A arm -O linux -n $(date --iso-8601=seconds) -C NONE -a 0x30008000 -e 0x30008000 -d zImage uImage
+Image Name:   2014-10-18T20:27:54+0800
+Created:      Sat Oct 18 20:27:54 2014
+Image Type:   ARM Linux Kernel Image (uncompressed)
+Data Size:    2094940 Bytes = 2045.84 kB = 2.00 MB
+Load Address: 30008000
+Entry Point:  30008000
+
+</code></pre>
+
+<p>Now copy the uImage to the tftp directory for testing</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/10/18/tftpd-on-ubuntu/">tftpd on ubuntu</a>
       </h1>
       <span class="post-date">Oct 18, 2014 
@@ -619,159 +744,6 @@ Handshake None
 
 <p>The serial port in BBB is listed as following:<br />
 <img src="/images/BBBSerial.jpg" alt="/images/BBBSerial.jpg" /></p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/10/15/trouble-shooting-on-docker/">Trouble-Shooting on Docker</a>
-      </h1>
-      <span class="post-date">Oct 15, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/docker">docker</a>
-        
-      </span>
-      
-      
-
-<p>The guideline I follow is from :<br />
-<a href="https://wiki.archlinux.org/index.php/Docker">https://wiki.archlinux.org/index.php/Docker</a></p>
-
-<h3 id="working-behind-proxy">Working behind Proxy</h3>
-
-<p>When docker runs under the proxy, it will be blocked by the firewall, thus in the ArchLinux we have to kill the systemd started docker daemon, and manually set the proxy configuration for the docker daemon, following is the tips:</p>
-
-<pre><code>$ systemctl stop docker.service
-$ sudo HTTP_PROXY=http://1xx.*.*.2xx:2xx3 docker -d &amp;
-
-</code></pre>
-
-<p>Then you run the docker for create the new machine  will be OK.</p>
-
-<h3 id="default-configuration">Default Configuration</h3>
-
-<p>That leads me for thinking the default configuration of ArchLinux , change it to :</p>
-
-<pre><code>$ cat /usr/lib/systemd/system/docker.service
-[Unit]
-Description=Docker Application Container Engine
-Documentation=http://docs.docker.com
-After=network.target docker.socket
-Requires=docker.socket
-
-[Service]
-ExecStart=/usr/bin/docker -d 
-LimitNOFILE=1048576
-LimitNPROC=1048576
-
-[Install]
-Also=docker.socket
-
-</code></pre>
-
-<p>Add following line, but failed, Arch Wiki also indicates its failure:</p>
-
-<pre><code>[Service]
-Environment=&quot;http_proxy=192.168.1.1:3128&quot;
-ExecStart=
-ExecStart=/usr/bin/docker -d -g /var/yourDockerDir
-
-</code></pre>
-
-<p>So everytime you want to enable proxy, simply manually reload it.</p>
-
-<p>Then reload the service status and restart the docker.service:</p>
-
-<pre><code>sudo systemctl daemon-reload
-sudo systemctl restart docker.service
-
-</code></pre>
-
-<p>Test the docker to view if it runs well:</p>
-
-<pre><code>$ docker info
-
-</code></pre>
-
-<h3 id="docker-management">Docker Management</h3>
-
-<p>List the installed images:</p>
-
-<pre><code>[Trusty@~/code/octo/heroku/Tomcat]$ sudo docker images
-REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-archlinux           latest              a063a516f4c7        About an hour ago   293 MB
-busybox             latest              e72ac664f4f0        13 days ago         2.433 MB
-base/archlinux      2014.07.03          ea234cde99e6        12 weeks ago        282.9 MB
-base/archlinux      2014.04.01          56c61f5c2920        12 weeks ago        293.3 MB
-base/archlinux      latest              dce0559daa1b        12 weeks ago        282.9 MB
-
-</code></pre>
-
-<p>List Containers:</p>
-
-<pre><code>[Trusty@~/code/octo/heroku/Tomcat]$ sudo docker ps -a
-CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS                         PORTS               NAMES
-50baf5783c6e        busybox:latest      &quot;/bin/echo hello wor   6 minutes ago       Exited (0) 6 minutes ago                           mad_carson          
-2f7108d2ee0e        archlinux:latest    &quot;echo Success.&quot;        About an hour ago   Exited (0) About an hour ago                       jolly_galileo       
-
-</code></pre>
-
-<p>List the running Containers:</p>
-
-<pre><code>[Trusty@~/code/octo/heroku/Tomcat]$ docker ps
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-
-</code></pre>
-
-<p>Now start a container via(This command will run into the container and execute the /bin/bash):</p>
-
-<pre><code>$ docker run -i -t archlinux /bin/bash
-[root@b6ab14b2ce65 /]# 
-
-</code></pre>
-
-<p>Check the container status:</p>
-
-<pre><code>$ docker ps
-CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
-b6ab14b2ce65        archlinux:latest    &quot;/bin/bash&quot;         27 seconds ago      Up 25 seconds                           high_wright   
-
-</code></pre>
-
-<p>When you exit, then the ps won&rsquo;t display the corresponding items.</p>
-
-<h3 id="install-more-images">Install More Images</h3>
-
-<p>Install via:</p>
-
-<pre><code>$ docker run ubuntu /bin/echo hello world
-$ docker run centos /bin/echo hello world
-
-</code></pre>
-
-<p>Run it ubuntu:</p>
-
-<pre><code>$ docker run -i -t ubuntu /bin/bash   
-root@34b68719493b:/# cat /etc/issue
-Ubuntu 14.04.1 LTS \n \l
-
-</code></pre>
-
-<p>Run into centos:</p>
-
-<pre><code>$ docker run -i -t centos /bin/bash   
-bash-4.2# uname -a
-Linux e3ec1911331b 3.16.4-1-ARCH #1 SMP PREEMPT Mon Oct 6 08:22:27 CEST 2014 x86_64 x86_64 x86_64 GNU/Linux
-bash-4.2# cat /etc/issue
-\S
-Kernel \r on an \m
-
-bash-4.2# which yum
-/usr/bin/yum
-
-</code></pre>
 
       
     </div>
@@ -2197,8 +2169,17 @@ bash-4.2# which yum
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2207,7 +2188,7 @@ bash-4.2# which yum
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

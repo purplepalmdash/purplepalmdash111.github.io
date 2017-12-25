@@ -105,6 +105,232 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/01/26/read-digest-on-kvm/">Read Digest On KVM</a>
+      </h1>
+      <span class="post-date">Jan 26, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="some-words">Some Words</h3>
+
+<p>VMM: (Virtual Machine Monitor)<br />
+VMX: (Virtual Machine eXtensions):  instructions on processors with x86 virtualization.</p>
+
+<p>Virtualization software:  is most often used to emulate a complete computer system in
+order to allow a guest operating system to be run, for example allowing Linux to run as
+a guest on top of a PC that is natively running a Microsoft Windows operating system
+(or the inverse, running Windows as a guest on Linux).</p>
+
+<p>CPU Ring:<br />
+<a href="https://en.wikipedia.org/wiki/Protection_ring">https://en.wikipedia.org/wiki/Protection_ring</a></p>
+
+<p><img src="/images/300px-Priv_rings.svg.png" alt="/images/300px-Priv_rings.svg.png" /></p>
+
+<p>VT-d, I/O Hardware Virtualization.<br />
+VT-c, Networking Hardware Virtualization.</p>
+
+<h3 id="host-kickstart-file">Host kickstart file</h3>
+
+<p>Add following installation packages:</p>
+
+<pre><code>%packages
+@virtualization
+@Base
+@Core
+@additional-devel
+@base
+@large-systems
+@storage-client-iscsi
+@systgem-management-snmp
+@virtualization
+@virtualization-client
+@virtualization-platform
+@virtualization-tools
+%end
+</code></pre>
+
+<h3 id="mouse-on-windows-virtual-machine">Mouse On Windows Virtual Machine</h3>
+
+<p>Add twice the usb mouse:</p>
+
+<pre><code>&lt;input type='tablet' bus='usb'
+</code></pre>
+
+<h3 id="numa">NUMA</h3>
+
+<p>Install the numa configuration tools via:</p>
+
+<pre><code># apt-cache search numactl
+numactl - NUMA scheduling and memory placement tool
+# apt-get -y install numactl
+</code></pre>
+
+<p>Command: <code>numactl --hardware</code>, <code>numastat</code>, <code>numastat -c qemu-kvm</code>.</p>
+
+<p>Check the numa banlancing policy via:</p>
+
+<pre><code># cat /proc/sys/kernel/numa_balancing
+0
+</code></pre>
+
+<p><code>echo 1</code> for open the auto balancing.</p>
+
+<p>KSM, could merge the same memory page, even in different NUMA node.</p>
+
+<pre><code># cat /sys/kernel/mm/ksm/merge_across_nodes 
+1
+</code></pre>
+
+<h3 id="cpu-binding">CPU Binding</h3>
+
+<p>Use <code>virsh vcpuinfo xx</code> for displaying the VCPU/CPU corresponding relationship.</p>
+
+<pre><code>virsh # emulatorpin 79
+emulator: CPU Affinity
+----------------------------------
+       *: 0-7
+</code></pre>
+
+<p>Change it dynamically:</p>
+
+<pre><code>virsh # emulatorpin 79 0-3 --live
+
+virsh # emulatorpin 79
+emulator: CPU Affinity
+----------------------------------
+       *: 0-3
+</code></pre>
+
+<p>Now you could check the result via <code>virsh dumpxml xxx</code>:</p>
+
+<pre><code>  &lt;vcpu placement='static'&gt;4&lt;/vcpu&gt;
+  &lt;cputune&gt;
+    &lt;emulatorpin cpuset='0-3'/&gt;
+  &lt;/cputune&gt;
+</code></pre>
+
+<p>1-1 binding using virsh:</p>
+
+<pre><code># virsh vcpupin 79 0 0    
+# virsh vcpupin 79 1 1
+# virsh vcpupin 79 2 2
+# virsh vcpupin 79 3 3
+# virsh dumpxml 79 | more
+  &lt;cputune&gt;
+    &lt;vcpupin vcpu='0' cpuset='0'/&gt;
+    &lt;vcpupin vcpu='1' cpuset='1'/&gt;
+    &lt;vcpupin vcpu='2' cpuset='2'/&gt;
+    &lt;vcpupin vcpu='3' cpuset='3'/&gt;
+</code></pre>
+
+<p>Now view the vcpuinfo via:</p>
+
+<pre><code># virsh vcpuinfo 79
+VCPU:           0
+CPU:            0
+State:          running
+CPU time:       9.2s
+CPU Affinity:   y-------
+</code></pre>
+
+<h3 id="cpu-hot-plug-in">CPU Hot-Plug-in</h3>
+
+<p>The cpu configuration info is listed as:</p>
+
+<p><img src="/images/2016_01_26_10_54_29_285x127.jpg" alt="/images/2016_01_26_10_54_29_285x127.jpg" /></p>
+
+<p>View the CPU infos via:</p>
+
+<pre><code># cat /proc/interrupts 
+           CPU0       CPU1       
+</code></pre>
+
+<p>Change the CPUs to 3:</p>
+
+<pre><code>virsh # setvcpus 80 3 --live
+</code></pre>
+
+<p>Now in the vm the result should be(or detect it via <code>cat /proc/cpuinfo</code>) :</p>
+
+<pre><code># cat /proc/interrupts 
+           CPU0       CPU1       CPU2  
+</code></pre>
+
+<h3 id="cpu-working-mode">CPU Working Mode</h3>
+
+<p>If we select the pass-through, then the cpuinfo should be:</p>
+
+<pre><code># virsh dumpxml xxxxx
+  &lt;cpu mode='host-passthrough'&gt;
+  &lt;/cpu&gt;
+# cat /proc/cpuinfo
+processor       : 1
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 58
+model name      : Intel(R) Core(TM) i7-3770 CPU @ 3.40GHz
+</code></pre>
+
+<p>If we select the host-model, will choose the most similar:<br />
+Or If we choose <code>Copy host cpu mode</code>, like following:<br />
+<img src="/images/2016_01_26_11_07_32_299x274.jpg" alt="/images/2016_01_26_11_07_32_299x274.jpg" /></p>
+
+<pre><code># cat /proc/cpuinfo
+....
+processor       : 1
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 42
+model name      : Intel Xeon E312xx (Sandy Bridge)
+</code></pre>
+
+<h3 id="memory-balloon">Memory Balloon</h3>
+
+<p>Change the memory balloon to 1024 or 4096 via:</p>
+
+<pre><code># virsh qemu-monitor-command PerfTune --hmp --cmd balloon 1024
+# virsh qemu-monitor-command PerfTune --hmp --cmd info balloon
+balloon: actual=1024
+# virsh qemu-monitor-command PerfTune --hmp --cmd balloon 4096
+</code></pre>
+
+<h3 id="memory-limitation">Memory Limitation</h3>
+
+<p>Make configuration of the memory via:</p>
+
+<pre><code>virsh memtune PerfTune --hard-limit xxxxx --config
+virsh memtune PerfTune --soft-limit xxxxx --config
+virsh memtune PerfTune --swap-hard-limit xxxxx --config
+virsh memtune PerfTune --min_guarantee xxxxx --config
+</code></pre>
+
+<p>&ndash;config, write to configuration xml
+&ndash;live, lively write
+&ndash;current ?</p>
+
+<h3 id="hugepage">HugePage</h3>
+
+<p>Enable hugepage via:</p>
+
+<pre><code># grep -i huge /proc/meminfo 
+AnonHugePages:  12820480 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2016/01/18/tips-on-setup-mesos-cluster/">Tips On Setup Mesos Cluster</a>
       </h1>
       <span class="post-date">Jan 18, 2016 
@@ -1241,50 +1467,6 @@ wget http://192.168.0.79/iso/veewee/rubygems-$RUBYGEMS_VERSION.tgz
 8.0K    awesome-ubuntu-server.vbox-prev
 68K     Logs
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/12/30/rtl-sdr-steps/">rtl-sdr steps</a>
-      </h1>
-      <span class="post-date">Dec 30, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/radio">radio</a>
-        
-      </span>
-      
-      <p>Installing and configurating steps:</p>
-
-<pre><code>$ git clone https://github.com/balint256/gr-baz
-$ sudo apt-get install libboost-all-dev gr-osmosdr gnuradio-dev liblog4cpp5-dev 
-$ cd gr-baz
-$ mkdir build
-$ cd build
-$ cmake ..
-$ make &amp;&amp; sudo make install
-</code></pre>
-
-<p>Install rtl-sdr:</p>
-
-<pre><code>$ git clone git://git.osmocom.org/rtl-sdr.git 
-$ cd rtl-sdr 
-$ mkdir build
-$ cd build/
-$ cmake ../ -DINSTALL_UDEV_RULES=ON
-$ sudo make install
-$ sudo ldconfig 
-</code></pre>
-
-<p>Now you could use <code>sudo rtl_eeprom</code> for probing the rtl equipments.</p>
-
-<pre><code>$ sudo modprobe -r dvb_usb_rtl28xxu
-$ sudo apt-get install -y gqrx-sdr
-</code></pre>
-
-<p>Using <code>gqrx</code> could scan the frequency and get the radio stations.</p>
 
       
     </div>
@@ -2710,8 +2892,17 @@ $ sudo apt-get install -y gqrx-sdr
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2720,7 +2911,7 @@ $ sudo apt-get install -y gqrx-sdr
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

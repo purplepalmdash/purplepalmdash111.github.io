@@ -105,6 +105,155 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/11/28/guan-yu-stm32ban-shang-de-12864ye-jing-3/">关于STM32板上的12864液晶(3)</a>
+      </h1>
+      <span class="post-date">Nov 28, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">Embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+        
+      </span>
+      
+      <p>###如何控制液晶屏幕
+ASCII码的可打印字符的范围在0x20 ~ 0x7f之间， 0x20 是空格字符，0x7f是delete字符。 最开始我们需要在内存中建立一张关于可打印字符的表。用于表示在液晶屏幕上如何显示出该字符，即该字符的点阵排列。<br />
+下图是可以打印的ASCII/Unicode 0-127的值：</p>
+
+<p><img src="/images/ascii.jpg" alt="ascii.jpg" /></p>
+
+<p>点阵数组：</p>
+
+<pre><code>	const u8 Asii8[] = {
+		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+		0x06,0x5F,0x06,0x00,0x00,0x07,0x03,0x00,
+		0x07,0x03,0x00,0x24,0x7E,0x24,0x7E,0x24,
+		0x00,0x24,0x2B,0x6A,0x12,0x00,0x00,0x63,
+		0x13,0x08,0x64,0x63,0x00,0x36,0x49,0x56,
+
+</code></pre>
+
+<p>来个例子：</p>
+
+<pre><code>	#: 0x00, 0x24, 0x7e, 0x24, 0x7e, 0x24
+	00000000
+	00100100
+	01111110
+	00100100
+	01111110
+	00100100
+
+</code></pre>
+
+<p>对应的1代表将该点的液晶点点上。<br />
+要注意，实际的显示应该是倒过来的，即： 把你的脖子顺时针转90度看上面的二进制表达式。</p>
+
+<p>在LCD上设置需要写入的坐标，</p>
+
+<pre><code>	/**************************************************************
+	**函数名 :LcdSetXP
+	**功能:设置坐标**
+	**注意事项:这里设置的坐标不是X,Y,而是X,PAGE.因为黑白屏一次写入的数据为8个点,而且为竖
+	**			式写入,故纵坐标是以页为单位,64个点共8页
+	***************************************************************/
+	void LcdSetXP(u8 x,u8 page)
+	{
+		LcdCmd((page&amp;0x07)+0xb0);	//设置页指针
+	    LcdCmd((x&gt;&gt;4)|0x10);
+	    LcdCmd(x&amp;0x0f);
+	}
+
+</code></pre>
+
+<p>128X64的屏幕一共有8192个点， 每一个字符用48个点来表示，即8X6。所以每一个字的X坐标长度应该是6, 而Y坐标应该是8. 一个page代表8个点。<br />
+考虑下面代码:</p>
+
+<pre><code>	LcdSetXP(0,1);
+	LcdChar8('T');
+	LcdChar8('E');
+	LcdChar8('S');
+	LcdChar8('T');
+	LcdChar8(' ');
+	LcdChar8('O');
+	LcdChar8('K');
+	LcdChar8('!');
+
+	LcdSetXP(0,2);
+	LcdChar8('T');
+	LcdSetXP(6,2);
+	LcdChar8('E');
+	LcdSetXP(24,2);
+	LcdChar8('S');
+	LcdChar8('T');
+	LcdChar8(' ');
+	LcdChar8('O');
+	LcdChar8('K');
+	LcdChar8('!');
+
+</code></pre>
+
+<p>得到的结果应该是：<br />
+TEST OK!<br />
+TE  ST OK!<br />
+对应上面的解释不难明白在屏幕上填写字符的原理。</p>
+
+<p>有关在屏幕上写字符的函数是：</p>
+
+<pre><code>/**************************************************************
+**函数名 :LcdChar8
+**功能:写一个宽6高8的ASCII
+**注意事项:这里忽略了坐标的设置,此函数作为子函数被其他函数调用,使用前需要设置坐标
+			使用内部的点阵表
+***************************************************************/
+void LcdChar8(char chr)
+{
+	u8 i;
+	u8* p_data;
+
+	/* 0x20 is the space character
+	 * 0x7f is the delete character
+	 * Seems all of the printable character are listed in the global array
+	 */
+	if((chr&lt;0x20)||(chr&gt;0x7f))
+	{
+		return;
+	}
+
+	/* Asii8 is the global variable(Glbal Array), So now we retrieve the
+	 * character's address via first address plus the (asii code number)*6
+	 * Because, each entry size if 6, all of the entry start from 0x20
+	 */
+	p_data = (u8*)Asii8 + (chr-0x20)*6;	//要写字符的首地址
+
+	for(i=0;i&lt;6;i++)
+	{
+		LcdDat(*p_data++);
+	}
+}
+
+</code></pre>
+
+<p>举例说明， !的字符表示为
+00000000<br />
+00000000<br />
+00000110<br />
+01011111<br />
+00000110<br />
+00000000<br />
+则看起来应该像：
+000100<br />
+001110<br />
+000100<br />
+000000<br />
+000100<br />
+000000<br />
+把1想象为点，就能对应想象出!在屏幕上的样子。</p>
+
+<p>原有的代码中关于GPIO初始化的时候，多初始化了一个PB14口，删除后一切正常。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/11/27/auto-convert-source-code-to-utf-8-compatiable/">Auto convert source code to UTF-8 compatiable</a>
       </h1>
       <span class="post-date">Nov 27, 2013 
@@ -572,46 +721,6 @@ Choose the Main:</p>
 </code></pre>
 
 <p>Open your own openocd, and then using eclipse to connect the gdb. Remember &ldquo;toggle breakpoint&rdquo; and you will get a hardware breakpoint. Enjoy the debugging.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/25/solution-on-joggler/">Solution On Joggler</a>
-      </h1>
-      <span class="post-date">Nov 25, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/joggler">Joggler</a>
-        
-      </span>
-      
-      <p>###Hardware
-Joggler<br />
-Intel&reg; Atom&trade; CPU Z520   @ 1.33GHz  Dual Core<br />
-MemTotal:         504480 kB<br />
-Harddisk: 500G External USB.</p>
-
-<p>###System and Software
-Download the Ubuntu Base/Server 12.04 LTS (Precise) (Joggler Image v1.4 - 09/04/2013) from the<br />
-<a href="http://joggler.exotica.org.uk/ubuntu/">http://joggler.exotica.org.uk/ubuntu/</a>
-From the ubuntu website we know 12.04 LTS will supported to 2017, I think that fits my needs.<br />
-Unzip the download image:</p>
-
-<pre><code>	gunzip ubuntu_base_12.04-v1.4-ext4.img.gz
-	dd if=./ubuntu_base_12.04-v1.4-ext4.img of=/dev/sdc bs=1M
-
-</code></pre>
-
-<p>The use this external usb disk for booting up the joggler. After joggler has been booted up, install coresponding packages.</p>
-
-<p>###Prevent Hard disk from hiberating
-Add following lines to crontab -e</p>
-
-<pre><code>	*/4 * * * * fdisk -l /dev/uba&gt;/dev/null &amp;&amp; echo abc&gt;/root/done.txt
-
-</code></pre>
 
       
     </div>
@@ -2037,8 +2146,17 @@ Add following lines to crontab -e</p>
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2047,7 +2165,7 @@ Add following lines to crontab -e</p>
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

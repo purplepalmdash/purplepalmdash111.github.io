@@ -105,6 +105,251 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/04/07/deploy-opencontrail-on-centos-with-docker/">Deploy OpenContrail On CentOS With Docker As Hypervisor</a>
+      </h1>
+      <span class="post-date">Apr 7, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<p>Reference:<br />
+<a href="https://software.intel.com/en-us/blogs/2014/12/28/experimenting-with-openstack-sahara-on-docker-containers">https://software.intel.com/en-us/blogs/2014/12/28/experimenting-with-openstack-sahara-on-docker-containers</a><br />
+I wanna enable the docker as hypervisor then it would greatly save the resources, and benefit with docker&rsquo;s rich resources. Following is the steps:</p>
+
+<h3 id="preparation">Preparation</h3>
+
+<p>First create the image file via:</p>
+
+<pre><code># qemu-img create -f qcow2 CentOSOpenContrail.qcow2 100G
+Formatting 'CentOSOpenContrail.qcow2', fmt=qcow2 size=107374182400 encryption=off cluster_size=65536 
+[root:/home/juju/img/CentOSOpenContrail]# pwd
+/home/juju/img/CentOSOpenContrail
+
+</code></pre>
+
+<p>Then create a virtual machine based on KVM, allocate 8G Memory, 4-core, which copies the host CPU configuration.</p>
+
+<h3 id="installation">Installation</h3>
+
+<p>After installation, update the installed software via:</p>
+
+<pre><code>$ mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup   
+$ wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo 
+$ sudo yum makecache
+$ sudo yum update -y
+$ sudo reboot
+
+</code></pre>
+
+<p>Install following packages:</p>
+
+<pre><code># wget https://repos.fedorapeople.org/repos/openstack/openstack-juno/rdo-release-juno-1.noarch.rpm
+# rpm -ivh rdo-release-juno-1.noarch.rpm 
+# yum install –y https://rdo.fedorapeople.org/rdo-release.rpm
+# yum install openstack-packstack
+
+</code></pre>
+
+<p>Now you could use packstack for installing the packages:</p>
+
+<pre><code># packstack --gen-answer-file=/root/answer.txt
+# packstack --answer-file=/root/answer.txt
+
+</code></pre>
+
+<p>Install openstack-sahara via following command, the python-tox enable tox for generating the configuration files for sahara:</p>
+
+<pre><code># yum install openstack-sahara 
+# yum install python-tox
+
+</code></pre>
+
+<p>Create the username and password for sahara to use:</p>
+
+<pre><code>[root@10-17-17-183 etc]# mysql
+MariaDB [(none)]&gt; create user 'sahara'@'localhost' identified by 'saharapass';
+Query OK, 0 rows affected (0.07 sec)
+MariaDB [(none)]&gt; show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| cinder             |
+| glance             |
+| keystone           |
+| mysql              |
+| neutron            |
+| nova               |
+| performance_schema |
+| test               |
++--------------------+
+9 rows in set (0.00 sec)
+
+MariaDB [(none)]&gt; use mysql
+MariaDB [mysql]&gt; show tables;
+MariaDB [mysql]&gt; select * from user;
++-----------+----------------+-----------------------------------
+
+</code></pre>
+
+<p>How to get all of the password configuration information of packstack?</p>
+
+<pre><code>$ cd /etc/
+$ grep -i &quot;sql://&quot; ./ -r
+
+</code></pre>
+
+<p>Create a database named &lsquo;saharaDB&rdquo; and grant it to user sahra:</p>
+
+<pre><code>MariaDB [(none)]&gt; create database saharaDB;
+MariaDB [(none)]&gt; grant all on saharaDB.* to 'sahara'@'localhost';
+Query OK, 0 rows affected (0.02 sec)
+
+MariaDB [(none)]&gt; quit;
+[root@10-17-17-183 etc]# mysql -h 127.0.0.1 -u sahara -p saharaDB
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 1481
+Server version: 5.5.40-MariaDB-wsrep MariaDB Server, wsrep_25.11.r4026
+
+Copyright (c) 2000, 2014, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [saharaDB]&gt; 
+
+</code></pre>
+
+<p>So the syntax for sahara to use is like:</p>
+
+<pre><code># cat /etc/sahara/sahara.conf
+connection = mysql://sahara:saharapass@127.0.0.1/saharaDB
+use_neutron=true
+
+# sahara-db-manage --config-file /etc/sahara/sahara.conf upgrade head
+INFO  [alembic.migration] Context impl MySQLImpl.
+INFO  [alembic.migration] Will assume non-transactional DDL.
+INFO  [alembic.migration] Running upgrade None -&gt; 001, Icehouse release
+INFO  [alembic.migration] Running upgrade 001 -&gt; 002, placeholder
+INFO  [alembic.migration] Running upgrade 002 -&gt; 003, placeholder
+INFO  [alembic.migration] Running upgrade 003 -&gt; 004, placeholder
+INFO  [alembic.migration] Running upgrade 004 -&gt; 005, placeholder
+INFO  [alembic.migration] Running upgrade 005 -&gt; 006, placeholder
+INFO  [alembic.migration] Running upgrade 006 -&gt; 007, convert clusters.status_description to LongText
+INFO  [alembic.migration] Running upgrade 007 -&gt; 008, add security_groups field to node groups
+INFO  [alembic.migration] Running upgrade 008 -&gt; 009, add rollback info to cluster
+INFO  [alembic.migration] Running upgrade 009 -&gt; 010, add auto_security_groups flag to node group
+INFO  [alembic.migration] Running upgrade 010 -&gt; 011, add Sahara settings info to cluster
+
+</code></pre>
+
+<p>REgister the service and specify the endpoint:</p>
+
+<pre><code>[root@10-17-17-183 etc]# cat ./nagios/keystonerc_admin                                                                                         
+export OS_USERNAME=admin                                                                                                                       
+export OS_TENANT_NAME=admin                                                                                                                    
+export OS_PASSWORD=5d4e62e79d314477                                                                                                            
+export OS_AUTH_URL=http://10.17.17.183:35357/v2.0/ 
+[root@10-17-17-183 etc]# pwd                                                                
+/etc  
+# keystone service-create --name sahara --type data_processing --description &quot;Data processing service&quot;
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |     Data processing service      |
+|   enabled   |               True               |
+|      id     | 5f711f0d42754b349931349bd0c325d1 |
+|     name    |              sahara              |
+|     type    |         data_processing          |
++-------------+----------------------------------+
+[root@10-17-17-183 ~]# keystone endpoint-create --service-id $(keystone service-list | awk '/ sahara / {print $2}') --publicurl http://127.0.0.1:8386/v1.1/%\(tenant_id\)s --internalurl http://127.0.0.1:8386/v1.1/%\(tenant_id\)s --adminurl http://127.0.0.1:8386/v1.1/%\(tenant_id\)s --region regionOne
++-------------+------------------------------------------+
+|   Property  |                  Value                   |
++-------------+------------------------------------------+
+|   adminurl  | http://127.0.0.1:8386/v1.1/%(tenant_id)s |
+|      id     |     b2115bab8bd743f589b1ed68eef69b4c     |
+| internalurl | http://127.0.0.1:8386/v1.1/%(tenant_id)s |
+|  publicurl  | http://127.0.0.1:8386/v1.1/%(tenant_id)s |
+|    region   |                regionOne                 |
+|  service_id |     5f711f0d42754b349931349bd0c325d1     |
++-------------+------------------------------------------+
+[root@10-17-17-183 ~]# systemctl start openstack-sahara-all
+[root@10-17-17-183 ~]# systemctl enable openstack-sahara-all
+ln -s '/usr/lib/systemd/system/openstack-sahara-all.service' '/etc/systemd/system/multi-user.target.wants/openstack-sahara-all.service'
+[root@10-17-17-183 ~]# systemctl status openstack-sahara-all.service
+
+</code></pre>
+
+<p>More detailed info could be fetched from:<br />
+<a href="http://docs.openstack.org/juno/install-guide/install/apt/content/sahara-install.html">http://docs.openstack.org/juno/install-guide/install/apt/content/sahara-install.html</a><br />
+Now login to the <a href="http://10.17.17.183">http://10.17.17.183</a> then you could visit the Trustyboard. The password is the one we used in the <code>OS_PASSWORD</code>.<br />
+Install docker:</p>
+
+<pre><code>$  yum install docker
+Or
+$  wget https://get.docker.com/builds/Linux/x86_64/docker-latest -O docker
+$  docker --version
+[root@10-17-17-183 ~]#  usermod -G dockerroot nova
+[root@10-17-17-183 ~]# service openstack-nova-compute restart
+Redirecting to /bin/systemctl restart  openstack-nova-compute.service
+# systemctl restart docker
+# systemctl enable docker
+
+</code></pre>
+
+<p>Install nova-docker support:</p>
+
+<pre><code>$  yum install python-pip
+$  pip install -e git+https://github.com/stackforge/nova-docker#egg=novadocker
+$  cd src/novadocker/
+$  python setup.py install
+$ vim /etc/nova/nova.conf
+[DEFAULT]
+compute_driver = novadocker.virt.docker.DockerDriver
+
+</code></pre>
+
+<p>Edit the nova&rsquo;s rootwrap like following:</p>
+
+<pre><code>[root@10-17-17-183 nova]# mkdir rootwrap.d
+[root@10-17-17-183 nova]# cd rootwrap.d/
+[root@10-17-17-183 rootwrap.d]# touch docker.filters
+[root@10-17-17-183 rootwrap.d]# vim docker.filters 
+[Filters]
+# nova/virt/docker/driver.py:'ln', '-sf', '/var/run/netns/.*'
+ln: CommandFilter, /bin/ln, root
+[root@10-17-17-183 rootwrap.d]# vim /etc/nova/rootwrap.conf 
+[root@10-17-17-183 rootwrap.d]# pwd
+/etc/nova/rootwrap.d
+
+</code></pre>
+
+<p>Edit the glance-api.conf</p>
+
+<pre><code>[root@10-17-17-183 glance]# vim ./glance-api.conf 
+[DEFAULT]
+container_formats = ami,ari,aki,bare,ovf,docker
+[root@10-17-17-183 glance]# pwd
+/etc/glance
+
+</code></pre>
+
+<p>Create the ubuntu Container images via following commands:</p>
+
+<pre><code>$ docker pull ubuntu
+$ docker save ubuntu | glance image-create --is-public=True --container-format=docker --disk-format=raw --name ubuntu_container
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/04/01/build-qemu-for-supporting-glustfs/">Build qemu for supporting glustfs</a>
       </h1>
       <span class="post-date">Apr 1, 2015 
@@ -484,109 +729,6 @@ Finally, if your machine runs into error state, you could destroy it forcely via
 <pre><code>$ juju destroy-machine x --force
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/03/24/deploy-maas-11/">Deploy MAAS(11)</a>
-      </h1>
-      <span class="post-date">Mar 24, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Since the deployment meets some problem, I have to consider doing some tricks in the MAAS controller, to let the deployment much more easier and time-saving, following is the steps for setting up such environment.</p>
-
-<h3 id="resize-maas-controller-disk">Resize Maas Controller Disk</h3>
-
-<p>Since the Mass Controller machine only have 40G size harddisk, it will be not enough if we enable the repository cache for guest machines, thus we have to resize the disk.<br />
-First shutdown the virtual machine.<br />
-Resize the qcow2 file via:</p>
-
-<pre><code># virsh dumpxml MassController | grep qcow2
-      &lt;driver name='qemu' type='qcow2' cache='none'/&gt;
-      &lt;source file='/home/juju/img/MassController.qcow2'/&gt;
-# qemu-img resize /home/juju/img/MassController.qcow2 +40GB
-Image resized.
-# qemu-img info /home/juju/img/MassController.qcow2
-image: /home/juju/img/MassController.qcow2
-file format: qcow2
-virtual size: 80G (85899345920 bytes)
-disk size: 9.4G
-cluster_size: 65536
-# virsh start MassController
-
-</code></pre>
-
-<p>Now use a liveCD for startup the machine, this will bootup the machine into a iso booted environment.</p>
-
-<pre><code>$ wget http://downloads.sourceforge.net/gparted/gparted-live-0.21.0-1-i586.iso
-
-</code></pre>
-
-<p>Bootup the machine and resize like following:<br />
-<img src="/images/2015_03_24_10_28_21_791x423.jpg" alt="/images/2015_03_24_10_28_21_791x423.jpg" /></p>
-
-<h3 id="squid-deb-proxy">squid-deb-proxy</h3>
-
-<p>In Mass Controller machine, install following packages:</p>
-
-<pre><code>$ sudo apt-get install squid-deb-proxy avahi-utils
-$ sudo start squid-deb-proxy
-
-</code></pre>
-
-<p>Every client should install following package:</p>
-
-<pre><code>$ sudo apt-get install squid-deb-proxy-client
-
-</code></pre>
-
-<p>Don&rsquo;t install squid-deb-proxy, because it will cause maas to be removed.</p>
-
-<p>In fact MAAS manages its own squid, named maas-proxy, which could be examined via:</p>
-
-<pre><code>$ ps -ef | grep squid
-proxy      763     1  0 Mar23 ?        00:00:07 /usr/sbin/squid3 -N -f /etc/maas/maas-proxy.conf
-Trusty      3892  3861  0 00:13 pts/5    00:00:00 grep --color=auto squid
-
-</code></pre>
-
-<p>This may cause all of the packages, or images be cached in squid, but it will be very helpful if we want to speedup the installation speed.<br />
-configure the squide&rsquo;s cache directory size via:</p>
-
-<pre><code>$ sudo vim /etc/maas/maas-proxy.conf
-
-cache_dir ufs /var/spool/squid 100 16 256
-By default, the cache_dir directory may be commented.
-
-/var/spool/squid – This is the directory folder where squid will use to swap cache your server web files
-100 – The amount of disk space to use in MB for your caching directory
-16 – the first-level subdirectories which will be created in your cache directory
-256 – The number of second-level subdirectories which will be created under each first level directory
-
-</code></pre>
-
-<p>We should add following configuration under the configure.yaml of the .juju/:</p>
-
-<pre><code>    maas-server: http://10.17.17.200/MAAS
-    http-proxy: http://10.17.17.200:8000
-    #https-proxy: http://10.17.17.200:3128
-    no-proxy: localhost,10.17.17.0/24
-    apt-http-proxy: http://10.17.17.200:8000
-    #apt-https-proxy: http://10.17.17.200:3128
-    apt-ftp-proxy: http://10.17.17.200:8000
-    type: maas
-
-</code></pre>
-
-<p>After configuration, the bootstrap and add-machine will succesfully deployed.</p>
 
       
     </div>
@@ -2012,8 +2154,17 @@ By default, the cache_dir directory may be commented.
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -2022,7 +2173,7 @@ By default, the cache_dir directory may be commented.
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>

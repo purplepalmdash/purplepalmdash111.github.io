@@ -105,6 +105,85 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/05/09/write-python-weather-app-on-heroku-4/">Write Python Weather APP on Heroku(4)</a>
+      </h1>
+      <span class="post-date">May 9, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/python">python</a>
+        
+      </span>
+      
+      
+
+<h3 id="local-database-sync">Local Database Sync</h3>
+
+<p>First fetch the remote database to localdb via following command:</p>
+
+<pre><code>$ heroku pg:pull DATABASE_URL mylocaldb --app  python-weather-app
+
+</code></pre>
+
+<p>This command will pull down your database down and create a copy version locally. You can easily view all of the database via psql mylocaldb.</p>
+
+<p>As root, edit following files:</p>
+
+<pre><code># pwd
+/var/lib/postgres/data
+# vim postgresql.conf
+listen_addresses = 'localhost'		# what IP address(es) to listen on;
+					# comma-separated list of addresses;
+					# defaults to 'localhost'; use '*' for all
+					# (change requires restart)
+port = 5432				# (change requires restart)
+# vim pb_hba.conf
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            trust
+host    all             all             127.0.0.1/32            md5
+
+</code></pre>
+
+<p>After editing, save the file and restart the postgresql service.</p>
+
+<h3 id="connecting-to-localdatabase">Connecting to LocalDatabase</h3>
+
+<p>Following shows how to add/query the records. Now your environment could be totally debugged locally.</p>
+
+<pre><code>&gt;&gt;&gt; import psycopg2
+&gt;&gt;&gt; psycopg2.connect(database=&quot;mylocaldb&quot;,user=&quot;Trusty&quot;,password=&quot;&quot;,host=&quot;127.0.0.1&quot;,port=&quot;5432&quot;)
+&lt;connection object at 0x30f0cd0; dsn: 'dbname=mylocaldb user=Trusty password=xx host=127.0.0.1 port=5432', closed: 0&gt;
+&gt;&gt;&gt; db_conn = 'postgresql+psycopg2://Trusty:@localhost/mylocaldb'
+&gt;&gt;&gt; app = Flask(__name__) 
+&gt;&gt;&gt; app.config['SQLALCHEMY_DATABASE_URI'] = db_conn
+&gt;&gt;&gt; db = SQLAlchemy(app)
+&gt;&gt;&gt; db.create_all()
+&gt;&gt;&gt; class User(db.Model):
+...     id = db.Column(db.Integer, primary_key=True)
+...     name = db.Column(db.String(80))
+...     email = db.Column(db.String(120), unique=True)
+...     def __init__(self, name, email):
+...         self.name = name
+...         self.email = email
+...     def __repr__(self):
+...         return '&lt;Name %r&gt;' % self.name
+... 
+&gt;&gt;&gt; user = User('John Doe', 'john.doe@example.com')
+&gt;&gt;&gt; all_users=User.query.all()
+&gt;&gt;&gt; print all_users
+[&lt;Name u'John Doe'&gt;]
+&gt;&gt;&gt; user1 = User('Jim Green', 'jim.green@english.com')
+&gt;&gt;&gt; db.session.add(user1)
+&gt;&gt;&gt; db.session.commit()
+
+</code></pre>
+
+<p>In genhtml.py we need to do corresponding changes in order to enable the local database.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/05/08/use-tunnel-for-acrossing-something/">Use Tunnel For Acrossing Something</a>
       </h1>
       <span class="post-date">May 8, 2014 
@@ -441,112 +520,6 @@ WorkerNode[0]=Your_App_Name.herokuapp.com
 
 <p>###Configure Browser
 The proxy address is 127.0.0.1, the port is 48100 or 48102.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/05/02/sd-card-migration/">SD Card Migration</a>
-      </h1>
-      <span class="post-date">May 2, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      <p>Following are the tips for operating a SD card under Linux.<br />
-###Backup SD Card
-We can use dd for backup sd card into an image file.</p>
-
-<pre><code>dd if=/dev/mmcblk0 of=Your_Image_Name.img bs=1M
-
-</code></pre>
-
-<p>You need to wait for a moment until all of the data dump working done.<br />
-###Write Into SD Card
-Also use dd for writing the image file into the SD card:</p>
-
-<pre><code>dd if=Your_Image_Name.img os=/dev/mmcblk0 bs=1M
-
-</code></pre>
-
-<p>Make sure your SD Card&rsquo;s volumn is bigger than the image file.<br />
-###Dump SD Card Partition
-This is simple, because you can mount the part into some mount points, use following commands:</p>
-
-<pre><code>sudo mount /dev/mmcblock0px /Your_Mount_Point
-
-</code></pre>
-
-<p>Maybe you have to specify the partition types.<br />
-###Dump Image File Partition
-First you have to get the image file partition list via following command:</p>
-
-<pre><code>fdisk BBB_USB.img 
-
-Welcome to fdisk (util-linux 2.24.1).
-Changes will remain in memory only, until you decide to write them.
-Be careful before using the write command.
-
-
-Command (m for help): p
-Disk BBB_USB.img: 7.5 GiB, 8035237888 bytes, 15693824 sectors
-Units: sectors of 1 * 512 = 512 bytes
-Sector size (logical/physical): 512 bytes / 512 bytes
-I/O size (minimum/optimal): 512 bytes / 512 bytes
-Disklabel type: dos
-Disk identifier: 0x00000000
-
-Device       Boot     Start       End  Blocks  Id System
-BBB_USB.img1 *         2048    100351   49152   e W95 FAT16 (LBA)
-BBB_USB.img2         100352  15693823 7796736  83 Linux
-
-</code></pre>
-
-<p>From the above output, we know this image file consist of 2 partitions, the first one is a FAT16 partition, the second is the Linux Partition.<br />
-First we use loop device for setting up the partition 1:</p>
-
-<pre><code># First losetup to delete the mounted equipment
-$  losetup -d /dev/loop0
-# Now use losetp to set the first partition
-# 1048576 = 2048*512, 25165824 = 49152*512. 
-$ losetup -v -f -o 1048576 --sizelimit 25165824 ./BBB_USB.img
-$ sudo mount /dev/loop1 /mnt
-$ cp -ar /mnt/* Your_Directory
-
-</code></pre>
-
-<p>For the second partition, we use following command:</p>
-
-<pre><code># sudo mount ./BBB_USB.img -o offset=51380224 /mnt
-# cp -ar /mnt/* Your_Directory
-
-</code></pre>
-
-<p>By doing this you can directly copy out the partition files.<br />
-###Make Filesystem on SD Card
-After partition, directly use mkfs.xxx to make filesystems on SD Card. Following is the command which is used for creating vfat fs on SD Card:</p>
-
-<pre><code>mkfs.vfat -F 16/32 -n boot /dev/mmcblk0p1
-
-</code></pre>
-
-<p>###Zip Image File
-You can use following command for zipping the image file, in order to saving the disk space:</p>
-
-<pre><code>bunzip2 z BBB_USB.img
-
-</code></pre>
-
-<p>or</p>
-
-<pre><code>tar cjvf BBB_USB.img.tar.bz2 BBB_USB.img
-
-</code></pre>
-
-<p>First command will remove the origin image file, while the second one will remain the origin image.</p>
 
       
     </div>
@@ -1972,8 +1945,17 @@ You can use following command for zipping the image file, in order to saving the
         
     
     
+    
+    
+    
+    
+    
+        
+        
+    
+    
     <li
-    ><a href="/page/154/">154</a></li>
+    ><a href="/page/155/">155</a></li>
     
     
     <li
@@ -1982,7 +1964,7 @@ You can use following command for zipping the image file, in order to saving the
     </li>
     
     <li>
-        <a href="/page/154/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
+        <a href="/page/155/" aria-label="Last"><span aria-hidden="true">&raquo;&raquo;</span></a>
     </li>
     
 </ul>
