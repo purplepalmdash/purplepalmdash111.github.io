@@ -105,6 +105,252 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/11/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-4/">用Qemu和GNU编译链研究ARM汇编(4)</a>
+      </h1>
+      <span class="post-date">Jul 11, 2013 
+      </span>
+      
+      <p>1. 有关异常向量</p>
+
+<p>前面的例子中存在一个大BUG，内存布局中的前8个全字是为异常向量而保留的。当异常发生时控制逻辑将转到这些位置以执行对应的异常处理代码。异常向量和它们的地址如下：</p>
+
+<ul>
+<li>Exception  Address</li>
+<li>Reset  0x00</li>
+<li>Undefined Instruction  0x04</li>
+<li>Software Interrupt (SWI)   0x08</li>
+<li>Prefetch Abort     0x0C</li>
+<li>Data Abort     0x10</li>
+<li>Reserved, not used     0x14</li>
+<li>IRQ    0x18</li>
+<li>FIQ    0x1C</li>
+</ul>
+
+<p>按理说，这些个异常向量应该对应到异常处理程序中，既然我们代码中不会有异常发生，索性就用死循环来代替，如下：</p>
+
+<pre><code>        .section &quot;vectors&quot;
+reset:  b     start
+undef:  b     undef
+swi:    b     swi
+pabt:   b     pabt
+dabt:   b     dabt
+        nop
+irq:    b     irq
+fiq:    b     fiq
+</code></pre>
+
+<p>对应的，为了确保这些指令被放置在异常向量地址中，链接脚本也需要做相应的改动：</p>
+
+<pre><code>SECTIONS {
+        . = 0x00000000;
+        .text : {
+                * (vectors);
+                * (.text);
+                ...
+        }
+        ...
+}
+</code></pre>
+
+<p>异常向量需要放置在所有代码之前，这确保了代了向量是从0x0地址开始。</p>
+
+<p>2. C启动代码</p>
+
+<p>直接执行C代码会造成CPU直接重启，因为和汇编代码不同的是C语言需要初始化运行环境。</p>
+
+<pre><code>static int arr[] = { 1, 10, 4, 5, 6, 7 };
+static int sum;
+static const int n = sizeof(arr) / sizeof(arr[0]);
+
+int main()
+{
+        int i;
+
+        for (i = 0; i &lt; n; i++)
+                sum += arr[i];
+}
+</code></pre>
+
+<p>C语言运行环境需要设置
+1. 栈
+2. 全局变量： 已初始化的 &amp;&amp; 未初始化的
+3. 只读数据</p>
+
+<p>2.1 栈设置</p>
+
+<p>栈被用来存储自动变量，传递函数变量，存储返回地址等等。ARM Architecture
+Procedure Call Standard
+(AAPCS)是ARM体系结构中用于生成栈的规则。r13被用于作栈指针。</p>
+
+<p>对于特定的开发板来说，栈开始地址可能不同，对于connex开发板来说，地址可以用下面的代码来定义：</p>
+
+<pre><code>	ldr sp, =0xA4000000
+</code></pre>
+
+<p>2.2 全局变量</p>
+
+<p>C代码在编译时会把已初始化的全局变量放在.data段中，因而在初始化的汇编代码中，需要把.data段从Flash搬移到RAM中。</p>
+
+<p>C代码确保未初始化的全局变量被初始化成0.
+当C程序被编译时，独立的.bss段被用作未初始化的变量。因为未初始化的值都是0,我们无需将其存储在FLASH中。只不过在搬移的时候，我们需要在程序中将它们初始化为0而已。</p>
+
+<p>2.3 只读数据</p>
+
+<p>const常量会被初始化为.rodata， .rodata也被用于存储字符常量。</p>
+
+<p>.rodata在运行时不会被改变，所以它们可以被直接放置在FLASH中。</p>
+
+<p>2.4 启动代码</p>
+
+<p>Linker脚本需要做下面的事：
+1. .bss部分代替
+2.  vectors部分代替
+3. .rodata部分代替</p>
+
+<pre><code>SECTIONS {
+        . = 0x00000000;
+        .text : {
+              * (vectors);
+              * (.text);
+        }
+        .rodata : {
+              * (.rodata);
+        }
+        flash_sdata = .;
+
+        . = 0xA0000000;
+        ram_sdata = .;
+        .data : AT (flash_sdata) {
+              * (.data);
+        }
+        ram_edata = .;
+        data_size = ram_edata - ram_sdata;
+
+        sbss = .;
+        .bss : {
+             * (.bss);
+        }
+        ebss = .;
+        bss_size = ebss - sbss;
+}
+</code></pre>
+
+<p>启动代码需要完成下列任务：
+1. 中断向量设置
+2. 将.data部分从FLASH拷贝到RAM
+3. 将.bss置0后拷贝到RAM
+4. 设置栈指针(stack pointer)
+5. 分支程序到main函数</p>
+
+<pre><code>        .section &quot;vectors&quot;
+reset:  b     start
+undef:  b     undef
+swi:    b     swi
+pabt:   b     pabt
+dabt:   b     dabt
+        nop
+irq:    b     irq
+fiq:    b     fiq
+
+        .text
+start:
+        @@ Copy data to RAM.
+        ldr   r0, =flash_sdata
+        ldr   r1, =ram_sdata
+        ldr   r2, =data_size
+
+        @@ Handle data_size == 0
+        cmp   r2, #0
+        beq   init_bss
+copy:
+        ldrb   r4, [r0], #1
+        strb   r4, [r1], #1
+        subs   r2, r2, #1
+        bne    copy
+
+init_bss:
+        @@ Initialize .bss
+        ldr   r0, =sbss
+        ldr   r1, =ebss
+        ldr   r2, =bss_size
+
+        @@ Handle bss_size == 0
+        cmp   r2, #0
+        beq   init_stack
+
+        mov   r4, #0
+zero:
+        strb  r4, [r0], #1
+        subs  r2, r2, #1
+        bne   zero
+
+init_stack:
+        @@ Initialize the stack pointer
+        ldr   sp, =0xA4000000
+
+        bl    main
+
+stop:   b     stop
+</code></pre>
+
+<p>我们将直接用arm-none-eabi-gcc来编译所有程序：
+    arm-none-eabi-gcc -nostdlib -o csum.elf -T csum.lds csum.c startup.s
+-nostdlib选项用于指定标准C不应该被链接。</p>
+
+<p>查看符号信息：</p>
+
+<pre><code>	arm-none-eabi-nm -n csum.elf 
+	00000000 t reset
+	00000004 A bss_size
+	00000004 t undef
+	00000008 t swi
+	0000000c t pabt
+	00000010 t dabt
+	00000018 A data_size
+	00000018 t irq
+	0000001c t fiq
+	00000020 T main
+	00000094 t start
+	000000a8 t copy
+	000000b8 t init_bss
+	000000d0 t zero
+	000000dc t init_stack
+	000000e4 t stop
+	00000100 r n
+	00000104 R flash_sdata
+	a0000000 d arr
+	a0000000 D ram_sdata
+	a0000018 D ram_edata
+	a0000018 D sbss
+	a0000018 b sum
+	a000001c B ebss
+</code></pre>
+
+<p>可以看到： 中断向量从0x0开始; 汇编代码从8个全字后开始(0x20==32==8*4);
+只读数据n放在代码之后; arr，初始化后的数据，放在RAM中;
+未初始化的数据,sum放在6个int之后6*4==24==0x18</p>
+
+<p>转化成.bin二进制格式后，在Qemu中运行之，检查结果：</p>
+
+<pre><code>	$ arm-none-eabi-objcopy -O binary csum.elf csum.bin	
+	$ dd if=/dev/zero of=./flash.bin bs=4K count=4K
+  	$ dd if=csum.bin of=flash.bin bs=4096 conv=notrunc
+  	$ qemu-system-arm -M connex -pflash flash.bin -nographic -serial /dev/null
+	(qemu) xp /6dw 0xa0000000
+	a0000000:          1         10          4          5
+	a0000010:          6          7
+	(qemu) xp /1dw 0xa0000018
+	a0000018:         33
+</code></pre>
+
+<p>我们可以看到，1, 10, 4, 5, 6, 7 分别为数组元素，而结果为33,
+储存在0x18的地址。如果感兴趣，我们大可查找出别的数据地址，这里就不一一述说了。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/07/10/yong-qemuhe-gnubian-yi-lian-yan-jiu-armhui-bian-2/">用Qemu和GNU编译链研究ARM汇编(2)</a>
       </h1>
       <span class="post-date">Jul 10, 2013 
@@ -799,149 +1045,6 @@ w表明条目的大小为32个bit，即一个全字。</p>
 </code></pre>
 
 <p>之后挂载命令一样。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/08/yong-qemumo-ni-arm-1/">用Qemu模拟ARM(1)</a>
-      </h1>
-      <span class="post-date">Jul 8, 2013 
-      </span>
-      
-      <p>前面已经安装并配置了编译链和qemu，现在可以用qemu来模拟arm平台了。</p>
-
-<p>1. Hello, Qemu!</p>
-
-<p>输入下面的代码:</p>
-
-<pre><code>#include&lt;stdio.h&gt;
-int main()
-{
-    printf(&quot;Hello, Qemu!\n&quot;);
-    return 0;
-}
-</code></pre>
-
-<p>编译并运行:</p>
-
-<pre><code>	$ arm-none-linux-gnueabi-gcc -o hello hello.c -static
-	$ qemu-arm ./hello
-	$ file hello
-	hello: ELF 32-bit LSB  executable, ARM, EABI5 version 1 (SYSV), \
-	 statically linked, for GNU/Linux 2.6.16, not stripped
-</code></pre>
-
-<p>不加-static变量的话，运行时则需要使用-L选项链接到相应的运行库</p>
-
-<pre><code>	$ qemu-arm -L /home/Trusty/CodeSourcery/\
-	Sourcery_CodeBench_Lite_for_ARM_GNU_Linux/\
-	arm-none-linux-gnueabi/libc/  ./hello_1 
-	Hello, Qemu!
-	$ file hello_1
-	hello_1: ELF 32-bit LSB  executable, ARM, EABI5 version 1 (SYSV),\
-	 dynamically linked (uses shared libs), for GNU/Linux 2.6.16, not stripped
-</code></pre>
-
-<p>动态编译和静态编译生成的文件大小差别：</p>
-
-<pre><code>	$ ls -l -h
-	total 656K
-	-rwxr-xr-x 1 Trusty root 640K Jul  7 18:46 hello
-	-rwxr-xr-x 1 Trusty root 6.6K Jul  7 18:48 hello_1
-</code></pre>
-
-<p>###小插曲1：</p>
-
-<p>系统里安装了两套编译链arm-none-eabi-和arm-none-linux-eabi-,很容易让人混淆，可参考编译链的命名规则：</p>
-
-<p>arch(架构)-vendor(厂商名)-(os(操作系统名)-)abi(Application Binary
-Interface，应用程序二进制接口)</p>
-
-<p>举例说明：</p>
-
-<ul>
-<li>x86_64-w64-mingw32 = x86_64 &ldquo;arch&rdquo;字段 (=AMD64), w64 (=mingw-w64
-是&rdquo;vendor&rdquo;字段), mingw32 (=GCC所见的win32 API)</li>
-<li>i686-unknown-linux-gnu = 32位 GNU/linux编译链</li>
-<li>arm-none-linux-gnueabi = ARM 架构, 无vendor字段, linux 系统, gnueabi ABI.</li>
-<li>arm-none-eabi = ARM架构, 无厂商, eabi ABI(embedded abi)</li>
-</ul>
-
-<p>两种编译链的主要区别在于库的差别，前者没有后者的库多，后者主要用于在有操作系统的时候编译APP用的。前者不包括标准输入输出库在内的很多C标准库，适合于做面向硬件的类似单片机那样的开发。因而如果采用arm-none-eabi-gcc来编译hello.c会出现链接错误。</p>
-
-<p>###小插曲2：</p>
-
-<p>qemu-arm和qemu-system-arm的区别：</p>
-
-<ul>
-<li>qemu-arm是用户模式的模拟器(更精确的表述应该是系统调用模拟器)，而qemu-system-arm则是系统模拟器，它可以模拟出整个机器并运行操作系统</li>
-<li>qemu-arm仅可用来运行二进制文件，因此你可以交叉编译完例如hello
-world之类的程序然后交给qemu-arm来运行，简单而高效。而qemu-system-arm则需要你把hello
-world程序下载到客户机操作系统能访问到的硬盘里才能运行。</li>
-</ul>
-
-<p>2. 使用qemu-system-arm运行Linux内核</p>
-
-<p>从www.kernel.org下载最新内核,而后解压</p>
-
-<pre><code>	$ tar xJf linux-3.10.tar.xz
-	$ cd linux-3.10
-	$ make ARCH=arm versatile_defconfig
-	$ make menuconfig ARCH=arm CROSS_COMPILE=arm-none-linux-gnueabi-
-</code></pre>
-
-<p>上面的命令指定内核架构为arm，交叉编译链为arm-none-linux-gnueabi,
-需要在make menuconfig弹出的窗口中选择到 “Kernel Features”, 激活“Use the ARM
-EABI to compile the kernel”,
-如果不激活这个选项的话，内核将无法加载接下来要制作的initramfs。</p>
-
-<p>如果需要在u-boot上加载内核，就要编译为uImage的格式，uImage通过mkimage程序来压缩的，ArchLinux的yaourt仓库里可以找到这个包：</p>
-
-<pre><code>	$ yaourt -S mkimage
-</code></pre>
-
-<p>安装好mkimage后，开始编译内核，因为CPU有4核，所以开启了-j8选项以加速编译:</p>
-
-<pre><code>	$ make ARCH=arm CROSS_COMPILE=arm-none-linux-gnueabi- all -j8 uImage 
-</code></pre>
-
-<p>接下来我们可以在qemu-system-arm中测试我们的内核了</p>
-
-<pre><code>	$ qemu-system-arm -M versatilepb -m 128M -kernel ./arch/arm/boot/uImage
-</code></pre>
-
-<p>在弹出的窗口中可以内核运行到了kernel
-panic状态，这是因为内核无法加载root镜像的缘故，我们将制作一个最简单的hello
-world的文件系统，告知kernel运行之。</p>
-
-<pre><code>#include &lt;stdio.h&gt;
- 
-void main() {
-	  printf(&quot;Hello World!\n&quot;);
-	  while(1);
-}
-</code></pre>
-
-<p>编译并制作启动镜像:</p>
-
-<pre><code>	$ arm-none-linux-gnueabi-gcc -o init init.c -static
-	$ echo init |cpio -o --format=newc &gt; initramfs
-	1280 blocks
-	$ file initramfs 
-	initramfs: ASCII cpio archive (SVR4 with no CRC)
-</code></pre>
-
-<p>接下来我们回到编译目录下执行：</p>
-
-<pre><code>	$ qemu-system-arm -M versatilepb -kernel ./arch/arm/boot/uImage  -initrd
-	../initramfs -serial stdio -append &quot;console=tty1&quot;
-</code></pre>
-
-<p>这时候可以看到，kernel运行并在Qemu自带的终端里打印出&rdquo;Hello World!&ldquo;。</p>
-
-<p>如果我们改变console变量为ttyAMA0, 将在启动qemu-system-arm的本终端上打印出qemu的输出。</p>
 
       
     </div>

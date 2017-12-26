@@ -105,6 +105,49 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2016/07/01/xenserver-statistics/">XenServer Statistics</a>
+      </h1>
+      <span class="post-date">Jul 1, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
+        
+      </span>
+      
+      <p>Direct write rrd into graphite, refers to:</p>
+
+<pre><code>$ git clone https://github.com/jgilmour/XenGraphiteIT.git
+</code></pre>
+
+<p>Then you get the storage pool information fro xsconsole via:</p>
+
+<pre><code>$ xe vdi-list
+</code></pre>
+
+<p>Notice it will contain the hard disk and iso repositories, use harddisk.</p>
+
+<p>Now edit the .config file:</p>
+
+<pre><code>[XENAPI]
+URL = http://192.168.10.187
+USERNAME = root
+PASSWORD = xxxxxxx
+SR-UUID = 51977c4b-8dc2-bcff-b7ad-de7cc5c7e717
+
+[GRAPHITE]
+CARBON_HOST = 192.168.1.79
+CARBON_PORT = 2003
+CARBON_NAME = collectd.com.IT.servers.xen.
+</code></pre>
+
+<p>Run <code>python2 xengraphite.py</code> you could get your XenServer statistic data into your
+graphite database, enjoy it.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2016/06/29/site-to-site-vpn/">site-to-site VPN</a>
       </h1>
       <span class="post-date">Jun 29, 2016 
@@ -979,224 +1022,6 @@ $ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/ubu
 </code></pre>
 
 <p>Then restart the machine, you will get it installing ubuntu.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2016/06/01/use-rakehd-for-deploying-systems/">Use RackHD For Deploying Systems</a>
-      </h1>
-      <span class="post-date">Jun 1, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Following are the steps for using the RackHD for deploying systems. Mainly refers to
-<a href="http://dojoblog.emc.com/rackhd-cpi/setting-up-rackhd/">http://dojoblog.emc.com/rackhd-cpi/setting-up-rackhd/</a></p>
-
-<p>But the tutorial from emc includes lots of mistakes, so I listed all of the steps in
-following chapters.</p>
-
-<h3 id="vagrant-env-preparation">Vagrant Env Preparation</h3>
-
-<p>Initialize the vagrant env via(ubuntu1404 is my box name):</p>
-
-<pre><code>$ vagrant init ubuntu1404
-A `Vagrantfile` has been placed in this directory. 
-$ vim Vagrantfile
-  config.vm.provider &quot;virtualbox&quot; do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-    vb.memory = &quot;4096&quot;
-    vb.cpus = 4
-    vb.customize [&quot;modifyvm&quot;, :id, &quot;--nicpromisc2&quot;, &quot;allow-all&quot;, &quot;--ioapic&quot;, &quot;on&quot;]
-  end
-$ vagrant up
-</code></pre>
-
-<h3 id="prerequisites">Prerequisites</h3>
-
-<p>Use following scripts for installing the prerequisites for RackHD(<code>pre_rackhd.sh</code>):</p>
-
-<pre><code>#!/bin/bash 
-set -­e
-
-sudo apt-get -y update
-sudo apt-get -y dist-upgrade
-sudo apt-get autoremove
-sudo apt-get install -y nodejs nodejs-legacy npm
-
-# Runtime Dependencies
-sudo apt-get install -y rabbitmq-server mongodb isc-dhcp-server
-sudo apt-get install -y snmp ipmitool ansible amtterm apt-mirror unzip libkrb5-dev
-
-# upstart will be installed after Ubuntu15.04.
-# sudo apt-get -y install upstart­sysv
-sudo update-initramfs -u
-
-# amttool
-wget http://downloads.sourceforge.net/project/amttooltng/1.7/amttool
-sudo chmod 777 amttool
-sudo mv amttool /usr/bin/amttooltng
-
-# Compile Dependencies
-sudo apt-get install -y git openssh-server pbuilder dh-make devscripts ubuntu-dev-tools
-
-# Git clone all of the repositories
-RACKHD_INSTALL_DIR=~;cd $RACKHD_INSTALL_DIR
-git clone https://github.com/RackHD/RackHD
-RACKHD_PROJECT_DIR=${RACKHD_INSTALL_DIR}/RackHD
-cd $RACKHD_PROJECT_DIR
-git submodule update --init --recursive
-git submodule foreach git pull origin master
-
-# Configuration files
-sudo touch /etc/default/on-http
-sudo touch /etc/default/on-dhcp-proxy
-sudo touch /etc/default/on-taskgraph
-sudo touch /etc/default/on-syslog
-sudo touch /etc/default/on-tftp
-
-# Build And Install
-cd ${RACKHD_PROJECT_DIR}/on-http
-./HWIMO-BUILD
-sudo dpkg -i on-http_*.deb
- 
-cd ${RACKHD_PROJECT_DIR}/on-dhcp-proxy
-./HWIMO-BUILD
-sudo dpkg -i on-dhcp-proxy_*.deb
-
-cd ${RACKHD_PROJECT_DIR}/on-taskgraph
-./HWIMO-BUILD
-sudo dpkg -i on-taskgraph_*.deb
-
-cd ${RACKHD_PROJECT_DIR}/on-syslog
-./HWIMO-BUILD
-sudo dpkg -i on-syslog_*.deb
-
-cd ${RACKHD_PROJECT_DIR}/on-tftp
-./HWIMO-BUILD
-sudo dpkg -i on-tftp_*.deb
-</code></pre>
-
-<p>Now shutdown the vm, add one networking interface, because we want to add PXE in this
-network apdater.</p>
-
-<pre><code>$ vim Vagrantfile
-config.vm.network &quot;private_network&quot;, ip: &quot;172.31.128.1&quot;, virtualbox__intnet: &quot;closednet&quot;
-</code></pre>
-
-<p>Now startup the vagrant vm again. continue to configure the PXE.</p>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>Examine the eth1 IP Configuration:</p>
-
-<pre><code>vagrant@ubuntu-1404:~$ ifconfig eth1
-eth1      Link encap:Ethernet  HWaddr 08:00:27:c2:cf:3e  
-          inet addr:172.31.128.1  Bcast:172.31.128.255  Mask:255.255.255.0
-</code></pre>
-
-<p>Configure the isc-dhcp:</p>
-
-<pre><code>$ sudo vim /etc/default/isc-dhcp-server
-INTERFACES=&quot;eth1&quot;
-</code></pre>
-
-<p>Add the following configuration into <code>/etc/dhcp/dhcp.conf</code>:</p>
-
-<pre><code># RackHD Added Lines
-deny duplicates;
-
-ignore-client-uids true;
-
-subnet 172.31.128.0 netmask 255.255.252.0 {
-    range 172.31.128.2 172.31.131.254;
-    # Use this option to signal to the PXE client that we are doing proxy DHCP
-    option vendor-class-identifier &quot;PXEClient&quot;;
-}
-</code></pre>
-
-<p>Download the config.json for monorail usage, and modify its tftpRoot Configuration:</p>
-
-<pre><code>$ cd /opt/monorail/
-$ sudo wget https://raw.githubusercontent.com/RackHD/RackHD/master/packer/ansible/roles/monorail/files/config.json
-$ sudo vim config.json
-    &quot;tftpRoot&quot;: &quot;/opt/monorail/static/tftp&quot;,
-</code></pre>
-
-<p>Prepare the http and tftp folder:</p>
-
-<pre><code>$ sudo mkdir -p /opt/monorail/static/http/common/
-$ sudo mkdir -p /opt/monorail/static/tftp/
-</code></pre>
-
-<p>Download the tftp and http static files:</p>
-
-<pre><code>$ cd /opt/monorail/static/tftp
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/ipxe/monorail.ipxe
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/ipxe/monorail-undionly.kpxe
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/ipxe/monorail-efi32-snponly.efi
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/ipxe/monorail-efi64-snponly.efi
-$ cd /opt/monorail/static/http/common/
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/builds/discovery.overlay.cpio.gz
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/builds/base.trusty.3.16.0-25-generic.squashfs.img
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/builds/initrd.img-3.16.0-25-generic
-$ sudo wget https://bintray.com/artifact/download/rackhd/binary/builds/vmlinuz-3.16.0-25-generic
-</code></pre>
-
-<p>Now reboot the vm again, next step we will test the PXE boot.</p>
-
-<h3 id="pxe-clients">PXE Clients</h3>
-
-<p>The PXE will be avaiable and after it finishes, the vm will look like:</p>
-
-<p><img src="/images/2016_06_01_11_47_57_712x236.jpg" alt="/images/2016_06_01_11_47_57_712x236.jpg" /><br />
-Now you could get the node info via following RESTFUL api call:</p>
-
-<pre><code>$ curl http://localhost:8080/api/1.1/nodes | python -m json.tool
-        &quot;createdAt&quot;: &quot;2016-06-01T03:44:09.064Z&quot;,
-        &quot;id&quot;: &quot;574e5a0944ff724a05284005&quot;,
-        &quot;identifiers&quot;: [
-            &quot;08:00:27:02:5f:7a&quot;
-        ],
-        &quot;name&quot;: &quot;08:00:27:02:5f:7a&quot;,
-
-</code></pre>
-
-<p>Examine the mac correponding node ID <code>574e5a0944ff724a05284005</code>, later we wil use this id for deploying CentOS.</p>
-
-<h3 id="add-centos7-deployment">Add CentOS7 Deployment</h3>
-
-<p>Add CentOS7 DVD into the deployment:</p>
-
-<pre><code>$ sudo python ~/RackHD/on-tools/scripts/setup_iso.py /mnt/CentOS-7-x86_64-Everything-1511.iso  /opt/monorail/static/http --link=/home/vagrant/RackHD
-</code></pre>
-
-<p>This will takes around 10 mins for importing the iso into the RackHD.</p>
-
-<p>Configure the node:</p>
-
-<pre><code>$ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/noop_body.json http://localhost:8080/api/1.1/nodes/574e5a0944ff724a05284005/obm | python -m json.tool
-$ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/centos_iso_boot.json http://localhost:8080/api/1.1/nodes/574e5a517c6c03440553dd0f/workflows | python -m json.tool
-</code></pre>
-
-<p><img src="/images/2016_06_01_14_12_33_449x503.jpg" alt="/images/2016_06_01_14_12_33_449x503.jpg" /><br />
-Then added the configuration for deploying CentOS7 via:</p>
-
-<pre><code>$ cd ~/RackHD/example/
-$ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/noop_body.json http://localhost:8080/api/1.1/nodes/574e6516224a4449056183e7/obm | python -m json.tool
-$ curl -H &quot;Content-Type: application/json&quot; -X POST --data @samples/centos_iso_boot.json http://localhost:8080/api/1.1/nodes/574e6516224a4449056183e7/workflows | python -m json.tool
-</code></pre>
-
-<p>PXE the node, thus you will get a CentOS7 installed.</p>
 
       
     </div>

@@ -105,6 +105,145 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/10/beaglebone-boot-from-nfs/">BeagleBone boot from NFS</a>
+      </h1>
+      <span class="post-date">Dec 10, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/beaglebone">Beaglebone</a>
+        
+      </span>
+      
+      <p>###Building Preparation
+Create a new directory for stroing all of the items related to beaglebone.</p>
+
+<pre><code>	cd /media/nfs/
+	mkdir beaglebone
+	cd beaglebone/
+
+</code></pre>
+
+<p>Download the cross-compiler from linaro toolchain binary website. And add it to the environment variables.</p>
+
+<pre><code>	wget -c https://launchpad.net/linaro-toolchain-binaries/trunk/2013.10/+download/gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux.tar.xz
+	tar xJf gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux.tar.xz
+	export CC=`pwd`/gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux/bin/arm-linux-gnueabihf-
+	# Test the cross-compiler
+	${CC}gcc --version
+
+</code></pre>
+
+<p>Checkout the U-boot:</p>
+
+<pre><code>	git clone git://git.denx.de/u-boot.git
+	cd u-boot/
+	git checkout v2013.10 -b tmp
+
+</code></pre>
+
+<p>Patching U-boot:</p>
+
+<pre><code>	wget https://raw.github.com/eewiki/u-boot-patches/master/v2013.10/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+	patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+
+</code></pre>
+
+<p>Configure and compile the U-boot:</p>
+
+<pre><code>	make ARCH=arm CROSS_COMPILE=${CC} distclean
+	make ARCH=arm CROSS_COMPILE=${CC} am335x_evm_config
+	make ARCH=arm CROSS_COMPILE=${CC}
+
+</code></pre>
+
+<p>Checkout the kernel:</p>
+
+<pre><code>	git clone git://github.com/RobertCNelson/linux-dev.git
+	cd linux-dev
+	git checkout origin/am33x-v3.12 -b tmp
+
+</code></pre>
+
+<p>Now we got our kernel and U-boot available. The next step is to build a filesystem:</p>
+
+<pre><code>	wget -c https://rcn-ee.net/deb/minfs/raring/ubuntu-13.04-minimal-armhf-2013-08-25.tar.xz
+
+</code></pre>
+
+<p>Prepare the mmc card.</p>
+
+<pre><code>	export DISK=/dev/mmcblk0
+	[Trusty@XXXyyy beaglebone]$ sudo dd if=/dev/zero of=${DISK} bs=1M count=16
+	16+0 records in
+	16+0 records out
+	16777216 bytes (17 MB) copied, 4.84877 s, 3.5 MB/s 
+
+</code></pre>
+
+<p>Use sfdisk for creating the partition layout.</p>
+
+<pre><code>	sudo sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
+	1,48,0xE,*
+	,,,-
+	__EOF__
+
+</code></pre>
+
+<p>Format Partitions:</p>
+
+<pre><code>	sudo mkfs.vfat -F 16 ${DISK}p1 -n boot
+	sudo mkfs.ext4 ${DISK}p2 -L rootfs
+
+</code></pre>
+
+<p>Install Bootloader to the 1st partition of mmc card.</p>
+
+<pre><code>	[Trusty@XXXyyy beaglebone]$ sudo mkdir -p /media/boot/
+	[Trusty@XXXyyy beaglebone]$ sudo mkdir -p /media/rootfs/
+	[Trusty@XXXyyy beaglebone]$ sudo mount ${DISK}p1 /media/boot/
+	[Trusty@XXXyyy beaglebone]$ sudo mount ${DISK}p2 /media/rootfs/
+	[Trusty@XXXyyy beaglebone]$ sudo cp -v ./u-boot/MLO /media/boot/
+	‘./u-boot/MLO’ -&gt; ‘/media/boot/MLO’
+	[Trusty@XXXyyy beaglebone]$ sudo cp -v ./u-boot/u-boot.img /media/boot/
+	‘./u-boot/u-boot.img’ -&gt; ‘/media/boot/u-boot.img’
+
+	[Trusty@XXXyyy linux-dev]$ vim uEnv.txt
+	[Trusty@XXXyyy linux-dev]$ sudo cp -v ./uEnv.txt /media/boot/
+	‘./uEnv.txt’ -&gt; ‘/media/boot/uEnv.txt’
+
+</code></pre>
+
+<p>Copy Kernel:</p>
+
+<pre><code>	[Trusty@XXXyyy beaglebone]$ sudo cp -v ./linux-dev/deploy/3.12.4-bone9.zImage /media/boot/zImage
+	‘./linux-dev/deploy/3.12.4-bone9.zImage’ -&gt; ‘/media/boot/zImage’
+
+</code></pre>
+
+<p>Copy Root File System:</p>
+
+<pre><code>	sudo tar xfvp ./ubuntu-13.04-minimal-armhf-2013-08-25/armhf-rootfs-ubuntu-raring.tar -C /media/rootfs/
+Installation of kernel and configuration of the filesystem.
+	sudo cp -v ./linux-dev/deploy/3.12.4-bone9.zImage /media/boot/zImage
+	sudo mkdir -p /media/boot/dtbs/
+	sudo tar xfov ./linux-dev/deploy/3.12.4-bone9-dtbs.tar.gz -C /media/boot/dtbs/
+	sudo tar xfv ./linux-dev/deploy/3.12.4-bone9-firmware.tar.gz  -C /media/rootfs/lib/firmware/
+	sudo tar xfv ./linux-dev/deploy/3.12.4-bone9-modules.tar.gz -C /media/rootfs/
+	sudo vim /media/rootfs/etc/fstab
+	sudo vim /media/rootfs/etc/network/interfaces 
+	sudo vim /media/rootfs/etc/udev/rules.d/70-persistent-net.rules
+	sudo vim /media/rootfs/etc/inittab
+	sudo vim /media/rootfs/etc/init/serial.conf
+	sudo umount /media/rootfs/
+	sudo umount /media/boot/
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/12/09/enable-audio-in-beaglebone-black/">Enable audio in BeagleBone Black</a>
       </h1>
       <span class="post-date">Dec 9, 2013 
@@ -541,75 +680,6 @@ done
 </code></pre>
 
 <p>好了，这个Internet Radio就写好了。Enjoy it!!!</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/12/06/enable-spice-for-qemu-virtual-machine/">Enable spice for qemu virtual machine</a>
-      </h1>
-      <span class="post-date">Dec 6, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/qemu">Qemu</a>
-        
-      </span>
-      
-      <p>###Package Installation
-Install virt-viewer for browsing the virtual machine desktop. For default spicec is not OK.</p>
-
-<pre><code>	$ pacman -S gtk-vnc
-	$ yaourt -S spice-gtk3
-	$ yaourt -S virt-viewer
-</code></pre>
-
-<p>Install virt-manager</p>
-
-<pre><code>	[root@DashArch Trusty]# pacman -S virt-manager 
-	[root@DashArch Trusty]# systemctl start libvirtd.service
-	[root@DashArch Trusty]# systemctl enable  libvirtd.service
-	ln -s '/usr/lib/systemd/system/libvirtd.service' '/etc/systemd/system/multi-user.target.wants/libvirtd.service'
-	[root@DashArch Trusty]# ps -ef | grep libvirt
-	root      8852     1  5 15:23 ?        00:00:00 /usr/bin/libvirtd -p /var/run/libvirtd.pid
-</code></pre>
-
-<p>###启动支持spice Server的qemu
--vga qxl -spice port=5988,disable-ticketing将使能spice</p>
-
-<pre><code>	./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga qxl -spice port=5988,disable-ticketing -localtime
-</code></pre>
-
-<p>在本地或者远程访问spice server:</p>
-
-<pre><code>	$ spice -h 127.0.0.1 -p 5988
-</code></pre>
-
-<p>但是ArchLinux上的X Server会出现问题，具体解决方案未明了。然而在Ubuntu上则是可以顺利访问的。
-###启动支持VNC的Qemu</p>
-
-<pre><code>	./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga std -nographic  -localtime -vnc :33
-启动后vncviewer :33则可连接到qemu的窗口
-</code></pre>
-
-<p>###启动Qemu，以std方式
-全新启动：</p>
-
-<pre><code>	./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga std  -localtime `
-
-</code></pre>
-
-<p>保存状态： ctl+alt+2</p>
-
-<pre><code>	$ savevm booted
-
-</code></pre>
-
-<p>启动到上一次保存的状态：</p>
-
-<pre><code>	$  ./run-qemu -boot d  -m 1024 -enable-kvm -drive file=./fpgawindows.qcow2,if=ide -drive file=./fake.qcow2,if=virtio -cdrom ./virtio-win-0.1-74.iso -usb -vga std  -localtime --loadvm booted
-
-</code></pre>
 
       
     </div>

@@ -105,6 +105,133 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/03/18/building-qemu-based-raspberrypi-development-environment/">Building Qemu Based RaspberryPI Development Environment</a>
+      </h1>
+      <span class="post-date">Mar 18, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/qemu">Qemu</a>
+        
+      </span>
+      
+      <p>First download the latest image from <a href="http://www.raspberrypi.org/downloads">http://www.raspberrypi.org/downloads</a>, mine is Wheezy. <br />
+And we also have to download the qemu-compatible kernel from following address:<br /></p>
+
+<pre><code>	$ wget http://xecdesign.com/downloads/linux-qemu/kernel-qemu
+
+</code></pre>
+
+<p>Change the img file according to <a href="http://localhost/blog/2013/09/04/qemu-for-raspberrypi/">http://localhost/blog/2013/09/04/qemu-for-raspberrypi/</a>, follow this tutorial, you have to change the img file size and its content, but we have to do some modifications. <br />
+The run-qemu file is changed to following: <br /></p>
+
+<pre><code>	#!/bin/bash
+	USERID=$(whoami)
+	
+	# Get name of newly created TAP device; see https://bbs.archlinux.org/viewtopic.php?pid=1285079#p1285079
+	precreationg=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+	sudo /usr/bin/ip tuntap add user $USERID mode tap
+	postcreation=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
+	IFACE=$(comm -13 &lt;(echo &quot;$precreationg&quot;) &lt;(echo &quot;$postcreation&quot;))
+	
+	# This line creates a random mac address. The downside is the dhcp server will assign a different ip each time
+	printf -v macaddr &quot;52:54:%02x:%02x:%02x:%02x&quot; $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff )) $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff ))
+	# Instead, uncomment and edit this line to set an static mac address. The benefit is that the dhcp server will assign the same ip.
+	# macaddr='52:54:be:36:42:a9'
+        macaddr = '52:54:79:3c:80:c0'
+	 
+	qemu-system-arm -net nic,macaddr=$macaddr -net tap,ifname=&quot;$IFACE&quot; -append &quot;root=/dev/sda2 panic=1 rootfstype=ext4 rw&quot; $*
+	  
+	sudo ip link set dev $IFACE down &amp;&gt; /dev/null
+	sudo ip tuntap del $IFACE mode tap &amp;&gt; /dev/null
+
+</code></pre>
+
+<p>In router, we add the static address for mac corresponding to 10.0.0.168, you can alter it according to your habit. <br /></p>
+
+<p>Now we want to disable the X at every startup and use vnc instead. <br />
+And we can overlocking the raspberryPI to 1000MHZ, this will greatly improve the performance.<br /></p>
+
+<p>Enable the vncserver:<br /></p>
+
+<pre><code>	$ apt-get install tightvncserver vim 
+
+</code></pre>
+
+<p>Now startup the vncserver and use vncviewer to view the desktop:<br /></p>
+
+<p><img src="/images/Screenshot-QEMU.png" alt="/images/Screenshot-QEMU.png" /></p>
+
+<p>No, the correct method is listed as: <br /></p>
+
+<pre><code>	cat /eroot@raspberrypi:~# cat /etc/init.d/startvnc 
+	#!/bin/sh -e
+	### BEGIN INIT INFO
+	# Provides:          vncserver
+	# Required-Start:    networking
+	# Default-Start:     3 4 5
+	# Default-Stop:      0 6
+	### END INIT INFO
+	
+	PATH=&quot;$PATH:/usr/X11R6/bin/&quot;
+	
+	# The Username:Group that will run VNC
+	export USER=&quot;pi&quot;
+	#${RUNAS}
+	
+	# The display that VNC will use
+	DISPLAY=&quot;1&quot;
+	
+	# Color depth (between 8 and 32)
+	DEPTH=&quot;16&quot;
+	
+	# The Desktop geometry to use.
+	#GEOMETRY=&quot;&lt;WIDTH&gt;x&lt;HEIGHT&gt;&quot;
+	#GEOMETRY=&quot;800x600&quot;
+	#GEOMETRY=&quot;1024x768&quot;
+	GEOMETRY=&quot;1280x1024&quot;
+	
+	# The name that the VNC Desktop will have.
+	NAME=&quot;my-vnc-server&quot;
+	
+	OPTIONS=&quot;-name ${NAME} -depth ${DEPTH} -geometry ${GEOMETRY} :${DISPLAY}&quot;
+	
+	. /lib/lsb/init-functions
+	
+	case &quot;$1&quot; in
+	start)
+	log_action_begin_msg &quot;Starting vncserver for user '${USER}' on   localhost:${DISPLAY}&quot;
+	su ${USER} -c &quot;/usr/bin/vncserver ${OPTIONS}&quot;
+	;;
+	
+	stop)
+	log_action_begin_msg &quot;Stoping vncserver for user '${USER}' on localhost:${DISPLAY}&quot;
+	su ${USER} -c &quot;/usr/bin/vncserver -kill :${DISPLAY}&quot;
+	;;
+	
+	restart)
+	$0 stop
+	$0 start
+	;;
+	esac
+	
+	exit 0
+
+</code></pre>
+
+<p>And now we can add this script into /etc/rc.local as:<br /></p>
+
+<pre><code>	# Start the vncserver here:
+	/etc/init.d/startvnc start
+
+</code></pre>
+
+<p>So everytime we startup the qemu based raspberryPI, we can easily attached to its geometry, and we can easily adapt the resolution.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/03/18/moving-weather-app-to-bbb/">Moving Weather App to BBB</a>
       </h1>
       <span class="post-date">Mar 18, 2014 
@@ -369,75 +496,6 @@ Install pyodbc:<br /></p>
 <pre><code>TBD
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/03/14/trouble-shotting-on-wordpress/">Trouble-Shotting on Wordpress</a>
-      </h1>
-      <span class="post-date">Mar 14, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/wordpress">Wordpress</a>
-        
-      </span>
-      
-      <p>Since the Wordpress is located at home, there are several problems for dealing with.<br />
-###Changeing Apache Listening Port
-Nanjing Unicom has banned the port 80, thus I have to change the default listening port of apache from 80 to other ports. Following is How-To:<br />
-First import an variable in /etc/apache2/envvars:<br /></p>
-
-<pre><code>	export VHOST_PORT_HTTP=7777
-
-</code></pre>
-
-<p>Then Change the /etc/apache2/ports.conf: <br /></p>
-
-<pre><code>	# NameVirtualHost *:80
-	# Listen 80
-	NameVirtualHost *:${VHOST_PORT_HTTP}
-	Listen ${VHOST_PORT_HTTP}
-
-</code></pre>
-
-<p>Finally change the site-enabled:<br /></p>
-
-<pre><code>	root@arm:/etc/apache2# cat sites-enabled/000-default
-	&lt;VirtualHost *:${VHOST_PORT_HTTP}&gt;
-
-</code></pre>
-
-<p>Now restart the apache2 service, you should see the apache listens the 7777 port. <br /></p>
-
-<pre><code>	/etc/init.d/apache2 restart
-
-</code></pre>
-
-<p>###Configurating the WordPress
-Install this light-weight browser for changing configurations. <br /></p>
-
-<pre><code>	pacman -S midori
-
-</code></pre>
-
-<p>After remote login with &ldquo;ssh -Y&rdquo;, simply input: <br /></p>
-
-<pre><code>	midori 
-
-</code></pre>
-
-<p>Then you can get a local window. <br />
-But wait, midori relies on window, but we&rsquo;d better do everything in command-line for savign the bandwidth, thus we install the elinks, and use it for configurating the wordpress.<br /></p>
-
-<pre><code>	$ apt-get install elinks
-
-</code></pre>
-
-<p>You have to change the configuration-&gt;General, from <a href="http://xxx.xxx.xxx.xxx">http://xxx.xxx.xxx.xxx</a> to <a href="http://xxx.xxx.xxx.xxx:7777">http://xxx.xxx.xxx.xxx:7777</a>, then we can change the port and let it show in browser. <br /></p>
-
-<p>Now you can access the wordpress in everywhere.</p>
 
       
     </div>

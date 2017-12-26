@@ -105,6 +105,79 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2016/08/18/onxenserverbridgeworkingtips/">OnXenServerBridgeWorkingTips</a>
+      </h1>
+      <span class="post-date">Aug 18, 2016 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="background">Background</h3>
+
+<p>I will use XenServer for testing, while I made a vagrant box of XenServer 6.5, it could
+work properly in seperated networking, so following I will try to setup a bridged
+&ldquo;XenServer&rdquo; which will acts like a real physical machine.</p>
+
+<h3 id="vagrantfile">Vagrantfile</h3>
+
+<p>The configuration part is listed as:</p>
+
+<pre><code>  # csagentxen65 node.
+  # Add one networking, modify hostname, define memory, CPU cores.
+  config.vm.define :csagentxen65 do |csagentxen65|
+    csagentxen65.vm.box = &quot;Xen65Box&quot;
+    csagentxen65.vm.boot_timeout = '36000'
+    csagentxen65.vm.hostname = CLOUDSTACK_AGENT_HOSTNAME
+    csagentxen65.vm.network :public_network, 
+	    :dev =&gt; &quot;br0&quot;,
+	    :mode =&gt; &quot;bridge&quot;,
+	    :type =&gt; &quot;bridge&quot;,
+	    :ip =&gt; &quot;192.168.10.3&quot;
+    # Disable mounting of vagrant folder as it's not supported on xenserver
+    csagentxen65.vm.synced_folder &quot;.&quot;, &quot;/vagrant&quot;, disabled: true
+    csagentxen65.vm.provider :libvirt do |domain|
+      domain.memory = 8192
+      domain.cpus = 4
+      domain.storage_pool_name = 'XenStoragePool'
+      domain.nested = true
+      domain.cpu_mode = 'host-passthrough'
+      domain.nic_model_type = 'e1000'
+      domain.management_network_mac = &quot;08:00:27:1D:90:A8&quot;
+    end
+  end
+</code></pre>
+
+<p>Here we used our newly created storage pool, I use virt-manager for creating a new
+storage pool, which is in a seprated disk, could gain much more IOPS.</p>
+
+<h3 id="bug-fix">Bug-Fix</h3>
+
+<p>vagrant-libvirt will create 2 ethernet port, while the default one is xenbr0, but we
+want the xenbr1 be the management port.</p>
+
+<p>Gain a administration shell:</p>
+
+<p><img src="/images/2016_08_18_19_34_41_498x510.jpg" alt="/images/2016_08_18_19_34_41_498x510.jpg" /><br />
+Enter following command:</p>
+
+<pre><code># ifconfig eth1 netmask 255.255.0.0
+# route add default gw 192.168.0.xxx eth1
+</code></pre>
+
+<p>Now you can run ansible-playbook against the XenServer, but it will stuck.</p>
+
+<p>Now manually configure eth1&rsquo;s netmask and its gateway. ansible-playbook could be run
+properly.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2016/08/03/sendmessagetoslack/">SendMessageToSlack</a>
       </h1>
       <span class="post-date">Aug 3, 2016 
@@ -491,124 +564,6 @@ $ git push -u origin master
 <p><img src="/images/2016_07_18_15_24_00_358x581.jpg" alt="/images/2016_07_18_15_24_00_358x581.jpg" /></p>
 
 <p>配置完毕后，就可以通过点击<code>Build Now</code>来编译Packer.io工程了。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2016/07/13/setupjenkinsci/">SetupJenkinsCI</a>
-      </h1>
-      <span class="post-date">Jul 13, 2016 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/dev">Dev</a>
-        
-      </span>
-      
-      
-
-<h3 id="aim">AIM</h3>
-
-<p>Jenkins + Packer.io + GitLab + Gogs, for automatically building the virtual machine
-images.</p>
-
-<h3 id="jenkins-installation-configuration">Jenkins Installation/Configuration</h3>
-
-<p>TBD</p>
-
-<h3 id="gitlab">GitLab</h3>
-
-<p>Refers to:<br />
-<a href="https://github.com/sameersbn/docker-gitlab">https://github.com/sameersbn/docker-gitlab</a></p>
-
-<h4 id="image-preparation">Image Preparation</h4>
-
-<p>Using docker for installing gitlab. First pull the docker image back via:</p>
-
-<pre><code>$ docker pull sameersbn/gitlab:8.9.6
-</code></pre>
-
-<p>Also pull back the postgres and redis images, for we will link to these container&rsquo;s
-services:</p>
-
-<pre><code>$ docker pull sameersbn/postgresql:9.4-22
-$ docker pull sameersbn/redis:latest
-</code></pre>
-
-<h4 id="run-gitlab">Run GitLab</h4>
-
-<p>Create the data directory for holding the data:</p>
-
-<pre><code>$ mkdir -p /root/data/gitlab
-$ cd /root/data/gitlab
-$ mkdir redis postgresql gitlab
-$ chmod 777 -R /root/data/gitlab/
-</code></pre>
-
-<p>Launch a postgresql container via:</p>
-
-<pre><code># docker run --name gitlab-postgresql -d \
-     --env 'DB_NAME=gitlabhq_production' \
-     --env 'DB_USER=gitlab' --env 'DB_PASS=password' \
-     --env 'DB_EXTENSION=pg_trgm' \
-     --volume /root/data/gitlab/postgresql:/var/lib/postgresql \
-     sameersbn/postgresql:9.4-22
-</code></pre>
-
-<p>Launch a redis container via:</p>
-
-<pre><code># docker run --name gitlab-redis -d \
-     --volume /root/data/gitlab/redis:/var/lib/redis \
-     sameersbn/redis:latest
-</code></pre>
-
-<p>Launch the gitlab container:</p>
-
-<pre><code># docker run --name gitlab -d \
-     --link gitlab-postgresql:postgresql --link gitlab-redis:redisio \
-     --publish 10022:22 --publish 10080:80 \
-     --env 'GITLAB_PORT=10080' --env 'GITLAB_SSH_PORT=10022' \
-     --env 'GITLAB_SECRETS_DB_KEY_BASE=long-and-random-alpha-numeric-string' \
-     --volume /root/data/gitlab/gitlab:/home/git/data \ 
-     sameersbn/gitlab:8.9.6
-</code></pre>
-
-<p>Now visit <code>http://127.0.0.1:10080</code>, for setting up the password:</p>
-
-<p><img src="/images/2016_07_13_19_49_55_969x420.jpg" alt="/images/2016_07_13_19_49_55_969x420.jpg" /></p>
-
-<h4 id="systemd-services">Systemd Services</h4>
-
-<p>For automatically startup the docker service in system boot, create the service items
-in systemd, listed in following:</p>
-
-<p>Create the gitlab service:</p>
-
-<pre><code>$ vim /usr/lib/systemd/system/gitlab.service
-[Unit]
-Description=gitlab
-Requires=docker.service
-After=docker.service
-
-[Service]
-Restart=always
-ExecStart=/usr/bin/docker start -a gitlab
-ExecStop=/usr/bin/docker stop -t 2 gitlab
-
-[Install]
-WantedBy=multi-user.target
-</code></pre>
-
-<p>Also create another 2 service named <code>gitlab-redis.service</code> and
-<code>gitlab-postgres.service</code>, then enable the service via:</p>
-
-<pre><code># systemctl enable gitlabpostgres.service
-# systemctl enable gitlabredis.service
-# systemctl enable gitlab.service
-</code></pre>
-
-<p>Then next time when system reboot, these service will automatically restart.</p>
 
       
     </div>

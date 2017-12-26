@@ -105,6 +105,235 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/12/12/recover-my-openwrt-configuration/">Recover My OpenWRT Configuration</a>
+      </h1>
+      <span class="post-date">Dec 12, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/openwrt">openwrt</a>
+        
+      </span>
+      
+      
+
+<h3 id="background">Background</h3>
+
+<p>I tried to use <code>192.168.1</code> network for debugging, but after I change back from <code>10.0.0.</code> to <code>192.168.1.</code> the router got no interface for luci and http. So following is the steps for recovering from the fail router.</p>
+
+<h3 id="solution">Solution</h3>
+
+<p>First I tried to recover the luci and uhttpd, but after a while I think maybe I could swith to a newer version.<br />
+The newest version currently is &ldquo; &lsquo;Barrier Breaker&rsquo; &ldquo;, its version number is 14.07.<br />
+My router is Mercury 4530R, which have the following configuration:</p>
+
+<pre><code>CPU	Ram	Flash	Network	USB	Serial	JTag    
+Atheros	128MiB	8MiB	4LAN + 2WIFI	Yes	Yes	?    
+
+</code></pre>
+
+<p>LUCI upgrade failed:<br />
+<img src="/images/flasherror.jpg" alt="/images/flasherror.jpg" /></p>
+
+<p>The reason:<br />
+<img src="/images/flasherrorreason.jpg" alt="/images/flasherrorreason.jpg" /></p>
+
+<p>Because in early 2012 Autumn, the official supporting for 4530R is not release, so we modified the machineID, to let 4530R to use TP-Link&rsquo;s patched images, this will display our system as for 4310, but not for 4530R.</p>
+
+<h4 id="sysupgrade-in-cli">Sysupgrade in CLI</h4>
+
+<p>First check the free memory:</p>
+
+<pre><code>root@OpenWrt:~# free
+             total         used         free       shared      buffers
+Mem:        126788        26636       100152            0         1780
+-/+ buffers:              24856       101932
+Swap:            0            0            0
+
+</code></pre>
+
+<p>Download the sysupgrade file:</p>
+
+<pre><code># cd /tmp
+# wget http://downloads.openwrt.org/barrier_breaker/14.07/ar71xx/generic/openwrt-ar71xx-generic-mw4530r-v1-squashfs-sysupgrade.bin
+# ls -l openwrt-ar71xx-generic-mw4530r-v1-squashfs-sysupgrade.bin 
+-rw-r--r--    1 root     root       3342340 Jun 22 17:28 openwrt-ar71xx-generic-mw4530r-v1-squashfs-sysupgrade.bin
+
+</code></pre>
+
+<p>Problem when checking:</p>
+
+<pre><code># sysupgrade -v openwrt-ar71xx-generic-mw4530r-v1-squashfs-sysupgrade.bin 
+Invalid image, hardware ID mismatch, hw:43100001 image:45300001.
+Image check 'platform_check_image' failed.
+
+</code></pre>
+
+<p>Ignore the Image check:</p>
+
+<pre><code>root@OpenWrt:/tmp# sysupgrade -F openwrt-ar71xx-generic-mw4530r-v1-squashfs-sysupgrade.bin 
+Invalid image, hardware ID mismatch, hw:43100001 image:45300001.
+Image check 'platform_check_image' failed but --force given - will update anyway!
+Saving config files...
+Sending TERM to remaining processes ... uhttpd dnsmasq smbd nmbd ntpd hotplug2 syslogd klogd hotplug2 ubusd netifd 
+Sending KILL to remaining processes ... uhttpd 
+Switching to ramdisk...
+Performing system upgrade...
+Unlocking firmware ...
+
+Writing from &lt;stdin&gt; to firmware ...     
+Appending jffs2 data from /tmp/sysupgrade.tgz to firmware...TRX header not found
+Error fixing up TRX header
+    
+Upgrade completed
+Rebooting system...
+
+</code></pre>
+
+<p>After a while, your router is flashed to the new system.</p>
+
+<h4 id="more-happily-play-with-flashdisk">More Happily Play with FlashDisk</h4>
+
+<p>Cause 8M Flash is not enough for playing lots of things, I plug-in a 2G FlashDisk into the usb port as the external disk.</p>
+
+<pre><code>$ ssh root@192.168.1.1
+root@OpenWrt:~# export http_proxy=http://1xx.xx.xxx.xxx:2xxxx
+root@OpenWrt:~# df -h
+Filesystem                Size      Used Available Use% Mounted on
+rootfs                    4.6M    292.0K      4.3M   6% /
+/dev/root                 2.3M      2.3M         0 100% /rom
+tmpfs                    61.7M    588.0K     61.1M   1% /tmp
+/dev/mtdblock3            4.6M    292.0K      4.3M   6% /overlay
+overlayfs:/overlay        4.6M    292.0K      4.3M   6% /
+tmpfs                   512.0K         0    512.0K   0% /dev
+root@OpenWrt:~# opkg update
+......
+root@OpenWrt:~# opkg install block-mount kmod-usb-storage fdisk kmod-fs-ext4 kmod-usb-storage-extras kmod-scsi-generic
+......
+root@OpenWrt:~# df -h
+Filesystem                Size      Used Available Use% Mounted on
+rootfs                    4.6M    836.0K      3.8M  18% /
+
+</code></pre>
+
+<p>Now format the flash-disk and plug it into the usb port. Reboot the router and now via <code>fdisk -l</code> you will see the plugged-in flashdisk:</p>
+
+<pre><code>Device    Boot Start       End  Blocks  Id System
+/dev/sda1       2048   3948543 1973248  83 Linux
+
+</code></pre>
+
+<h4 id="transfer-filesystem-to-external-disk">Transfer Filesystem to External Disk</h4>
+
+<p>The steps is listed as:<br />
+pivot overlay:</p>
+
+<pre><code>root@OpenWrt:~# mkdir /mnt/sda1
+root@OpenWrt:~# mount /dev/sda1 /mnt/sda1/
+root@OpenWrt:~# tar -C /overlay -cvf - . | tar -C /mnt/sda1 -xf -
+root@OpenWrt:~# ls /mnt/sda1/
+etc         lib         lost+found  mnt         sbin        usr
+
+</code></pre>
+
+<p>pivot root:</p>
+
+<pre><code>mkdir -p /tmp/cproot
+mount --bind / /tmp/cproot
+tar -C /tmp/cproot -cvf - . | tar -C /mnt/sda1 -xf -
+umount /tmp/cproot
+
+</code></pre>
+
+<p>Configuration file:</p>
+
+<pre><code>$ block detect
+config 'mount'
+        option  target  '/mnt/sda1'
+        option  uuid    'f6857dac-a12a-49c9-b567-f05a61100bd7'
+        option  enabled '0'
+
+$ cat /etc/config/fstab
+config global
+        option anon_swap '0'
+        option anon_mount '0'
+        option auto_swap '1'
+        option auto_mount '1'
+        option delay_root '5'
+        option check_fs '0'
+
+config mount
+        option target '/overlay'
+        option  uuid    'f6857dac-a12a-49c9-b567-f05a61100bd7'
+        option enabled '1'
+        option fstype 'ext4'
+
+</code></pre>
+
+<p>Now reboot the router and you got a 2G based storage router:</p>
+
+<pre><code>root@OpenWrt:~# df -h
+Filesystem                Size      Used Available Use% Mounted on
+rootfs                    1.8G     12.6M      1.7G   1% /
+
+</code></pre>
+
+<p>You could play happily in this router.<br />
+<img src="/images/4530Rrouter.jpg" alt="/images/4530Rrouter.jpg" /></p>
+
+<h3 id="further-optimization">Further Optimization</h3>
+
+<p>Includes:<br />
+1. Fixed ip address configurations.<br />
+2. Port forwarding. Router-&gt; Port Forwarding.<br />
+3. SSH Server Replacement, from dropbear to opensshd.</p>
+
+<pre><code># opkg update
+# opkg install openssh-server
+# uci set dropbear.@dropbear[0].Port=2222
+# uci commit dropbear
+# /etc/init.d/dropbear restart
+# /etc/init.d/sshd enable
+# /etc/init.d/sshd start
+# /etc/init.d/dropbear disable
+# /etc/init.d/dropbear stop
+# ssh-keygen
+# opkg install openssh-client
+
+</code></pre>
+
+<p>4. Time sync.<br />
+With the previous installed sshd, you could add yourself to remote server&rsquo;s trusted users. then add files of <code>time.sh</code> for syncing time.<br />
+Refers to local link <code>/blog/2014/02/11/write-local-ntp-sync-server/</code><br />
+5. Sharing the mouse between Yosemite and ArchLinux, change the configuration files.</p>
+
+<p>Finally we got all of these done:</p>
+
+<pre><code>root@OpenWrt:~/.ssh# uptime
+ 12:45:31 up 6 min,  load average: 0.22, 0.14, 0.06
+root@OpenWrt:~/.ssh# date
+Fri Dec 12 12:45:33 CST 2014
+root@OpenWrt:~/.ssh# uname -a
+Linux OpenWrt 3.10.49 #3 Wed Oct 1 14:00:51 CEST 2014 mips GNU/Linux
+
+</code></pre>
+
+<p>Enable ssh WAN access:</p>
+
+<pre><code>uci add firewall rule
+uci set firewall.@rule[-1].src=wan
+uci set firewall.@rule[-1].target=ACCEPT
+uci set firewall.@rule[-1].proto=tcp
+uci set firewall.@rule[-1].dest_port=22
+uci commit firewall
+/etc/init.d/firewall restart
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/12/11/ba-wan-panamax/">把玩Panamax</a>
       </h1>
       <span class="post-date">Dec 11, 2014 
@@ -541,69 +770,6 @@ $ VAGRANT_APT_HTTP_PROXY=&quot;http://1xx.xx.xx.xxx:2xxxx vagrant provision
 <pre><code>vagrant halt
 
 </code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/04/flask-and-angularjs-blog-tips/">Flask&amp;amp;AngularJS Blog Tips</a>
-      </h1>
-      <span class="post-date">Dec 4, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
-        
-      </span>
-      
-      
-
-<h3 id="background">Background</h3>
-
-<p>For setup the local blog which used for recording some articles, and provide the RESTful APIs for remote usage.<br />
-The tutorial is located at:<br />
-<a href="http://blog.john.mayonvolcanosoftware.com/building-a-blog-using-flask-and-angularjs-part-1/">http://blog.john.mayonvolcanosoftware.com/building-a-blog-using-flask-and-angularjs-part-1/</a></p>
-
-<h3 id="installation-of-packages">Installation of Packages</h3>
-
-<p>First preapare the environment using virtualenv2:</p>
-
-<pre><code>$ virtualenv2 flask_blog
-$ source flask_blog/bin/activate
-
-</code></pre>
-
-<p>Now write a requirements.txt file, under the current folder, the content is:</p>
-
-<pre><code>Flask==0.10.1
-Flask-Bcrypt==0.6.0
-Flask-HTTPAuth==2.2.1
-Flask-RESTful==0.2.12
-Flask-SQLAlchemy==1.0
-Flask-WTF==0.10.0
-Jinja2==2.7.3
-MarkupSafe==0.23
-SQLAlchemy==0.9.7
-SQLAlchemy-Utils==0.26.9
-WTForms==2.0.1
-WTForms-Alchemy==0.12.8
-WTForms-Components==0.9.5
-Werkzeug==0.9.6
-aniso8601==0.83
-decorator==3.4.0
-infinity==1.3
-intervals==0.3.1
-itsdangerous==0.24
-marshmallow==0.7.0
-py-bcrypt==0.4
-pytz==2014.4
-six==1.7.3
-validators==0.6.0
-wsgiref==0.1.2
-
-</code></pre>
-
-<p>Use <code>pip install -r requirements.txt</code> for installing all of the packages.</p>
 
       
     </div>

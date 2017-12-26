@@ -105,6 +105,127 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/12/ntp-in-lan-based-on-openwrt/">NTP in LAN based on OPENWRT</a>
+      </h1>
+      <span class="post-date">Dec 12, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/openwrt">openwrt</a>
+        
+      </span>
+      
+      <p>###Package Installation
+Disable the system default ntp server and install ntpd, this ntpd is the real ntpd package, not busybox-ntpd</p>
+
+<pre><code>	opkg update
+	opkg install ntpd
+	/etc/init.d/sysntpd disable
+	/etc/init.d/ntpd enable
+	/etc/init.d/ntpd start
+	netstat -l | grep ntp
+
+</code></pre>
+
+<p>The client installation, on debian:</p>
+
+<pre><code>	apt-get install ntp
+
+</code></pre>
+
+<p>###Server Configuration
+Comment all of the possible reference server, use local time source.</p>
+
+<pre><code>	root@OpenWrt:~# cat /etc/ntp.conf 
+	# use a random selection of 4 public stratum 2 servers
+	# see http://twiki.ntp.org/bin/view/Servers/NTPPoolServers
+	
+	restrict default nomodify notrap noquery
+	#restrict default noquery
+	
+	#restrict 127.0.0.1
+	restrict 10.0.0.0 mask 255.255.255.0 nomodify notrap
+	
+	server 127.127.1.0	# LOCAL CLOCK
+	fudge 127.127.1.0 stratum 0
+	
+	driftfile  /var/lib/ntp/ntp.drift
+
+</code></pre>
+
+<p>Then restart the service. Your ntp server is available.
+###Client Configuration
+Enable saned to enable ntp client on beaglebone:</p>
+
+<pre><code>	# error message
+	[....] Starting NTP server: ntpdsaned disabled; edit /etc/default/saned
+	vim /etc/default/saned 
+	# Set to yes to start saned
+	RUN=yes
+
+</code></pre>
+
+<p>Then we have to enable the ntp client&rsquo;s configuration:<br />
+For Client manually synchornize</p>
+
+<pre><code>	root@arm:~# ntpdate 10.0.0.1
+	 1 Jan 05:18:55 ntpdate[2243]: the NTP socket is in use, exiting
+	root@arm:~# ps -ef | grep ntp
+	ntp       1805     1  0 04:30 ?        00:00:00 /usr/sbin/ntpd -p /var/run/ntpd.pid -g -u 107:112
+	root      2245  2127  0 05:19 pts/0    00:00:00 grep ntp
+	root@arm:~# kill 1805
+	root@arm:~# date
+	Sat Jan  1 05:19:05 UTC 2000
+	root@arm:~# ntpdate 10.0.0.1
+	12 Dec 07:38:44 ntpdate[2247]: step time server 10.0.0.1 offset 440129967.397166 sec
+	root@arm:~# date
+	Thu Dec 12 07:38:46 UTC 2013
+
+</code></pre>
+
+<p>The client configuration for ntp, remove all of the possible server, use LAN server:</p>
+
+<pre><code>	server 10.0.0.1
+
+</code></pre>
+
+<p>tzselect will set the timezone of the equipment. The result is:</p>
+
+<pre><code>	TZ='Asia/Shanghai'; export TZ
+
+</code></pre>
+
+<p>Add it into the ~/.profile, then your time will be adjusted to Shanghai Time.<br />
+###Update time via http
+Since I located in UMT+8, I will use following commands for sync the time</p>
+
+<pre><code>	date $(wget -O - &quot;http://www.timeapi.org/utc/in+eight+hours&quot; 2&gt;/dev/null | sed s/[-T:+]/\ /g | awk '{print $2,$3,$4,$5,&quot;.&quot;,$6}' | tr -d &quot; &quot; )
+
+</code></pre>
+
+<p>Then add it to crontab</p>
+
+<pre><code>	root@OpenWrt:~# cat /bin/time.sh 
+	#!/bin/sh
+	#echo $http_proxy
+	#echo $https_proxy
+	date $(wget -O - &quot;http://www.timeapi.org/utc/in+eight+hours&quot; 2&gt;/dev/null | sed s/[-T:+]/\ /g | awk '{print $2,$3,$4,$5,&quot;.&quot;,$6}' | tr -d &quot; &quot; )
+
+</code></pre>
+
+<p>The crontab -e should like following:</p>
+
+<pre><code>	* */3 * * * /bin/time.sh
+
+</code></pre>
+
+<p>This means every 3 hours the script will be called for synchronizing the time.<br />
+Now we can enjoy the precise time from the internet and make it availale for the service on LAN.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/12/12/western-digits-green-disk-on-ubuntu/">Western Digital Green Disk on Ubuntu</a>
       </h1>
       <span class="post-date">Dec 12, 2013 
@@ -541,145 +662,6 @@ The bootup failure information is listed as following:</p>
 <p>tar files into your directory:</p>
 
 <pre><code>	tar xvfp /media/nfs/beaglebone/debian-7.1-bare-armhf-2013-08-25/armhf-rootfs-debian-wheezy.tar  -C /media/debianroot/
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/12/10/beaglebone-boot-from-nfs/">BeagleBone boot from NFS</a>
-      </h1>
-      <span class="post-date">Dec 10, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/beaglebone">Beaglebone</a>
-        
-      </span>
-      
-      <p>###Building Preparation
-Create a new directory for stroing all of the items related to beaglebone.</p>
-
-<pre><code>	cd /media/nfs/
-	mkdir beaglebone
-	cd beaglebone/
-
-</code></pre>
-
-<p>Download the cross-compiler from linaro toolchain binary website. And add it to the environment variables.</p>
-
-<pre><code>	wget -c https://launchpad.net/linaro-toolchain-binaries/trunk/2013.10/+download/gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux.tar.xz
-	tar xJf gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux.tar.xz
-	export CC=`pwd`/gcc-linaro-arm-linux-gnueabihf-4.8-2013.10_linux/bin/arm-linux-gnueabihf-
-	# Test the cross-compiler
-	${CC}gcc --version
-
-</code></pre>
-
-<p>Checkout the U-boot:</p>
-
-<pre><code>	git clone git://git.denx.de/u-boot.git
-	cd u-boot/
-	git checkout v2013.10 -b tmp
-
-</code></pre>
-
-<p>Patching U-boot:</p>
-
-<pre><code>	wget https://raw.github.com/eewiki/u-boot-patches/master/v2013.10/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
-	patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
-
-</code></pre>
-
-<p>Configure and compile the U-boot:</p>
-
-<pre><code>	make ARCH=arm CROSS_COMPILE=${CC} distclean
-	make ARCH=arm CROSS_COMPILE=${CC} am335x_evm_config
-	make ARCH=arm CROSS_COMPILE=${CC}
-
-</code></pre>
-
-<p>Checkout the kernel:</p>
-
-<pre><code>	git clone git://github.com/RobertCNelson/linux-dev.git
-	cd linux-dev
-	git checkout origin/am33x-v3.12 -b tmp
-
-</code></pre>
-
-<p>Now we got our kernel and U-boot available. The next step is to build a filesystem:</p>
-
-<pre><code>	wget -c https://rcn-ee.net/deb/minfs/raring/ubuntu-13.04-minimal-armhf-2013-08-25.tar.xz
-
-</code></pre>
-
-<p>Prepare the mmc card.</p>
-
-<pre><code>	export DISK=/dev/mmcblk0
-	[Trusty@XXXyyy beaglebone]$ sudo dd if=/dev/zero of=${DISK} bs=1M count=16
-	16+0 records in
-	16+0 records out
-	16777216 bytes (17 MB) copied, 4.84877 s, 3.5 MB/s 
-
-</code></pre>
-
-<p>Use sfdisk for creating the partition layout.</p>
-
-<pre><code>	sudo sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
-	1,48,0xE,*
-	,,,-
-	__EOF__
-
-</code></pre>
-
-<p>Format Partitions:</p>
-
-<pre><code>	sudo mkfs.vfat -F 16 ${DISK}p1 -n boot
-	sudo mkfs.ext4 ${DISK}p2 -L rootfs
-
-</code></pre>
-
-<p>Install Bootloader to the 1st partition of mmc card.</p>
-
-<pre><code>	[Trusty@XXXyyy beaglebone]$ sudo mkdir -p /media/boot/
-	[Trusty@XXXyyy beaglebone]$ sudo mkdir -p /media/rootfs/
-	[Trusty@XXXyyy beaglebone]$ sudo mount ${DISK}p1 /media/boot/
-	[Trusty@XXXyyy beaglebone]$ sudo mount ${DISK}p2 /media/rootfs/
-	[Trusty@XXXyyy beaglebone]$ sudo cp -v ./u-boot/MLO /media/boot/
-	‘./u-boot/MLO’ -&gt; ‘/media/boot/MLO’
-	[Trusty@XXXyyy beaglebone]$ sudo cp -v ./u-boot/u-boot.img /media/boot/
-	‘./u-boot/u-boot.img’ -&gt; ‘/media/boot/u-boot.img’
-
-	[Trusty@XXXyyy linux-dev]$ vim uEnv.txt
-	[Trusty@XXXyyy linux-dev]$ sudo cp -v ./uEnv.txt /media/boot/
-	‘./uEnv.txt’ -&gt; ‘/media/boot/uEnv.txt’
-
-</code></pre>
-
-<p>Copy Kernel:</p>
-
-<pre><code>	[Trusty@XXXyyy beaglebone]$ sudo cp -v ./linux-dev/deploy/3.12.4-bone9.zImage /media/boot/zImage
-	‘./linux-dev/deploy/3.12.4-bone9.zImage’ -&gt; ‘/media/boot/zImage’
-
-</code></pre>
-
-<p>Copy Root File System:</p>
-
-<pre><code>	sudo tar xfvp ./ubuntu-13.04-minimal-armhf-2013-08-25/armhf-rootfs-ubuntu-raring.tar -C /media/rootfs/
-Installation of kernel and configuration of the filesystem.
-	sudo cp -v ./linux-dev/deploy/3.12.4-bone9.zImage /media/boot/zImage
-	sudo mkdir -p /media/boot/dtbs/
-	sudo tar xfov ./linux-dev/deploy/3.12.4-bone9-dtbs.tar.gz -C /media/boot/dtbs/
-	sudo tar xfv ./linux-dev/deploy/3.12.4-bone9-firmware.tar.gz  -C /media/rootfs/lib/firmware/
-	sudo tar xfv ./linux-dev/deploy/3.12.4-bone9-modules.tar.gz -C /media/rootfs/
-	sudo vim /media/rootfs/etc/fstab
-	sudo vim /media/rootfs/etc/network/interfaces 
-	sudo vim /media/rootfs/etc/udev/rules.d/70-persistent-net.rules
-	sudo vim /media/rootfs/etc/inittab
-	sudo vim /media/rootfs/etc/init/serial.conf
-	sudo umount /media/rootfs/
-	sudo umount /media/boot/
 
 </code></pre>
 

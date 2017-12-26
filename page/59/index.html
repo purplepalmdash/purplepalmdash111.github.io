@@ -105,6 +105,247 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2015/06/17/wh-worktips-1/">WH Worktips(1)</a>
+      </h1>
+      <span class="post-date">Jun 17, 2015 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">Virtualization</a>
+        
+      </span>
+      
+      
+
+<h3 id="preparation">Preparation</h3>
+
+<p>Hardware: 2G Memory, 1-Core, the Cobbler Server, which runs CentOS6.6.<br />
+Network: Use a 10.47.58.0/24(Its name is WHNetwork), no dhcp server in this network.</p>
+
+<h3 id="cobbler-server-preparation">Cobbler Server Preparation</h3>
+
+<p>First Change its IP address to 10.47.58.2, gateway to 10.47.58.1.</p>
+
+<pre><code>[root@z_WHServer ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0 
+DEVICE=eth0
+TYPE=Ethernet
+UUID=a6e5b56f-661f-4128-ab8c-c575a9623245
+ONBOOT=yes
+NM_CONTROLLED=yes
+BOOTPROTO=none
+IPADDR=10.47.58.2
+GATEWAY=10.47.58.1
+......
+
+[root@z_WHServer ~]# cat /etc/sysconfig/network
+NETWORKING=yes
+HOSTNAME=z_WHServer
+# vim /etc/selinux/config
+    #SELINUX=enforcing
+    SELINUX=disabled 
+# reboot
+</code></pre>
+
+<p>Install and configure Cobbler Server via:</p>
+
+<pre><code># yum -y update &amp;&amp; yum install -y cobbler cobbler-web
+# reboot
+# openssl passwd -1                                                                                                     │
+Password:                                                                                                                                 │
+Verifying - Password:                                                                                                                     │
+igaowugoauwgoueougo
+# vim /etc/cobbler/settings
+    default_password_crypted: &quot;agowuoguwoawoguwoe&quot;
+    # default, localhost
+    server: 10.47.58.2
+    # default, localhost
+    next_server: 10.47.58.2
+    manage_dhcp: 1
+</code></pre>
+
+<p>Edit the dhcp template:</p>
+
+<pre><code># vim /etc/cobbler/dhcp.template
+####  subnet 192.168.1.0 netmask 255.255.255.0 {
+####       option routers             192.168.1.5;
+####       option domain-name-servers 192.168.1.1;
+####       option subnet-mask         255.255.255.0;
+####       range dynamic-bootp        192.168.1.100 192.168.1.254;
+####       default-lease-time         21600;
+####       max-lease-time             43200;
+####       next-server                $next_server;
+subnet 10.47.58.0 netmask 255.255.255.0 {
+     option routers             10.47.58.1; 
+     range dynamic-bootp        10.47.58.3 10.47.58.254;
+     option domain-name-servers 114.114.114.114, 180.76.76.76;     
+     option subnet-mask         255.255.255.0;         
+     filename                   &quot;/pxelinux.0&quot;;       
+     default-lease-time         21600;           
+     max-lease-time             43200;      
+     next-server                $next_server; 
+
+     class &quot;pxeclients&quot; {
+</code></pre>
+
+<p>Check via:</p>
+
+<pre><code>[root@z_WHServer ~]# service cobblerd start
+Starting cobbler daemon:                                   [  OK  ]
+[root@z_WHServer ~]# chkconfig cobblerd on
+[root@z_WHServer ~]# chkconfig httpd on
+[root@z_WHServer ~]# service cobblerd status
+cobblerd (pid 5421) is running...
+</code></pre>
+
+<p>Reboot and Check via:</p>
+
+<pre><code># cobbler check
+</code></pre>
+
+<p>You will get lots of the errors, first solve the dhcpd issue, notice the following dhcpd configuration file is temporarily used.</p>
+
+<pre><code># yum install -y dhcp
+# vim /etc/dhcp/dhcpd.conf
+#
+# DHCP Server Configuration file.
+#   see /usr/share/doc/dhcp*/dhcpd.conf.sample
+#   see 'man 5 dhcpd.conf'
+#
+# create new
+# specify domain name
+option domain-name &quot;server.world&quot;;
+# specify name server's hostname or IP address
+option domain-name-servers dlp.server.world;
+# default lease time
+default-lease-time 600;
+# max lease time
+max-lease-time 7200;
+# this DHCP server to be declared valid
+authoritative;
+# specify network address and subnet mask
+subnet 10.47.58.0 netmask 255.255.255.0 {
+    # specify the range of lease IP address
+    range dynamic-bootp 10.47.58.200 10.47.58.254;
+    # specify broadcast address
+    option broadcast-address 10.47.58.255;
+    # specify default gateway
+    option routers 10.47.58.1;
+}
+# service dhcpd start
+# chkconfig dhcpd on
+# chkconfig xinetd on
+# reboot
+</code></pre>
+
+<p>Get loaders to download the loaders to <code>/var/lib/cobbler/loaders</code>:<br />
+!!! Notice, this step maybe failed because of networking issues!!!!</p>
+
+<pre><code>$ cobbler get-loaders
+</code></pre>
+
+<p>Change xinted:</p>
+
+<pre><code># cat  /etc/xinetd.d/rsync 
+# default: off
+# description: The rsync server is a good addition to an ftp server, as it \
+#       allows crc checksumming etc.
+service rsync
+{
+        disable = no
+
+</code></pre>
+
+<p>Edit iptables:</p>
+
+<pre><code>$ sudo vim /etc/sysconfig/iptables
+:OUTPUT ACCEPT [0:0]
+-A INPUT -p udp -m multiport --dports 69,80,443,25151 -j ACCEPT 
+-A INPUT -p tcp -m multiport --dports 69,80,443,25151 -j ACCEPT 
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+$ sudo reboot
+</code></pre>
+
+<p>Install packages:</p>
+
+<pre><code># yum install -y debmirror pykickstart cman
+# cobbler check
+# cobbler sync
+</code></pre>
+
+<h3 id="import-systems">Import Systems</h3>
+
+<p>Import 2 DVD iso via:</p>
+
+<pre><code># mount -o loop -t iso9660 CentOS-6.5-x86_64-bin-DVD1.iso  /mnt1/
+# cobbler import --name=CentOS-6.5 --arch=x86_64 --path=/mnt1
+# mount -o loop -t iso9660 CentOS-6.5-x86_64-bin-DVD2.iso  /mnt2
+# rsync -a '/mnt2/' /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/ --exclude-from=/etc/cobbler/rsync.exclude --progress
+# COMPSXML=$(ls /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/repodata/*comps*.xml)
+# createrepo -c cache -s sha --update --groupfile ${COMPSXML} /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/ 
+</code></pre>
+
+<p>Verify it via:</p>
+
+<pre><code>[root@z_WHServer repodata]# cobbler distro list
+   CentOS-6.5-x86_64
+[root@z_WHServer repodata]# cobbler profile list
+   CentOS-6.5-x86_64
+[root@z_WHServer repodata]# cobbler distro report --name=CentOS-6.5-x86_64
+Name                           : CentOS-6.5-x86_64
+Architecture                   : x86_64
+TFTP Boot Files                : {}
+Breed                          : redhat
+Comment                        : 
+Fetchable Files                : {}
+Initrd                         : /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/images/pxeboot/initrd.img
+Kernel                         : /var/www/cobbler/ks_mirror/CentOS-6.5-x86_64/images/pxeboot/vmlinuz
+</code></pre>
+
+<p>Check if your tftp working:</p>
+
+<pre><code># yum install tftp-server
+# vim /etc/xinetd.d/tftp
+# /sbin/chkconfig tftp on
+# service xinetd start
+# netstat -anp | grep 69
+# tftp 10.47.58.2
+get pxelinux.0
+</code></pre>
+
+<p>If successful, the pxelinux.0 will downloaded to your directory.</p>
+
+<h3 id="install-new-systems">Install New Systems</h3>
+
+<p>Use a machine, configure to the same network, then start from pxe.</p>
+
+<h3 id="customize-the-ks-file">Customize the KS file</h3>
+
+<p>Generate kickstart configuration file via:</p>
+
+<pre><code># system-config-kickstart 
+</code></pre>
+
+<p>Add a new profile via:</p>
+
+<pre><code>[root@z_WHServer kickstarts]# cobbler profile add --name=CentOS6.5-Desktop --kickstart=/var/lib/cobbler/kickstarts/CentOS-6.5-x86_64/C
+sktop.cfg --distro=CentOS-6.5-x86_64
+[root@z_WHServer kickstarts]# cobbler profile list
+   CentOS-6.5-x86_64
+   CentOS6.5-Desktop
+</code></pre>
+
+<h3 id="cobbler-web-interface">Cobbler Web Interface</h3>
+
+<pre><code>$ htdigest /etc/cobbler/users.digest &quot;Cobbler&quot; cobbler 
+Which will prompt you for a new password. 
+Once you have updated the password remember to run
+$ cobbler sync
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2015/06/16/xenserver-tips/">XenServer Tips</a>
       </h1>
       <span class="post-date">Jun 16, 2015 
@@ -591,176 +832,6 @@ $ chef-client -l debug -S https://ChefServer/organizations/xxxxx -K /xxx/xxx/xxx
 </code></pre>
 
 <p>On Chef Server, bootstrap again via the same command, now you could work.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2015/06/08/openvswitch-and-vxlan-how-to/">OpenVSwitch and VXLAN How-to</a>
-      </h1>
-      <span class="post-date">Jun 8, 2015 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/virtualization">virtualization</a>
-        
-      </span>
-      
-      
-
-<p>Following records the steps for my setup for OpenVSwitch environment and configure VXLAN on it.</p>
-
-<h3 id="preparation">Preparation</h3>
-
-<p>I use two VMs for this experiment, created a new virtual network, it&rsquo;s 10.94.94.0/24, every vm machines adds into this network.<br />
-VM1, VM2, both have 1G Memory. 1 Core.<br />
-VM1: 10.94.94.11, VM2: 10.94.94.12.</p>
-
-<pre><code>$ sudo apt-get update &amp;&amp; sudo apt-get -y upgrade
-$ sudo apt-get install build-essential$
-$ sudo reboot
-$ uname -a
-$ uname -a
-Linux OpenVSwitchVM1 3.13.0-24-generic #47-Ubuntu SMP Fri May 2 23:30:00 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux
-</code></pre>
-
-<h3 id="generate-deb">Generate DEB</h3>
-
-<p>Following steps includes install dependencies, fetching source code, build, generate package, notice we use 2.3.0 version of the openvswitch.</p>
-
-<pre><code>$ sudo apt-get install -y build-essential fakeroot debhelper \
-                    autoconf automake bzip2 libssl-dev \
-                    openssl graphviz python-all procps \
-                    python-qt4 python-zopeinterface \
-                    python-twisted-conch libtool
-$ wget http://openvswitch.org/releases/openvswitch-2.3.0.tar.gz
-$ tar xzvf openvswitch-2.3.0.tar.gz
-$ cd openvsiwtch-2.3.0
-$ DEB_BUILD_OPTIONS='parallel=8 nocheck' fakeroot debian/rules binary
-$ cd ..
-$ ls -al *.deb
-openvswitch-common_2.3.0-1_amd64.deb         openvswitch-ipsec_2.3.0-1_amd64.deb   openvswitch-vtep_2.3.0-1_amd64.deb
-openvswitch-datapath-dkms_2.3.0-1_all.deb    openvswitch-pki_2.3.0-1_all.deb       python-openvswitch_2.3.0-1_all.deb
-openvswitch-datapath-source_2.3.0-1_all.deb  openvswitch-switch_2.3.0-1_amd64.deb
-openvswitch-dbg_2.3.0-1_amd64.deb            openvswitch-test_2.3.0-1_all.deb
-
-</code></pre>
-
-<p>Also copy all of the deb files into another PC.</p>
-
-<h3 id="installation">Installation</h3>
-
-<p>In two machines, do following steps for installing.</p>
-
-<pre><code>$ sudo apt-get install -y bridge-utils
-$ sudo dpkg -i openvswitch-common_2.3.1-1_amd64.deb \
-         openvswitch-switch_2.3.1-1_amd64.deb
-</code></pre>
-
-<h3 id="vm-netorking-configuration">VM Netorking Configuration</h3>
-
-<p>For VM1:</p>
-
-<pre><code>root@OpenVSwitchVM1:~# ovs-vsctl add-br br0
-root@OpenVSwitchVM1:~# ovs-vsctl add-br br1
-# ovs-vsctl add-port br0 eth0
-# ifconfig eth0 0 up
-# ifconfig br0 10.94.94.11
-# route add default gw 10.94.94.1 br0
-# ifconfig br1 172.10.0.1
-
-</code></pre>
-
-<p>For VM2:</p>
-
-<pre><code># ovs-vsctl add-br br0
-# ovs-vsctl add-br br1
-# ovs-vsctl add-port br0 eth0
-# ifconfig eth0 0 up &amp;&amp; ifconfig br0 10.94.94.12
-# route add default gw 10.94.94.1
-# ifconfig br1 172.10.1.1
-</code></pre>
-
-<p>Ping each other, we could see br1 is not OK.</p>
-
-<h3 id="vxlan-setup">VXLAN Setup</h3>
-
-<p>On VM1, do following operation, to set the vx1:</p>
-
-<pre><code>root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.12
-root@OpenVSwitchVM1:~# ovs-vsctl show
-a1e9afb6-345a-4f79-8e0b-131cd43cfb67
-    Bridge &quot;br0&quot;
-        Port &quot;eth0&quot;
-            Interface &quot;eth0&quot;
-        Port &quot;br0&quot;
-            Interface &quot;br0&quot;
-                type: internal
-    Bridge &quot;br1&quot;
-        Port &quot;br1&quot;
-            Interface &quot;br1&quot;
-                type: internal
-        Port &quot;vx1&quot;
-            Interface &quot;vx1&quot;
-                type: vxlan
-                options: {remote_ip=&quot;10.94.94.12&quot;}
-    ovs_version: &quot;2.3.0&quot;
-</code></pre>
-
-<p>On VM2, do following operation, to set vx1</p>
-
-<pre><code>root@OpenVSwitchVM2:~# ovs-vsctl add-port br1 vx1 -- set interface vx1 type=vxlan options:remote_ip=10.94.94.11
-root@OpenVSwitchVM2:~# ovs-vsctl show
-bce3f2b5-9b77-41dc-8130-b8922dd7ac9e
-    Bridge &quot;br1&quot;
-        Port &quot;vx1&quot;
-            Interface &quot;vx1&quot;
-                type: vxlan
-                options: {remote_ip=&quot;10.94.94.11&quot;}
-        Port &quot;br1&quot;
-            Interface &quot;br1&quot;
-                type: internal
-    Bridge &quot;br0&quot;
-        Port &quot;br0&quot;
-            Interface &quot;br0&quot;
-                type: internal
-        Port &quot;eth0&quot;
-            Interface &quot;eth0&quot;
-    ovs_version: &quot;2.3.0&quot;
-</code></pre>
-
-<p>So now you could ping each other via the br1 address.</p>
-
-<h3 id="mirror-port">Mirror Port</h3>
-
-<p>Do the following things for setting up the mirror port.</p>
-
-<pre><code>#  modprobe dummy
-#  ip link set up dummy0
-root@OpenVSwitchVM1:~# ovs-vsctl add-port br1 dummy0
-root@OpenVSwitchVM1:~# ovs-vsctl --id=@m create mirror name=mirror0 -- add bridge br1 mirrors @m
-33931f5a-008f-44cf-abc6-38afb3062b5e
-root@OpenVSwitchVM1:~# ovs-vsctl list port dummy0
-_uuid               : 5f5fe675-b1ee-4acd-a0ab-f14e952d1603
-bond_downdelay      : 0
-bond_fake_iface     : false
-bond_mode           : []
-bond_updelay        : 0
-external_ids        : {}
-fake_bridge         : false
-interfaces          : [a6fbabe9-790d-4be8-a362-b7cbdd46db89]
-lacp                : []
-mac                 : []
-name                : &quot;dummy0&quot;
-other_config        : {}
-qos                 : []
-statistics          : {}
-status              : {}
-tag                 : []
-trunks              : []
-vlan_mode           : []
-
-</code></pre>
 
       
     </div>
