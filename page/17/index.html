@@ -105,6 +105,195 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/01/12/wordpress%E9%95%BF%E5%9B%BE%E7%89%87%E5%8A%9F%E8%83%BD%E5%AE%9E%E7%8E%B0/">Wordpress长图片功能实现</a>
+      </h1>
+      <span class="post-date">Jan 12, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="目标">目标</h3>
+
+<p>在Wordpress的每篇文章添加TurnToJPG功能，点击该按钮以后，由博文直接生成长文字图片。</p>
+
+<h3 id="搭建测试环境">搭建测试环境</h3>
+
+<p>为了及时测试我们的博客，快速搭建一个基于docker的开发环境:</p>
+
+<pre><code>$ sudo docker pull wordpress
+$ sudo docker pull mariadb
+$ sudo docker pull corbinu/docker-phpmyadmin
+</code></pre>
+
+<p>创建一个docker-compose的yml文件，启动之:</p>
+
+<pre><code>$ vim docker-compose.yml 
+wordpress:
+  image: wordpress
+  links:
+    - wordpress_db:mysql
+  ports:
+    - 8080:80
+wordpress_db:
+  image: mariadb
+  environment:
+    MYSQL_ROOT_PASSWORD: examplepass
+phpmyadmin:
+  image: corbinu/docker-phpmyadmin
+  links:
+    - wordpress_db:mysql
+  ports:
+    - 8181:80
+  environment:
+    MYSQL_USERNAME: root
+    MYSQL_ROOT_PASSWORD: examplepass
+</code></pre>
+
+<p>现在启动服务:</p>
+
+<pre><code>$ sudo docker-compose up -d
+Creating mywordpress_wordpress_db_1
+Creating mywordpress_wordpress_1
+Creating mywordpress_phpmyadmin_1
+</code></pre>
+
+<p>打开<code>http://127.0.0.1:8080</code>即可访问到我们的测试站点。在wordpress后台
+查找并安装<code>tdPersona</code>主题.</p>
+
+<h3 id="分析">分析</h3>
+
+<h4 id="所用主题模板">所用主题模板</h4>
+
+<p>随机拷贝某篇博文的html, 而后:</p>
+
+<pre><code>$ cat test.html | grep -i themes
+&lt;link rel='stylesheet' id='tdpersona-icons-css'  href='http://www.hahahahohoho.com.cn/wp-content/themes/tdpersona/css/font-awesome.min.css?ver=4.6.2' type='text/css' media='all' /&gt;
+&lt;link rel='stylesheet' id='tdpersona-framework-css'  href='http://www.hahahahohoho.com.cn/wp-content/themes/tdpersona/css/bootstrap.min.css?ver=4.6.2' type='text/css' media='all' /&gt;
+&lt;link rel='stylesheet' id='style-css'  href='http://www.hahahahohoho.com.cn/wp-content/themes/tdpersona/style.css?ver=4.6.2' type='text/css' media='all' /&gt;
+</code></pre>
+
+<p>可见原博主选用的是<code>tdpersona</code>主题.</p>
+
+<h4 id="找到需要图形化的部分">找到需要图形化的部分</h4>
+
+<p>在chromium里按<code>F12</code>, 耐心找寻你需要的那一部分。</p>
+
+<p><img src="/images/2017_01_12_19_54_51_636x338.jpg" alt="/images/2017_01_12_19_54_51_636x338.jpg" /></p>
+
+<p>我的:</p>
+
+<pre><code>&lt;article id=&quot;post-10746&quot; class=&quot;post-10746 post type-post status-publish format-standard hentry category-1&quot;&gt;
+// .........
+&lt;/article&gt;
+</code></pre>
+
+<p>进一步看，发现我们需要在<code>&lt;head&gt;&lt;/head&gt;</code>动文章:</p>
+
+<p><img src="/images/2017_01_12_12_21_05_626x149.jpg" alt="/images/2017_01_12_12_21_05_626x149.jpg" /></p>
+
+<pre><code>	&lt;header class=&quot;entry-header&quot;&gt;
+		&lt;h2 class=&quot;entry-title&quot;&gt;&lt;?php the_title(); ?&gt;&lt;/h2&gt;
+
+		&lt;?php if ( 'post' == get_post_type() ) : ?&gt;
+			&lt;?php tdpersona_post_date(); ?&gt;
+		&lt;?php endif; ?&gt;
+
+		&lt;?php if ( has_post_thumbnail() ): ?&gt;
+		&lt;div class=&quot;post-thumb&quot;&gt;
+			&lt;?php the_post_thumbnail(); ?&gt;
+		&lt;/div&gt;&lt;!-- .post-thumb --&gt;
+		&lt;?php endif; ?&gt;
+
+	&lt;/header&gt;&lt;!-- .entry-header --&gt;
+</code></pre>
+
+<h3 id="代码修改">代码修改</h3>
+
+<p><code>/var/www/html/wp-content/themes/tdpersona/template-parts/content-single.php</code>:</p>
+
+<p>首尾分别添加如下行数(+代表添加的行数):</p>
+
+<pre><code>+ &lt;div class=&quot;capturepost&quot;&gt;
+&lt;article id=&quot;post-&lt;?php the_ID(); ?&gt;&quot; &lt;?php post_class(); ?&gt;&gt;
+	&lt;/footer&gt;&lt;!-- .entry-meta --&gt;
+&lt;/article&gt;&lt;!-- #post --&gt;
++ &lt;/div&gt;
+</code></pre>
+
+<p><code>/var/www/html/wp-content/themes/tdpersona/inc/template-tags.php</code>:</p>
+
+<pre><code>	$output .= '&lt;div class=&quot;entry-date&quot;&gt;';
+	$output .= '&lt;a href=&quot;'.esc_url( get_permalink() ).'&quot;&gt;'.$date_format_html.'&lt;/a&gt;';
+	$output .= '&lt;/div&gt;&lt;!-- .entry-date --&gt;';
+
++	$output .= '&lt;div class=&quot;save-to-jpg&quot;, align=&quot;right&quot;&gt;';
++	$output .= '&lt;a href=&quot;javascript:genPostShot()&quot;&gt;TurnToJPG --&gt; &lt;i class=&quot;fa fa-camera-retro fa-2x&quot;&gt;&lt;/i&gt;&lt;/a&gt;&lt;a id=&quot;test&quot;&gt;&lt;/a&gt;';
++	$output .= '&lt;/div&gt;&lt;!-- .save-to-jpg --&gt;'; 
++	$output .= '&lt;hr&gt;';
+</code></pre>
+
+<p>这将在标题栏下面添加一个图标和链接，点击该图标将触发javascript函数，将当前页面
+转变为jpg图片.</p>
+
+<p><code>/var/www/html/wp-includes/formatting.php</code>:</p>
+
+<pre><code>		&lt;script type=&quot;text/javascript&quot;&gt;
+			window._wpemojiSettings = &lt;?php echo wp_json_encode( $settings ); ?&gt;;
+			!function(a,b,c){function d(a){var b,c,d,e,f=String.fromCharCode;if(!k||!k.fillText)return!1;switch(k.clearRect(0,0,j.width,j.height),k.textBaseline=&quot;top&quot;,k.font=&quot;600 32px Arial&quot;,a){case&quot;flag&quot;:return k.fillText(f(55356,56826,55356,56819),0,0),!(j.toDataURL().length&lt;3e3)&amp;&amp;(k.clearRect(0,0,j.width,j.height),k.fillText(f(55356,57331,65039,8205,55356,57096),0,0),b=j.toDataURL(),k.clearRect(0,0,j.width,j.height),k.fillText(f(55356,57331,55356,57096),0,0),c=j.toDataURL(),b!==c);case&quot;emoji4&quot;:return k.fillText(f(55357,56425,55356,57341,8205,55357,56507),0,0),d=j.toDataURL(),k.clearRect(0,0,j.width,j.height),k.fillText(f(55357,56425,55356,57341,55357,56507),0,0),e=j.toDataURL(),d!==e}return!1}function e(a){var c=b.createElement(&quot;script&quot;);c.src=a,c.defer=c.type=&quot;text/javascript&quot;,b.getElementsByTagName(&quot;head&quot;)[0].appendChild(c)}var f,g,h,i,j=b.createElement(&quot;canvas&quot;),k=j.getContext&amp;&amp;j.getContext(&quot;2d&quot;);for(i=Array(&quot;flag&quot;,&quot;emoji4&quot;),c.supports={everything:!0,everythingExceptFlag:!0},h=0;h&lt;i.length;h++)c.supports[i[h]]=d(i[h]),c.supports.everything=c.supports.everything&amp;&amp;c.supports[i[h]],&quot;flag&quot;!==i[h]&amp;&amp;(c.supports.everythingExceptFlag=c.supports.everythingExceptFlag&amp;&amp;c.supports[i[h]]);c.supports.everythingExceptFlag=c.supports.everythingExceptFlag&amp;&amp;!c.supports.flag,c.DOMReady=!1,c.readyCallback=function(){c.DOMReady=!0},c.supports.everything||(g=function(){c.readyCallback()},b.addEventListener?(b.addEventListener(&quot;DOMContentLoaded&quot;,g,!1),a.addEventListener(&quot;load&quot;,g,!1)):(a.attachEvent(&quot;onload&quot;,g),b.attachEvent(&quot;onreadystatechange&quot;,function(){&quot;complete&quot;===b.readyState&amp;&amp;c.readyCallback()})),f=c.source||{},f.concatemoji?e(f.concatemoji):f.wpemoji&amp;&amp;f.twemoji&amp;&amp;(e(f.twemoji),e(f.wpemoji)))}(window,document,window._wpemojiSettings);
+		&lt;/script&gt;
++		/* Actually add it into here seems not a good idea, just a hacking */
++		&lt;script type=&quot;text/javascript&quot; src=&quot;//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js&quot;&gt;&lt;/script&gt;
++		&lt;script type=&quot;text/javascript&quot; src=&quot;/js/html2canvas.js&quot;&gt;&lt;/script&gt;
++		&lt;script type='text/javascript'&gt;//&lt;![CDATA[
++		function genPostShot() { 
++		        var rightNow = new Date();
++		        var imageName = rightNow.toISOString().slice(0,16).replace(/(-)|(:)|(T)/g,&quot;&quot;);
++		        imageName += '.jpg'
++		        html2canvas(document.getElementsByClassName('capturepost'), {
++		            background :'#FFFFFF',
++		            onrendered: function(canvas) {
++				// Click them for download
++		        	$('#test').attr('href', canvas.toDataURL(&quot;image/jpeg&quot;));
++		        	$('#test').attr('download',imageName);
++		        	$('#test')[0].click();
++		            }
++		        });
++		}; 
++		//]]&gt;
++		&lt;/script&gt;
++		/* Hacking Ended */
+
+</code></pre>
+
+<p>其实这个hacking做得不好，整洁的代码应该是新建一个函数用于添加这些代码。</p>
+
+<p>最后，在<code>/var/www/html</code>下创建一个文件夹，并下载html2canvas.js文件:</p>
+
+<pre><code>$ sudo mkdir -p /var/www/html/js
+$ cd js
+$ sudo wget https://cdn.bootcss.com/html2canvas/0.5.0-alpha1/html2canvas.js
+</code></pre>
+
+<p>或者直接修改上面定义中的<code>/js/html2canvas.js</code> 为:</p>
+
+<pre><code>//cdn.bootcss.com/html2canvas/0.5.0-alpha1/html2canvas.js
+</code></pre>
+
+<h3 id="验证">验证</h3>
+
+<p>现在重新刷新博客页面，即可享受一键另存为图片的快捷功能。</p>
+
+<p><img src="/images/2017_01_12_19_19_28_665x330.jpg" alt="/images/2017_01_12_19_19_28_665x330.jpg" /></p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/01/10/%E5%90%8E%E5%8F%B0%E5%BC%80%E5%8F%91%E8%AF%BB%E4%B9%A6%E7%AC%94%E8%AE%B0/">后台开发读书笔记</a>
       </h1>
       <span class="post-date">Jan 10, 2017 
@@ -1063,111 +1252,6 @@ redis-slave-132015689-hpw88     1/1       Running   0          2h
 
 <p>服务创建以后，访问<code>http://CoreOS1IP:31080</code>则可访问到guestbook前端页面，三个CoreOS
 节点的31080端口均可提供前端页面访问。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/01/03/myreadingbooks/">MyReadingBooks</a>
-      </h1>
-      <span class="post-date">Jan 3, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/life">Life</a>
-        
-      </span>
-      
-      
-
-<h3 id="文学类">文学类</h3>
-
-<h4 id="1">1</h4>
-
-<p>《流亡中的自在》达lai喇嘛著.<br />
-心得：<br />
-从另一个角度看待西藏问题，当事人很难得的回忆录。<br />
-阅读时间： 2017.1.1</p>
-
-<h4 id="2">2</h4>
-
-<p>《五代十国》 朱长孝著.<br />
-心得：<br />
-演艺类小说，讲述五代十国的风云人物/事件。<br />
-阅读时间： 2017.1.2 ~</p>
-
-<h4 id="3">3</h4>
-
-<p>《鲸鱼女孩 池塘男孩》痞子蔡著.<br />
-心得：<br />
-台湾网络文学，<code>小确幸</code>的典型文章，读起来很温馨。<br />
-阅读时间： 2017.1.1</p>
-
-<h4 id="4">4</h4>
-
-<p>《窗边的小豆豆》 (日本)黑柳彻子著.<br />
-心得：<br />
-幼儿教育类作品，一个叫豆豆的淘气小女孩，如何在一所尊重儿童个性的幼儿园里愉快成长的故事，很值得当代的
-中国父母们看看。<br />
-阅读时间： 2017.1.1</p>
-
-<h4 id="5">5</h4>
-
-<p>《北极风情画》卜乃夫著.<br />
-心得：<br />
-40年代作品，言情作品，一个在东北参加马占山抗日的南韩青年随部队流亡到苏联后，与一位波兰少女的爱情故事。<br />
-阅读时间: 2017.1.1</p>
-
-<h4 id="6">6</h4>
-
-<p>《人类的故事》(美) 房龙著, 白马译，中国文联出版社.<br />
-心得：<br />
-故事真是娓娓道来，书中的插图也很有想象力，这本书质感很好，拿在手里就不想放。<br />
-之前对欧洲中世纪的历史不是很了解，看完这本书以后了解了基督教三大派系的起源和发展，了解了原来俄罗斯
-的起源在于东罗马帝国、沙皇的本意是凯撒等等…………作者写作的时候是20世纪初，当时能有如此宏观的视角，真是让人佩服。</p>
-
-<p>后续我想继续找到他写的《圣经的故事》《宽容》等作品.<br />
-阅读时间： 2017.1.3～2017.1.6</p>
-
-<h4 id="7">7</h4>
-
-<p>《草房子》<br />
-心得：
-已经是第二次看这本书了，第一次是在nook上，依然兴趣盎然。好的作品就是这样，值得回味。适合儿童、童心未泯的成人阅读。
-关于苏北的一些习俗，写得很好。<br />
-阅读时间： 2017.1.8~ 2017.1.10</p>
-
-<h4 id="8">8</h4>
-
-<p>《欲乐园》（日）渡边淳一<br />
-心得：<br />
-草根医生与富家姑娘、穷护士之间的一段孽缘。以学历论英雄之狭隘被讽刺得很深刻。<br />
-阅读时间: 2017.02.09晚</p>
-
-<h3 id="技术类">技术类</h3>
-
-<h4 id="1-1">1</h4>
-
-<p>《实用数据分析》 (美) Hector Cuesta著.<br />
-心得：<br />
-可以直接上手用来把玩数据。
-阅读时间: 2017.1.1 ~ 2017.1.3</p>
-
-<h4 id="2-1">2</h4>
-
-<p>《Docker基础与实战》(韩) 李在弘著.<br />
-心得：<br />
-比较基础，直接翻阅即可。里头的很多例子可以借鉴一下，适合初学者用。第8章的例子不错。但是怎么说呢？这本书文笔太罗嗦，六块九的
-东西写成了69块钱。从图书馆借阅就好.<br />
-阅读时间: 2017.02.22~ 2017.02.23</p>
-
-<h4 id="3-1">3</h4>
-
-<p>《开源云平台CloudStack实战》(中) 鲍亮 叶宏著.<br />
-心得：<br />
-泛泛之书，感觉就是西安交大的一个副教授带着手下的几个研究生写的一本关于Cloudstack的书，作为阅读物就好，而且各种代码都没法
-下载，不推荐购买。而且这么烂的书敢卖69块钱，真是想钱想疯了.<br />
-阅读时间: 2017.02.21</p>
 
       
     </div>

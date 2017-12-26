@@ -105,6 +105,122 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/06/automatically-filter-spambot-on-digitalocean/">Automatically Filter SpamBot on DigitalOcean</a>
+      </h1>
+      <span class="post-date">Nov 6, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="setup-iptables">Setup iptables</h3>
+
+<p>Install iptables-persistent, so that the iptables rules will be saved even reboot the machine:</p>
+
+<pre><code># apt-get update
+# apt-get install iptables-persistent
+
+</code></pre>
+
+<h3 id="script-for-manually-add-iptables">Script for manually add iptables</h3>
+
+<p>Use following scritp for manually add iptables items:</p>
+
+<pre><code>#!/bin/sh
+# This script runs once per hour, Directly remove the ips which post comments
+# more than 4 times per hour. And who comments less than 3 times we should sent
+# its ip to old ips file. The old ips files will be used for analyse once per day
+# The run frequency is controlled by  crontab.   
+
+######################################################
+# Before Start, empty the deathSentence
+######################################################
+&gt;/var/log/apache2/deathSentence
+
+######################################################
+# First cat the file and try to found the bot ip list
+######################################################
+# Pipe 1: The one who called POST method should be monitored
+# Pipe 2: Get the ip address who called POST method.
+# Pipe 3: Sort the ip addresses. 
+# Pipe 4: Calculate the repeated times. First column, times; Second column, ip address.
+# Pipe 5: Sort via first column(times) numerically(Not textly!) .
+# Pipe 6: If the Call POST time bigger than 4 in one hour, catch it!
+# Pipe 7: Yes we caught this thief! Get its ipaddr.
+# Write these thieves into the death sentence
+cat /var/log/apache2/other_vhosts_access.log | grep &quot;POST&quot; | awk '{print $2}' | sort | uniq --count | sort -n | awk '$1&gt;4' | awk {'print $2'}&gt;/var/log/apache2/deathSentence
+# Those who comments but equal or more than 4 times will be append to wishList
+cat /var/log/apache2/other_vhosts_access.log | grep &quot;POST&quot; | awk '{print $2}' | sort | uniq --count | sort -n | awk '$1&lt;5' | awk {'print $2'}&gt;&gt;/var/log/apache2/wishList
+
+######################################################
+# Second we add this bot ip list into the netfilter
+######################################################
+for i in `cat /var/log/apache2/deathSentence`
+do
+	#echo $i
+	iptables -A INPUT -s $i -j DROP
+done
+
+######################################################
+# Finally empty the other_vhosts_access.log
+######################################################
+&gt;/var/log/apache2/other_vhosts_access.log
+
+</code></pre>
+
+<p>Oh, also add myself into the blacklist, so un-lock me:</p>
+
+<pre><code>$ iptables -A INPUT -s 1xx.x.x.x -j ACCEPT
+
+</code></pre>
+
+<p>Since those wishList should also be cared, wrote following scripts for judge, every 4 hours will be make a decision.</p>
+
+<pre><code>#!/bin/sh
+# This script runs once 4 hours, used for processing the /var/log/apache2/wishList
+# ip address lists. Those bad guys who were in wishList, if their total appear times
+# bigger than 4 times, will be added to iptable's drop rules.
+&gt;/var/log/apache2/deathSentence_4hour
+
+######################################################
+# Read the ip list and store those bad guys into deathSentence_4hour
+######################################################
+cat /var/log/apache2/wishList | sort | uniq --count | sort -n | awk '$1&gt;4' | awk {'$print $2'}&gt;/var/log/apache2/deathSentence_4hour
+
+######################################################
+# Now you got the bad guys, add them into iptables
+######################################################
+for i in `cat /var/log/apache2/deathSentence_4hour`
+do
+        #echo $i
+        iptables -A INPUT -s $i -j DROP
+done
+
+######################################################
+# Finally empty the wishList
+######################################################
+&gt;/var/log/apache2/wishList
+
+</code></pre>
+
+<h3 id="crontab-it">Crontab It!</h3>
+
+<p>Run <code>auto_add_bot_ip.sh</code> at every minute 0 of 1 hour, then run <code>auto_judge_wishlist.sh</code> at every minute 10 of every 4 hours.</p>
+
+<pre><code># m h  dom mon dow   command
+0 */1 * * * /root/code/auto_add_bot_ip.sh
+10 */4 * * * /root/code/auto_judge_wishlist.sh
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/11/06/manually-delete-spam-comments-for-wp/">Manually delete spam comments for WP</a>
       </h1>
       <span class="post-date">Nov 6, 2014 
@@ -353,128 +469,6 @@ $ mount -a
 <p>If you are ubuntu client, then you should install nfs-client via;</p>
 
 <pre><code>sudo apt-get install nfs-common
-
-</code></pre>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/05/mysql-creashes-on-digitalocean/">MySQL creashes on DigitalOcean</a>
-      </h1>
-      <span class="post-date">Nov 5, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="problem">Problem</h3>
-
-<p>The mysql server always keep crash, with following log under /var/log/mysql/error.log:</p>
-
-<pre><code>141104 23:06:46 InnoDB: Fatal error: cannot allocate memory for the buffer pool
-
-</code></pre>
-
-<p>So this is the memory problem, we should allocate more memory for our VPS.</p>
-
-<h3 id="solution">Solution</h3>
-
-<p>Add swap partition:<br />
-First check the swap partition:</p>
-
-<pre><code>root@xxx:/var/log# free -m
-             total       used       free     shared    buffers     cached
-Mem:           490        464         25         28         61        172
--/+ buffers/cache:        230        259
-Swap:            0          0          0
-root@xxx:/var/log# swapon -s
-Filename                                Type            Size    Used    Priority
-
-</code></pre>
-
-<p>Now create a swapfile:</p>
-
-<pre><code># dd if=/dev/zero of=/swapfile bs=1M count=1024
-1024+0 records in
-1024+0 records out
-1073741824 bytes (1.1 GB) copied, 2.16285 s, 496 MB/s
-# ls /swapfile -l -h
--rw-r--r-- 1 root root 1.0G Nov  5 00:58 /swapfile
-
-</code></pre>
-
-<p>Setting the swapfile:</p>
-
-<pre><code>root@xxx:/var/log# chmod 600 /swapfile 
-root@xxx:/var/log# swapon /swapfile
-swapon: /swapfile: read swap header failed: Invalid argument
-root@xxx:/var/log# mkswap /swapfile
-Setting up swapspace version 1, size = 1048572 KiB
-no label, UUID=64b727dd-0d7e-45ff-9235-cd9ba84b062f
-root@xxx:/var/log# swapon /swapfile 
-
-</code></pre>
-
-<p>Now use free command you could check swap file enabled:</p>
-
-<pre><code>root@xxx:/var/log# free -m
-             total       used       free     shared    buffers     cached
-Mem:           490        458         31         28         25        229
--/+ buffers/cache:        204        285
-Swap:         1023          0       1023
-
-</code></pre>
-
-<p>Add it permanately into the /etc/fstab:</p>
-
-<pre><code>/swapfile   none    swap    sw    0   0
-
-</code></pre>
-
-<p>Configure the parameters:</p>
-
-<pre><code>root@xxx:/var/log# cat /proc/sys/vm/swappiness
-60
-root@xxx:/var/log# sysctl vm.swappiness=10
-vm.swappiness = 10                                                                                      
-root@xxx:/var/log# cat /proc/sys/vm/swappiness                                                  
-10                                                
-root@xxx:/var/log# vim /etc/sysctl.conf
-vm.swappiness=10
-vm.vfs_cache_pressure = 50
-root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
-100                                         
-root@xxx:/var/log# cat /proc/sys/vm/vfs_cache_pressure                                          
-50                                                                                                     
-
-</code></pre>
-
-<p>Now the mysql server should be good.</p>
-
-<h3 id="disable-wp-admin-login-password">Disable wp-admin login password</h3>
-
-<p>Disable the login password.</p>
-
-<pre><code># vim /etc/apache2/apache2.conf
-#&lt;DirectoryMatch ^.*/wp-admin/&gt;
-#    AuthType Basic
-#    AuthName &quot;Please login to your droplet via SSH for login details.&quot;
-#    AuthUserFile /etc/apache2/.htpasswd
-#    Require valid-user
-#&lt;DirectoryMatch&gt;
-root@xxx:~# service apache2 restart
- * Restarting web server apache2      
-
-</code></pre>
-
-<p>Change the password for login details</p>
-
-<pre><code>$ htpasswd .htpasswd user2
 
 </code></pre>
 

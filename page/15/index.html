@@ -105,6 +105,83 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/02/10/workingtipsonencryption/">WorkingTipsOnEncryption</a>
+      </h1>
+      <span class="post-date">Feb 10, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<p>Refers to:</p>
+
+<p><a href="https://blog.tinned-software.net/automount-a-luks-encrypted-volume-on-system-start/">https://blog.tinned-software.net/automount-a-luks-encrypted-volume-on-system-start/</a></p>
+
+<h3 id="disk-partition-encryption">Disk Partition Encryption</h3>
+
+<p>Steps for encryption of vdb1:</p>
+
+<pre><code># dd if=/dev/urandom of=/root/vdb_secret_key bs=512 count=8
+# cryptsetup -v luksAddKey /dev/vdb1 /root/vdb_secret_key
+# cryptsetup luksDump /dev/vdb1 | grep &quot;Key Slot&quot;
+# cryptsetup -v luksOpen /dev/vdb1 vdb1_crypt --key-file=/root/vdb_secret_key 
+# cryptsetup -v luksClose vdb1_crypt
+</code></pre>
+
+<p>Add following line for auto decryption:</p>
+
+<pre><code># vim /etc/crypttab
+vdb1_crypt UUID=43740d4f-df91-492e-8d06-b32f461a633e /root/vdb_secret_key luks
+</code></pre>
+
+<p>While UUID is generated via following command:</p>
+
+<pre><code># cryptsetup luksDump /dev/vdb1  | grep &quot;UUID&quot;
+</code></pre>
+
+<p>Add lines into <code>/etc/fstab</code>:</p>
+
+<pre><code>/dev/mapper/vdb1_crypt	/media/vdb1	ext4	defaults	0	 2
+</code></pre>
+
+<h3 id="volume-encryption">Volume Encryption</h3>
+
+<p>For storing contents in an encrypted file, do following steps:</p>
+
+<pre><code># dd if=/dev/zero of=/root/luks.vol bs=1M count=1024
+# cryptsetup --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 10000 luksFormat /root/luks.vol
+# cryptsetup luksOpen /root/luks.vol file
+# ls /dev/mapper/
+# mkfs.ext4 /dev/mapper/file
+</code></pre>
+
+<p>Now we begin to use keyfile for unlock this partition:</p>
+
+<pre><code># dd if=/dev/urandom of=/root/file_key bs=512 count=8
+# cryptsetup -v luksAddKey /root/luks.vol /root/file_key
+# cryptsetup -v luksOpen /root/luks.vol vol_crypt --key-file=/root/file_key 
+# cryptsetup -v luksClose vol_crypt
+</code></pre>
+
+<p>Get the UUID of the luks.vol:</p>
+
+<pre><code># cryptsetup luksDump /root/luks.vol  | grep &quot;UUID&quot;
+</code></pre>
+
+<p>Now you could add following lines into <code>/etc/rc.local</code>:</p>
+
+<pre><code>cryptsetup -v luksOpen /root/luks.vol vol_crypt --key-file=/root/file_key
+mount /dev/mapper/vol_crypt /media/vol
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/02/09/centos%E5%85%A8%E7%9B%98%E5%8A%A0%E5%AF%86/">CentOS全盘加密</a>
       </h1>
       <span class="post-date">Feb 9, 2017 
@@ -449,334 +526,6 @@ luks-189e8c45-2c62-4c08-acb6-b3264c435fd1 UUID=189e8c45-2c62-4c08-acb6-b3264c435
 </code></pre>
 
 <p>Make sure the partition is the same as the one you looked as <code>crypto_LUKS</code>.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/01/22/%E4%BD%BF%E7%94%A8usb%E7%A3%81%E7%9B%98%E6%97%A0%E5%AF%86%E7%A0%81%E7%99%BB%E5%BD%95%E5%8A%A0%E5%AF%86%E5%88%86%E5%8C%BA%E7%9A%84linux/">使用USB磁盘无密码登录加密分区的LINUX</a>
-      </h1>
-      <span class="post-date">Jan 22, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<h3 id="背景">背景</h3>
-
-<p>最近一直在看关于LINUX磁盘加密的东西，也尝试了文件加密、扇区加密、全盘加密等方面。
-然而每次都需要输入密码这种事情对一个追求速度的人来说似乎有点浪费时间，而且每次重新
-都需要输入密码也无法适用于自动化运维的场合。因而我根据网上提到的方法制作了一个
-从USB磁盘读取密钥以解密加密全盘的方法。下面是对应的实现过程。</p>
-
-<h3 id="debian系统安装">Debian系统安装</h3>
-
-<p>从镜像网站下载Debian
-8(jessie)的DVD安装源，在Virtualbox中创建一台虚拟机，插入
-ISO后，光盘启动系统进入到以下界面:</p>
-
-<p><img src="/images/2017_01_22_18_52_55_444x325.jpg" alt="/images/2017_01_22_18_52_55_444x325.jpg" /></p>
-
-<p>选择<code>Install</code>后，继续安装，因为篇幅的关系，这里省略掉关于用户名/密码/主机名/语言/区域设置等配置，
-直接进入到磁盘分区的步骤:</p>
-
-<p>选择手动对磁盘进行分区:</p>
-
-<p><img src="/images/2017_01_22_18_54_29_556x251.jpg" alt="/images/2017_01_22_18_54_29_556x251.jpg" />
-选择我们添加的磁盘:</p>
-
-<p><img src="/images/2017_01_22_18_55_13_547x201.jpg" alt="/images/2017_01_22_18_55_13_547x201.jpg" /></p>
-
-<p>选择接受上面的提示，创建一个新的空白分区表:</p>
-
-<p><img src="/images/2017_01_22_18_56_33_538x154.jpg" alt="/images/2017_01_22_18_56_33_538x154.jpg" /></p>
-
-<p>可以看到当前没有任何磁盘分区，选择到红色光标所在的行，按回车:</p>
-
-<p><img src="/images/2017_01_22_18_57_25_543x255.jpg" alt="/images/2017_01_22_18_57_25_543x255.jpg" /></p>
-
-<p>创建一个新的分区:</p>
-
-<p><img src="/images/2017_01_22_18_57_55_388x178.jpg" alt="/images/2017_01_22_18_57_55_388x178.jpg" /></p>
-
-<p><code>/boot</code>分区大小我们设置为400MB：</p>
-
-<p><img src="/images/2017_01_22_18_58_16_541x168.jpg" alt="/images/2017_01_22_18_58_16_541x168.jpg" /></p>
-
-<p>选择为主分区:</p>
-
-<p><img src="/images/2017_01_22_18_58_33_301x156.jpg" alt="/images/2017_01_22_18_58_33_301x156.jpg" /></p>
-
-<p>Location选择，从Beginning开始:</p>
-
-<p><img src="/images/2017_01_22_18_59_04_397x114.jpg" alt="/images/2017_01_22_18_59_04_397x114.jpg" /></p>
-
-<p>配置为我们以下截图里所示的内容:</p>
-
-<p><img src="/images/2017_01_22_18_59_37_452x219.jpg" alt="/images/2017_01_22_18_59_37_452x219.jpg" /></p>
-
-<p>接着创建一个大小为1GB的交换分区:</p>
-
-<p><img src="/images/2017_01_22_19_00_12_456x214.jpg" alt="/images/2017_01_22_19_00_12_456x214.jpg" /></p>
-
-<p><img src="/images/2017_01_22_19_00_22_530x167.jpg" alt="/images/2017_01_22_19_00_22_530x167.jpg" /></p>
-
-<p><img src="/images/2017_01_22_19_00_51_545x199.jpg" alt="/images/2017_01_22_19_00_51_545x199.jpg" /></p>
-
-<p>接着创建主分区，步骤不再重复，充分利用剩下的磁盘空间:</p>
-
-<p><img src="/images/2017_01_22_19_01_31_411x192.jpg" alt="/images/2017_01_22_19_01_31_411x192.jpg" /></p>
-
-<p>在上面的高亮区内按回车，改变磁盘类型为<code>physical volume for encryption</code>:</p>
-
-<p><img src="/images/2017_01_22_19_01_59_326x335.jpg" alt="/images/2017_01_22_19_01_59_326x335.jpg" /></p>
-
-<p>注意我们配置的参数，这里配置了默认的加密方式为device-mapper(dm-crypt)，
-加密算法为256键字节大小的AES加密:</p>
-
-<p><img src="/images/2017_01_22_19_03_07_517x251.jpg" alt="/images/2017_01_22_19_03_07_517x251.jpg" /></p>
-
-<p>成功创建后的磁盘分区情况如下图:</p>
-
-<p><img src="/images/2017_01_22_19_03_50_428x209.jpg" alt="/images/2017_01_22_19_03_50_428x209.jpg" /></p>
-
-<p>接下来对加密卷作高阶配置，选择如下图中的条目:</p>
-
-<p><img src="/images/2017_01_22_19_06_47_321x159.jpg" alt="/images/2017_01_22_19_06_47_321x159.jpg" /></p>
-
-<p>出现警告信息，告知我们当前的分区方案将被写入到磁盘，我们是否开始配置加密卷？</p>
-
-<p><img src="/images/2017_01_22_19_08_03_435x207.jpg" alt="/images/2017_01_22_19_08_03_435x207.jpg" /></p>
-
-<p>选择yes后，选择<code>Create encrypted volumes</code>:</p>
-
-<p><img src="/images/2017_01_22_19_08_41_456x182.jpg" alt="/images/2017_01_22_19_08_41_456x182.jpg" /></p>
-
-<p>我们选择sda2和sda3，对交换分区和主分区进行加密。如果只选择主分区加密，安装程序会
-报出错误，所以一开始我们就选中这两块分区，进入到下一步:</p>
-
-<p><img src="/images/2017_01_22_19_09_34_447x245.jpg" alt="/images/2017_01_22_19_09_34_447x245.jpg" /></p>
-
-<p>分区完毕，选择<code>Done Setting up the partition</code>， 结束手动分区步骤:</p>
-
-<p><img src="/images/2017_01_22_19_10_13_399x212.jpg" alt="/images/2017_01_22_19_10_13_399x212.jpg" /></p>
-
-<p>确定写入磁盘:</p>
-
-<p><img src="/images/2017_01_22_19_10_29_542x135.jpg" alt="/images/2017_01_22_19_10_29_542x135.jpg" /></p>
-
-<p>写入过程:</p>
-
-<p><img src="/images/2017_01_22_19_10_50_553x320.jpg" alt="/images/2017_01_22_19_10_50_553x320.jpg" /></p>
-
-<p>此时需要定义密码:</p>
-
-<p><img src="/images/2017_01_22_19_11_12_534x209.jpg" alt="/images/2017_01_22_19_11_12_534x209.jpg" /></p>
-
-<p>成功配置完加密卷的磁盘分区表如下所示:</p>
-
-<p><img src="/images/2017_01_22_19_11_55_510x295.jpg" alt="/images/2017_01_22_19_11_55_510x295.jpg" /></p>
-
-<p>选择4G大小的主分区，改变其Mount point为/:</p>
-
-<p><img src="/images/2017_01_22_19_12_29_545x266.jpg" alt="/images/2017_01_22_19_12_29_545x266.jpg" /></p>
-
-<p><img src="/images/2017_01_22_19_12_41_551x245.jpg" alt="/images/2017_01_22_19_12_41_551x245.jpg" /></p>
-
-<p>同样改变swap分区:</p>
-
-<p><img src="/images/2017_01_22_19_12_55_499x159.jpg" alt="/images/2017_01_22_19_12_55_499x159.jpg" /></p>
-
-<p>确定写入磁盘:</p>
-
-<p><img src="/images/2017_01_22_19_13_06_540x222.jpg" alt="/images/2017_01_22_19_13_06_540x222.jpg" /></p>
-
-<p>接下来继续安装，并在安装的最后一步将BootLoad写入MBR。</p>
-
-<p>安装完毕后，重新启动机器后，需要输入密码才能进入系统:</p>
-
-<p><img src="/images/2017_01_22_19_14_22_453x97.jpg" alt="/images/2017_01_22_19_14_22_453x97.jpg" /></p>
-
-<p><img src="/images/2017_01_22_19_14_32_463x151.jpg" alt="/images/2017_01_22_19_14_32_463x151.jpg" /></p>
-
-<h3 id="配置passwordless">配置passwordless</h3>
-
-<p>接下来我们创建无需输入密码的根文件系统，使用一个USB优盘来记录密码信息，位于USB优盘
-上的secret key将用于解密加密磁盘。
-将USB盘插入到虚拟机，可以使用dmesg来获取其卷标，这里可以看到我们的卷表为<code>/dev/sdb</code>:</p>
-
-<p><img src="/images/2017_01_22_19_16_35_540x296.jpg" alt="/images/2017_01_22_19_16_35_540x296.jpg" /></p>
-
-<p>使用dd命令，从优盘读取8192字节大小的随机字节 ，作为我们要使用的secret key:</p>
-
-<pre><code># dd if=/dev/sdb of=/root/secret.key bs=512 skip=4 count=16
-</code></pre>
-
-<p>上面生成的secret.key文件将被加入到加密卷中，通过<code>cryptsetup</code>命令加入。默认的密码被保存
-在slot 0, 而slot 1将被用作第二个secret key。</p>
-
-<p>首先使用blkid命令来查看磁盘卷的详细信息:</p>
-
-<pre><code># blkid 
-/dev/mapper/sda3_crypt: UUID=&quot;6d978850-19f3-4a89-87cb-01825d7601c4&quot; TYPE=&quot;ext4&quot;
-/dev/sda1: UUID=&quot;3288f26a-7669-44fe-b130-87d39ab57166&quot; TYPE=&quot;ext4&quot; PARTUUID=&quot;f7870f8a-01&quot;
-/dev/sda2: PARTUUID=&quot;f7870f8a-02&quot;
-/dev/sda3: UUID=&quot;8ca94b2f-89d3-4114-9e33-290dc57ed723&quot; TYPE=&quot;crypto_LUKS&quot; PARTUUID=&quot;f7870f8a-03&quot;
-/dev/sdb1: LABEL=&quot;XENSERVER-6&quot; UUID=&quot;5CD6-02A1&quot; TYPE=&quot;vfat&quot; PARTUUID=&quot;0003fa4f-01&quot;
-</code></pre>
-
-<p>被用于解密卷的secret key将仅仅被加入到<code>/dev/sda3</code>中，当然，它也可以被加入到<code>/dev/sda2</code>中。</p>
-
-<pre><code># cryptsetup luksAddKey /dev/sda3 /root/secret.key --key-slot 1
-Enter any passphrase!
-</code></pre>
-
-<p>我们将创建一个简单的udev规则，用于创建USB设备，我们将创建一个<code>/etc/udev/rules.d/99-custom-usb.rules</code>
-文件，并将它的链接文件指向<code>/dev/usbdevice</code>:</p>
-
-<pre><code># vi /etc/udev/rules.d/99-custom-usb.rules 
-SUBSYSTEMS==&quot;usb&quot;,DRIVERS==&quot;usb&quot;,SYMLINK+=&quot;usbdevice%n&quot;
-</code></pre>
-
-<p>重新加载udev规则:</p>
-
-<pre><code># udevadm control --reload-rules
-</code></pre>
-
-<p>现在插入磁盘后，以验证自定义规则:</p>
-
-<pre><code># ls -l /dev/usbdevice
-lrwxrwxrwx 1 root root 3 Jan 22 04:27 /dev/usbdevice -&gt; sdb
-</code></pre>
-
-<p>创建一个shell脚本，用于在系统启动时，从USB设备读取出secret key，并将其
-提供给cryptsetup。 这个脚本位于<code>/usr/local/sbin/openluksdevices.sh</code>:</p>
-
-<pre><code class="language-SHELL">#!/bin/sh
-############taken from following link#########
-###http://www.oxygenimpaired.com/debian-lenny-luks-encrypted-root-hidden-usb-keyfile
-
-TRUE=0
-FALSE=1
-
-# flag tracking key-file availability
-OPENED=$FALSE
-
-if [ -b /dev/usbdevice ]; then
-# if device exists then output the keyfile from the usb key 
-dd if=/dev/usbdevice bs=512 skip=4 count=16 | cat
-OPENED=$TRUE
-fi
-
-if [ $OPENED -ne $TRUE ]; then
-echo &quot;FAILED to get USB key file ...&quot; &gt;&amp;2
-/lib/cryptsetup/askpass &quot;Try LUKS password: &quot;
-else
-echo &quot;Success loading key file for Root . Moving on.&quot; &gt;&amp;2
-fi
-
-sleep 2
-</code></pre>
-
-<p>添加可执行权限:</p>
-
-<pre><code># chmod a+x /usr/local/sbin/openluksdevices.sh
-</code></pre>
-
-<p>与fstab文件类似， crypttab文件包含有在Linux平台加密卷的相关配置信息. 这里
-我们添加针对<code>sda3_crypt</code>加密卷的配置信息:</p>
-
-<pre><code># vi /etc/crypttab 
-sda2_crypt UUID=4270c1eb-5a06-4a1f-8a19-d5af9db4f779 none luks,swap
-sda3_crypt UUID=8ca94b2f-89d3-4114-9e33-290dc57ed723 none luks,keyscript=/usr/local/sbin/openluksdevices.sh
-</code></pre>
-
-<p>同样，我们需要重新生成initramfs，因而在initramfs的制作工具的定义文件里
-我们也需要添加针对<code>sda3_crypt</code>卷的解密操作:</p>
-
-<pre><code># vi /etc/initramfs-tools/conf.d/cryptroot 
-CRYPTROOT=target=sda3_crypt,source=/dev/disk/by-uuid/8ca94b2f-89d3-4114-9e33-290dc57ed723
-</code></pre>
-
-<p>并在<code>/etc/initramfs-tools</code>中添加<code>usb_storage</code>选项:</p>
-
-<pre><code># vi /etc/initramfs-tools/modules 
-usb_storage
-</code></pre>
-
-<p>添加<code>udevusbkey.sh</code>文件，以在临时文件系统<code>initrd</code>中添加自定义的udev规则:</p>
-
-<p><code>/etc/initramfs-tools/hooks/udevusbkey.sh</code>文件:</p>
-
-<pre><code>#!/bin/sh
-# udev-usbkey script
-###taken from
-###http://www.oxygenimpaired.com/ubuntu-with-grub2-luks-encrypted-lvm-root-hidden-usb-keyfile
-PREREQ=&quot;udev&quot;
-prereqs()
-{
-echo &quot;$PREREQ&quot;
-}
-
-case $1 in
-prereqs)
-prereqs
-exit 0
-;;
-esac
-
-. /usr/share/initramfs-tools/hook-functions
-
-# Copy across relevant rules
-
-cp /etc/udev/rules.d/99-custom-usb.rules ${DESTDIR}/lib/udev/rules.d/
-
-exit 0
-</code></pre>
-
-<p>并给予其可执行权限:</p>
-
-<pre><code>#  chmod a+x /etc/initramfs-tools/hooks/udevusbkey.sh
-</code></pre>
-
-<p>GRUB2配置文件也需要进行相应的修改，以添加<code>rootdelay</code>和<code>cryptopts</code>选项:</p>
-
-<pre><code>$ vi /etc/default/grub
-GRUB_CMDLINE_LINUX_DEFAULT=&quot;rootdelay=20 cryptopts=target=sda3_crypt,source=/dev/disk/by-uuid/8ca94b2f-89d3-4114-9e33-290dc57ed723,keyscript=/lib/cryptsetup/scripts/openluksdevices.sh&quot;
-GRUB_CMDLINE_LINUX=&quot;&quot;
-</code></pre>
-
-<p>运行<code>update-grub</code>以更新grub配置文件，可以通过检查<code>/boot/grub/grub.cfg</code>来看到我们更改
-后的配置已经被加入到最终配置文件。</p>
-
-<p>运行<code>update-initramfs -u</code>来更新系统启动时所需用到的临时文件系统.</p>
-
-<p>运行检查程序，查看openlunksdevices是否被正确打包入initramfs中:</p>
-
-<pre><code># cd /tmp
-# zcat /boot/initrd.img-3.16.0-4-amd64 | cpio -iv
-# ls -l lib/cryptsetup/scripts/openluksdevices.sh 
--rwxr-xr-x 1 root staff 565 Jan 22 06:52 lib/cryptsetup/scripts/openluksdevices.sh
-</code></pre>
-
-<p>最后的启动过程可以参考:</p>
-
-<p><img src="/images/2017_01_22_19_54_12_548x301.jpg" alt="/images/2017_01_22_19_54_12_548x301.jpg" /></p>
-
-<h3 id="总结">总结</h3>
-
-<p>这里使用一个USB存储设备打开了LINUX系统里的一个加密盘，一个自动化脚本
-被用来在启动时为机密卷提供一个用于解密的secret key.</p>
-
-<h3 id="bug">Bug</h3>
-
-<p>按照原教程里的配置，导致swap分区无法被激活，我觉得可能需要添加关于swap分区的选项。</p>
-
-<p>更新，在分区指定swap分区加密的时候，选定密码类型为random password.</p>
 
       
     </div>

@@ -105,6 +105,180 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/blog/2017/02/23/%E7%94%A8git%E5%92%8Cdocker%E5%BF%AB%E9%80%9F%E9%83%A8%E7%BD%B2%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F/">用Git和Docker快速部署应用程序</a>
+      </h1>
+      <span class="post-date">Feb 23, 2017 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
+        
+      </span>
+      
+      
+
+<h3 id="参考资料">参考资料</h3>
+
+<p>《Docker基础与实战》第八章 (韩) 李在弘。</p>
+
+<h3 id="环境">环境</h3>
+
+<p>本机, ArchLinux.<br />
+服务器, DigitalOcean, Ubuntu14.04.<br />
+之所以选择DO的主机，是因为它位于墙外，不会有防火墙的阻挡，每次都能编译成功。</p>
+
+<h3 id="本机配置">本机配置</h3>
+
+<h4 id="git">Git</h4>
+
+<p>ArchLinux上安装<code>sudo pacman -S git</code>， 之后可以配置global:</p>
+
+<pre><code>$ git config --global user.name xxxx
+$ git config --global user.email xxxx@gamil.com
+</code></pre>
+
+<h4 id="app-js">app.js</h4>
+
+<p>用Node.js编写一个简单的Web服务器，返回<code>Hello Docker</code>:</p>
+
+<pre><code>var express = require('express');
+var app = express();
+
+app.get(['/', '/index.html'], function (req, res) {
+  res.send('Hello Docker1');
+});
+
+app.listen(80);
+</code></pre>
+
+<h4 id="package-json">package.json</h4>
+
+<p>用于描述运行该程序的依赖关系:</p>
+
+<pre><code>{
+  &quot;name&quot;: &quot;exampleapp&quot;,
+  &quot;description&quot;: &quot;Hello Docker&quot;,
+  &quot;version&quot;: &quot;0.0.1&quot;,
+  &quot;dependencies&quot;: {
+    &quot;express&quot;: &quot;4.4.x&quot;
+  }
+}
+</code></pre>
+
+<h4 id="dockerfile">Dockerfile</h4>
+
+<p>用于运行该APP的Docker容器定义如下:</p>
+
+<pre><code>FROM ubuntu:14.04
+
+RUN apt-get update
+RUN apt-get install -y nodejs npm
+
+ADD app.js /var/www/app.js
+ADD package.json /var/www/package.json
+
+WORKDIR /var/www
+RUN npm install
+
+CMD nodejs app.js
+</code></pre>
+
+<h3 id="do服务器配置">DO服务器配置</h3>
+
+<h4 id="git配置">Git配置</h4>
+
+<p>需要安装Docker， Docker的安装方法不再重复，安装git, 安装方法也不再重复.</p>
+
+<p>创建服务器端的git仓库:</p>
+
+<pre><code>$ cd ~
+$ git init exampleapp
+$ cd exampleapp
+$ git config receive.denycurrentbranch ignore
+</code></pre>
+
+<p>配置成<code>receive.denycurrentbranch ignore</code>是为了便于从开发者PC接收推送的源代码.</p>
+
+<h4 id="git-hook配置">Git Hook配置</h4>
+
+<p>在<code>~/exampleapp/.git/hooks</code>目录下，创建一个<code>post-receive</code>文件，内容如下:</p>
+
+<pre><code>#!/bin/bash
+
+APP_NAME=exampleapp
+APP_DIR=$HOME/$APP_NAME
+REVISION=$(expr substr $(git rev-parse --verify HEAD) 1 7)
+
+GIT_WORK_TREE=$APP_DIR git checkout -f
+
+cd $APP_DIR
+docker build --tag $APP_NAME:$REVISION .
+docker stop $APP_NAME
+docker rm $APP_NAME
+docker run -d --name $APP_NAME -p 8068:80 $APP_NAME:$REVISION
+</code></pre>
+
+<p>保存并设置可执行权限:</p>
+
+<pre><code>$ chmod +x ~/exampleapp/.git/hooks/post-receive
+</code></pre>
+
+<h3 id="更新流程">更新流程</h3>
+
+<p>在开发机的目录下，添加remote分支:</p>
+
+<pre><code>$ git remote add origin dash@xxx.xxx.xxx.x:exampleapp
+</code></pre>
+
+<p>如果你的DO上主机使用别的端口，例如8894端口，则编辑ssh的配置，为主机指定端口即可:</p>
+
+<pre><code>$ vim ~/.ssh/config
+host 1xx.xx.xx.xxx
+port 8894
+</code></pre>
+
+<p>此时每次提交的代码都会触发DO上主机的自动化构建过程，且自动侦听8068端口。</p>
+
+<h3 id="自动推送到服务器">自动推送到服务器</h3>
+
+<p>只需要更改<code>post-receive</code>文件即可实现自动推送流程:</p>
+
+<pre><code>#!/bin/bash
+
+APP_NAME=exampleapp
+APP_DIR=$HOME/$APP_NAME
+REVISION=$(expr substr $(git rev-parse --verify HEAD) 1 7)
+
++++ REGISTRY=192.168.0.40:5000
++++ APP_SERVERS=(
++++   &quot;pyrasis@192.168.0.101&quot;
++++   &quot;pyrasis@192.168.0.102&quot;
++++ )
+
+GIT_WORK_TREE=$APP_DIR git checkout -f
+
+cd $APP_DIR
+docker build --tag $APP_NAME:$REVISION .
+docker tag $APP_NAME:$REVISION $REGISTRY/$APP_NAME:$REVISION
+docker push $REGISTRY/$APP_NAME:$REVISION
+
++++ SSH=&quot;ssh -o StrictHostKeyChecking=no&quot;
++++ for SERVER in ${APP_SERVERS[@]}
++++ do
++++   $SSH $SERVER docker pull $REGISTRY/$APP_NAME:$REVISION
++++   $SSH $SERVER docker stop $APP_NAME
++++   $SSH $SERVER docker rm $APP_NAME
++++   $SSH $SERVER docker run -d --name $APP_NAME \
++++     -p 80:80 $REGISTRY/$APP_NAME:$REVISION
++++ done
+</code></pre>
+
+<p>上面的代码需要事先实现中转机(即运行git的机器)与目标服务器的ssh免登录设置。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/blog/2017/02/22/%E5%BA%94%E7%94%A8%E6%A1%86%E6%9E%B6%E5%8A%A0%E5%AF%86/">应用框架加密</a>
       </h1>
       <span class="post-date">Feb 22, 2017 
@@ -556,83 +730,6 @@ end
 <h3 id="免密码登录">免密码登录</h3>
 
 <p>OpenSuse的免密码登录与CentOS相同, 都是通过修改dracut来实现免密码登录.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/blog/2017/02/10/workingtipsonencryption/">WorkingTipsOnEncryption</a>
-      </h1>
-      <span class="post-date">Feb 10, 2017 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">Linux</a>
-        
-      </span>
-      
-      
-
-<p>Refers to:</p>
-
-<p><a href="https://blog.tinned-software.net/automount-a-luks-encrypted-volume-on-system-start/">https://blog.tinned-software.net/automount-a-luks-encrypted-volume-on-system-start/</a></p>
-
-<h3 id="disk-partition-encryption">Disk Partition Encryption</h3>
-
-<p>Steps for encryption of vdb1:</p>
-
-<pre><code># dd if=/dev/urandom of=/root/vdb_secret_key bs=512 count=8
-# cryptsetup -v luksAddKey /dev/vdb1 /root/vdb_secret_key
-# cryptsetup luksDump /dev/vdb1 | grep &quot;Key Slot&quot;
-# cryptsetup -v luksOpen /dev/vdb1 vdb1_crypt --key-file=/root/vdb_secret_key 
-# cryptsetup -v luksClose vdb1_crypt
-</code></pre>
-
-<p>Add following line for auto decryption:</p>
-
-<pre><code># vim /etc/crypttab
-vdb1_crypt UUID=43740d4f-df91-492e-8d06-b32f461a633e /root/vdb_secret_key luks
-</code></pre>
-
-<p>While UUID is generated via following command:</p>
-
-<pre><code># cryptsetup luksDump /dev/vdb1  | grep &quot;UUID&quot;
-</code></pre>
-
-<p>Add lines into <code>/etc/fstab</code>:</p>
-
-<pre><code>/dev/mapper/vdb1_crypt	/media/vdb1	ext4	defaults	0	 2
-</code></pre>
-
-<h3 id="volume-encryption">Volume Encryption</h3>
-
-<p>For storing contents in an encrypted file, do following steps:</p>
-
-<pre><code># dd if=/dev/zero of=/root/luks.vol bs=1M count=1024
-# cryptsetup --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 10000 luksFormat /root/luks.vol
-# cryptsetup luksOpen /root/luks.vol file
-# ls /dev/mapper/
-# mkfs.ext4 /dev/mapper/file
-</code></pre>
-
-<p>Now we begin to use keyfile for unlock this partition:</p>
-
-<pre><code># dd if=/dev/urandom of=/root/file_key bs=512 count=8
-# cryptsetup -v luksAddKey /root/luks.vol /root/file_key
-# cryptsetup -v luksOpen /root/luks.vol vol_crypt --key-file=/root/file_key 
-# cryptsetup -v luksClose vol_crypt
-</code></pre>
-
-<p>Get the UUID of the luks.vol:</p>
-
-<pre><code># cryptsetup luksDump /root/luks.vol  | grep &quot;UUID&quot;
-</code></pre>
-
-<p>Now you could add following lines into <code>/etc/rc.local</code>:</p>
-
-<pre><code>cryptsetup -v luksOpen /root/luks.vol vol_crypt --key-file=/root/file_key
-mount /dev/mapper/vol_crypt /media/vol
-</code></pre>
 
       
     </div>

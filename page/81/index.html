@@ -105,6 +105,89 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/12/30/trouble-shooting-on-lost-ssh-connection/">Trouble Shooting On Lost SSH Connection</a>
+      </h1>
+      <span class="post-date">Dec 30, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
+        
+      </span>
+      
+      
+
+<p>I found lots of ssh connection attack info under the folder of /var/log/btmp, So I decide to change the sshd default listening port, from 22 to xxxx. Following is the steps for doing this:</p>
+
+<h3 id="change-sshd-listening-port">Change SSHD Listening Port</h3>
+
+<p>Change the default port from 22 to xxxx</p>
+
+<pre><code># vim /etc/ssh/sshd_config
+Change the port from 22 to xxxx
+# service ssh restart
+
+</code></pre>
+
+<p>Now, congratulations, you lost all of your connections, since you have enable the iptables and banned all of the other ports.</p>
+
+<h3 id="solution">Solution</h3>
+
+<p>Don&rsquo;t worry, we have digitalOcean&rsquo;s terminal service, from it we could reached the console.<br />
+But the problem is: it&rsquo;s pretty slow for us to visit this webpage from China to US!<br />
+Then we should use another machine which runs coreos.<br />
+Create a new lxde based vnc machine simply via following command:</p>
+
+<pre><code>core@Trustycore ~ $ docker pull dorowu/ubuntu-desktop-lxde-vnc
+
+</code></pre>
+
+<p>Run the machine</p>
+
+<pre><code>docker run -i -t -p 6080:6080 dorowu/ubuntu-desktop-lxde-vnc
+
+</code></pre>
+
+<p>Then open your browser and visit:<br />
+<code>http://Your_ip_address:6080/vnc.html</code> you could reached the vnc machine.</p>
+
+<h3 id="memory-problem">Memory Problem</h3>
+
+<p>Since the default memory is only 512MB, we have to enable the swapfile, thus we could use firefox for accessing the DigitalOcean terminal.<br />
+Following is the steps:</p>
+
+<pre><code>$ sudo dd if=/dev/zero of=/swapfile bs=1M count=1024
+$ sudo chmod 600 /swapfile 
+$ sudo mkswap /swapfile
+$ sudo vim /etc/systemd/system/swap.service
+ [Unit]  
+ Description=Turn on swap  
+ [Service]  
+ Type=oneshot  
+ Environment=&quot;SWAPFILE=/swapfile&quot;
+ RemainAfterExit=true  
+ ExecStartPre=/usr/sbin/losetup -f ${SWAPFILE}  
+ ExecStart=/usr/bin/sh -c &quot;/sbin/swapon $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ ExecStop=/usr/bin/sh -c &quot;/sbin/swapoff $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ ExecStopPost=/usr/bin/sh -c &quot;/usr/sbin/losetup -d $(/usr/sbin/losetup -j ${SWAPFILE} | /usr/bin/cut -d : -f 1)&quot;  
+ [Install]  
+ WantedBy=multi-user.target 
+$ sudo  systemctl enable /etc/systemd/system/swap.service  
+$ sudo systemctl start swap  
+
+</code></pre>
+
+<p>Now you could happily use firefox in your vnc window.<br />
+Simply login to the terminal window, and modify the configuration file, restart the ssh service, now you could also change the iptables rules, to open xxxx port.</p>
+
+<p>Another way is to disable root login, in <code>/etc/ssh/sshd_config</code>, set<code>#PermitRootLogin yes</code> to <code>PermitRootLoginno</code>.</p>
+
+<p>You will be safe.</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/12/29/get-alive-machine-in-lan/">Get Alive Machine In LAN</a>
       </h1>
       <span class="post-date">Dec 29, 2014 
@@ -414,131 +497,6 @@ end
 </code></pre>
 
 <p>Now run <code>vagrant provision</code> then we could refresh the installation.</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/12/13/dockerize-wordpress-on-digitaloceans-coreos/">Dockerize Wordpress On DigitalOcean&#39;s CoreOS</a>
-      </h1>
-      <span class="post-date">Dec 13, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/web">web</a>
-        
-      </span>
-      
-      
-
-<h3 id="wordpress">Wordpress</h3>
-
-<p>Install it via:</p>
-
-<pre><code>$ docker pull tutum/wordpress
-
-</code></pre>
-
-<p>Run it via:</p>
-
-<pre><code>$ docker run -p 80:80 tutum/wordpress &amp;
-
-</code></pre>
-
-<p>Now configure the backend, and you could directly access <code>http://Your_IP_Address</code> for this wordpress website.</p>
-
-<h3 id="import-database-and-static-files">Import Database And Static Files</h3>
-
-<p>Since I have an old website, I want to import it in this container, following is the steps of how-to.<br />
-The exising database runs on Debian 7, and its platform is arm-based, see if we could directly retrieve the wordpress and extract them into it.</p>
-
-<h4 id="extract-the-mysql-datafile">Extract the MYSQL Datafile</h4>
-
-<p>Use mysqldump for extracting the existing wordpress file</p>
-
-<pre><code>$ mysqldump -u root -p[root-password] wordpress&gt;~/wordpress.mysql
-
-</code></pre>
-
-<p>Then copy the <code>wordpress.mysql</code> to the remote server.</p>
-
-<h4 id="replacement">Replacement</h4>
-
-<p>Be sure to use gedit for replacing the old <code>fxx***.iiiouge.biz:7777</code> to <code>1xx.xxx.xxx.xxx</code> then all of your links will be acts well.<br />
-Then upload the /var/www/ directory to your server&rsquo;s corresponding directory, here ours is <code>/var/www/html</code>, eg. <code>/app</code></p>
-
-<h4 id="import-the-mysql-datafile">Import the MYSQL Datafile</h4>
-
-<p>Attached to running wordpress in DO via:</p>
-
-<pre><code>$ docker ps
-CONTAINER ID        IMAGE                    COMMAND                CREATED             STATUS              PORTS                          NAMES
-cfddafcc96f5        tutum/wordpress:latest   &quot;/run.sh&quot;              25 hours ago        Up 25 hours         3306/tcp, 0.0.0.0:80-&gt;80/tcp   drunk_brown         
-$ docker exec -it cfddafcc96f5 bash
-
-</code></pre>
-
-<p>This will give you a terminal for accessing the running container. Examine the wordpress running environments:<br />
-The WP files are located at <code>/var/www/html</code>, the mysql file locates at <code>/var/lib/mysql/wordpress</code>, then how to import the old wordpress website is the things we want to solve.<br />
-Install phpMyAdmin for importing the database:</p>
-
-<pre><code>$ sudo apt-get install phpmyadmin apache-utils
-$ sudo vim /etc/apache2/apache2.conf
-Include /etc/phpmyadmin/apache.conf
-$ sudo service apache2 restart
-Include /etc/phpmyadmin/apache.conf
-$ sudo service apache2 restart
-
-</code></pre>
-
-<p>Now you could directly access the phpMyAdmin page with username root and empty password, this is dangerous, but we just for demononstration, needn&rsquo;t care it.<br />
-Use phpMyAdmin for importing the sql file which we extracted from the old wordpress.</p>
-
-<h4 id="trouble-shooting">Trouble shooting</h4>
-
-<p>When uploading the www file and replaced, the connection shows:</p>
-
-<pre><code>数据库连接错误
-您在wp-config.php文件中提供的数据库用户名和密码可能不正确，或者无法连接到localhost上的数据库服务器，这意味着您的主机数据库服务器已停止工作。
-
-您确认您提供的用户名和密码正确么？
-您确认您提供的主机名正确么？
-您确认数据库服务器运行正常么？
-
-</code></pre>
-
-<p>This is because we provided the wrong password for the mysql, change it to the username <code>root</code> and nopassword.</p>
-
-<p>Restart the apache2 server now your website acts good.</p>
-
-<h4 id="hide-phpmyadmin-page-the-username-root-and-nopassword">Hide phpMyAdmin Page the username <code>root</code> and nopassword.</h4>
-
-<pre><code>$ sudo nano /etc/phpmyadmin/apache.conf 
-&lt;Directory /usr/share/phpmyadmin&gt;
-        Options FollowSymLinks
-        DirectoryIndex index.php
-        AllowOverride All
-        [...]
-
-</code></pre>
-
-<p>Add the htaccess method via:</p>
-
-<pre><code>$ sudo nano /usr/share/phpmyadmin/.htaccess
-AuthType Basic
-AuthName &quot;Restricted Files&quot;
-AuthUserFile /etc/apache2/.phpmyadmin.htpasswd
-Require valid-user
-
-</code></pre>
-
-<p>Then set the password for root via:</p>
-
-<pre><code>$ sudo htpasswd -c /etc/apache2/.phpmyadmin.htpasswd root
-
-</code></pre>
-
-<p>After doing this, restart the apache2 service, now your phpMyAdmin page is under the protection of the username and the password.</p>
 
       
     </div>

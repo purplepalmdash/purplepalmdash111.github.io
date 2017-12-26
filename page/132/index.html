@@ -105,6 +105,77 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/12/01/gpio-advanced-in-stm32/">GPIO Advanced in STM32</a>
+      </h1>
+      <span class="post-date">Dec 1, 2013 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
+        
+      </span>
+      
+      <p>直接操作寄存器的好处，最主要的就是看中它的快。缺点在于比较晦涩，因为你需要了解到实现的底层。在官方库中，我们可以找到如下的定义：</p>
+
+<pre><code>//./Libraries/CMSIS/CM3/DeviceSupport/ST/STM32F10x/stm32f10x.h:
+#define PERIPH_BASE           ((uint32_t)0x40000000) /*!&lt; Peripheral base address in the alias region */
+//./Libraries/CMSIS/CM3/DeviceSupport/ST/STM32F10x/stm32f10x.h:
+#define APB2PERIPH_BASE       (PERIPH_BASE + 0x10000)
+//./Libraries/CMSIS/CM3/DeviceSupport/ST/STM32F10x/stm32f10x.h:
+#define GPIOA_BASE            (APB2PERIPH_BASE + 0x0800)
+//./Libraries/CMSIS/CM3/DeviceSupport/ST/STM32F10x/stm32f10x.h:
+#define GPIOA               ((GPIO_TypeDef *) GPIOA_BASE)
+// Definition of the GPIO Types
+/** 
+  * @brief General Purpose I/O
+  */
+
+typedef struct
+{
+  __IO uint32_t CRL;
+  __IO uint32_t CRH;
+  __IO uint32_t IDR;
+  __IO uint32_t ODR;
+  __IO uint32_t BSRR;
+  __IO uint32_t BRR;
+  __IO uint32_t LCKR;
+} GPIO_TypeDef;
+
+/**
+ * IO definitions
+ *
+ * define access restrictions to peripheral registers
+ */
+
+#ifdef __cplusplus
+  #define     __I     volatile                /*!&lt; defines 'read only' permissions      */
+#else
+  #define     __I     volatile const          /*!&lt; defines 'read only' permissions      */
+#endif
+#define     __O     volatile                  /*!&lt; defines 'write only' permissions     */
+#define     __IO    volatile                  /*!&lt; defines 'read / write' permissions   */
+;
+
+</code></pre>
+
+<p>从上面就可以基本看出GPIO的相关知识。在GPIO的使用中我们需要注意7个寄存器：<br />
+CRL, CRH, IDR, ODR, BSRR, BRR, LCKR.<br />
+使用起来很简单，直接调用相应的寄存器操作就好：<br />
+GPIOA-&gt;CRL=0x00;<br />
+寄存器的定义在手册中有详细的介绍。简单的说，CRL和CRH被称之为Configuration Register， 配置寄存器，而IDR和ODR则是数据寄存器，一个是INPUT一个是OUTPUT。 置位/复位寄存器BSRR，还有一个16位的复位寄存器BRR， 还有一个32位的锁定寄存器LCKR，设置好对应的寄存器则可执行相应的操作。</p>
+
+<p>输入和输出操作可以直接操作寄存器，例如点亮和熄灭LED都是可以直接用操作寄存器来完成。而对键盘的操作，则是读入值。</p>
+
+<pre><code>	#define GET_LEFT()	(!(GPIOD-&gt;IDR&amp;GPIO_Pin_3)) 
+
+</code></pre>
+
+<p>能使用库函数的场合，除非对IO要求非常高，否则不建议直接操作寄存器。因为出错误的概率会远远增大。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/12/01/stm32-and-25f080/">STM32 and 25F080</a>
       </h1>
       <span class="post-date">Dec 1, 2013 
@@ -401,127 +472,6 @@ int main(void)
 </code></pre>
 
 <p>原理在于，直接读取到目的地址的值，与预设的值相比较。 要注意如何写入。先unlock，写入字后，lock住。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/11/29/stm32shang-de-ding-shi-qi/">STM32上的定时器</a>
-      </h1>
-      <span class="post-date">Nov 29, 2013 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a><a class="a_cat" href="http://purplepalmdash.github.io/categories/stm32">stm32</a>
-        
-      </span>
-      
-      <p>使用定时器的好处是，等待某个时隙的同时还可以干别的事，而定时器的时间一到，得到一个中断后对应执行中断函数中的服务例程而已。STM32的定时器非常之复杂而强大，配置和使用都要花很大精力。<br />
-打开TIM2线的程序如下：</p>
-
-<pre><code>void TIM_Configuration(void)
-{
-	//......
-
-	/* TIM2 clock enable */
-  	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-
-	//......
-
-</code></pre>
-
-<p>有关定时器的设置如下：</p>
-
-<pre><code>	/* 基础设置*/
-	TIM_TimeBaseStructure.TIM_Period = 8000;			//计数值   
-	TIM_TimeBaseStructure.TIM_Prescaler = 7200-1;    	//预分频,此值+1为分频的除数
-	TIM_TimeBaseStructure.TIM_ClockDivision = 0x0;  	//
-	TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up; 	//向上计数
-
-</code></pre>
-
-<p>这里设置的是定时器溢出控制,分频值的计算就是上述代码中提到的预分频的设置。 TIM2属于低速总线，这条总线最高只能达到36M的速度，芯片内部还有一个X2的倍频器，用于将低速的32M倍频成72M， 库中已经默认有实现。所以我们这里使用的TIM2其速度依然是72M， 如果预设分频为7200的话，分频后的结果就是72M/7200=10K(<sup>72000000</sup>&frasl;<sub>7200</sub>). 我们可以把这个值变大或变小，以获得更慢或更快的分频速度。<br />
-计数值设置的是8000，计数器向上计数到8000的时候会溢出。因而溢出的时间是8000/10K=0.8s 比较值的设置如下：</p>
-
-<pre><code>	u16 CCR1_Val = 4000;
-	u16 CCR2_Val = 2000;
-	u16 CCR3_Val = 1000;
-	u16 CCR4_Val = 500; 
-	/* 比较通道1*/
-	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Inactive;      		//输出比较非主动模式
-	TIM_OCInitStructure.TIM_Pulse = CCR1_Val;  
-	TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;		//极性为正
-	  
-	TIM_OC1Init(TIM2, &amp;TIM_OCInitStructure);
-	TIM_OC1PreloadConfig(TIM2, TIM_OCPreload_Disable);				//禁止OC1重装载,其实可以省掉这句,因为默认是4路都不重装的.
-
-</code></pre>
-
-<p>则得到的四个比较值的大小分别为: <sup>4000</sup>&frasl;<sub>10000</sub>=0.4s, <sup>2000</sup>&frasl;<sub>10000</sub>=0.2s, <sup>1000</sup>&frasl;<sub>10000</sub>=0.1s, <sup>500</sup>&frasl;<sub>10000</sub>=0.05</p>
-
-<p>不同的分频值设置，如果把Prescaler设置为14400-1,则得到的分频结果是72000000/14400=5K，对应的时间也随着调整。<br />
-简单来说，我们需要得到分频结果，还有就是预设的几个值与其结果作运算得出的真正时间。</p>
-
-<p>Timer到达后会产生中断，通道的捕获中断发生时，对应会执行相应的动作。这些中断处理函数是在&rdquo;stm32f10x_it.c&rdquo;中实现的：</p>
-
-<pre><code>/*******************************************************************************
-* Function Name  : TIM2_IRQHandler TIM2中断
-* Description    : This function handles TIM2 global interrupt request.
-* Input          : None
-* Output         : None
-* Return         : None
-*******************************************************************************/
-
-void TIM2_IRQHandler(void)
-{
-	if (TIM_GetITStatus(TIM2, TIM_IT_CC1) != RESET)
-	{
-		/*必须清空标志位*/
-		TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
-	
-		/*点亮LED5*/
-		LED5_ON;
-		//LED1直接操作寄存器方式的闪烁
-		GPIOA-&gt;ODR^=GPIO_Pin_8;
-	
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_CC2) != RESET)
-	{
-		TIM_ClearITPendingBit(TIM2, TIM_IT_CC2);
-	
-		/*点亮LED6*/
-		LED6_ON;
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_CC3) != RESET)
-	{
-		TIM_ClearITPendingBit(TIM2, TIM_IT_CC3);
-		
-		/* 点亮LED7*/
-		LED7_ON;
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_CC4) != RESET)
-	{
-	  	TIM_ClearITPendingBit(TIM2, TIM_IT_CC4);
-	    
-	  	/*点亮LED8*/
-		LED8_ON;
-	
-	}
-	else if (TIM_GetITStatus(TIM2, TIM_IT_Update) != RESET)
-	{
-		TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
-		/*熄灭所有LED*/
-		LED5_OFF;
-		LED6_OFF;
-		LED7_OFF;
-		LED8_OFF;
-	}
-}
-
-</code></pre>
-
-<p>需要注意的是， GPIOA-&gt;ODR^=GPIO_Pin_8, 直接操作了寄存器，用于将LED1反向输出。GPIO-&gt;ODR就是GPIOA的输出寄存器，而LED1用的就是GPIOA的8脚， 在这个中断函数中，如果TIM_IT_CC1的值达到了，将点亮LED5和控制LED1的闪烁。<br />
-在IO速度要求很高的场合，建议采用IO直接操作寄存器的方法，比用库函数要快得多。</p>
 
       
     </div>

@@ -105,6 +105,190 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb/">EBC Exercises on BBB</a>
+      </h1>
+      <span class="post-date">Nov 13, 2014 
+      
+      <br/>
+      <a class="a_cat" href="http://purplepalmdash.github.io/categories/embedded">embedded</a>
+        
+      </span>
+      
+      
+
+<h3 id="tips-on-building-kenrel">Tips on Building Kenrel</h3>
+
+<p>Via following commands you could build the 3.8 kernel for BBB:</p>
+
+<pre><code>$ git clone git://github.com/RobertCNelson/linux-dev.git
+$ cd linux-dev
+$ git checkout origin/am33x-v3.8 -b am33x-v3.8
+$ time git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+$ cp system.sh.sample system.sh
+$ diff system.sh*
+15c15
+&lt; CC=arm-linux-gnueabi-
+---
+&gt; #CC=arm-linux-gnueabi-
+21c21
+&lt; LINUX_GIT=~/BeagleBoard/linux-stable/
+---
+&gt; #LINUX_GIT=/home/user/linux-stable/
+31c31
+&lt; ZRELADDR=0x80008000
+---
+&gt; #ZRELADDR=0x80008000
+$ ./build_kernel.sh
+
+</code></pre>
+
+<h3 id="u-boot-cross-compile">U-boot Cross-compile</h3>
+
+<p>Download the U-boot and cross-compile it.</p>
+
+<pre><code># git clone git://git.denx.de/u-boot.git
+# cd u-boot/
+# git checkout v2013.07 -b tmp
+# wget https://raw.github.com/eewiki/u-boot-patches/master/v2013.07/0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+# patch -p1 &lt; 0001-am335x_evm-uEnv.txt-bootz-n-fixes.patch
+# setpogo	# For setting my cross-compiler to arm-linux-gnueabi-
+# export ARCH=arm
+# export CROSS_COMPILE=arm-linux-gnueabi-
+# make
+
+</code></pre>
+
+<p>After building you will get MLO and u-boot.img.</p>
+
+<h3 id="test-on-nfs">Test on NFS</h3>
+
+<p>Prepare the NFS File System.</p>
+
+<pre><code>mkdir dtbs
+tar xzvf 3.8.13-bone53-dtbs.tar.gz -C ./dtbs
+cp dtbs/am335x-boneblack.dtb /srv/tftp/
+cp 3.8.13-bone53.zImage /srv/tftp/
+mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n &quot;Linux&quot; -d /srv/tftp/3.8.13-bone53.zImage  /srv/tftp/uImage
+tar xJvf ubuntu-14.04-console-armhf-2014-08-13.tar.xz -C /srv/nfs4/
+cd /srv/nfs4/ubuntu-14.04-console-armhf-2014-08-13
+tar xvf armhf-rootfs-ubuntu-trusty.tar -C ../Ubuntu_fs/
+chmod 777 -R Ubuntu_fs/
+
+</code></pre>
+
+<p>Then boot the system from U-boot Via:</p>
+
+<pre><code>setenv ipaddr 192.168.1.16
+setenv serverip 192.168.1.221
+tftpboot ${fdtaddr} am335x-boneblack.dtb
+tftpboot ${kloadaddr} uImage
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rootfstype=nfs rw nfsroot=192.168.1.221:/srv/nfs4/Ubuntu_fs ip=192.168.1.1 
+bootm ${kloadaddr} - ${fdtaddr}
+
+</code></pre>
+
+<p>Now boot the BBB and we got the ssh enabled, via ssh ubuntu@192.168.1.1, password is temppwd.</p>
+
+<p>Sometimes you will meet sudo problem, just chown and chmod is OK</p>
+
+<pre><code># chmod 4755 some_related_file
+# chown root some_related_file
+
+</code></pre>
+
+<p>Since NFS gonna the write priviledge error, go back for SD card.</p>
+
+<h3 id="sd-card">SD Card</h3>
+
+<p>FileSystem Preparation:</p>
+
+<pre><code>$ export DISK=/dev/mmcblk0
+$ dd if=/dev/zero of=${DISK} bs=1M count=10
+$ dd if=./u-boot/MLO of=${DISK} count=1 seek=1 conv=notrunc bs=128k
+$ dd if=./u-boot/u-boot.img of=${DISK} count=2 seek=1 conv=notrunc bs=384k
+ sfdisk --in-order --Linux --unit M ${DISK} &lt;&lt;-__EOF__
+1,,0x83,*
+__EOF__
+$ mkfs.ext4 /dev/mmcblk0p1 -L rootfs
+
+</code></pre>
+
+<p>Copy the Operating system into the sd card partition 1, later we will use /mnt for mounting the partition 1:</p>
+
+<pre><code># mount /dev/mmcblk0p1 /mnt
+# cd ubuntu-14.04.1-console-armhf-2014-10-29
+# tar xvf armhf-rootfs-ubuntu-trusty.tar -C /mnt/
+# sync
+
+</code></pre>
+
+<p>Now install the kernel image into the ubuntu system. Imagine your SD is mount to /mnt/</p>
+
+<pre><code>cp /media/y/embedded/BBB/EBC/3.8Kernel/linux-dev/deploy/3.8.13-bone53.zImage /mnt/boot/vmlinuz-3.8.13-bone53
+tar xzvf /media/y/embedded/BBB/EBC/3.8Kernel/linux-dev/deploy/3.8.13-bone53-dtbs.tar.gz -C /mnt/boot/dtbs/
+
+</code></pre>
+
+<p>Now create the following uEnv.txt located in /mnt/boot/ and /mnt/:</p>
+
+<pre><code>##This will work with: Angstrom's 2013.06.20 u-boot.
+ 
+loadaddr=0x82000000
+fdtaddr=0x88000000
+rdaddr=0x88080000
+ 
+initrd_high=0xffffffff
+fdt_high=0xffffffff
+
+console=ttyO0,115200n8
+mmcroot=/dev/mmcblk0p1 ro
+ 
+loadximage=load mmc 0:1 ${loadaddr} /boot/vmlinuz-3.8.13-bone53
+loadxfdt=load mmc 0:1 ${fdtaddr} /boot/dtbs/3.8.13-bone53/am335x-boneblack.dtb
+loadxrd=load mmc 0:1 ${rdaddr} /boot/initrd.img-${uname_r}; setenv rdsize ${filesize}
+loaduEnvtxt=load mmc 0:1 ${loadaddr} /boot/uEnv.txt ; env import -t ${loadaddr} ${filesize};
+loadall=run loaduEnvtxt; run loadximage; run loadxfdt;
+ 
+mmcargs=setenv bootargs console=tty0 console=${console} ${optargs} ${cape_disable} ${cape_enable} root=${mmcroot} rootfstype=${mmcrootfstype} ${cmdline}
+ 
+uenvcmd=run loadall; run mmcargs; bootz ${loadaddr} - ${fdtaddr};
+optargs=&quot;debug&quot;
+
+</code></pre>
+
+<p>Enable the dhcp, /mnt/etc/network/interfaces:</p>
+
+<pre><code>auto lo
+iface lo inet loopback
+ 
+auto eth0
+iface eth0 inet dhcp
+
+</code></pre>
+
+<p>Enable the serial port:</p>
+
+<pre><code>$ sudo vim /mnt/etc/init/serial.conf
+start on stopped rc RUNLEVEL=[2345]
+stop on runlevel [!2345]
+ 
+respawn
+exec /sbin/getty 115200 ttyO0
+
+</code></pre>
+
+<p>Now restart and you got the 3.8 kernel enabled, so next time if you want to change the kernel, simply change the uEnv.txt file is OK.</p>
+
+<pre><code>ubuntu@arm:/boot$ uname -a
+Linux arm 3.8.13-bone53 #1 SMP Tue Nov 11 18:40:19 CST 2014 armv7l armv7l armv7l GNU/Linux
+
+</code></pre>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2014/11/13/ebc-exercises-on-bbb-control-led/">EBC Exercises on BBB - Control LED</a>
       </h1>
       <span class="post-date">Nov 13, 2014 
@@ -357,98 +541,6 @@ cd UnixBench
 </code></pre>
 
 <p>Result:</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2014/11/10/enable-bluetooth-headset-on-archlinux/">Enable Bluetooth Headset On ArchLinux</a>
-      </h1>
-      <span class="post-date">Nov 10, 2014 
-      
-      <br/>
-      <a class="a_cat" href="http://purplepalmdash.github.io/categories/linux">linux</a>
-        
-      </span>
-      
-      
-
-<p>Since my operating system upgraded, I have to re-set my bluetooth headset. I use A2DP via Bluez5/Pulseaudio.</p>
-
-<h3 id="installation">Installation</h3>
-
-<p>First install following packages:</p>
-
-<pre><code># pacman -S pulseaudio-alsa bluez bluez-libs bluez-utils
-
-</code></pre>
-
-<p>Then start the service via systemd:</p>
-
-<pre><code># systemctl start bluetooth
-
-</code></pre>
-
-<h3 id="configuration">Configuration</h3>
-
-<p>I use an expect script for automatically connect to my MW600 and play:</p>
-
-<pre><code>#!/usr/bin/expect
-
-# This script is for automatically scan my bluetooth headset, which is Sony-Errison mw-600
-
-# Timeout should be very short in local
-# set timeout 3
-
-spawn ssh Trusty@localhost -Y
-expect {
-        &quot;yes/no&quot; {
-                    send &quot;yes\n&quot;
-                                exp_continue
-                                    }
-            &quot;assword&quot; {
-                        send &quot;xxxxxxx!\n&quot;
-                                }
-}
-expect $
-
-# Now we are in the controlled session, run bluetooth related commands.
-send &quot;bluetoothctl\r&quot;
-expect #
-send &quot;power on\r&quot;
-expect &quot;yes&quot;
-send &quot;agent on\r&quot;
-expect #
-send &quot;default-agent\r&quot;
-expect #
-send &quot;connect 8C:64:22:5F:FF:BD\r&quot;
-expect &quot;connection successful&quot; 
-# Now exit the bluetoothctl
-send &quot;exit\r&quot;
-expect $
-
-# After execute the command in this ssh session, simply exit. 
-send &quot;exit\r&quot;
-expect $
-
-</code></pre>
-
-<p>Everytime I want to use bluetooth headset, just run:</p>
-
-<pre><code> $ /home/Trusty/auto/autobluetooth.sh &amp;&amp; pavucontrol &amp;
-
-</code></pre>
-
-<h3 id="flash-content">Flash Content</h3>
-
-<p>Install following package for let alsa use pulseaudio:</p>
-
-<pre><code>$ sudo pacman -S pulseaudio-alsa
-
-</code></pre>
-
-<p>Restart opera(or other browser which calls flash), now your sound will be played via bluetooth.</p>
 
       
     </div>

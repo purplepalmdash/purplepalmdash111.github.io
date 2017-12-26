@@ -105,6 +105,79 @@
     
     <div class="post">
       <h1 class="post-title">
+        <a href="http://purplepalmdash.github.io/2013/07/08/zai-qemushang-yun-xing-raspberry-pijing-xiang/">在Qemu上运行Raspberry PI镜像</a>
+      </h1>
+      <span class="post-date">Jul 8, 2013 
+      </span>
+      
+      <p>1. 下载和准备镜像文件</p>
+
+<pre><code>	$ wget http://downloads.raspberrypi.org/images/raspbian/2013-05-25-wheezy-raspbian/2013-05-25-wheezy-raspbian.zip
+	$ unzip 2013-05-25-wheezy-raspbian.zip
+</code></pre>
+
+<p>2. 查看镜像文件分区信息</p>
+
+<pre><code>	$ fdisk -l 2013-05-25-wheezy-raspbian.img 
+	Disk 2013-05-25-wheezy-raspbian.img: 1939 MB, 1939865600 bytes, 3788800 sectors
+	Units = sectors of 1 * 512 = 512 bytes
+	Sector size (logical/physical): 512 bytes / 512 bytes
+	I/O size (minimum/optimal): 512 bytes / 512 bytes
+	Disk label type: dos
+	Disk identifier: 0x000c7b31
+	
+	                         Device Boot      Start         End      Blocks   Id
+	System
+	2013-05-25-wheezy-raspbian.img1            8192      122879       57344    c 	W95 FAT32 (LBA)
+	2013-05-25-wheezy-raspbian.img2          122880     3788799     1832960   83	Linux
+</code></pre>
+
+<p>从上面可以看到，根文件分区的地址偏移为512*122880=62914560</p>
+
+<p>3. 更改根分区文件里preload信息:</p>
+
+<pre><code>	$ sudo mount ./2013-05-25-wheezy-raspbian.img -o offset=62914560 /mnt3
+	$ sudo vim /mnt3/etc/ld.so.preload 
+	#注释掉这一行，否则在qemu启动完系统后将自动提示配置rpi而造成系统无法登陆
+	#/usr/lib/arm-linux-gnueabihf/libcofi_rpi.so
+	$ sudo umount /mnt3
+</code></pre>
+
+<p>4. 用qemu-system-arm启动raspberrypi镜像</p>
+
+<pre><code>	$ qemu-system-arm -kernel kernel-qemu -cpu arm1176 -m 256 -M versatilepb \
+	-no-reboot -serial stdio -append &quot;root=/dev/sda2 panic=1&quot; -hda \
+	./2013-05-25-wheezy-raspbian.img 
+</code></pre>
+
+<p>系统将启动到一个root登陆的无需密码的shell中，运行下列命令以修复文件系统:</p>
+
+<pre><code>	$ fsck /dev/sda2
+	$ shutdown -r now
+</code></pre>
+
+<p>再次启动完毕后的登陆用户名和密码如下，接下来就等同于原机操作了。</p>
+
+<pre><code>	Login as pi
+	Password raspberry
+</code></pre>
+
+<p>5. ArchLinux on RaspberryPI</p>
+
+<p>基本步骤也是一样，挂在第2块分区后，需要更改etc/fstab做下列修改：</p>
+
+<pre><code>	# &lt;file system&gt;        &lt;dir&gt;         &lt;type&gt;    &lt;options&gt;          &lt;dump&gt; &lt;pass&gt;
+	/dev/sda1	  /boot           vfat    defaults        0       0
+	/dev/sda2	  /		auto    defaults        0       0
+</code></pre>
+
+<p>之后挂载命令一样。</p>
+
+      
+    </div>
+    
+    <div class="post">
+      <h1 class="post-title">
         <a href="http://purplepalmdash.github.io/2013/07/08/yong-qemumo-ni-arm-1/">用Qemu模拟ARM(1)</a>
       </h1>
       <span class="post-date">Jul 8, 2013 
@@ -623,230 +696,6 @@ stack pointer)地址. 栈通常是向下增长的，所以最好给它一个比�
 </code></pre>
 
 <p>两种方法各有千秋，前者比较灵活，但是遇到复杂网络配置的时候可能会很棘手，譬如多网卡/桥接等模型时容易把人弄晕。后者配置选项很多，但一劳永逸。</p>
-
-      
-    </div>
-    
-    <div class="post">
-      <h1 class="post-title">
-        <a href="http://purplepalmdash.github.io/2013/07/07/qemukuai-su-shang-shou/">Qemu快速上手</a>
-      </h1>
-      <span class="post-date">Jul 7, 2013 
-      </span>
-      
-      <p>1. 安装Qemu</p>
-
-<p>ArchLinux的仓库里包含有qemu已编译好的包:</p>
-
-<pre><code>	$ pacman -Ss qemu
-	extra/qemu 1.4.2-2 [installed]
-	    A generic and open source processor emulator which achieves a good \
-	emulation speed by using dynamic translation.
-	$ pacman -S qemu
-</code></pre>
-
-<p>会根据默认配置安装好几乎所有平台支持的Qemu.</p>
-
-<p>或者你可以手动下载源码包进行编译:官方下载地址在<a href="http://wiki.qemu.org/Download">http://wiki.qemu.org/Download</a></p>
-
-<p>安装完qemu后运行qemu-system-i386, 如果弹出窗口，则说明qemu安装正确。</p>
-
-<p>2. 创建新虚拟机磁盘镜像</p>
-
-<p>创建虚拟机的第一步是创建一个新的磁盘镜像，qemu提供了对多种磁盘镜像格式的支持，如raw、qcow2、qed、vdi等，qemu-img的帮助里介绍qcow2是最多才多艺(Versatile)的格式，支持压缩、加密等功能，还能最大程度节省磁盘空间。我们选择它来做磁盘镜像(Virtualbox可以直接读取qcow2格式的虚拟机镜像)。</p>
-
-<pre><code>	$ qemu-img create -f qcow2 ubuntu.qcow2 16G
-	Formatting 'ubuntu.qcow2', fmt=qcow2 size=17179869184 encryption=off \
-	cluster_size=65536 lazy_refcounts=off 
-</code></pre>
-
-<p>3. 启动并安装虚拟机:</p>
-
-<pre><code>	$ qemu-system-i386 -hda ubuntu.qcow2 -boot d -cdrom \
-	./ubuntu-13.04-desktop-i386.iso -m 1024 -enable-kvm
-</code></pre>
-
-<p>-boot d代表优先从光驱启动，对应的选项有a, b (软驱 1 和 2), c (硬盘优先), d (光盘优先), n-p(支持Etherboot的网卡1-4).</p>
-
-<p>安装ubuntu的步骤很直观，这里就不用篇幅描述了。安装完毕后，使用下列命令启动安装好的虚拟机镜像</p>
-
-<pre><code>	$ qemu-system-i386 -hda ubuntu.qcow2 -m 1024 -enable-kvm
-</code></pre>
-
-<p>4. 配置虚拟机网络：</p>
-
-<p>4.1 使用桥接网络</p>
-
-<p>这种方法需要改动系统配置，使用bridge-utils来创建虚拟网卡和实际网卡之间的桥接。</p>
-
-<pre><code>	$ pacman -Ss bridge-utils
-	core/bridge-utils 1.5-2
-	    Utilities for configuring the Linux ethernet bridge
-	$ pacman -S bridge-utils
-</code></pre>
-
-<p>创建桥接设备(br0)</p>
-
-<pre><code>	$ modprobe bridge
-	$ brctl addbr br0
-</code></pre>
-
-<p>出现add bridge failed: Package not installed时的解决方法：</p>
-
-<pre><code>	$ brctl addbr br0
-	add bridge failed: Package not installed
-	# 查看kernel中关于bridge配置选项
-	$ zcat /proc/config.gz | grep CONFIG_BRIDGE=
-	CONFIG_BRIDGE=m
-	# 查看是否存在ko文件
-	$ ls /usr/lib/modules/`uname -r`/kernel/net/bridge
-	bridge.ko.gz  netfilter
-	# 加载bridge内核模块
-	$ modprobe bridge
-	# 检查内核模块是否被加载
-	$ lsmod | grep ^bridge
-	bridge                 93187  0 
-</code></pre>
-
-<p>若modprobe bridge后lsmod看不到bridge模块，有可能是因为更新完系统安装到新的kernel version后没有重启，ArchLinux是一个非常激进的发行版，内核往往几天一升级，习惯休眠或长期不关机的用户可能会碰到这个问题。</p>
-
-<p>检查bridge网络</p>
-
-<pre><code>	$ brctl show br0
-	bridge name	bridge id		STP enabled	interfaces
-	br0		8000.000000000000	no
-</code></pre>
-
-<p>关于STP:
-Spanning Tree Protocol (STP) is a Layer 2 protocol that runs on bridges and
-switches. The specification for STP is IEEE 802.1D. The main purpose of STP is
-to ensure that you do not create loops when you have redundant paths in your
-network. Loops are deadly to a network.
-生成树协议运行于bridge或交换机上，主要目的为确保在存在冗余路径时网络中不会生成回路，回路会造成网络的死循环。</p>
-
-<p>用下列命令查看网口信息, 或者ifconfig -a直接查看也可:</p>
-
-<pre><code>	$ ifconfig -s | awk '{print $1}' | grep -v &quot;Iface\|lo&quot;
-	enp0s25
-</code></pre>
-
-<p>将enp0s25加入到br0</p>
-
-<pre><code>	$ /sbin/ifconfig enp0s25 down
-	$ /sbin/ifconfig enp0s25 0.0.0.0 promisc up
-	$ brctl addif br0 enp0s25
-	$ dhcpcd br0
-</code></pre>
-
-<p>查看bridge端口信息,发现enp0s25已经被加入了br0：</p>
-
-<pre><code>	$ brctl show br0
-	bridge name	bridge id		STP enabled	interfaces
-	br0		8000.c8cbb8b48913	no		enp0s25
-</code></pre>
-
-<p>有关bridge网络的dhcp相关配置，可以参考<a href="http://Tomcat.no-ip.biz/blog/2013/07/07/archlinuxwang-luo-pei-zhi-wen-ti/">ArchLinux网络配置问题</a>。</p>
-
-<p>创建qemu启动脚本:</p>
-
-<pre><code>	$ vim /etc/qemu-ifup
-	#!/bin/sh
-	  
-	echo &quot;Executing /etc/qemu-ifup&quot;
-	echo &quot;Bringing up $1 for bridged mode...&quot;
-	sudo /usr/bin/ip link set $1 up promisc on
-	echo &quot;Adding $1 to br0...&quot;
-	sudo /usr/bin/brctl addif br0 $1
-	sleep 2
-</code></pre>
-
-<p>更改脚本权限：</p>
-
-<pre><code>	$ chmod 750 /etc/qemu-ifup 
-	$ chown -R root /etc/qemu-ifup 
-	$ chgrp kvm /etc/qemu-ifup 
-</code></pre>
-
-<p>创建qemu结束脚本</p>
-
-<pre><code>	$ vim /etc/qemu-ifdown
-	#!/bin/sh
-	 
-	echo &quot;Executing /etc/qemu-ifdown&quot;
-	sudo /usr/bin/ip link set $1 down
-	sudo /usr/bin/brctl delif br0 $1
-	sudo /usr/bin/ip link delete dev $1
-</code></pre>
-
-<p>更改脚本权限:</p>
-
-<pre><code>	$ chmod 750 /etc/qemu-ifdown 
-	$ chown -R root /etc/qemu-ifdown 
-	$ chgrp kvm /etc/qemu-ifdown 
-</code></pre>
-
-<p>添加当前用户到kvm用户组并在visudo中开放对应命令的权限：</p>
-
-<pre><code>	$ usermod -a -G kvm Trusty
-	$ visudo
-	Cmnd_Alias      QEMU=/usr/bin/ip,/usr/bin/modprobe,/usr/bin/brctl
-	%kvm     ALL=NOPASSWD: QEMU
-</code></pre>
-
-<p>建立run-qemu文件，并添加到系统路径中.</p>
-
-<pre><code>	$ vim /bin/run-qemu
-	#!/bin/bash
-	USERID=`whoami`
-	precreationg=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
-	sudo /usr/bin/ip tuntap add user $USERID mode tap
-	postcreation=$(/usr/bin/ip tuntap list | /usr/bin/cut -d: -f1 | /usr/bin/sort)
-	IFACE=$(comm -13 &lt;(echo &quot;$precreationg&quot;) &lt;(echo &quot;$postcreation&quot;))
-	
-	# This line creates a random mac address. The downside is the dhcp server will
-	assign a different ip each time
-	printf -v macaddr &quot;52:54:%02x:%02x:%02x:%02x&quot; $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp;
-	0xff )) $(( $RANDOM &amp; 0xff)) $(( $RANDOM &amp; 0xff ))
-	# Instead, uncomment and edit this line to set an static mac address. The
-	benefit is that the dhcp server will assign the same ip.
-	# macaddr='52:54:be:36:42:a9'
-	  
-	qemu-system-i386 -enable-kvm -net nic,macaddr=$macaddr -net tap,ifname=&quot;$IFACE&quot;
-	$*
-	  
-	sudo ip link set dev $IFACE down &amp;&gt; /dev/null
-	sudo ip tuntap del $IFACE mode tap &amp;&gt; /dev/null 
-	$ sudo chmod a+w /bin/run-qemu
-</code></pre>
-
-<p>使用下列命令来运行qemu</p>
-
-<pre><code>	$ /bin/run-qemu -hda ./ubuntu.qcow2 -m 1024 -vga std
-</code></pre>
-
-<p>运行多个run-qemu实例后的网络信息如下：</p>
-
-<pre><code>	$ ifconfig -s
-	Iface      MTU    RX-OK RX-ERR RX-DRP RX-OVR    TX-OK TX-ERR TX-DRP TX-OVR Flg
-	br0       1500    70676      0      0 0         64334      0      0      0 BMRU
-	enp0s25   1500   103814      0      0 0         75661      0      0      0 BMPRU
-	lo       65536      983      0      0 0           983      0      0      0 LRU
-	tap0      1500        3      0      0 0            11      0      0      0 BMPRU
-	tap1      1500        3      0      0 0            11      0      0      0 BMPRU
-</code></pre>
-
-<p>4.2 使用VDE(Virtual Distrubuted Ethernet)创建Qemu网络，这种方法无需改变系统配置。</p>
-
-<p>有关VDE的配置可以参考前面写过的<a href="http://Tomcat.no-ip.biz/blog/2013/07/04/zai-centosshang-an-zhuang-ji-yu-qemude-xu-ni-ji/">在CentOS上安装基于Qemu的虚拟机</a>一文。</p>
-
-<p>值得注意的是, vdeswitch和slirpvde都可以在ArchLinux的软件库中找到:</p>
-
-<pre><code>	$ pacman -Ss vde
-	extra/vde2 2.3.2-4 [installed]
-	    Virtual Distributed Ethernet for emulators like qemu
-</code></pre>
-
-<p>使用VDE创建的网络对外是不可见的，它使用由slirpvde分配的dhcp地址，通常以10.0.0开头，VDE配置的网络也可以在VirtualBox中看到，VirtualBox中关于NAT的网络配置就是基于VDE的。</p>
 
       
     </div>
