@@ -81,3 +81,19 @@ deb http://192.168.0.100/arm64repo/mirror/ports.ubuntu.com/ xenial-proposed main
 # apt-get update
 
 ```
+Enable the vnc:    
+
+```
+# qemu-system-aarch64 ...... -vga std -vnc 127.0.0.1:33
+```
+
+### BenchMark
+In arm ubuntu64, do following for benchmark testing:    
+
+```
+# apt-get install hpcc
+# cp /usr/share/doc/hpcc/example/_hpccinf.txt hpccinf.txt
+##### Edit this file
+# hpcc
+```
+You could easily see the output.    
