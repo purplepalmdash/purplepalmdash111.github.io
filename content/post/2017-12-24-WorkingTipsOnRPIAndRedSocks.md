@@ -241,6 +241,18 @@ $ sudo vim /etc/shadowsocks.conf
 $ sudo vim /etc/rc.local
 sslocal -c /etc/shadowsocks.conf -d start
 ```
+Trouble-Shooting On sslocal:    
+
+```
+$ vim /usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.py
+Comment all of the :    
+
+libcrypto.EVP_CIPHER_CTX_cleanup(self._ctx)
+Changes to : libcrypto.EVP_CIPHER_CTX_reset(self._ctx)
+# rm -f  /usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.pyc
+```
+
+
 Redsocks:    
 
 ```
